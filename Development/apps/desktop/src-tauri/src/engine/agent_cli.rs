@@ -399,6 +399,34 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
 }
 
 fn execute(args: &[String]) -> Result<Value, &'static str> {
+    // A read-only recovery inspection of the original native controller.
+    // No Testing owner takeover, expired-lease shortcut, game command,
+    // log access or second controller startup.
+    if args.first().map(String::as_str)==Some("testing-inspect") {
+        #[cfg(not(all(windows,target_arch="x86_64",feature="lazy-tester-package")))]
+        {return Err("UNSUPPORTED");}
+        #[cfg(all(windows,target_arch="x86_64",feature="lazy-tester-package"))]
+        {
+            use super::native_clients_session::{self,SessionRequest,valid_testing_id};
+            if args.len()!=2{return Err("INVALID_ARGUMENTS");}
+            let slot=args[1].parse::<u32>().map_err(|_|"INVALID_ARGUMENTS")?;
+            if !(1..=5).contains(&slot){return Err("INVALID_ARGUMENTS");}
+            let owner=std::env::var("LAZY_TESTER_TESTING_OWNER_ID")
+                .map_err(|_|"TESTING_OWNER_ID_REQUIRED")?;
+            if !valid_testing_id(&owner){return Err("TESTING_OWNER_ID_REQUIRED");}
+            if !native_clients_session::existing_controller_gate(
+                "Local\\MivubiEducationStartupObservation").map_err(native_error)? {
+                return Err("CONTROLLER_UNAVAILABLE");
+            }
+            let snapshot=native_clients_session::request(
+                SessionRequest::TestingInspect{slot,owner_id:owner})
+                .map_err(native_error)?;
+            let inspection=snapshot.testing_inspection
+                .ok_or("TESTING_RESULT_UNAVAILABLE")?;
+            return Ok(json!({"schema":1,"ok":true,
+                "operation":"testing-inspect","inspection":inspection}));
+        }
+    }
     // Correlation-only native Testing arbitration, never an executor.
     // The random MCP owner token is passed via environment, NOT CLI argv.
     if matches!(args.first().map(String::as_str),

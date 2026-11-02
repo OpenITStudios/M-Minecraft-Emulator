@@ -108,6 +108,16 @@ new-revision acceptance.
   remains a nonpersistent 12-second status. No new Testing engine,
   world/input command, Tauri UI page or CI. Regression source fixtures
   AUTHORED_NOT_EXECUTED; Windows world/log provenance unverified.
+- **Read-only orphan Testing inspection (2 November):** the SAME
+  `probe_qa({slot,inspectRun:true})` route reads the original native
+  controller's volatile reservation phase, run ID and fixed recovery
+  action without preparing a new Probe, publishing activity or writing
+  game input. It preserves an explicit `transferAllowed=false`,
+  `ownerProcessProof=NOT_BOUND_TO_PROCESS_HANDLE` and
+  `operatorApproval=NOT_AVAILABLE_IN_PROTOCOL`. A token match is not
+  a verified live/dead MCP process. No unapproved native transfer,
+  extra UI/Testing engine, CI or background service. Native/Node
+  read-only regressions AUTHORED_NOT_EXECUTED; Windows runtime unknown.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.
@@ -216,9 +226,11 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Review an authenticated read-only native run-recovery inspection and
-operator-approved fence transfer for abandoned RESERVED owners without
-altering game sessions. Runtime tests remain deferred. Retain
+Next: design a native process-lifetime binding for the original MCP
+owner, then a separately authorized operator approval and atomic
+compare-and-swap transfer. Read-only inspection now exists in source;
+takeover is still blocked because no trustworthy owner-death proof
+exists. Runtime tests remain deferred. Retain
 the source-only P3 report with map tests NOT_TESTED and real-world
 evidence gates BLOCKED. When a separately authorized Windows QA
 environment eventually becomes available, validate **one** original

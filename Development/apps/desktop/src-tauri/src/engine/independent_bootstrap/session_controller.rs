@@ -496,6 +496,7 @@ impl Sessions {
             settings: None,
             agent_activity: None,
             testing_run: None,
+            testing_inspection: None,
         }
     }
 
@@ -1305,7 +1306,8 @@ fn receive_before_maintenance<T>(
 fn response_reaps_all(request: &SessionRequest) -> bool {
     if matches!(request, SessionRequest::CloseOne { .. } |
         SessionRequest::CloseAll | SessionRequest::PublishAgentActivity {..} |
-        SessionRequest::TestingReserve {..} | SessionRequest::TestingFinalize {..}) {
+        SessionRequest::TestingReserve {..} | SessionRequest::TestingFinalize {..} |
+        SessionRequest::TestingInspect {..}) {
         return false;
     }
     #[cfg(feature="mc02-native-input")]
@@ -1435,6 +1437,7 @@ fn run() -> io::Result<()> {
             let relabel_on_reply = !matches!(&envelope.request,
                 SessionRequest::TestingReserve{..} |
                 SessionRequest::TestingFinalize{..} |
+                SessionRequest::TestingInspect{..} |
                 SessionRequest::PublishAgentActivity{..} |
                 SessionRequest::Mc02Input {..} |
                 SessionRequest::AiLeasedInput {..} |
@@ -1445,10 +1448,16 @@ fn run() -> io::Result<()> {
             let relabel_on_reply = !matches!(&envelope.request,
                 SessionRequest::PublishAgentActivity{..} |
                 SessionRequest::TestingReserve{..} |
-                SessionRequest::TestingFinalize{..});
+                SessionRequest::TestingFinalize{..} |
+                SessionRequest::TestingInspect{..});
             let mut testing_reply=None;
+            let mut inspection_reply=None;
             match envelope.request {
                 SessionRequest::Inspect => {}
+                SessionRequest::TestingInspect {slot,owner_id} => {
+                    inspection_reply=Some(testing_runs.inspect(slot,&owner_id)
+                        .map_err(|error|error.to_string())?);
+                }
                 SessionRequest::TestingReserve {
                     slot,owner_id,run_id,replace_run_id
                 } => {
@@ -1595,6 +1604,7 @@ fn run() -> io::Result<()> {
             snapshot.storage = storage;
             snapshot.settings = settings;
             snapshot.testing_run=testing_reply;
+            snapshot.testing_inspection=inspection_reply;
             snapshot.agent_activity=agent_activity.as_ref().and_then(|(report,at)|{
                 if at.elapsed()<=Duration::from_secs(12) {
                     Some(report.clone())

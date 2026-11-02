@@ -335,6 +335,52 @@ source changes and Rust/Node regression fixtures are **NOT_EXECUTED**;
 live Windows, per-slot input, player/admin command delivery, original
 Probe world/source attribution and gameplay remain NOT_VERIFIED.
 
+## Read-only native Testing run inspection and safe recovery gate
+
+The existing **single** MCP entry supports
+`probe_qa({slot:2,inspectRun:true})`. This is an explicit, read-only
+inspection through the same executable's authenticated pipe to the
+original retained native controller; it does not run `probe_qa` source
+preparation, read game/log evidence, publish activity, or change a
+reservation.
+
+The reply contains the original controller's current **volatile**
+per-slot correlation observation:
+
+- `NO_RECORD`: the controller has no current reservation record. This
+  also happens after a controller restart; it is **not** proof that no
+  previous Testing run exists. Check the private `Data/Testing`
+  archive (when configured) before proposing a new run.
+- `RESERVED`: a run ID is present but terminal evidence is absent.
+  `ownerTokenMatch` only compares the requesting MCP's random
+  correlation token; it does **not** prove the original AI process is
+  running or has exited. The proper recovery action is
+  `REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL`.
+- `FINAL`: the controller has only a fixed terminal source-only
+  status and digest. The proper action is
+  `READ_FINAL_REPORT_NO_OWNER_TRANSFER`; use the canonical
+  `probe_qa({archivedRunId})` route if its immutable archive exists.
+
+Every inspection explicitly reports
+`ownerProcessProof=NOT_BOUND_TO_PROCESS_HANDLE`,
+`operatorApproval=NOT_AVAILABLE_IN_PROTOCOL`, and
+`transferAllowed=false`. No private owner ID, PID, HWND, account, raw
+log or world information is returned. The ordinary app/webview cannot
+forge a native inspection request, and a missing retained controller is
+reported as unavailable rather than created.
+
+**Operator-approved takeover is NOT yet implemented.** The current
+native reservation does not bind a retained handle or process-birth
+identity for the originating MCP process. Token equality, arbitrary
+caller-reported death, timeouts, screenshots and archive SHA alone
+cannot establish that the prior owner safely exited. A future transfer
+must be separately reviewed against verified original owner exit,
+operator authentication, the expected old run ID and immutable archive
+integrity; it must use an atomic compare-and-swap inside the original
+controller, and must not modify Minecraft process or world state. Until
+then an abandoned `RESERVED` run remains blocked. This is a deliberate
+safety constraint, not a missing automatic retry.
+
 ## Immutable original Probe summary archive (explicit opt-in)
 
 Configure the optional absolute private `Data/Testing` root ONCE with

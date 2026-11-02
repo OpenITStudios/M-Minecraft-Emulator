@@ -37,7 +37,8 @@ pub async fn lazy_tester_session(
     if matches!(&request,
        crate::engine::native_clients_session::SessionRequest::PublishAgentActivity{..} |
        crate::engine::native_clients_session::SessionRequest::TestingReserve{..} |
-       crate::engine::native_clients_session::SessionRequest::TestingFinalize{..}) {
+       crate::engine::native_clients_session::SessionRequest::TestingFinalize{..} |
+       crate::engine::native_clients_session::SessionRequest::TestingInspect{..}) {
         return Err("Desktop cannot publish agent activity or arbitrate Testing runs".into());
     }
     // The desktop's normal session command must never be an alternate

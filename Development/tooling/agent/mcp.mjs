@@ -231,6 +231,71 @@ export function validateNativeReport(value, operation) {
     evidence:'NATIVE_SESSION_ONLY_NOT_GAMEPLAY_OR_ACCOUNT_SIGNIN',
   };
 }
+// Read-only native observation of the original controller's in-memory
+// Testing reservation. Owner token equality is not proof that a particular
+// AI process is alive/dead; no operator approval/transfer exists here.
+// Validate the exact read-only source fields independently of CLI transport.
+// Strict parser prevents accidental claims of verified owner death/approval.
+export function parseTestingInspectionReceipt(message,slot) {
+  const obs=message?.inspection;
+  const keys=['schema','slot','phase','runId','ownerTokenMatch',
+    'reportedStatus','reportDigest','ownerProcessProof',
+    'operatorApproval','transferAllowed','recoveryAction','provenance'];
+  const fail=()=>{throw new Error('TESTING_NATIVE_INSPECTION_RECEIPT_INVALID');};
+  if(message?.schema!==1||message.ok!==true||
+     message.operation!=='testing-inspect'||
+     !obs||typeof obs!=='object'||Array.isArray(obs)||
+     Object.keys(obs).length!==keys.length||
+     keys.some(key=>!Object.hasOwn(obs,key))||
+     obs.schema!==1||obs.slot!==slot||
+     !['NO_RECORD','RESERVED','FINAL'].includes(obs.phase)||
+     typeof obs.ownerTokenMatch!=='boolean'||
+     obs.ownerProcessProof!=='NOT_BOUND_TO_PROCESS_HANDLE'||
+     obs.operatorApproval!=='NOT_AVAILABLE_IN_PROTOCOL'||
+     obs.transferAllowed!==false||
+     obs.provenance!=='RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF')
+     fail();
+  const validId=value=>typeof value==='string'&&/^[a-f0-9]{32}$/.test(value);
+  const validDigest=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+  const outcomes=['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW','INCOMPLETE','BLOCKED'];
+  if(obs.phase==='NO_RECORD') {
+    if(obs.runId!==null||obs.ownerTokenMatch!==false||
+       obs.reportedStatus!==null||obs.reportDigest!==null||
+       obs.recoveryAction!=='CHECK_ARCHIVE_AND_CONTROLLER_EPOCH')fail();
+  }else if(obs.phase==='RESERVED') {
+    if(!validId(obs.runId)||obs.reportedStatus!==null||
+       obs.reportDigest!==null||
+       obs.recoveryAction!=='REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL')
+       fail();
+  }else {
+    if(!validId(obs.runId)||!outcomes.includes(obs.reportedStatus)||
+       !validDigest(obs.reportDigest)||
+       obs.recoveryAction!=='READ_FINAL_REPORT_NO_OWNER_TRANSFER')fail();
+  }
+  return obs;
+}
+
+export async function inspectTestingRunNative(executable,{slot,ownerId}) {
+  if(!executable)throw new Error('Native Testing controller not configured');
+  if(!Number.isInteger(slot)||slot<1||slot>5||
+     !/^[a-f0-9]{32}$/.test(ownerId??''))
+    throw new Error('Invalid read-only Testing inspection');
+  let raw;
+  try {
+    raw=await execFileAsync(executable,
+      ['--lazy-tester-agent-cli','testing-inspect',String(slot)],{
+        env:{...process.env,LAZY_TESTER_TESTING_OWNER_ID:ownerId},
+        shell:false,windowsHide:true,timeout:4000,maxBuffer:4096,
+      });
+  }catch{
+    throw new Error('TESTING_NATIVE_INSPECTION_UNAVAILABLE');
+  }
+  let message;
+  try{message=JSON.parse(raw.stdout.trim());}
+  catch{throw new Error('TESTING_NATIVE_INSPECTION_RECEIPT_INVALID');}
+  return parseTestingInspectionReceipt(message,slot);
+}
+
 export async function coordinateTestingRunNative(executable,{
   operation,slot,runId,ownerId,replaceRunId=null,
   reportedStatus=null,reportDigest=null,
@@ -935,7 +1000,7 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
-  {name:'probe_qa',description:'Canonical source-only Testing entry. coordinateNative=true reserves one original-controller run per MC slot for cooperating agents; with an explicitly configured private Data/Testing archive, completed original Probe summaries are checksum-verified and stored once. archivedRunId reads a historical source-only summary without native/game access. Never infer authorized Minecraft command delivery or map PASS; a lost run owner requires manual recovery.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'},archivedRunId:{type:'string',pattern:'^[a-f0-9]{32}$'}},additionalProperties:false}},
+  {name:'probe_qa',description:'Canonical Testing entry. inspectRun=true reads the original controller per-slot reservation and recovery requirements without starting a run, taking ownership or proving AI liveness. coordinateNative=true reserves a cooperating run; archivedRunId reads source-only immutable summaries. No automatic game command, operator approval, takeover or verified map PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},inspectRun:{type:'boolean'},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'},archivedRunId:{type:'string',pattern:'^[a-f0-9]{32}$'}},additionalProperties:false}},
   {name:'prepare_probe_qa',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa for all new AI Testing workflows. A direct legacy prepare invalidates an existing per-slot result checkpoint. Returns a command for a separately authorized player/admin; never sends input or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
   {name:'read_probe_qa_result',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa to prepare, read and resume the same canonical checkpoint without carrying a session token. This reader inspects original RUN_START/RESULT/RUN_DONE and never certifies gameplay success.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
@@ -1162,6 +1227,7 @@ export function createHandler(config,{
   visualObserverFactory=createVisualObserver,
   publishActivity=publishAgentActivityNative,
   coordinateTesting=coordinateTestingRunNative,
+  inspectTesting=inspectTestingRunNative,
   archiveTesting=archiveTestingResult,
   readArchivedTesting=readTestingArchive,
   findArchivedTestingSlot=archivedTestingSlotReference,
@@ -1390,6 +1456,34 @@ export function createHandler(config,{
     }
   }
   async function callTool(name,args) {
+    if(name==='probe_qa' && args && Object.hasOwn(args,'inspectRun')) {
+      // No preparation, source ZIP, log, client capture, status write,
+      // native game input, owner transfer or controller startup.
+      keysExactly(args,['slot','inspectRun']);
+      if(args.inspectRun!==true)throw new Error('Invalid tool arguments');
+      const slot=slotOf(args.slot??2);
+      if(!config.executable)return {
+        schema:1,slot,status:'TESTING_CONTROLLER_NOT_CONFIGURED',
+        operatorNextAction:'REVIEW_NATIVE_CONTROLLER_SETUP',
+        gameplayAcceptance:'NOT_VERIFIED',
+        commandSentByLazyTester:false,
+      };
+      try {
+        const inspection=await inspectTesting(config.executable,{
+          slot,ownerId:testingOwnerId});
+        return {schema:1,slot,status:'TESTING_RUN_INSPECTION',
+          inspection,operatorNextAction:inspection.recoveryAction,
+          gameplayAcceptance:'NOT_VERIFIED',
+          commandSentByLazyTester:false,
+        };
+      }catch{
+        return {schema:1,slot,status:'TESTING_INSPECTION_UNAVAILABLE',
+          operatorNextAction:'REVIEW_NATIVE_CONTROLLER_AVAILABILITY',
+          gameplayAcceptance:'NOT_VERIFIED',
+          commandSentByLazyTester:false,
+        };
+      }
+    }
     if(name==='probe_qa' && args && Object.hasOwn(args,'archivedRunId')) {
       // Historical summary is an explicit READ, never a new checkpoint,
       // test command, reservation, native reconnect or status publication.

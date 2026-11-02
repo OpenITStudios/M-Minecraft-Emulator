@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
+import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
@@ -1512,6 +1512,128 @@ test('coordinated Testing never invents archive saved status on write failure',a
     assert.equal(done.archivedRunId,undefined);
     assert.equal(done.gameplayAcceptance,'NOT_VERIFIED');
   }finally{handler.shutdown();}
+});
+
+
+test('read-only one-entry Testing inspection does not create or mutate a run',async()=>{
+  const calls=[];
+  const fake={
+    schema:1,slot:2,phase:'RESERVED',runId:'c'.repeat(32),
+    ownerTokenMatch:false,reportedStatus:null,reportDigest:null,
+    ownerProcessProof:'NOT_BOUND_TO_PROCESS_HANDLE',
+    operatorApproval:'NOT_AVAILABLE_IN_PROTOCOL',
+    transferAllowed:false,
+    recoveryAction:'REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL',
+    provenance:'RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF',
+  };
+  const observer=createHandler(config(),{
+    native:async()=>{throw Error('Inspect must never contact Minecraft');},
+    coordinateTesting:async()=>{throw Error('Inspection must never reserve');},
+    publishActivity:async()=>{throw Error('No activity publishing');},
+    probeCatalog:async()=>{throw Error('No source ZIP parsing');},
+    evidence:async()=>{throw Error('No content log reading');},
+    inspectTesting:async(exe,{slot,ownerId})=>{
+      calls.push({exe,slot,ownerId});
+      return fake;
+    },
+  });
+  const discovery=(await observer.handle({
+    jsonrpc:'2.0',id:2,method:'tools/list'})).result.tools;
+  const schema=discovery.find(x=>x.name==='probe_qa').inputSchema;
+  assert.equal(schema.properties.inspectRun.type,'boolean');
+  const reply=await observer.callTool('probe_qa',{slot:2,inspectRun:true});
+  assert.equal(reply.status,'TESTING_RUN_INSPECTION');
+  assert.equal(reply.inspection.phase,'RESERVED');
+  assert.equal(reply.inspection.transferAllowed,false);
+  assert.equal(reply.inspection.ownerProcessProof,'NOT_BOUND_TO_PROCESS_HANDLE');
+  assert.equal(reply.operatorNextAction,
+    'REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL');
+  assert.equal(reply.commandSentByLazyTester,false);
+  assert.equal(reply.gameplayAcceptance,'NOT_VERIFIED');
+  assert.equal(calls.length,1);
+  assert.match(calls[0].ownerId,/^[a-f0-9]{32}$/);
+  assert.deepEqual(await observer.callTool('probe_qa',{slot:2,inspectRun:true}),reply);
+  assert.equal(calls.length,2,'Repeats are independent reads, not new runs');
+  await assert.rejects(()=>observer.callTool('probe_qa',{
+    slot:2,inspectRun:true,coordinateNative:true}),/Invalid tool arguments/);
+  await assert.rejects(()=>observer.callTool('probe_qa',{
+    slot:2,inspectRun:false}),/Invalid tool arguments/);
+  observer.shutdown();
+});
+
+test('Testing native read-only inspections do not infer ownership from absence',async()=>{
+  let scans=0;
+  const handler=createHandler(config(),{
+    inspectTesting:async()=>{scans++;return {
+      schema:1,slot:3,phase:'NO_RECORD',runId:null,
+      ownerTokenMatch:false,reportedStatus:null,reportDigest:null,
+      ownerProcessProof:'NOT_BOUND_TO_PROCESS_HANDLE',
+      operatorApproval:'NOT_AVAILABLE_IN_PROTOCOL',
+      transferAllowed:false,
+      recoveryAction:'CHECK_ARCHIVE_AND_CONTROLLER_EPOCH',
+      provenance:'RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF',
+    };},
+    native:async()=>{throw Error('Read only');},
+  });
+  const result=await handler.callTool('probe_qa',{slot:3,inspectRun:true});
+  assert.equal(scans,1);
+  assert.equal(result.inspection.runId,null);
+  assert.equal(result.operatorNextAction,'CHECK_ARCHIVE_AND_CONTROLLER_EPOCH');
+  assert.equal(result.inspection.transferAllowed,false);
+  assert.equal(result.gameplayAcceptance,'NOT_VERIFIED');
+  handler.shutdown();
+});
+
+test('native Testing inspection admission fails before subprocess on bad input',async()=>{
+  await assert.rejects(()=>inspectTestingRunNative('',{
+    slot:2,ownerId:'a'.repeat(32)}),/Native Testing controller not configured/);
+  await assert.rejects(()=>inspectTestingRunNative(path.resolve('lazy-tester.exe'),{
+    slot:0,ownerId:'a'.repeat(32)}),/Invalid read-only Testing inspection/);
+  await assert.rejects(()=>inspectTestingRunNative(path.resolve('lazy-tester.exe'),{
+    slot:2,ownerId:'UPPERCASEOWNER'}),/Invalid read-only Testing inspection/);
+});
+
+
+test('read-only Testing receipt validation rejects forged takeover/liveness evidence',()=>{
+  const noRecord={
+    schema:1,slot:2,phase:'NO_RECORD',
+    runId:null,ownerTokenMatch:false,reportedStatus:null,reportDigest:null,
+    ownerProcessProof:'NOT_BOUND_TO_PROCESS_HANDLE',
+    operatorApproval:'NOT_AVAILABLE_IN_PROTOCOL',
+    transferAllowed:false,
+    recoveryAction:'CHECK_ARCHIVE_AND_CONTROLLER_EPOCH',
+    provenance:'RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF',
+  };
+  const wrap=(inspection)=>({schema:1,ok:true,
+    operation:'testing-inspect',inspection});
+  assert.deepEqual(parseTestingInspectionReceipt(wrap(noRecord),2),noRecord);
+  const reserved={...noRecord,phase:'RESERVED',runId:'b'.repeat(32),
+    ownerTokenMatch:false,
+    recoveryAction:'REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL'};
+  assert.deepEqual(parseTestingInspectionReceipt(wrap(reserved),2),reserved);
+  const terminal={...reserved,phase:'FINAL',reportedStatus:'FAIL',
+    reportDigest:'e'.repeat(64),
+    recoveryAction:'READ_FINAL_REPORT_NO_OWNER_TRANSFER'};
+  assert.deepEqual(parseTestingInspectionReceipt(wrap(terminal),2),terminal);
+  for(const invalid of [
+    {...reserved,transferAllowed:true},
+    {...reserved,operatorApproval:'APPROVED'},
+    {...reserved,ownerProcessProof:'VERIFIED_DEAD'},
+    {...reserved,ownerId:'a'.repeat(32)},
+    {...reserved,reportedStatus:'PROBE_REPORTED_PASS'},
+    {...reserved,recoveryAction:'ALLOW_TAKEOVER'},
+    {...reserved,runId:'invalid'},
+    {...noRecord,runId:'c'.repeat(32)},
+    {...terminal,reportDigest:null},
+    {...terminal,phase:'RESERVED'},
+    {...terminal,slot:4},
+  ]) {
+    assert.throws(()=>parseTestingInspectionReceipt(wrap(invalid),2),
+      /TESTING_NATIVE_INSPECTION_RECEIPT_INVALID/);
+  }
+  assert.throws(()=>parseTestingInspectionReceipt({
+    ...wrap(noRecord),operation:'testing-reserve'},2),
+    /TESTING_NATIVE_INSPECTION_RECEIPT_INVALID/);
 });
 
 test('never trusts incomplete or out-of-order native profiles',()=>{

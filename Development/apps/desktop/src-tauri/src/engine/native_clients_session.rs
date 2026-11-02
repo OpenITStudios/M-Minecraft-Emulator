@@ -159,6 +159,24 @@ impl AgentActivityReport {
    It does not execute QA, read Skills Probe evidence or certify game/world.
    One reservation and immutable FINAL reference per native MC slot.
    Controller restart loses this volatile book: it is NOT a durable archive. */
+// Read-only snapshot of the original controller's in-memory Testing run
+// reservation, never proof that the owning AI process is alive/dead.
+#[derive(Clone,Debug,PartialEq,Eq,Deserialize,Serialize)]
+#[serde(rename_all="camelCase",deny_unknown_fields)]
+pub struct TestingRunInspection {
+    pub schema:u32,
+    pub slot:u32,
+    pub phase:String,
+    pub run_id:Option<String>,
+    pub owner_token_match:bool,
+    pub reported_status:Option<String>,
+    pub report_digest:Option<String>,
+    pub owner_process_proof:String,
+    pub operator_approval:String,
+    pub transfer_allowed:bool,
+    pub recovery_action:String,
+    pub provenance:String,
+}
 #[derive(Clone,Debug,PartialEq,Eq,Deserialize,Serialize)]
 #[serde(rename_all="camelCase",deny_unknown_fields)]
 pub struct TestingRunView {
@@ -198,6 +216,38 @@ fn valid_testing_outcome(outcome:&str)->bool {
     matches!(outcome,"PROBE_REPORTED_PASS"|"FAIL"|"NEEDS_REVIEW"|"INCOMPLETE"|"BLOCKED")
 }
 impl NativeTestingRunBook {
+    pub(crate) fn inspect(
+        &self,slot:u32,caller_token:&str,
+    )->Result<TestingRunInspection,&'static str> {
+        if !(1..=5).contains(&slot)||!valid_testing_id(caller_token) {
+            return Err("TESTING_INSPECTION_INVALID");
+        }
+        let record=self.slots[(slot-1) as usize].as_ref();
+        let (phase,run_id,owner_match,reported_status,digest,action)=
+            if let Some(held)=record {
+                (held.view.phase.clone(),Some(held.view.run_id.clone()),
+                 held.owner==caller_token,held.view.reported_status.clone(),
+                 held.view.report_digest.clone(),
+                 if held.view.phase=="RESERVED" {
+                    "REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL"
+                 } else {"READ_FINAL_REPORT_NO_OWNER_TRANSFER"})
+            } else {
+                // A controller restart ALSO produces NO_RECORD. Do not
+                // infer there was never a prior run from this state.
+                ("NO_RECORD".into(),None,false,None,None,
+                 "CHECK_ARCHIVE_AND_CONTROLLER_EPOCH")
+            };
+        Ok(TestingRunInspection {
+            schema:1,slot,phase,run_id,
+            owner_token_match:owner_match,
+            reported_status,report_digest:digest,
+            owner_process_proof:"NOT_BOUND_TO_PROCESS_HANDLE".into(),
+            operator_approval:"NOT_AVAILABLE_IN_PROTOCOL".into(),
+            transfer_allowed:false,
+            recovery_action:action.into(),
+            provenance:"RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF".into(),
+        })
+    }
     pub(crate) fn reserve(
         &mut self,slot:u32,owner:&str,run_id:&str,replace_run_id:Option<&str>,
     )->Result<TestingRunView,&'static str> {
@@ -276,6 +326,8 @@ pub struct SessionSnapshot {
     pub agent_activity:Option<AgentActivityReport>,
     #[serde(default,skip_serializing_if="Option::is_none")]
     pub testing_run:Option<TestingRunView>,
+    #[serde(default,skip_serializing_if="Option::is_none")]
+    pub testing_inspection:Option<TestingRunInspection>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -388,6 +440,7 @@ impl SessionSnapshot {
             settings: None,
             agent_activity: None,
             testing_run: None,
+            testing_inspection: None,
             profiles: (1..=5)
                 .map(|slot| ProfileSession {
                     slot,
@@ -412,6 +465,7 @@ pub enum SessionRequest {
         #[serde(default)] replace_run_id:Option<String>},
     TestingFinalize {slot:u32,owner_id:String,run_id:String,
         reported_status:String,report_digest:String},
+    TestingInspect {slot:u32,owner_id:String},
     InspectSettings,
     ApplyPreset,
     ApplyGraphicsPreset { slot: u32, preset: super::manager_settings::GraphicsPreset },
@@ -735,6 +789,12 @@ fn admit_controller(
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     match &request {
+        SessionRequest::TestingInspect {slot,owner_id} => {
+            if !(1..=5).contains(slot)||!valid_testing_id(owner_id) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    "Invalid read-only Testing inspection"));
+            }
+        }
         SessionRequest::TestingReserve {slot,owner_id,run_id,replace_run_id} => {
             if !(1..=5).contains(slot)||!valid_testing_id(owner_id)||
                 !valid_testing_id(run_id)||
@@ -978,7 +1038,8 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     if matches!(request,
         SessionRequest::PublishAgentActivity{..} |
         SessionRequest::TestingReserve{..} |
-        SessionRequest::TestingFinalize{..}) {
+        SessionRequest::TestingFinalize{..} |
+        SessionRequest::TestingInspect{..}) {
         return Err(io::Error::new(io::ErrorKind::NotFound,
             "No retained controller; status or Testing reservation refused"));
     }
@@ -1067,6 +1128,54 @@ pub(super) fn read_message(input: &mut impl io::BufRead) -> io::Result<Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn testing_inspection_is_read_only_and_never_authorizes_orphan_takeover() {
+        // No controller/game/OS access. Token comparison is not PID proof.
+        let mut book=NativeTestingRunBook::default();
+        let owner="a".repeat(32);
+        let other="b".repeat(32);
+        let run="c".repeat(32);
+        let digest="1".repeat(64);
+        let empty=book.inspect(2,&other).unwrap();
+        assert_eq!(empty.phase,"NO_RECORD");
+        assert!(empty.run_id.is_none());
+        assert!(!empty.transfer_allowed);
+        assert_eq!(empty.recovery_action,"CHECK_ARCHIVE_AND_CONTROLLER_EPOCH");
+        assert_eq!(empty.owner_process_proof,"NOT_BOUND_TO_PROCESS_HANDLE");
+        assert_eq!(empty.operator_approval,"NOT_AVAILABLE_IN_PROTOCOL");
+        assert_eq!(book.inspect(0,&owner),Err("TESTING_INSPECTION_INVALID"));
+        assert_eq!(book.inspect(2,"INVALID"),Err("TESTING_INSPECTION_INVALID"));
+
+        let reserved=book.reserve(2,&owner,&run,None).unwrap();
+        let owner_view=book.inspect(2,&owner).unwrap();
+        let other_view=book.inspect(2,&other).unwrap();
+        assert_eq!(owner_view.phase,"RESERVED");
+        assert!(owner_view.owner_token_match);
+        assert!(!other_view.owner_token_match);
+        assert_eq!(other_view.run_id.as_deref(),Some(run.as_str()));
+        assert_eq!(other_view.reported_status,None);
+        assert_eq!(other_view.report_digest,None);
+        assert_eq!(other_view.recovery_action,
+            "REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL");
+        assert!(!owner_view.transfer_allowed);
+        assert!(!other_view.transfer_allowed);
+        assert_eq!(book.reserve(2,&owner,&run,None).unwrap(),reserved,
+            "Inspection must not mutate a reservation");
+        assert!(!book.reserve(2,&other,&"d".repeat(32),None)
+            .unwrap().owner_match);
+
+        book.finalize(2,&owner,&run,"FAIL",&digest).unwrap();
+        let final_view=book.inspect(2,&other).unwrap();
+        assert_eq!(final_view.phase,"FINAL");
+        assert_eq!(final_view.reported_status.as_deref(),Some("FAIL"));
+        assert_eq!(final_view.report_digest.as_deref(),Some(digest.as_str()));
+        assert_eq!(final_view.recovery_action,
+            "READ_FINAL_REPORT_NO_OWNER_TRANSFER");
+        assert!(!final_view.transfer_allowed);
+        assert_eq!(book.finalize(2,&other,&run,"FAIL",&digest),
+            Err("TESTING_RUN_OWNER_MISMATCH"));
+    }
 
     #[test]
     fn testing_run_book_deduplicates_and_fences_terminal_outcome() {
