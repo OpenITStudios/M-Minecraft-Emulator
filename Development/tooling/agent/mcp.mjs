@@ -18,6 +18,9 @@ import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} f
 import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
 import {validateDiagnosticsRoot,diagnosticsOverview,listDiagnosticIssues,
   getDiagnosticIssue,queryDiagnosticEvidence} from './diagnostics-local.mjs';
+import {validateTestingArchiveRoot,archiveTestingResult,
+  readTestingArchive,archivedTestingSlotReference}
+  from './testing-result-store.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
   evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
@@ -93,6 +96,7 @@ export function parseConfiguration(argv, env = process.env) {
   let executable = env.LAZY_TESTER_AGENT_EXE ?? '';
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
   let diagnosticsDirectory = env.LAZY_TESTER_DIAGNOSTICS_DIR ?? '';
+  let testingArchiveDirectory = env.LAZY_TESTER_TESTING_ARCHIVE_DIR ?? '';
   let probeZip = env.LAZY_TESTER_PROBE_ZIP ?? '';
   let mapContractPath = env.LAZY_TESTER_MAP_CONTRACT ?? '';
   let cuaExecutable = env.LAZY_TESTER_CUA_EXE ?? '';
@@ -101,14 +105,15 @@ export function parseConfiguration(argv, env = process.env) {
   let experimentalMultiClientInputEnabled=false;
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <Data/Diagnostics>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
+    if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--testing-archive-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
+      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <Data/Diagnostics>] [--testing-archive-dir <Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
     if (flag==='--exe') executable=value;
     if (flag==='--evidence-dir') evidenceDirectory=value;
     if (flag==='--diagnostics-dir') diagnosticsDirectory=value;
+    if (flag==='--testing-archive-dir') testingArchiveDirectory=value;
     if (flag==='--probe-zip') probeZip=value;
     if (flag==='--map-contract') mapContractPath=value;
     if (flag==='--cua-exe') cuaExecutable=value;
@@ -142,6 +147,7 @@ export function parseConfiguration(argv, env = process.env) {
     throw new Error('Evidence directory must be absolute');
   }
   if (diagnosticsDirectory) validateDiagnosticsRoot(diagnosticsDirectory);
+  if (testingArchiveDirectory)validateTestingArchiveRoot(testingArchiveDirectory);
   if (probeZip && (!path.isAbsolute(probeZip) || !/\.zip$/i.test(probeZip))) {
     throw new Error('Probe ZIP must be an absolute .zip file path');
   }
@@ -151,7 +157,8 @@ export function parseConfiguration(argv, env = process.env) {
   }
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
   if (gpuExecutable) validateGpuExecutable(gpuExecutable);
-  return Object.freeze({mode, executable, evidenceDirectory,diagnosticsDirectory,probeZip,mapContractPath,
+  return Object.freeze({mode, executable, evidenceDirectory,diagnosticsDirectory,
+    testingArchiveDirectory,probeZip,mapContractPath,
     cuaExecutable,gpuExecutable,experimentalMc02InputEnabled,
     experimentalMultiClientInputEnabled});
 }
@@ -928,7 +935,7 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
-  {name:'probe_qa',description:'Single source-only Testing entry. Optional coordinateNative=true first reserves one correlation ID per MC slot in the existing original native controller across cooperating MCP agents; duplicate owners are refused. publishToDesktop=true mirrors the original Probe status. Only restart=true may replace an owned FINAL run. No automatic game command, persistent report archive or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'}},additionalProperties:false}},
+  {name:'probe_qa',description:'Canonical source-only Testing entry. coordinateNative=true reserves one original-controller run per MC slot for cooperating agents; with an explicitly configured private Data/Testing archive, completed original Probe summaries are checksum-verified and stored once. archivedRunId reads a historical source-only summary without native/game access. Never infer authorized Minecraft command delivery or map PASS; a lost run owner requires manual recovery.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'},archivedRunId:{type:'string',pattern:'^[a-f0-9]{32}$'}},additionalProperties:false}},
   {name:'prepare_probe_qa',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa for all new AI Testing workflows. A direct legacy prepare invalidates an existing per-slot result checkpoint. Returns a command for a separately authorized player/admin; never sends input or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
   {name:'read_probe_qa_result',description:'LEGACY COMPATIBILITY ONLY. Prefer probe_qa to prepare, read and resume the same canonical checkpoint without carrying a session token. This reader inspects original RUN_START/RESULT/RUN_DONE and never certifies gameplay success.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
@@ -1155,6 +1162,9 @@ export function createHandler(config,{
   visualObserverFactory=createVisualObserver,
   publishActivity=publishAgentActivityNative,
   coordinateTesting=coordinateTestingRunNative,
+  archiveTesting=archiveTestingResult,
+  readArchivedTesting=readTestingArchive,
+  findArchivedTestingSlot=archivedTestingSlotReference,
   probeCatalog=readPinnedProbeCatalogCached,
   probeRevisionStatus=probeSourceRevisionStatus,
   mapContract=readMapTestContractCached,
@@ -1380,6 +1390,28 @@ export function createHandler(config,{
     }
   }
   async function callTool(name,args) {
+    if(name==='probe_qa' && args && Object.hasOwn(args,'archivedRunId')) {
+      // Historical summary is an explicit READ, never a new checkpoint,
+      // test command, reservation, native reconnect or status publication.
+      keysExactly(args,['archivedRunId']);
+      if(typeof args.archivedRunId!=='string'||
+         !/^[a-f0-9]{32}$/.test(args.archivedRunId))
+        throw new Error('Invalid tool arguments');
+      if(!config.testingArchiveDirectory)return {
+        schema:1,status:'TESTING_ARCHIVE_NOT_CONFIGURED',
+        gameplayAcceptance:'NOT_VERIFIED'};
+      try {
+        const result=await readArchivedTesting({
+          store:config.testingArchiveDirectory,runId:args.archivedRunId});
+        return {...result,
+          operatorNextAction:'REVIEW_HISTORICAL_SOURCE_ONLY_RESULT'};
+      } catch {
+        return {schema:1,status:'TESTING_ARCHIVE_UNAVAILABLE_OR_INVALID',
+          runId:args.archivedRunId,
+          operatorNextAction:'REVIEW_ARCHIVE_INTEGRITY_MANUALLY',
+          gameplayAcceptance:'NOT_VERIFIED'};
+      }
+    }
     // Opt-in AI convenience path over the SAME original Probe checkpoint.
     // Legacy calls without the flag are byte-for-byte behavior-compatible.
     // Desktop delivery is only a short-lived presentation mirror, never
@@ -1420,6 +1452,27 @@ export function createHandler(config,{
           desktopDelivery:'NO_CURRENT_TESTING_CHECKPOINT_TO_MIRROR',
         };
         const existing=probeQaPlans.get(slot);
+        if(config.testingArchiveDirectory&&!testingRunIds.has(slot)&&
+           !existing) {
+          // A controller restart loses its volatile run book. A committed
+          // earlier result cannot be assumed to authorize a NEW run.
+          // No automatic takeover/replay from a historical archive.
+          let historical;
+          try {
+            historical=await findArchivedTestingSlot({
+              store:config.testingArchiveDirectory,slot});
+          } catch {
+            return {schema:1,slot,status:'BLOCKED',
+              reason:'TESTING_ARCHIVE_RECONCILIATION_REQUIRED',
+              operatorNextAction:'REVIEW_ARCHIVE_INTEGRITY_MANUALLY',
+              gameplayAcceptance:'NOT_VERIFIED'};
+          }
+          if(historical)return {schema:1,slot,status:'BLOCKED',
+            reason:'TESTING_PRIOR_ARCHIVED_RUN_REQUIRES_RECONCILIATION',
+            existingRunId:historical.runId,runPhase:'HISTORICAL_ARCHIVE',
+            operatorNextAction:'READ_HISTORICAL_RESULT_NO_AUTOMATIC_RESTART',
+            gameplayAcceptance:'NOT_VERIFIED'};
+        }
         if(existing&&(!testingRunIds.has(slot)||
             existing.nativeRunId!==testingRunIds.get(slot)))return {
           schema:1,slot,status:'BLOCKED',
@@ -1452,6 +1505,9 @@ export function createHandler(config,{
           return {schema:1,slot,status:'BLOCKED',
             reason:'TESTING_RUN_ALREADY_RESERVED',
             existingRunId:runRef.runId,runPhase:runRef.phase,
+            recoveryAction:runRef.phase==='FINAL'?
+              'READ_ARCHIVED_RESULT_IF_CONFIGURED':
+              'VERIFY_PREVIOUS_OWNER_NO_AUTOMATIC_TAKEOVER',
             operatorNextAction:'RESOLVE_BLOCKER_NO_AUTOMATIC_RESTART',
             gameplayAcceptance:'NOT_VERIFIED',
           };
@@ -1503,7 +1559,32 @@ export function createHandler(config,{
           }
         }
       }
+      let archiveStatus=null;
+      if(runRef!==null && terminalReference?.phase==='FINAL' &&
+         result.terminal===true) {
+        if(!config.testingArchiveDirectory) {
+          archiveStatus='NOT_CONFIGURED';
+        } else {
+          try {
+            const saved=await archiveTesting({
+              store:config.testingArchiveDirectory,
+              runId,slot,report:result,
+              reportDigest:terminalReference.reportDigest});
+            if(saved?.status!=='ARCHIVED_SOURCE_ONLY'||
+               saved.runId!==runId||saved.slot!==slot||
+               saved.originalDigest!==terminalReference.reportDigest)
+              throw new Error('Testing archive receipt invalid');
+            archiveStatus='ARCHIVED_SOURCE_ONLY';
+          }catch {
+            // Controller may already be FINAL; report the failure without
+            // replaying the source or treating the digest as a file.
+            archiveStatus='ARCHIVE_UNAVAILABLE_OR_CONFLICT';
+          }
+        }
+      }
       const shaped={...result,operatorNextAction,
+        ...(archiveStatus!==null?{archiveStatus,
+          ...(archiveStatus==='ARCHIVED_SOURCE_ONLY'?{archivedRunId:runId}:{})}:{}),
         ...(runRef!==null?{
           testingRunId:runId,
           nativeRunStatus:terminalReference?.phase??runRef.phase,

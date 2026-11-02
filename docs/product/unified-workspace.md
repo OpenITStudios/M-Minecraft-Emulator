@@ -71,6 +71,12 @@ and the regular desktop Tauri session command must refuse publications.
 User-facing status terminology is English: "Testing" replaces "QA" in
 the Play activity summary and details. Internal `probe_qa` names and
 source-level event contracts are preserved for compatibility.
+For the optional local archive, `probe_qa({archivedRunId})` is a
+read-only AI-only historical lookup. It is NOT exposed as a new Play
+history list or Tauri filesystem command. The original 12-second
+activity disclosure continues to reflect only freshly published MCP
+status, not a durable result in the archive. Missing archive or owner
+verification never silently resumes testing.
 
 **One-click Testing Results:** When original Probe markers report a complete
 PASS, FAIL or NEEDS_REVIEW result, the single existing Play-header

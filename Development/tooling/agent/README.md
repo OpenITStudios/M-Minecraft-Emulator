@@ -278,6 +278,9 @@ collector, archive, or automatic game command.
   session; do not run independent competing Probe owners for the same
   slot. Native game/input ownership remains singular, but it is NOT a
   substitute for an authenticated cross-process Testing-run identity.
+  The optional coordinated+archived flow below improves cooperative
+  deduplication and retrieval but does not authenticate historical world
+  provenance or automatically recover abandoned native owners.
 
 **Still unverified:** The native input experiment is disabled in regular
 builds; actual Player/admin command delivery, game/world-bound log
@@ -331,6 +334,70 @@ Controller-unavailable or uncertain native receipts fail closed. The
 source changes and Rust/Node regression fixtures are **NOT_EXECUTED**;
 live Windows, per-slot input, player/admin command delivery, original
 Probe world/source attribution and gameplay remain NOT_VERIFIED.
+
+## Immutable original Probe summary archive (explicit opt-in)
+
+Configure the optional absolute private `Data/Testing` root ONCE with
+`--testing-archive-dir <absolute/Data/Testing>` or
+`LAZY_TESTER_TESTING_ARCHIVE_DIR`. The root is independent of
+`Data/Diagnostics` (which remains an explicit diagnostic import) and is
+never a Minecraft profile/world directory. `Data` must already exist as
+an ordinary, non-symlink directory. No archive is written by default.
+
+When the existing `probe_qa({slot:2,coordinateNative:true})` reaches an
+**original frozen terminal** Skills Probe result, and the native controller
+has acknowledged its immutable FINAL status/digest, the SAME MCP process
+archives a **bounded, allowlisted source-only summary** in an exclusive
+per-run directory `Data/Testing/runs/<testingRunId>/`:
+
+- `report.json` is written exclusively with original terminal outcome,
+  validated Probe counts when complete, fixed NOT_TESTED map status,
+  NOT_VERIFIED gameplay, original SHA-256 report digest, slot/run ID and
+  an allowlisted reason where available. **No raw logs, account paths,
+  player IDs, screenshots, PID/HWND, world files, credentials or arbitrary
+  model text are stored.**
+- `manifest.json` is committed last after a flushed report and
+  `manifest.pending`. Immutable per-run directories cannot be
+  overwritten or automatically deleted. Interrupted/partial writes
+  remain uncommitted and fail closed; matching repeated run ID/digest is
+  idempotent. The archive has a bounded 128-run quota.
+- The archive is read back with pinned ordinary-file metadata and
+  checksums. A checksum matches stored bytes but **does not authenticate**
+  which game/world/player produced them, nor guarantee durability after
+  physical disk failure or malicious same-user tampering.
+
+AI reads historical source-only results through the SAME tool:
+`probe_qa({archivedRunId:"<32-char run ID>"})`. This is strictly
+read-only even if the native controller or original MCP has exited. It
+does not prepare a new run or certify native ownership. The result says
+`ARCHIVED_SOURCE_ONLY`, `Map Testing: NOT_TESTED`,
+`gameplayAcceptance: NOT_VERIFIED`, and
+`nativeRunState: NOT_VERIFIED_AFTER_ARCHIVE_READ`.
+
+**Abandoned-run recovery policy:** no heartbeat timeout, screenshot, process
+absence guess or historical digest can authorize an owner transfer.
+If the original native reservation remains RESERVED but the MCP owner
+is unavailable, a competing agent receives
+`TESTING_RUN_ALREADY_RESERVED` and
+`VERIFY_PREVIOUS_OWNER_NO_AUTOMATIC_TAKEOVER`. If the archive has a
+previous committed result and a *fresh* MCP has no matching native
+run ID, its first coordinated request returns
+`TESTING_PRIOR_ARCHIVED_RUN_REQUIRES_RECONCILIATION` instead of
+creating a new run. Missing or partially committed archive evidence
+returns `TESTING_ARCHIVE_RECONCILIATION_REQUIRED` and blocks a new run.
+Users can still read historical results by ID. An active/abandoned
+reservation cannot be forcibly cleared via these MCP APIs; verified
+native owner death, controlled operator approval and a fenced recovery
+protocol remain prerequisites for any future transfer or restart.
+
+**What is durable:** a short original Probe result summary per committed
+run ID on the configured private disk.
+**What remains volatile:** the controller's current reservation book and
+the original MCP's complete frozen terminal report. The archive is not
+a second Skills Probe runner, not an accepted map result, not automatic
+Windows input and not yet a persistent UI results list. The Play
+header's 12-second activity status is unchanged. Tests are authored
+but NOT_EXECUTED; Windows/Minecraft runtime proof remains unavailable.
 
 ## Gameplay Probe AI QA — no repeated ZIP work
 

@@ -93,6 +93,21 @@ new-revision acceptance.
   in-game command, no extra desktop UI, no CI or local execution.
   Native/Node regression tests AUTHORED_NOT_EXECUTED; real Windows
   source/game/world identity and five-client acceptance NOT_VERIFIED.
+- **Optional immutable Testing SUMMARY archive and recovery fence (2 November):**
+  The existing `probe_qa` can use an explicitly configured absolute
+  `Data/Testing` root for bounded, write-once per-run Skills Probe
+  terminal summaries after the original controller acknowledges FINAL.
+  A manifest is committed last and checksum verification precedes
+  read-only `probe_qa({archivedRunId})` retrieval after MCP exit.
+  A newly started MCP with an earlier committed result on the same
+  slot receives a RECONCILIATION_REQUIRED hold, not an automatic
+  second Testing run. A competing owner cannot take over an abandoned
+  RESERVED run based on age or missing screenshots. The original full
+  terminalReport and native reservation book are still volatile,
+  the private summary archive is opt-in, and the desktop Play header
+  remains a nonpersistent 12-second status. No new Testing engine,
+  world/input command, Tauri UI page or CI. Regression source fixtures
+  AUTHORED_NOT_EXECUTED; Windows world/log provenance unverified.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.
@@ -201,7 +216,10 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Retain the source-only P3 report with map tests NOT_TESTED and real-world
+Review an authenticated read-only native run-recovery inspection and
+operator-approved fence transfer for abandoned RESERVED owners without
+altering game sessions. Runtime tests remain deferred. Retain
+the source-only P3 report with map tests NOT_TESTED and real-world
 evidence gates BLOCKED. When a separately authorized Windows QA
 environment eventually becomes available, validate **one** original
 Skills Probe Player/admin run and its process/world-bound Content Log

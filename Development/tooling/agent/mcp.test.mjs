@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
@@ -1342,6 +1342,176 @@ test('native Testing helper validates correlation before any subprocess',async()
     ownerId:'b'.repeat(32),reportedStatus:'PASS',
     reportDigest:'c'.repeat(64),
   }),/Invalid Testing terminal reference/);
+});
+
+
+test('AI retrieves an archived original Probe summary after MCP restart without game IPC',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lt-mcp-testing-store-'));
+  const data=path.join(root,'Data');await mkdir(data);
+  const archive=path.join(data,'Testing');
+  const cfg={...config(),testingArchiveDirectory:archive,
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')};
+  let catalogs=0,reads=0,native=0,arbitration=0;
+  const coordination=async(_exe,args)=>{
+    arbitration++;
+    if(args.operation==='reserve')return {
+      schema:1,slot:args.slot,runId:args.runId,phase:'RESERVED',
+      ownerMatch:true,reportedStatus:null,reportDigest:null,
+      provenance:'NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF'};
+    return {schema:1,slot:args.slot,runId:args.runId,
+      phase:'FINAL',ownerMatch:true,reportedStatus:args.reportedStatus,
+      reportDigest:args.reportDigest,
+      provenance:'NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF'};
+  };
+  const setup={
+    coordinateTesting:coordination,
+    probeCatalog:async()=>{catalogs++;return {
+      autoCount:2,autoIds:['P01','P02'],
+      archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'};
+    },
+    probeRevisionStatus:async()=> 'UNCHANGED',
+    native:async(_exe,operation,slot)=>{
+      native++;
+      return {schema:1,ok:true,operation:'target',slot,
+        pid:4002,windowId:8002,createdFileTime:'9001',
+        sessionId:1,foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+        gameplayInput:'NOT_VERIFIED'};
+    },
+    evidence:async(_root,slot,_n,options)=>{
+      reads++;
+      if(options?.probeCheckpoint)return {
+        slot,status:'CAPTURE_FILE_PRESENT',
+        probeEvents:[
+          {kind:'start',arg:'auto',count:2,tick:10,at:null},
+          {kind:'result',id:'P01',result:'pass',tick:11,at:null},
+          {kind:'result',id:'P02',result:'pass',tick:12,at:null},
+          {kind:'done',arg:'auto',count:2,tick:13,at:null},
+        ]};
+      return {slot,status:'CAPTURE_FILE_PRESENT',
+        captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  };
+  const active=createHandler(cfg,setup);
+  try {
+    const prepared=await active.callTool('probe_qa',
+      {slot:2,coordinateNative:true});
+    assert.equal(prepared.phase,'AWAITING_AUTHORIZED_COMMAND');
+    const finished=await active.callTool('probe_qa',
+      {slot:2,coordinateNative:true});
+    assert.equal(finished.status,'PROBE_REPORTED_PASS');
+    assert.equal(finished.terminal,true);
+    assert.equal(finished.archiveStatus,'ARCHIVED_SOURCE_ONLY');
+    assert.equal(finished.archivedRunId,finished.testingRunId);
+    assert.match(finished.reportDigest,/^[a-f0-9]{64}$/);
+    const originalFile=await readFile(path.join(archive,'runs',
+      finished.testingRunId,'report.json'),'utf8');
+    assert.equal(originalFile.includes('pid'),false);
+    assert.equal(originalFile.includes('windowId'),false);
+    const readBefore=[catalogs,reads,native,arbitration];
+    const again=await active.callTool('probe_qa',
+      {slot:2,coordinateNative:true});
+    assert.equal(again.archivedRunId,finished.testingRunId);
+    assert.deepEqual([catalogs,reads,native],[...readBefore].slice(0,3));
+    active.shutdown();
+
+    // A fresh MCP has neither the former checkpoint nor native owner
+    // lease. Its history read is explicit, read-only and source-limited.
+    const restarted=createHandler(cfg,{
+      native:async()=>{throw Error('Historical read must not contact Minecraft');},
+      coordinateTesting:async()=>{throw Error('No new reservation allowed');},
+    });
+    try{
+      const recovered=await restarted.callTool('probe_qa',
+        {archivedRunId:finished.archivedRunId});
+      assert.equal(recovered.status,'ARCHIVED_SOURCE_ONLY');
+      assert.equal(recovered.reportedOutcome,'PROBE_REPORTED_PASS');
+      assert.deepEqual(recovered.reportedCounts,
+        {expected:2,pass:2,fail:0,info:0,look:0});
+      assert.equal(recovered.mapTesting,'NOT_TESTED');
+      assert.equal(recovered.nativeRunState,'NOT_VERIFIED_AFTER_ARCHIVE_READ');
+      const blocked=await restarted.callTool('probe_qa',
+        {slot:2,coordinateNative:true});
+      assert.equal(blocked.status,'BLOCKED');
+      assert.equal(blocked.reason,
+        'TESTING_PRIOR_ARCHIVED_RUN_REQUIRES_RECONCILIATION');
+      assert.equal(blocked.existingRunId,finished.testingRunId);
+      assert.equal(blocked.operatorNextAction,
+        'READ_HISTORICAL_RESULT_NO_AUTOMATIC_RESTART');
+      assert.equal(await restarted.callTool('probe_qa',{
+        archivedRunId:'f'.repeat(32)}).then(x=>x.status),
+        'TESTING_ARCHIVE_UNAVAILABLE_OR_INVALID');
+    }finally{restarted.shutdown();}
+  }finally{
+    active.shutdown();
+    await rm(root,{recursive:true,force:true});
+  }
+});
+
+test('Testing history read and archive failure remain fail-closed',async()=>{
+  const unconfigured=createHandler(config(),{
+    native:async()=>{throw Error('Do not touch native');},
+  });
+  const missing=await unconfigured.callTool('probe_qa',
+    {archivedRunId:'c'.repeat(32)});
+  assert.equal(missing.status,'TESTING_ARCHIVE_NOT_CONFIGURED');
+  assert.equal(missing.gameplayAcceptance,'NOT_VERIFIED');
+  await assert.rejects(()=>unconfigured.callTool('probe_qa',
+    {archivedRunId:'invalid'}),/Invalid tool arguments/);
+  await assert.rejects(()=>unconfigured.callTool('probe_qa',
+    {archivedRunId:'c'.repeat(32),restart:true}),/Invalid tool arguments/);
+  assert.throws(()=>parseConfiguration([
+    '--testing-archive-dir',path.resolve('Other')],{}),
+    /Testing archive requires an absolute Data\/Testing root/);
+  const archive=path.join(path.resolve('Data'),'Testing');
+  assert.equal(parseConfiguration([
+    '--testing-archive-dir',archive],{}).testingArchiveDirectory,archive);
+  unconfigured.shutdown();
+});
+
+test('coordinated Testing never invents archive saved status on write failure',async()=>{
+  const cfg={...config(),testingArchiveDirectory:path.join(
+    path.resolve('Data'),'Testing'),
+    probeZip:path.resolve('probe.zip'),
+    evidenceDirectory:path.resolve('capture')};
+  const handler=createHandler(cfg,{
+    coordinateTesting:async(_exe,args)=>({
+      schema:1,slot:args.slot,runId:args.runId,ownerMatch:true,
+      phase:args.operation==='finalize'?'FINAL':'RESERVED',
+      reportedStatus:args.operation==='finalize'?args.reportedStatus:null,
+      reportDigest:args.operation==='finalize'?args.reportDigest:null,
+      provenance:'NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF'}),
+    findArchivedTestingSlot:async()=>null,
+    archiveTesting:async()=>{throw Error('Private Data folder unavailable');},
+    probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
+      archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'}),
+    probeRevisionStatus:async()=> 'UNCHANGED',
+    native:async(_exe,operation,slot)=>({
+      schema:1,ok:true,operation:'target',slot,pid:402,windowId:802,
+      createdFileTime:'9001',sessionId:1,foreground:false,
+      visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+      gameplayInput:'NOT_VERIFIED'}),
+    evidence:async(_root,slot,_n,options)=>options?.probeCheckpoint?
+      {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[
+        {kind:'start',arg:'auto',count:1,tick:1,at:null},
+        {kind:'result',id:'P01',result:'pass',tick:2,at:null},
+        {kind:'done',arg:'auto',count:1,tick:3,at:null}]}:
+      {slot,status:'CAPTURE_FILE_PRESENT',
+        captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}},
+  });
+  try{
+    await handler.callTool('probe_qa',{slot:2,coordinateNative:true});
+    const done=await handler.callTool('probe_qa',
+      {slot:2,coordinateNative:true});
+    assert.equal(done.nativeRunStatus,'FINAL');
+    assert.equal(done.archiveStatus,'ARCHIVE_UNAVAILABLE_OR_CONFLICT');
+    assert.equal(done.archivedRunId,undefined);
+    assert.equal(done.gameplayAcceptance,'NOT_VERIFIED');
+  }finally{handler.shutdown();}
 });
 
 test('never trusts incomplete or out-of-order native profiles',()=>{
