@@ -22,7 +22,7 @@ use std::{
 use windows_sys::Win32::{
     Foundation::{
         GetLastError, LocalFree, ERROR_PIPE_CONNECTED, FILETIME, HANDLE, INVALID_HANDLE_VALUE,
-        WAIT_TIMEOUT,
+        WAIT_OBJECT_0, WAIT_TIMEOUT,
     },
     Security::{
         Authorization::{
@@ -31,7 +31,7 @@ use windows_sys::Win32::{
         *,
     },
     Storage::FileSystem::*,
-    System::{Pipes::*, Threading::*, IO::CancelSynchronousIo},
+    System::{Diagnostics::ToolHelp::*, Pipes::*, Threading::*, IO::CancelSynchronousIo},
 };
 
 fn refused(reason: &'static str) -> io::Error {
@@ -215,6 +215,93 @@ impl Peer {
                 && (((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
                     == self.birth
         }
+    }
+}
+
+// Bind the Windows-observed direct Node parent of the verified one-shot CLI.
+// This is a process handle/birth check, not MCP-script attestation or an
+// authorization to take over an abandoned Testing run.
+#[derive(Debug)]
+pub(crate) struct McpOwnerLifetime {
+    process: OwnedHandle,
+    pid: u32,
+    birth: u64,
+}
+impl McpOwnerLifetime {
+    pub(crate) fn same(&self, other: &Self) -> bool {
+        self.pid == other.pid && self.birth == other.birth
+    }
+    pub(crate) fn status(&self) -> &'static str {
+        let wait=unsafe {WaitForSingleObject(raw(&self.process),0)};
+        if wait==WAIT_OBJECT_0 {return "BOUND_PARENT_EXIT_CONFIRMED";}
+        if wait!=WAIT_TIMEOUT {return "BOUND_PARENT_STATUS_UNKNOWN";}
+        let mut created:FILETIME=unsafe {mem::zeroed()};
+        let mut exit=created;
+        let mut kernel=created;
+        let mut user=created;
+        if unsafe {GetProcessTimes(raw(&self.process),&mut created,
+             &mut exit,&mut kernel,&mut user)}==0 ||
+           ((created.dwHighDateTime as u64)<<32 | created.dwLowDateTime as u64)!=self.birth {
+            return "BOUND_PARENT_STATUS_UNKNOWN";
+        }
+        "BOUND_PARENT_RUNNING_AT_INSPECTION"
+    }
+}
+impl Peer {
+    pub(crate) fn mcp_parent(&self)->io::Result<McpOwnerLifetime> {
+        if !self.alive() {return Err(refused("Testing CLI peer is no longer live"));}
+        let child_pid=unsafe {GetProcessId(raw(&self.process))};
+        if child_pid==0 {return Err(refused("Testing CLI identity unavailable"));}
+        // ToolHelp parent attribution can be spoofed by a privileged
+        // same-user caller; never treat it as a signed MCP identity.
+        let snapshot=own(unsafe {CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS,0)})?;
+        let mut entry:PROCESSENTRY32W=unsafe {mem::zeroed()};
+        entry.dwSize=mem::size_of::<PROCESSENTRY32W>() as u32;
+        if unsafe {Process32FirstW(raw(&snapshot),&mut entry)}==0 {
+            return Err(io::Error::last_os_error());
+        }
+        let mut parent_pid=0;
+        loop {
+            if entry.th32ProcessID==child_pid {
+                parent_pid=entry.th32ParentProcessID;
+                break;
+            }
+            if unsafe {Process32NextW(raw(&snapshot),&mut entry)}==0 {break;}
+        }
+        if parent_pid==0||parent_pid==child_pid {
+            return Err(refused("Testing MCP direct parent unavailable"));
+        }
+        let process=own(unsafe {OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZATION_SYNCHRONIZE,
+            0,parent_pid)})?;
+        if Identity::process(raw(&process))? !=
+           Identity::process(unsafe {GetCurrentProcess()})? {
+            return Err(refused("Testing MCP parent logon/session differs"));
+        }
+        let image_path=crate::engine::windows_process_image::query(raw(&process))?;
+        let parent_path=std::ffi::OsString::from_wide(&image_path);
+        if !std::path::Path::new(&parent_path).file_name()
+           .and_then(|name|name.to_str())
+           .is_some_and(|name|name.eq_ignore_ascii_case("node.exe")) {
+            return Err(refused("Testing MCP direct parent is not Node"));
+        }
+        let mut created:FILETIME=unsafe {mem::zeroed()};
+        let mut exit=created;
+        let mut kernel=created;
+        let mut user=created;
+        if unsafe {GetProcessTimes(raw(&process),&mut created,
+           &mut exit,&mut kernel,&mut user)}==0 {
+            return Err(io::Error::last_os_error());
+        }
+        let birth=(created.dwHighDateTime as u64)<<32 | created.dwLowDateTime as u64;
+        if birth==0||birth>self.birth {
+            return Err(refused("Testing MCP parent creation is inconsistent"));
+        }
+        let owner=McpOwnerLifetime{process,pid:parent_pid,birth};
+        if owner.status()!="BOUND_PARENT_RUNNING_AT_INSPECTION"||!self.alive() {
+            return Err(refused("Testing MCP parent or CLI lifetime uncertain"));
+        }
+        Ok(owner)
     }
 }
 
@@ -533,6 +620,28 @@ mod tests {
         server.name = name.clone();
         client.name = name;
         (server, client)
+    }
+
+    #[test]
+    fn pinned_testing_parent_handle_rejects_birth_mismatch() {
+        // Own-process Win32 metadata only; no Node or Minecraft started.
+        let pid=unsafe {GetCurrentProcessId()};
+        let open_self=||own(unsafe {OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZATION_SYNCHRONIZE,
+            0,pid)}).unwrap();
+        let h=open_self();
+        let mut created:FILETIME=unsafe {mem::zeroed()};
+        let mut exited=created;
+        let mut kernel=created;
+        let mut user=created;
+        assert_ne!(unsafe {GetProcessTimes(raw(&h),
+            &mut created,&mut exited,&mut kernel,&mut user)},0);
+        let birth=(created.dwHighDateTime as u64)<<32|created.dwLowDateTime as u64;
+        let valid=McpOwnerLifetime{process:h,pid,birth};
+        assert_eq!(valid.status(),"BOUND_PARENT_RUNNING_AT_INSPECTION");
+        let invalid=McpOwnerLifetime{process:open_self(),pid,birth:birth+1};
+        assert!(!valid.same(&invalid));
+        assert_eq!(invalid.status(),"BOUND_PARENT_STATUS_UNKNOWN");
     }
 
     #[test]

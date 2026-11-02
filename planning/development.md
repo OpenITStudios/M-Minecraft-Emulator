@@ -118,6 +118,16 @@ new-revision acceptance.
   a verified live/dead MCP process. No unapproved native transfer,
   extra UI/Testing engine, CI or background service. Native/Node
   read-only regressions AUTHORED_NOT_EXECUTED; Windows runtime unknown.
+- **Pinned MCP Testing parent lifetime (2 November, source-only):**
+  the existing same-image CLI identifies its Windows-observed direct Node
+  parent; the original native TestingRunBook retains its handle, PID and birth
+  when a coordinated reservation succeeds. Same-token reserve/finalize
+  now rejects changed, exited or unknown parents, including PID reuse.
+  Inspection reports only bounded running/exited/uncertain OS-parent state,
+  not MCP-script authenticity, Minecraft game/world provenance or operator
+  consent. `transferAllowed=false` and no operator approval remain enforced.
+  Windows/runtime tests and source suites NOT_EXECUTED; source regressions
+  authored only. No second controller, automatic input or new desktop UI.
 - **Native owner:** original Rust session controller handles game
   process identity, private profiles, normal exit and recovery.
   Workspace/DWM presentation never becomes a second lifecycle owner.
@@ -226,11 +236,11 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: design a native process-lifetime binding for the original MCP
-owner, then a separately authorized operator approval and atomic
-compare-and-swap transfer. Read-only inspection now exists in source;
-takeover is still blocked because no trustworthy owner-death proof
-exists. Runtime tests remain deferred. Retain
+Next: design separate operator-authenticated approval and atomic
+compare-and-swap Testing-run transfer using the retained parent handle,
+exact old run ID, and private archive reconciliation. The observed OS-parent
+exit is not proof of MCP-script authenticity or operator consent;
+`transferAllowed=false` remains mandatory until those gates exist. Runtime tests remain deferred. Retain
 the source-only P3 report with map tests NOT_TESTED and real-world
 evidence gates BLOCKED. When a separately authorized Windows QA
 environment eventually becomes available, validate **one** original

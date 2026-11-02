@@ -193,10 +193,12 @@ pub struct TestingRunView {
     pub report_digest:Option<String>,
     pub provenance:String,
 }
-#[derive(Clone,Debug)]
+#[derive(Debug)]
 struct TestingRecord {
     owner:String,
     view:TestingRunView,
+    #[cfg(windows)]
+    owner_process:Option<pipe::McpOwnerLifetime>,
 }
 pub(crate) struct NativeTestingRunBook {
     slots:[Option<TestingRecord>;5],
@@ -237,18 +239,26 @@ impl NativeTestingRunBook {
                 ("NO_RECORD".into(),None,false,None,None,
                  "CHECK_ARCHIVE_AND_CONTROLLER_EPOCH")
             };
+        // A token match is not a process proof. Only a retained OS handle
+        // can report its pinned parent lifetime; no takeover is permitted.
+        #[cfg(windows)]
+        let owner_proof=record.and_then(|held|held.owner_process.as_ref())
+            .map_or("NOT_BOUND_TO_PROCESS_HANDLE",|pin|pin.status());
+        #[cfg(not(windows))]
+        let owner_proof="NOT_BOUND_TO_PROCESS_HANDLE";
         Ok(TestingRunInspection {
             schema:1,slot,phase,run_id,
             owner_token_match:owner_match,
             reported_status,report_digest:digest,
-            owner_process_proof:"NOT_BOUND_TO_PROCESS_HANDLE".into(),
+            owner_process_proof:owner_proof.into(),
             operator_approval:"NOT_AVAILABLE_IN_PROTOCOL".into(),
             transfer_allowed:false,
             recovery_action:action.into(),
             provenance:"RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF".into(),
         })
     }
-    pub(crate) fn reserve(
+    // Internal pure transition; live native requests use reserve_from_peer.
+    fn reserve(
         &mut self,slot:u32,owner:&str,run_id:&str,replace_run_id:Option<&str>,
     )->Result<TestingRunView,&'static str> {
         if !(1..=5).contains(&slot)||
@@ -283,10 +293,15 @@ impl NativeTestingRunBook {
             reported_status:None,report_digest:None,
             provenance:"NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF".into(),
         };
-        *entry=Some(TestingRecord{owner:owner.into(),view:view.clone()});
+        *entry=Some(TestingRecord{
+            owner:owner.into(),view:view.clone(),
+            #[cfg(windows)]
+            owner_process:None,
+        });
         Ok(view)
     }
-    pub(crate) fn finalize(
+    // Internal pure transition; live native requests use finalize_from_peer.
+    fn finalize(
         &mut self,slot:u32,owner:&str,run_id:&str,
         outcome:&str,digest:&str,
     )->Result<TestingRunView,&'static str> {
@@ -311,6 +326,57 @@ impl NativeTestingRunBook {
         record.view.reported_status=Some(outcome.into());
         record.view.report_digest=Some(digest.into());
         Ok(record.view.clone())
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn reserve_from_peer(
+        &mut self,slot:u32,owner:&str,run_id:&str,
+        replace_run_id:Option<&str>,peer:&pipe::Peer,
+    )->Result<TestingRunView,&'static str> {
+        if !(1..=5).contains(&slot) {return Err("TESTING_RUN_INVALID_ID");}
+        let incoming=peer.mcp_parent()
+            .map_err(|_|"TESTING_MCP_OWNER_PROCESS_UNVERIFIED")?;
+        if let Some(held)=self.slots[(slot-1) as usize].as_ref() {
+            if held.owner==owner && !held.owner_process.as_ref().is_some_and(
+                |original|original.same(&incoming) &&
+                  original.status()=="BOUND_PARENT_RUNNING_AT_INSPECTION") {
+                return Err("TESTING_MCP_OWNER_PROCESS_CHANGED");
+            }
+        }
+        if incoming.status()!="BOUND_PARENT_RUNNING_AT_INSPECTION" {
+            return Err("TESTING_MCP_OWNER_PROCESS_UNVERIFIED");
+        }
+        let view=self.reserve(slot,owner,run_id,replace_run_id)?;
+        if view.owner_match {
+            // A new/owned reservation pins the same verified parent OS
+            // process, rather than the disposable CLI or caller token.
+            let held=self.slots[(slot-1) as usize].as_mut()
+                .ok_or("TESTING_RESERVATION_REQUIRED")?;
+            held.owner_process=Some(incoming);
+        }
+        Ok(view)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn finalize_from_peer(
+        &mut self,slot:u32,owner:&str,run_id:&str,
+        outcome:&str,digest:&str,peer:&pipe::Peer,
+    )->Result<TestingRunView,&'static str> {
+        if !(1..=5).contains(&slot) {
+            return Err("TESTING_FINAL_REPORT_INVALID");
+        }
+        let incoming=peer.mcp_parent()
+            .map_err(|_|"TESTING_MCP_OWNER_PROCESS_UNVERIFIED")?;
+        let held=self.slots[(slot-1) as usize].as_ref()
+            .ok_or("TESTING_RESERVATION_REQUIRED")?;
+        if held.owner!=owner || held.view.run_id!=run_id ||
+           !held.owner_process.as_ref().is_some_and(
+              |original|original.same(&incoming) &&
+                original.status()=="BOUND_PARENT_RUNNING_AT_INSPECTION") ||
+           incoming.status()!="BOUND_PARENT_RUNNING_AT_INSPECTION" {
+            return Err("TESTING_MCP_OWNER_PROCESS_CHANGED");
+        }
+        self.finalize(slot,owner,run_id,outcome,digest)
     }
 }
 

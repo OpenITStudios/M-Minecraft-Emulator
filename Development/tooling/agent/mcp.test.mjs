@@ -1611,6 +1611,20 @@ test('read-only Testing receipt validation rejects forged takeover/liveness evid
     ownerTokenMatch:false,
     recoveryAction:'REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL'};
   assert.deepEqual(parseTestingInspectionReceipt(wrap(reserved),2),reserved);
+  for(const state of ['BOUND_PARENT_RUNNING_AT_INSPECTION',
+    'BOUND_PARENT_EXIT_CONFIRMED','BOUND_PARENT_STATUS_UNKNOWN']) {
+    const observed={...reserved,ownerProcessProof:state};
+    assert.deepEqual(parseTestingInspectionReceipt(wrap(observed),2),observed);
+    assert.equal(observed.transferAllowed,false,
+      'A pinned parent process is not an operator approval');
+    const finished={...observed,phase:'FINAL',reportedStatus:'FAIL',
+      reportDigest:'e'.repeat(64),
+      recoveryAction:'READ_FINAL_REPORT_NO_OWNER_TRANSFER'};
+    assert.deepEqual(parseTestingInspectionReceipt(wrap(finished),2),finished);
+    assert.throws(()=>parseTestingInspectionReceipt(wrap({
+      ...noRecord,ownerProcessProof:state}),2),
+      /TESTING_NATIVE_INSPECTION_RECEIPT_INVALID/);
+  }
   const terminal={...reserved,phase:'FINAL',reportedStatus:'FAIL',
     reportDigest:'e'.repeat(64),
     recoveryAction:'READ_FINAL_REPORT_NO_OWNER_TRANSFER'};

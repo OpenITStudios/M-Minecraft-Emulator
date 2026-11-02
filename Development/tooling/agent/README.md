@@ -364,16 +364,27 @@ per-slot correlation observation:
 Every inspection explicitly reports
 `ownerProcessProof=NOT_BOUND_TO_PROCESS_HANDLE`,
 `operatorApproval=NOT_AVAILABLE_IN_PROTOCOL`, and
-`transferAllowed=false`. No private owner ID, PID, HWND, account, raw
+`transferAllowed=false`. A new coordinated reservation also binds the
+Windows-reported direct **Node parent** of the verified one-shot CLI to
+a retained process handle, PID and creation time in the same native controller.
+Further same-token reserve/finalize requests require the *same live parent*;
+PID reuse and a new Node lifetime cannot finalize the old run.
+The read-only inspection exposes only `BOUND_PARENT_RUNNING_AT_INSPECTION`,
+`BOUND_PARENT_EXIT_CONFIRMED`, `BOUND_PARENT_STATUS_UNKNOWN`, or
+`NOT_BOUND_TO_PROCESS_HANDLE` for an unbound historical/pure fixture.
+Parent attribution is an OS observation, NOT cryptographic attestation of
+which MCP script is running; same-user parent spoofing is out of scope.
+An uncertain parent refuses new writes. Parent exit is not approval.
+No private owner ID, PID, HWND, account, raw
 log or world information is returned. The ordinary app/webview cannot
 forge a native inspection request, and a missing retained controller is
 reported as unavailable rather than created.
 
-**Operator-approved takeover is NOT yet implemented.** The current
-native reservation does not bind a retained handle or process-birth
-identity for the originating MCP process. Token equality, arbitrary
-caller-reported death, timeouts, screenshots and archive SHA alone
-cannot establish that the prior owner safely exited. A future transfer
+**Operator-approved takeover is NOT yet implemented.** A retained Windows
+parent handle/birth is process-lifetime evidence, not authentication of
+the MCP script, operator approval, a Minecraft world, or consent to takeover.
+Token equality, arbitrary caller-reported death, timeouts, screenshots and
+archive SHA alone cannot establish a safe handoff. A future transfer
 must be separately reviewed against verified original owner exit,
 operator authentication, the expected old run ID and immutable archive
 integrity; it must use an atomic compare-and-swap inside the original

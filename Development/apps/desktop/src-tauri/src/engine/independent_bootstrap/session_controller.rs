@@ -1461,15 +1461,18 @@ fn run() -> io::Result<()> {
                 SessionRequest::TestingReserve {
                     slot,owner_id,run_id,replace_run_id
                 } => {
-                    testing_reply=Some(testing_runs.reserve(slot,&owner_id,&run_id,
-                        replace_run_id.as_deref()).map_err(|e|e.to_string())?);
+                    testing_reply=Some(testing_runs.reserve_from_peer(
+                        slot,&owner_id,&run_id,replace_run_id.as_deref(),
+                        manager.as_ref().ok_or_else(||"Missing verified Testing peer".to_string())?
+                    ).map_err(|e|e.to_string())?);
                 }
                 SessionRequest::TestingFinalize {
                     slot,owner_id,run_id,reported_status,report_digest
                 } => {
-                    testing_reply=Some(testing_runs.finalize(
-                        slot,&owner_id,&run_id,&reported_status,&report_digest)
-                        .map_err(|e|e.to_string())?);
+                    testing_reply=Some(testing_runs.finalize_from_peer(
+                        slot,&owner_id,&run_id,&reported_status,&report_digest,
+                        manager.as_ref().ok_or_else(||"Missing verified Testing peer".to_string())?
+                    ).map_err(|e|e.to_string())?);
                 }
                 SessionRequest::PublishAgentActivity {activity} => {
                     if !activity.valid_ingress() {

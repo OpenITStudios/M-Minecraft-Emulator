@@ -250,7 +250,10 @@ export function parseTestingInspectionReceipt(message,slot) {
      obs.schema!==1||obs.slot!==slot||
      !['NO_RECORD','RESERVED','FINAL'].includes(obs.phase)||
      typeof obs.ownerTokenMatch!=='boolean'||
-     obs.ownerProcessProof!=='NOT_BOUND_TO_PROCESS_HANDLE'||
+     !['NOT_BOUND_TO_PROCESS_HANDLE',
+       'BOUND_PARENT_RUNNING_AT_INSPECTION',
+       'BOUND_PARENT_EXIT_CONFIRMED',
+       'BOUND_PARENT_STATUS_UNKNOWN'].includes(obs.ownerProcessProof)||
      obs.operatorApproval!=='NOT_AVAILABLE_IN_PROTOCOL'||
      obs.transferAllowed!==false||
      obs.provenance!=='RETAINED_CONTROLLER_MEMORY_ONLY_NOT_GAMEPLAY_PROOF')
@@ -260,6 +263,7 @@ export function parseTestingInspectionReceipt(message,slot) {
   const outcomes=['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW','INCOMPLETE','BLOCKED'];
   if(obs.phase==='NO_RECORD') {
     if(obs.runId!==null||obs.ownerTokenMatch!==false||
+       obs.ownerProcessProof!=='NOT_BOUND_TO_PROCESS_HANDLE'||
        obs.reportedStatus!==null||obs.reportDigest!==null||
        obs.recoveryAction!=='CHECK_ARCHIVE_AND_CONTROLLER_EPOCH')fail();
   }else if(obs.phase==='RESERVED') {
