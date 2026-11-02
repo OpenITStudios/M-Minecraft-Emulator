@@ -150,16 +150,31 @@ approved-source review. Simultaneous client preparations share the
 same in-flight review; unapproved versions remain blocked.
 
 The first QA call pins an existing capture cursor and may return an
-exact read-only game-window target; it NEVER sends commands or
-certifies player/admin/world readiness. The official command is
-`/scriptevent probe:run auto` and still needs a separately approved
-in-game Player/admin Computer Use channel and disposable QA world.
-Subsequent `probe_qa` calls inspect only **newly appended log bytes**,
-not an entire 256-KiB tail or unrelated analytics records. Waiting
-responses do not recheck native game windows and carry no long
-repeated instructions. The first call and result reports stay compact.
-To start a new session intentionally, use `probe_qa` with
-`{ "restart": true }`. No session ID must be passed by AI.
+exact read-only game-window target. Its short response distinguishes
+`sourceCapture: APPROVED_SOURCE_LOG_FILE_PRESENT` from
+`gameExecution: NOT_VERIFIED`; status is still BLOCKED because
+command dispatch is not enabled. File presence does **not** prove a
+live Content Log stream, installed Probe, authenticated world or
+Player/admin. The official `/scriptevent probe:run auto` still needs
+a separately approved in-game Player/admin Computer Use channel and
+disposable QA world.
+
+While the run is in progress, repeated `probe_qa` calls inspect only
+newly appended log bytes. After a complete Probe result, unrecoverable
+runner-marker mismatch, lost/replaced capture boundary, target
+replacement or source change, the **same per-slot MCP session**
+stores one terminal snapshot. Transient concurrent file reads can
+still be retried rather than falsely finalized. Further
+calls return it without ZIP, log or native reads. A still-pending run
+expires after 20 minutes and becomes a terminal BLOCKED snapshot,
+**not** a new run. The terminal report remains a historical source
+snapshot and never certifies Minecraft map gameplay.
+
+To deliberately begin another run, use `probe_qa` with
+`{ "restart": true }`. No session ID, new wizard or extra tool is
+required. Snapshots are bounded **in memory of the current MCP process**:
+restarting the MCP process does not restore them, and this is not a
+persistent QA report archive.
 
 The original `prepare_probe_qa`/`read_probe_qa_result` calls remain
 for backward compatibility. Probe output and Minecraft gameplay

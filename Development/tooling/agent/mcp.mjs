@@ -1022,11 +1022,26 @@ export function createHandler(config,{
   visualObserverFactory=createVisualObserver,
   probeCatalog=readPinnedProbeCatalogCached,
   probeRevisionStatus=probeSourceRevisionStatus,
+  qaClock=()=>Date.now(),
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
   // One volatile plan per slot; not a Minecraft world manager or an auto-run loop.
   const probeQaPlans=new Map();
   const probeQaBusy=new Set(); // short per-slot tool admission, no background runner
+  // Source-only terminal snapshots live in the same per-slot plan. No disk
+  // database, background processing, or extra QA session authority.
+  function settleProbeQa(slot,plan,report) {
+    if(probeQaPlans.get(slot)!==plan) {
+      return {schema:1,slot,status:'BLOCKED',
+        reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+    }
+    if(plan.terminalReport)return plan.terminalReport;
+    const frozen=Object.freeze({...report,terminal:true,
+      ...(report.counts?{counts:Object.freeze({...report.counts})}:{}),
+      ...(report.missingIds?{missingIds:Object.freeze([...report.missingIds])}:{})});
+    plan.terminalReport=frozen;
+    return frozen;
+  }
   let visualReadBusy=false; // only one identity-pinned screenshot at a time
   let mc02SequenceAbort=null; // pending opted-in legacy MC02 request only
   let multiSequence=null; // one bounded cross-slot request, not a game owner
@@ -1229,6 +1244,11 @@ export function createHandler(config,{
       probeQaBusy.add(slot);
       try {
         let plan=probeQaPlans.get(slot);
+        // A completed or stopped run is a historical snapshot, not new
+        // game readiness. Only explicit restart creates a new checkpoint.
+        if(plan?.terminalReport&&args.restart!==true) {
+          return plan.terminalReport;
+        }
         // One user-facing tool. Existing prepare/read tools remain for
         // backward-compatible callers, but AI need not carry a session ID.
         if(!plan||args.restart===true) {
@@ -1284,6 +1304,7 @@ export function createHandler(config,{
           }
           return {schema:1,slot,phase:'AWAITING_AUTHORIZED_COMMAND',
             status:'BLOCKED',reason:'COMMAND_DISPATCH_NOT_ENABLED',
+            sourceCapture:'APPROVED_SOURCE_LOG_FILE_PRESENT',gameExecution:'NOT_VERIFIED',
             probeCount:prepared.autoProbeCount,target:targetStatus,
             ...(targetHandoff?{targetHandoff}:{}),
             command:prepared.command,
@@ -1297,10 +1318,9 @@ export function createHandler(config,{
         try {revision=await probeRevisionStatus(config.probeZip,plan.sourceRevision);}
         catch {revision='UNAVAILABLE';}
         if(revision!=='UNCHANGED') {
-          probeQaPlans.delete(slot);
-          return {schema:1,slot,status:'BLOCKED',
+          return settleProbeQa(slot,plan,{schema:1,slot,status:'BLOCKED',
             reason:revision==='CHANGED'?'QA_SOURCE_CHANGED_STOP':
-              'QA_SOURCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'};
+              'QA_SOURCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
         }
         let raw;
         try {
@@ -1316,6 +1336,24 @@ export function createHandler(config,{
         if(probeQaPlans.get(slot)?.sessionId!==plan.sessionId) {
           return {schema:1,slot,status:'BLOCKED',
             reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+        }
+        if(raw.status==='QA_PLAN_EXPIRED') {
+          return settleProbeQa(slot,plan,compact);
+        }
+        // Runner markers that are missing, duplicated, suppressed or
+        // inconsistent cannot be repaired by rereading the same bytes.
+        // A new run (restart=true) is required for fresh provenance.
+        if(/^INCOMPLETE_[A-Z_]+$/.test(raw.status??'')) {
+          return settleProbeQa(slot,plan,compact);
+        }
+        // A rotated/replaced/truncated or lost Probe capture boundary
+        // cannot be repaired within this session. A torn concurrent read
+        // may recover, so only these explicit reasons are terminal.
+        if(raw.status==='CAPTURE_FILE_UNSTABLE'&&
+           ['PROBE_CAPTURE_REPLACED','PROBE_CAPTURE_TRUNCATED',
+            'PROBE_CAPTURE_TAIL_GAP','PROBE_CAPTURE_PREFIX_CHANGED',
+            'PROBE_MARKER_VOLUME_EXCEEDED'].includes(raw.captureIssue)) {
+          return settleProbeQa(slot,plan,compact);
         }
         if(['WAITING','INCOMPLETE','BLOCKED'].includes(compact.status)) {
           return compact;
@@ -1339,17 +1377,16 @@ export function createHandler(config,{
         }
         if(plan.targetIdentity&&target==='CHANGED_OR_UNAVAILABLE') {
           compact={...compact,status:'INCOMPLETE',
-            sourceStatus:'QA_NATIVE_TARGET_CHANGED',
+            reason:'QA_NATIVE_TARGET_CHANGED',
             gameplayAcceptance:'NOT_VERIFIED'};
-        } else if(!plan.targetIdentity&&
-          compact.status==='PROBE_REPORTED_PASS') {
-          // Preserve the Probe's raw counts but never elevate a log-only
-          // result when we have not even observed the intended game window.
+        } else if(!plan.targetIdentity) {
+          // Without a pinned game, even an official Probe FAIL/REVIEW
+          // remains unattributed. Preserve bounded counts, not a verdict.
           compact={...compact,status:'INCOMPLETE',
-            sourceStatus:'QA_NATIVE_TARGET_NOT_BOUND',
+            reason:'QA_NATIVE_TARGET_NOT_BOUND',
             gameplayAcceptance:'NOT_VERIFIED'};
         }
-        return {...compact,target};
+        return settleProbeQa(slot,plan,{...compact,target});
       } finally {probeQaBusy.delete(slot);}
     }
     if(name==='prepare_probe_qa') {
@@ -1390,7 +1427,7 @@ export function createHandler(config,{
           commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
       }
       const sessionId=randomBytes(12).toString('hex');
-      const preparedAt=new Date().toISOString();
+      const preparedAt=new Date(qaClock()).toISOString();
       probeQaPlans.set(slot,{sessionId,slot,preparedAt,autoIds:catalog.autoIds,
         sourceRevision:catalog.sourceRevision,
         captureCursor:existing.captureCursor});
@@ -1422,8 +1459,11 @@ export function createHandler(config,{
           gameplayAcceptance:'NOT_VERIFIED'};
       }
       // Do not reuse an old source plan indefinitely; no timer/worker needed.
-      if(Date.now()-Date.parse(session.preparedAt)>20*60*1000) {
-        probeQaPlans.delete(slot);
+      if(session.expired===true||
+         qaClock()-Date.parse(session.preparedAt)>20*60*1000) {
+        // Retain an expired tombstone so the preferred one-entry tool
+        // cannot silently start a new QA run on the next poll.
+        session.expired=true;
         return {schema:1,slot,status:'QA_PLAN_EXPIRED',
           gameplayAcceptance:'NOT_VERIFIED'};
       }

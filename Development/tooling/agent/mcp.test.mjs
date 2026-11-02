@@ -125,24 +125,31 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(ready.targetHandoff.input,'NOT_AVAILABLE_OR_AUTHORIZED');
   assert.equal(ready.commandSentByLazyTester,false);
   assert.equal(ready.reason,'COMMAND_DISPATCH_NOT_ENABLED');
+  assert.equal(ready.sourceCapture,'APPROVED_SOURCE_LOG_FILE_PRESENT');
+  assert.equal(ready.gameExecution,'NOT_VERIFIED');
   assert.deepEqual(nativeCalls,[['target',2]]); // read-only; no launch/input
   const report=await h.callTool('probe_qa',{slot:2});
   assert.equal(report.status,'PROBE_REPORTED_PASS');
+  assert.equal(report.terminal,true);
   assert.equal(report.counts.pass,2);
   assert.equal(report.target,'NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY');
   assert.equal(report.gameplayAcceptance,'NOT_VERIFIED');
   assert.deepEqual(nativeCalls,[['target',2],['target',2]]);
   assert.equal(catalogReads,1); // No catalog reload on result reads
   assert.equal(revisionReads,1); // Only cheap metadata comparison
-  // A changed target must not retain an old all-pass as fresh acceptance.
+  // A completed report is a historical snapshot; it does not imply
+  // the currently running Minecraft process remains the same.
   targetBirth='9876543';
-  const changed=await h.callTool('probe_qa',{slot:2});
-  assert.equal(changed.status,'INCOMPLETE');
-  assert.equal(changed.sourceStatus,'QA_NATIVE_TARGET_CHANGED');
-  assert.equal(changed.gameplayAcceptance,'NOT_VERIFIED');
+  const cached=await h.callTool('probe_qa',{slot:2});
+  assert.deepEqual(cached,report);
+  assert.deepEqual(nativeCalls,[['target',2],['target',2]]);
+  assert.equal(catalogReads,1);
+  assert.equal(revisionReads,1);
   const restarted=await h.callTool('probe_qa',{slot:2,restart:true});
   assert.equal(restarted.phase,'AWAITING_AUTHORIZED_COMMAND');
   assert.equal(restarted.commandSentByLazyTester,false);
+  assert.equal(restarted.targetHandoff.identity.createdFileTime,'9876543');
+  assert.equal(catalogReads,2); // only the intentional new session prepares
   await assert.rejects(()=>h.callTool('probe_qa',{slot:2,restart:'true'}),
     /Invalid tool arguments/);
   h.shutdown();
@@ -186,6 +193,240 @@ test('unchanged Probe status polls skip ZIP parsing and native target IPC',async
   assert.equal(revisionReads,2); // cheap metadata-change probes only
   assert.equal(nativeReads,1); // no repeated target IPC while waiting
   assert.equal(captureReads,3);
+  h.shutdown();
+});
+
+test('terminal Probe report is reused after 20 minutes without repeated IO',async()=>{
+  let qaTime=Date.parse('2026-11-02T07:00:00.000Z');
+  let catalogReads=0,revisionReads=0,evidenceReads=0,nativeReads=0;
+  const h=createHandler({...config(),probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    qaClock:()=>qaTime,
+    probeCatalog:async()=>{
+      catalogReads++;
+      return {autoCount:1,autoIds:['P01'],archiveSha256:'a'.repeat(64),
+        runnerSha256:'b'.repeat(64),sourceRevision:'c'.repeat(64),
+        cache:'UNCHANGED_APPROVED_ZIP'};
+    },
+    probeRevisionStatus:async()=>{revisionReads++;return 'UNCHANGED';},
+    evidence:async(_dir,slot,_n,options)=>{
+      evidenceReads++;
+      return options?.probeCheckpoint?
+        {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[
+          {kind:'start',arg:'auto',count:1,tick:1,at:null},
+          {kind:'result',id:'P01',result:'fail',tick:2,at:null},
+          {kind:'done',arg:'auto',count:1,tick:3,at:null},
+        ]}:
+        {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:{
+          kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+    native:async(_exe,op,slot)=>{
+      nativeReads++;
+      return {schema:1,ok:true,operation:'target',slot,pid:202,
+        windowId:808,createdFileTime:'5555',sessionId:1,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+        gameplayInput:'NOT_VERIFIED'};
+    },
+  });
+  const prepared=await h.callTool('probe_qa',{slot:2});
+  assert.equal(prepared.sourceCapture,'APPROVED_SOURCE_LOG_FILE_PRESENT');
+  assert.equal(prepared.gameExecution,'NOT_VERIFIED');
+  const finished=await h.callTool('probe_qa',{slot:2});
+  assert.equal(finished.status,'FAIL');
+  assert.equal(finished.terminal,true);
+  assert.equal(finished.counts.fail,1);
+  const before=[catalogReads,revisionReads,evidenceReads,nativeReads];
+  qaTime+=25*60*1000;
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),finished);
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),finished);
+  assert.deepEqual([catalogReads,revisionReads,evidenceReads,nativeReads],before);
+  const fresh=await h.callTool('probe_qa',{slot:2,restart:true});
+  assert.equal(fresh.phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(fresh.terminal,undefined);
+  assert.equal(catalogReads,before[0]+1);
+  h.shutdown();
+});
+
+test('expired pending run is held, never implicitly prepared again',async()=>{
+  let now=Date.parse('2026-11-02T07:00:00.000Z');
+  let catalogs=0,captures=0,revisions=0;
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    qaClock:()=>now,
+    probeCatalog:async()=>{
+      catalogs++;
+      return {autoCount:1,autoIds:['P01'],archiveSha256:'a'.repeat(64),
+        runnerSha256:'b'.repeat(64),sourceRevision:'c'.repeat(64),
+        cache:'UNCHANGED_APPROVED_ZIP'};
+    },
+    probeRevisionStatus:async()=>{revisions++;return 'UNCHANGED';},
+    evidence:async(_dir,slot,_n,opts)=>{
+      captures++;
+      return opts?.probeCheckpoint?
+        {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[]}:
+        {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:{
+          kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  });
+  await h.callTool('probe_qa',{slot:2});
+  now+=20*60*1000+1;
+  const expired=await h.callTool('probe_qa',{slot:2});
+  assert.equal(expired.status,'BLOCKED');
+  assert.equal(expired.reason,'QA_PLAN_EXPIRED');
+  assert.equal(expired.terminal,true);
+  const counters=[catalogs,captures,revisions];
+  now+=2*60*60*1000;
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),expired);
+  assert.deepEqual([catalogs,captures,revisions],counters);
+  const refreshed=await h.callTool('probe_qa',{slot:2,restart:true});
+  assert.equal(refreshed.phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(catalogs,counters[0]+1);
+  h.shutdown();
+});
+
+test('source change during pending QA stops once and preserves stop report',async()=>{
+  let status='UNCHANGED',catalogReads=0,captureReads=0,revisionReads=0;
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>{
+      catalogReads++;
+      return {autoCount:1,autoIds:['P01'],archiveSha256:'a'.repeat(64),
+        runnerSha256:'b'.repeat(64),sourceRevision:'c'.repeat(64),
+        cache:'UNCHANGED_APPROVED_ZIP'};
+    },
+    probeRevisionStatus:async()=>{revisionReads++;return status;},
+    evidence:async(_dir,slot)=>{
+      captureReads++;
+      return {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:{
+        kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  });
+  await h.callTool('probe_qa',{slot:2});
+  status='CHANGED';
+  const stopped=await h.callTool('probe_qa',{slot:2});
+  assert.equal(stopped.status,'BLOCKED');
+  assert.equal(stopped.reason,'QA_SOURCE_CHANGED_STOP');
+  assert.equal(stopped.terminal,true);
+  status='UNCHANGED';
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),stopped);
+  assert.equal(catalogReads,1);
+  assert.equal(captureReads,1);
+  assert.equal(revisionReads,1);
+  assert.equal((await h.callTool('probe_qa',{slot:2,restart:true}))
+    .phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal(catalogReads,2);
+  h.shutdown();
+});
+
+test('irrecoverable runner gaps settle once and require explicit new run',async()=>{
+  let reads=0,sourceChecks=0;
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>({autoCount:2,autoIds:['P01','P02'],
+      archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'}),
+    probeRevisionStatus:async()=>{sourceChecks++;return 'UNCHANGED';},
+    evidence:async(_dir,slot,_n,opts)=>{
+      reads++;
+      return opts?.probeCheckpoint?
+        {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[
+          {kind:'start',arg:'auto',count:2,tick:100,at:null},
+          {kind:'result',id:'P01',result:'pass',tick:101,at:null},
+          {kind:'done',arg:'auto',count:2,tick:102,at:null},
+        ]}:
+        {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:{
+          kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  });
+  await h.callTool('probe_qa',{slot:2});
+  const incomplete=await h.callTool('probe_qa',{slot:2});
+  assert.equal(incomplete.status,'INCOMPLETE');
+  assert.equal(incomplete.reason,'INCOMPLETE_RESULTS');
+  assert.equal(incomplete.terminal,true);
+  assert.deepEqual(incomplete.missingIds,['P02']);
+  const before=[reads,sourceChecks];
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),incomplete);
+  assert.deepEqual([reads,sourceChecks],before);
+  await h.callTool('probe_qa',{slot:2,restart:true});
+  assert.equal(reads,before[0]+1);
+  h.shutdown();
+});
+
+test('target replacement before first result remains incomplete and terminal',async()=>{
+  let birth='111111',nativeReads=0,evidenceReads=0;
+  const h=createHandler({...config(),probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
+      archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'}),
+    probeRevisionStatus:async()=> 'UNCHANGED',
+    native:async(_exe,op,slot)=>{
+      nativeReads++;
+      return {schema:1,ok:true,operation:'target',slot,pid:302,
+        windowId:902,createdFileTime:birth,sessionId:1,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+        gameplayInput:'NOT_VERIFIED'};
+    },
+    evidence:async(_dir,slot,_n,opts)=>{
+      evidenceReads++;
+      return opts?.probeCheckpoint?
+        {slot,status:'CAPTURE_FILE_PRESENT',probeEvents:[
+          {kind:'start',arg:'auto',count:1,tick:100,at:null},
+          {kind:'result',id:'P01',result:'pass',tick:101,at:null},
+          {kind:'done',arg:'auto',count:1,tick:102,at:null},
+        ]}:
+        {slot,status:'CAPTURE_FILE_PRESENT',captureCursor:{
+          kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  });
+  await h.callTool('probe_qa',{slot:2});
+  birth='222222';
+  const result=await h.callTool('probe_qa',{slot:2});
+  assert.equal(result.status,'INCOMPLETE');
+  assert.equal(result.reason,'QA_NATIVE_TARGET_CHANGED');
+  assert.equal(result.terminal,true);
+  const before=[nativeReads,evidenceReads];
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),result);
+  assert.deepEqual([nativeReads,evidenceReads],before);
+  h.shutdown();
+});
+
+test('capture replacement stops once; a transient capture read may retry',async()=>{
+  let captureStatus='FILE_CHANGED_DURING_READ',reads=0;
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
+      archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64),cache:'UNCHANGED_APPROVED_ZIP'}),
+    probeRevisionStatus:async()=> 'UNCHANGED',
+    evidence:async(_dir,slot,_n,opts)=>{
+      reads++;
+      return opts?.probeCheckpoint?
+        {slot,status:'CAPTURE_FILE_UNSTABLE',reason:captureStatus,
+          probeEvents:[]}:
+        {slot,status:'CAPTURE_FILE_PRESENT',
+          captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'}};
+    },
+  });
+  await h.callTool('probe_qa',{slot:2});
+  const transient=await h.callTool('probe_qa',{slot:2});
+  assert.equal(transient.status,'INCOMPLETE');
+  assert.equal(transient.terminal,undefined);
+  const initialReads=reads;
+  captureStatus='PROBE_CAPTURE_REPLACED';
+  const stopped=await h.callTool('probe_qa',{slot:2});
+  assert.equal(stopped.status,'INCOMPLETE');
+  assert.equal(stopped.captureIssue,'PROBE_CAPTURE_REPLACED');
+  assert.equal(stopped.terminal,true);
+  assert.equal(reads,initialReads+1);
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),stopped);
+  assert.equal(reads,initialReads+1);
   h.shutdown();
 });
 
@@ -257,15 +498,18 @@ test('QA single entry refuses source drift and log-only PASS without a pinned ta
   assert.equal(logOnly.sourceStatus,'QA_NATIVE_TARGET_NOT_BOUND');
   assert.equal(logOnly.counts.pass,2);
   assert.equal(logOnly.gameplayAcceptance,'NOT_VERIFIED');
+  assert.equal(logOnly.terminal,true);
   digest='b'.repeat(64);
-  const changed=await h.callTool('probe_qa',{slot:2});
-  assert.equal(changed.status,'BLOCKED');
-  assert.equal(changed.reason,'QA_SOURCE_CHANGED_STOP');
-  assert.equal((await h.callTool('probe_qa',{slot:2})).phase,'AWAITING_AUTHORIZED_COMMAND');
+  // No automatic rerun or reinterpretation of a finalized snapshot.
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),logOnly);
+  const renewed=await h.callTool('probe_qa',{slot:2,restart:true});
+  assert.equal(renewed.phase,'AWAITING_AUTHORIZED_COMMAND');
   failRead=true;
   const unavailable=await h.callTool('probe_qa',{slot:2});
   assert.equal(unavailable.status,'BLOCKED');
   assert.equal(unavailable.reason,'QA_SOURCE_UNAVAILABLE');
+  assert.equal(unavailable.terminal,true);
+  assert.deepEqual(await h.callTool('probe_qa',{slot:2}),unavailable);
   h.shutdown();
 });
 

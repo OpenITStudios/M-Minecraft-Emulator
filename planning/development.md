@@ -1,5 +1,42 @@
 # Current Development Handoff — Lazy Tester
 
+## Gameplay Probe QA terminal-session lifecycle — 2 November 2026
+
+**State: SOURCE_ONLY / NOT_EXECUTED.** Existing `probe_qa` now
+distinguishes `sourceCapture: APPROVED_SOURCE_LOG_FILE_PRESENT`
+from `gameExecution: NOT_VERIFIED` while keeping command-dispatch
+BLOCKED. File presence does not prove a live capture. It does not
+interpret a pinned ZIP, existing capture or native window as proof
+that the Minecraft world has Skills Probe installed or that a Player
+has admin rights.
+
+The same existing per-slot, volatile MCP plan now owns one frozen,
+bounded terminal report for conclusive original-Probe PASS/FAIL/REVIEW,
+irrecoverable runner-marker gaps, lost/replaced capture
+boundaries, source drift/unavailability, native target
+replacement/unbound completed results, or an expired pending
+session. Transient torn reads do not permanently settle the run. Repeated `probe_qa` calls return the exact snapshot
+without source metadata checks, ZIP operations, Content Log reads or
+native target inspection. A waiting run remains readable until the
+existing 20-minute limit; after expiry it is held as BLOCKED rather
+than silently re-prepared. Only explicit `restart=true` starts a
+new checkpoint. Legacy prepare/read tools remain compatible.
+
+Terminal snapshots are historical, source-scoped reports held only
+inside the live MCP process; they are not persistent on disk, not
+verified Minecraft/QA-world acceptance, and not current-state
+attestations after the target or ZIP later changes. No alternative
+session owner, artifact database, source update, in-game test
+engine, command sender or background timer was added. Regression
+fixtures were AUTHORED_NOT_EXECUTED; no Node tests, CI, Windows,
+Minecraft, account, world or input operations occurred.
+
+**Single next proof gate (separate runtime approval):** Verify one
+official Skills Probe admin-Player run on an isolated Education
+Windows QA world and bind its captured output to the correct
+native process/world before enabling automatic command dispatch.
+
+
 ## Eliminate repeated Skills Probe QA work — 2 November 2026
 
 **State: SOURCE_ONLY / NOT_EXECUTED.** Removed redundant per-result
