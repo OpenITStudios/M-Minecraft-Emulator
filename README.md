@@ -40,6 +40,17 @@ Archive/experiments/          Historical research
 workspace/            Ignored local tools, builds, candidates and private material
 ```
 
+## Gameplay Probe AI QA (source-only)
+
+The optional MCP offers two read-only operations:
+`prepare_probe_qa` and `read_probe_qa_result`. Configure the
+reviewed Skills Probe ZIP and an existing local capture directory
+once. The first returns the original `/scriptevent probe:run auto`
+step; the second reads fresh results, not stored or historic PASS data.
+Lazy Tester does not install the Probe, execute commands or certify
+gameplay. See the [short AI QA workflow](Development/tooling/agent/README.md#simple-ai-gameplay-probe-qa-source-only)
+before authorizing future Computer Use.
+
 ## AI-ready developer control
 
 `DEV.cmd` is the single local developer entrypoint. AI can inspect the

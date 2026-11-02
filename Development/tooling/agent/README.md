@@ -132,6 +132,47 @@ Existing MCP stays a read-only telemetry consumer. No new Codex
 stream, auto-update daemon, test runner or Minecraft game process.
 See [team update workflow](../../../docs/system/education-team-source-updates.md).
 
+## Simple AI Gameplay Probe QA (source-only)
+
+**Two MCP calls; no second test runner or game controller.** Configure
+these two paths once in the local MCP process (CLI option
+`--probe-zip` may replace the first environment variable):
+
+    LAZY_TESTER_PROBE_ZIP=C:\absolute\skills-probe-main.zip
+    LAZY_TESTER_EVIDENCE_DIR=C:\absolute\existing-captures
+
+The ZIP is neither copied into the repository nor installed to Minecraft.
+Only the exact reviewed SHA-256 in `team-source-baseline.json` is accepted.
+New ZIP versions require the existing team update review.
+
+1. Call `prepare_probe_qa` (defaults to MC02). It verifies the original
+   ZIP, derives the auto probe IDs from that source, checks that the existing
+   per-profile capture is present, and returns a session ID plus the
+   original `/scriptevent probe:run auto` command. Re-preparing invalidates
+   the previous plan for that slot.
+2. A separately authorized operator or verified per-window Computer Use
+   provider executes that command as an **in-game admin Player in a
+   disposable QA world with Skills Probe installed**.
+3. Call `read_probe_qa_result` with that slot and session ID. It reads
+   fresh `[probe:probe]` RUN_START / RESULT / RUN_DONE markers using the
+   existing bounded MC0x.log reader. Old `probe:report` STORED data
+   never counts. Missing or repeated markers, unexpected results or
+   non-PASS outcomes do not become gameplay PASS.
+
+There is no automatic import, capture process, new UI, game command
+sender, model loop, pack builder, source sync or account/world mutation.
+This is an **AI-ready plan/evidence bridge**, not permission to enable
+experimental input. The current MCP has no `send_minecraft_command`
+tool and the native AI input experiment remains OFF/unverified. Any
+actual Computer Use action needs its own target identity, permission
+and game-input proof before execution.
+
+The supplied `docs/AGENT-TEST-RUN.md` describes a historical 12-auto
+run, but the pinned ZIP presently declares 22 literal auto probes.
+The list is read from the approved source, never from that stale number;
+unrecognized dynamic auto registrations fail closed. Manual/setup
+cases remain separate and Probe PASS never certifies another map.
+
 ## Test/release boundary
 
 Read [current handoff](../../../planning/development.md) and

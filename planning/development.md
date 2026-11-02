@@ -1,5 +1,32 @@
 # Current Development Handoff — Lazy Tester
 
+## Simple Gameplay Probe AI QA handoff — 2 November 2026
+
+**State: SOURCE_ONLY / NOT_EXECUTED.** The existing local MCP has two
+read-only AI QA actions: `prepare_probe_qa` and `read_probe_qa_result`.
+The first needs one configured original pinned Skills Probe ZIP and
+existing per-slot capture directory; it derives the auto probe ID set
+from approved source and returns the official command and volatile
+session ID. The second correlates only fresh RUN_START/RESULT/RUN_DONE
+markers via the same stable MC0x.log reader. It will not treat old
+probe:report STORED output, missing results, INFO/LOOK outcomes, or a
+native input ACK as completed gameplay acceptance.
+
+The supplied ZIP source currently declares 22 literal auto probes;
+the historical AGENT-TEST-RUN.md says 12. The whole approved ZIP SHA-256
+and runner blob digest gate the catalog. No new in-game scorer, second
+MCP/game controller, daemon, installer, world writes, CI, source
+upload, command dispatch, Content Log discovery or AI input was added.
+World/profile/player attribution and Minecraft Education 26.33
+compatibility remain NOT_VERIFIED. Authored source fixtures were
+NOT_EXECUTED.
+
+**Next (separate runtime approval):** In an isolated Education world,
+verify the original Skills Probe command from an authorized Player,
+capture fresh run markers and confirm exact world/profile identity.
+Only then can a separately validated Computer Use command adapter
+execute the prepared action; the native multi-AI input feature remains OFF.
+
 ## Minecraft Education team source parity + command help — 2 November 2026
 
 **Operator-approved modular team ZIP intake (SOURCE_ONLY /
