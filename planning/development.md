@@ -1,5 +1,46 @@
 # Current Development Handoff — Lazy Tester
 
+## Map-aware Gameplay Probe QA P1 — 2 November 2026
+
+**State: SOURCE_ONLY / NOT_EXECUTED.** Added one bounded declarative
+Map Test Contract validator/selector inside existing agent tooling.
+No second in-game Probe, map scorer, backend provider, telemetry module,
+command sender, world/account mutation, UI, daemon or CI was added.
+The team's original Skills Probe auto catalog and its report remain
+the sole foundation-probe result owner.
+
+Optional `LAZY_TESTER_MAP_CONTRACT`/`--map-contract` points the same
+`probe_qa` MCP to one local approved map JSON. Its first response
+can include compact `mapPlan`, separate from original Probe status;
+`scope=full|smoke|affected` selects requirements but **never executes**
+them. An MCP `affected` request falls back to full until a trusted
+exact Git diff exists; unknown files and absent smoke coverage also
+fall back to full. Prerequisite and impacted dependencies are handled
+conservatively. The contract's expected outcomes are map-owner data,
+never inferred to be correct from possibly buggy source. Requirements
+with game actions must demand action-confirmation evidence.
+
+The same one-per-slot in-memory QA session pins map contract revision,
+rejects scope changes without `restart=true`, and blocks source drift.
+Stable contract data reuses a small memory cache and metadata checks;
+terminal reports retain a historical mapPlan without further I/O.
+The normal MCP response and the legacy prepare/read tools remain
+unchanged when no map contract is configured.
+
+**Proof:** REMOTE_GITHUB pinned Local source and consumer review only;
+bounded Node regression fixtures AUTHORED_NOT_EXECUTED. No Node test,
+Windows build, game, content log, map-specific state adapter, actual
+Git diff verification, AI input, installer or CI was executed.
+
+**Unresolved:** Current source does not send valid Player/admin commands,
+bind Content Log to QA world/profile, inspect map-specific live state,
+or control player gameplay. MapPlan is NOT_TESTED, not a gameplay verdict.
+
+**Next:** After separate runtime authorization, establish one original
+Skills Probe Player/admin command and exact QA-world Content Log identity
+before enabling automatic dispatch.
+
+
 ## Gameplay Probe QA terminal-session lifecycle — 2 November 2026
 
 **State: SOURCE_ONLY / NOT_EXECUTED.** Existing `probe_qa` now

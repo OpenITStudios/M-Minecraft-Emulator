@@ -23,6 +23,8 @@ import {createVisualObserver,OBSERVATION_LIMITS,
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 import {readPinnedProbeCatalogCached,probeSourceRevisionStatus,
   parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult} from './probe-qa.mjs';
+import {readMapTestContractCached,mapContractSourceStatus,planMapTests,
+  compactMapTestPlan} from './map-test-plan.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -90,14 +92,15 @@ export function parseConfiguration(argv, env = process.env) {
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
   let diagnosticsDirectory = env.LAZY_TESTER_DIAGNOSTICS_DIR ?? '';
   let probeZip = env.LAZY_TESTER_PROBE_ZIP ?? '';
+  let mapContractPath = env.LAZY_TESTER_MAP_CONTRACT ?? '';
   let cuaExecutable = env.LAZY_TESTER_CUA_EXE ?? '';
   let gpuExecutable = env.LAZY_TESTER_GPU_CAPTURE_EXE ?? '';
   let experimentalMc02InputEnabled=false;
   let experimentalMultiClientInputEnabled=false;
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--probe-zip','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <Data/Diagnostics>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
+    if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
+      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <Data/Diagnostics>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
@@ -105,6 +108,7 @@ export function parseConfiguration(argv, env = process.env) {
     if (flag==='--evidence-dir') evidenceDirectory=value;
     if (flag==='--diagnostics-dir') diagnosticsDirectory=value;
     if (flag==='--probe-zip') probeZip=value;
+    if (flag==='--map-contract') mapContractPath=value;
     if (flag==='--cua-exe') cuaExecutable=value;
     if (flag==='--gpu-capture-exe') gpuExecutable=value;
     if (flag==='--mc02-input-experimental') {
@@ -139,9 +143,13 @@ export function parseConfiguration(argv, env = process.env) {
   if (probeZip && (!path.isAbsolute(probeZip) || !/\.zip$/i.test(probeZip))) {
     throw new Error('Probe ZIP must be an absolute .zip file path');
   }
+  if (mapContractPath && (!path.isAbsolute(mapContractPath) ||
+      path.extname(mapContractPath).toLowerCase()!=='.json')) {
+    throw new Error('Map contract must be an absolute .json file path');
+  }
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
   if (gpuExecutable) validateGpuExecutable(gpuExecutable);
-  return Object.freeze({mode, executable, evidenceDirectory,diagnosticsDirectory,probeZip,
+  return Object.freeze({mode, executable, evidenceDirectory,diagnosticsDirectory,probeZip,mapContractPath,
     cuaExecutable,gpuExecutable,experimentalMc02InputEnabled,
     experimentalMultiClientInputEnabled});
 }
@@ -825,7 +833,7 @@ export const TOOL_LIST=[
   {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true}},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
-  {name:'probe_qa',description:'Preferred single read-only QA entry. Reuses approved cached Probe catalog (reload only if source changed), records a log cursor, and returns compact appended results. restart=true starts a new plan. No game command, input or map PASS is executed or claimed.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'}},additionalProperties:false}},
+  {name:'probe_qa',description:'One source-only QA entry. Original Probe result is separate from optional map contract plan. scope=full|smoke|affected selects map requirements only; affected without trusted VCS diff falls back to full. restart=true is explicit. No game command, input or map PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']}},additionalProperties:false}},
   {name:'prepare_probe_qa',description:'ONE-STEP read-only Gameplay Probe auto-run preparation from an exact approved ZIP. Returns a player-admin command for an externally authorized QA-world operator/AI; never sends keys, commands, installs packs or starts Minecraft.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},additionalProperties:false}},
   {name:'read_probe_qa_result',description:'Review only fresh RUN_START/RESULT/RUN_DONE markers from the prepared pinned Skills Probe run. Never treats stored results or native transport ACK as a gameplay pass.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},sessionId:{type:'string',pattern:'^[a-f0-9]{24}$'}},required:['slot','sessionId'],additionalProperties:false}},
   // Source-only local-first diagnostics: explicitly imported immutable evidence.
@@ -1022,6 +1030,8 @@ export function createHandler(config,{
   visualObserverFactory=createVisualObserver,
   probeCatalog=readPinnedProbeCatalogCached,
   probeRevisionStatus=probeSourceRevisionStatus,
+  mapContract=readMapTestContractCached,
+  mapRevisionStatus=mapContractSourceStatus,
   qaClock=()=>Date.now(),
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
@@ -1036,7 +1046,9 @@ export function createHandler(config,{
         reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
     }
     if(plan.terminalReport)return plan.terminalReport;
-    const frozen=Object.freeze({...report,terminal:true,
+    const frozen=Object.freeze({...report,
+      ...(plan.mapPlan && !Object.hasOwn(report,'mapPlan')?{mapPlan:plan.mapPlan}:{}),
+      terminal:true,
       ...(report.counts?{counts:Object.freeze({...report.counts})}:{}),
       ...(report.missingIds?{missingIds:Object.freeze([...report.missingIds])}:{})});
     plan.terminalReport=frozen;
@@ -1231,8 +1243,15 @@ export function createHandler(config,{
   }
   async function callTool(name,args) {
     if(name==='probe_qa') {
-      keysExactly(args,['slot','restart']);
+      keysExactly(args,['slot','restart','scope']);
       const slot=slotOf(args.slot??2);
+      if(args.scope!==undefined&&!['full','smoke','affected'].includes(args.scope)) {
+        throw new Error('Invalid tool arguments');
+      }
+      if(args.scope!==undefined&&!config.mapContractPath) {
+        return {schema:1,slot,status:'BLOCKED',
+          reason:'MAP_CONTRACT_NOT_CONFIGURED',gameplayAcceptance:'NOT_VERIFIED'};
+      }
       if(args.restart!==undefined&&typeof args.restart!=='boolean') {
         throw new Error('Invalid tool arguments');
       }
@@ -1244,6 +1263,16 @@ export function createHandler(config,{
       probeQaBusy.add(slot);
       try {
         let plan=probeQaPlans.get(slot);
+        if(plan&&args.restart!==true&&args.scope!==undefined&&
+           args.scope!==plan.mapScope) {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'QA_SCOPE_CHANGE_REQUIRES_RESTART',gameplayAcceptance:'NOT_VERIFIED'};
+        }
+        if(plan&&args.restart!==true&&config.mapContractPath&&
+           !plan.mapSourceRevision) {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'MAP_PLAN_RESTART_REQUIRED',gameplayAcceptance:'NOT_VERIFIED'};
+        }
         // A completed or stopped run is a historical snapshot, not new
         // game readiness. Only explicit restart creates a new checkpoint.
         if(plan?.terminalReport&&args.restart!==true) {
@@ -1252,6 +1281,19 @@ export function createHandler(config,{
         // One user-facing tool. Existing prepare/read tools remain for
         // backward-compatible callers, but AI need not carry a session ID.
         if(!plan||args.restart===true) {
+          let mapPlan=null,mapSourceRevision=null;
+          const mapScope=args.scope??'full';
+          if(config.mapContractPath) {
+            try {
+              const loaded=await mapContract(config.mapContractPath);
+              mapPlan=compactMapTestPlan(planMapTests(loaded.contract,{scope:mapScope}));
+              mapSourceRevision=loaded.sourceRevision;
+            } catch {
+              return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
+                reason:'MAP_CONTRACT_REVIEW_REQUIRED',
+                commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED'};
+            }
+          }
           let prepared;
           try {prepared=await callTool('prepare_probe_qa',{slot});}
           catch(error) {
@@ -1267,6 +1309,24 @@ export function createHandler(config,{
               reason:prepared.status,commandSentByLazyTester:false,
               gameplayAcceptance:'NOT_VERIFIED',
               next:'Configure the approved ZIP and stable capture once; retry probe_qa.'};
+          }
+          const activePlan=probeQaPlans.get(slot);
+          if(activePlan?.sessionId!==prepared.sessionId) {
+            return {schema:1,slot,status:'BLOCKED',
+              reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+          }
+          activePlan.mapScope=mapScope;
+          if(mapPlan) {
+            activePlan.mapPlan=Object.freeze(mapPlan);
+            activePlan.mapSourceRevision=mapSourceRevision;
+            let fresh;
+            try {fresh=await mapRevisionStatus(config.mapContractPath,mapSourceRevision);}
+            catch {fresh='UNAVAILABLE';}
+            if(fresh!=='UNCHANGED') {
+              return settleProbeQa(slot,activePlan,{schema:1,slot,status:'BLOCKED',
+                reason:fresh==='CHANGED'?'MAP_CONTRACT_CHANGED_STOP':
+                  'MAP_CONTRACT_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
+            }
           }
           let targetStatus='NATIVE_TARGET_NOT_CONFIGURED';
           let targetHandoff=null;
@@ -1309,7 +1369,8 @@ export function createHandler(config,{
             ...(targetHandoff?{targetHandoff}:{}),
             command:prepared.command,
             requires:'AUTHORIZED_PLAYER_ADMIN_AND_QA_WORLD',
-            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED'};
+            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
+            ...(mapPlan?{mapPlan}:{})};
         }
         // Do NOT read/hash/parse the ZIP again on every result query.
         // Only compare cheap filesystem change tokens against the pinned
@@ -1321,6 +1382,16 @@ export function createHandler(config,{
           return settleProbeQa(slot,plan,{schema:1,slot,status:'BLOCKED',
             reason:revision==='CHANGED'?'QA_SOURCE_CHANGED_STOP':
               'QA_SOURCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
+        }
+        if(plan.mapSourceRevision&&config.mapContractPath) {
+          let sourceStatus;
+          try {sourceStatus=await mapRevisionStatus(config.mapContractPath,
+            plan.mapSourceRevision);}catch{sourceStatus='UNAVAILABLE';}
+          if(sourceStatus!=='UNCHANGED') {
+            return settleProbeQa(slot,plan,{schema:1,slot,status:'BLOCKED',
+              reason:sourceStatus==='CHANGED'?'MAP_CONTRACT_CHANGED_STOP':
+                'MAP_CONTRACT_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
+          }
         }
         let raw;
         try {

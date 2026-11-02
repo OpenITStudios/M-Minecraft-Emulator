@@ -54,6 +54,11 @@ installs the Probe, starts Minecraft, sends a command, activates native
 AI input or certifies map gameplay. See the
 [short QA workflow](Development/tooling/agent/README.md#ai-gameplay-qa--one-mcp-entry-source-only).
 
+Optional **map-aware source-only QA planning** adds a local contract
+to the existing `probe_qa` response without changing the original
+team Probe runner. It never runs map-specific tests or claims map PASS.
+See [Map-Aware Probe QA](docs/system/map-aware-probe-qa.md).
+
 ## AI-ready developer control
 
 `DEV.cmd` is the single local developer entrypoint. AI can inspect the

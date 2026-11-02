@@ -185,6 +185,26 @@ of the world/player or of successful native input.
 updater, capture collector, native input, in-game module, CI or
 world/account mutation. Tests authored in source remain NOT_EXECUTED.
 
+## Map-Aware Probe QA — P1 source-only
+
+Optionally configure one map-owned JSON contract with
+`LAZY_TESTER_MAP_CONTRACT` or `--map-contract`. The same `probe_qa`
+entrypoint accepts `scope=full|smoke|affected`, with FULL by default.
+Its initial response includes a compact `mapPlan` for the chosen
+slot when configured. The plan does **not** run gameplay, dispatch
+commands or turn team Skills Probe PASS into a map PASS.
+`scope=affected` currently falls back to full because the MCP does
+not verify the map repository diff; no guessed change list can omit
+required tests. Only explicit `restart=true` changes the session's
+contract/scope checkpoint. Completed result snapshots remain frozen
+without additional contract checks. All tests are source-authored but
+NOT_EXECUTED.
+
+Contract schema, safe selection rules and proof limits:
+[Map-Aware Probe QA](../../../docs/system/map-aware-probe-qa.md).
+The map must own its requirements; no map module code or world content
+is copied into Lazy Tester.
+
 ## Test/release boundary
 
 Read [current handoff](../../../planning/development.md) and
