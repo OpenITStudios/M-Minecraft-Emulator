@@ -52,8 +52,12 @@ that those original probes reported PASS, **not** map gameplay acceptance.
 **Map-Aware QA:** an optional local `map-test-contract.json` selects
 `full`, `smoke` or `affected` requirements. Without independently
 verified map source diffs, `affected` conservatively selects `full`.
-The `mapPlan` is source-only and always `NOT_TESTED`. No second in-game
-scoring/test engine or automatic map action was introduced.
+The `mapPlan` contains bounded check summaries; the optional
+`qaReport` combines the original Probe's reported result with
+map test coverage and missing evidence. It is available even when
+the original Probe is not configured. Map checks remain NOT_TESTED,
+and no second in-game scoring/test engine, game action or automatic
+command dispatch was introduced.
 
 **Proof boundary:** ZIP provenance, stable log bytes and PID/HWND cannot
 independently establish the actual QA world, Player/admin authority or

@@ -222,7 +222,7 @@ of the world/player or of successful native input.
 updater, capture collector, native input, in-game module, CI or
 world/account mutation. Tests authored in source remain NOT_EXECUTED.
 
-## Map-Aware Probe QA — P1 planning / P2 proof, both source-only
+## Map-Aware Probe QA — P1 planning / P2 proof / P3 report (source-only)
 
 Optionally configure one map-owned JSON contract with
 `LAZY_TESTER_MAP_CONTRACT` or `--map-contract`. The same `probe_qa`
@@ -236,6 +236,21 @@ required tests. Only explicit `restart=true` changes the session's
 contract/scope checkpoint. Completed result snapshots remain frozen
 without additional contract checks. All tests are source-authored but
 NOT_EXECUTED.
+
+P3 keeps one QA entry. When a map contract is configured, `mapPlan`
+now includes up to 12 full, bounded check summaries (given/action/
+observe/expect/evidence), with every check `NOT_TESTED`. It can
+retain an exact local `contractSha256` byte fingerprint (source
+identity only; not world or author approval). Its
+`qaReport` separates the original foundation Probe result from
+map test coverage and missing evidence. Even if the original Probe
+reports all PASS, `qaReport.map` remains 0 executed/0 passed and
+`qaReport.acceptance=NOT_ACCEPTED` until real map-specific tests
+and world proof exist. The map plan/report are also available during
+an original ZIP or capture PREFLIGHT refusal, so planning does not
+require Minecraft. Repeated terminal MCP calls reuse the frozen
+report without more file or native reads. Ordinary calls with no
+map contract retain their previous shape.
 
 Contract schema, safe selection rules and proof limits:
 [Map-Aware Probe QA](../../../docs/system/map-aware-probe-qa.md).

@@ -36,7 +36,7 @@ Canonical routing: [active architecture](../docs/system/architecture.md),
 [source ownership](../docs/system/implementation-map.md),
 [Probe QA](../docs/system/map-aware-probe-qa.md).
 
-## Current source workflow (P1/P2)
+## Current source workflow (P1/P2/P3)
 
 ```text
 Optional approved map contract -> bounded full/smoke/affected plan
@@ -46,7 +46,8 @@ Optional retained native game target -> read-only PID/HWND/birth binding
 External authorized Player/admin -> original /scriptevent probe:run auto
     [NOT SENT OR VERIFIED BY LAZY TESTER]
 Appended original Probe RUN_START / RESULT / RUN_DONE markers
-    -> bounded result review -> frozen per-slot historical snapshot
+    -> bounded foundation result + source-only map coverage/evidence
+    -> frozen optional qaReport and per-slot historical snapshot
 ```
 
 - `probe_qa` is the preferred **one** MCP QA tool; legacy
@@ -69,6 +70,17 @@ Appended original Probe RUN_START / RESULT / RUN_DONE markers
   `smoke` needs declared checks; `affected` currently falls back
   to full because MCP does not authenticate an exact map Git diff.
   A plan cannot skip required tests based on AI guesses.
+- P3 `mapPlan.selectedChecks` includes up to 12 bounded map
+  requirements and their needed evidence, with a local contract
+  SHA-256 fingerprint (not author/game proof); the same `probe_qa`
+  returns optional `qaReport` during preflight/initial preparation
+  and on terminal snapshot. A map plan is still available when
+  Probe ZIP/capture is missing. `qaReport.foundation` preserves
+  original Probe status; `qaReport.map` always records 0 executed,
+  0 passed, 0 failed, and all map requirements NOT_TESTED.
+  `qaReport.acceptance=NOT_ACCEPTED` regardless of Probe-reported
+  PASS. Pending polls remain compact; final snapshots are reused
+  without additional I/O.
 - Team ZIP changes are inspected offline through existing lock
   fingerprints; new baseline versions are never auto-approved or
   synced into a running world.
@@ -95,16 +107,17 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority:** source-only flow alignment and safe
-repository cleanup. Do not request local testing, run source test
-suites, install packages, use CI or delete private artifacts. Preserve
+**Current operator priority:** source-only Map Test Contract →
+original Skills Probe → evidence gap projection → `qaReport` integration,
+with safe repository maintenance. Do not request local testing, run
+source test suites, install packages, use CI or delete private artifacts. Preserve
 `App/`, `Data/`, old pilot data, and all historical proof.
 
 ## Single next step
 
-After completing the current source-only cleanup, retain the existing
-runtime gates as BLOCKED. When a separately authorized Windows QA
+Retain the source-only P3 report with map tests NOT_TESTED and real-world
+evidence gates BLOCKED. When a separately authorized Windows QA
 environment eventually becomes available, validate **one** original
 Skills Probe Player/admin run and its process/world-bound Content Log
-before considering command dispatch. This is a deferred evidence gate,
-not a request to perform local testing now.
+before considering command dispatch. This gate is deferred; no local
+testing is requested now.

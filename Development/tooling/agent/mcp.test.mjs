@@ -127,6 +127,8 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   assert.equal(ready.reason,'COMMAND_DISPATCH_NOT_ENABLED');
   assert.equal(ready.sourceCapture,'APPROVED_SOURCE_LOG_FILE_PRESENT');
   assert.equal(ready.gameExecution,'NOT_VERIFIED');
+  assert.equal(ready.mapPlan,undefined);
+  assert.equal(ready.qaReport,undefined); // legacy source-only shape stays unextended
   assert.equal(ready.proofGate.readiness,'BLOCKED');
   assert.equal(ready.proofGate.targetAtPrepare,'NATIVE_PROCESS_WINDOW_ONLY');
   assert.equal(ready.proofGate.playerAdmin,'NOT_VERIFIED');
@@ -136,6 +138,8 @@ test('one AI QA MCP entry performs source/capture/target readiness then compact 
   const report=await h.callTool('probe_qa',{slot:2});
   assert.equal(report.status,'PROBE_REPORTED_PASS');
   assert.equal(report.terminal,true);
+  assert.equal(report.qaReport,undefined);
+  assert.equal(report.probeReportedStatus,undefined);
   assert.equal(report.counts.pass,2);
   assert.equal(report.target,'NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY');
   assert.equal(report.gameplayAcceptance,'NOT_VERIFIED');

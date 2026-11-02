@@ -172,31 +172,132 @@ export function planMapTests(contract,{scope='full',changeSet=null}={}){
   }
   for(const id of [...selected].sort())order(id);
   const evidence=[...new Set(sorted.flatMap(id=>byId.get(id).evidence))].sort();
+  // An approved map contract is the only source of expected behavior.
+  // Emit bounded per-check summaries for an external model to REVIEW,
+  // never a command dispatcher or implicit gameplay acceptance.
+  const selectedChecks=sorted.map(id=>{
+    const test=byId.get(id);
+    return Object.freeze({
+      id:test.id,required:test.required,given:test.given,
+      action:test.action,observe:test.observe,
+      expect:Object.freeze({...test.expect}),
+      evidenceNeeded:Object.freeze([...test.evidence]),
+      status:'NOT_TESTED',
+    });
+  });
   return Object.freeze({
     schema:1,map:validated.map,revision:validated.revision,
     requestedScope:scope,effectiveScope,reason,
     total:validated.requirements.length,
     required:validated.requirements.filter(r=>r.required).length,
     selected:Object.freeze(sorted),notSelected:validated.requirements.length-sorted.length,
+    selectedChecks:Object.freeze(selectedChecks),
+    requiredSelected:selectedChecks.filter(x=>x.required).length,
     evidence:Object.freeze(evidence),
     selectionProof:'SOURCE_ONLY_NOT_GAMEPLAY_OR_DIFF_AUTHENTICATION',
     mapAcceptance:'NOT_TESTED',execution:'NOT_EXECUTED'
   });
 }
 export function compactMapTestPlan(plan){
-  if(!plan||plan.schema!==1||!Array.isArray(plan.selected))refuse();
+  if(!plan||plan.schema!==1||!Array.isArray(plan.selected)||
+     !Array.isArray(plan.selectedChecks)||
+     !Number.isSafeInteger(plan.requiredSelected))refuse();
   return {schema:1,map:plan.map,revision:plan.revision,
     requestedScope:plan.requestedScope,effectiveScope:plan.effectiveScope,
     reason:plan.reason,total:plan.total,required:plan.required,
-    selectedCount:plan.selected.length,notTestedCount:plan.total,
-    selectedIds:plan.selected.slice(0,12),
+    selectedCount:plan.selected.length,requiredSelected:plan.requiredSelected,
+    requiredNotSelected:plan.required-plan.requiredSelected,
+    notSelectedCount:plan.notSelected,notTestedCount:plan.total,
+    selectedIds:Object.freeze(plan.selected.slice(0,12)),
+    selectedChecks:Object.freeze(plan.selectedChecks.slice(0,12)),
     omittedSelectedIds:Math.max(0,plan.selected.length-12),
-    evidenceNeeded:plan.evidence,
-    capabilityStatus:plan.evidence.map(source=>({
-      source,state:MAP_QA_CAPABILITY_STATES[source]
-    })),
+    evidenceNeeded:Object.freeze([...plan.evidence]),
+    capabilityStatus:Object.freeze(plan.evidence.map(source=>
+      Object.freeze({source,state:MAP_QA_CAPABILITY_STATES[source]}))),
     execution:'NOT_EXECUTED',mapAcceptance:'NOT_TESTED',
     foundationProbe:'SEPARATE_TEST_SCOPE'};
+}
+
+/**
+ * Source-only projection for the EXISTING probe_qa response. It consumes only
+ * an already-validated plan and the original Probe's compact result; it never
+ * claims map telemetry, gameplay assertions, or a verified QA-world origin.
+ *
+ * Always bound output and keep independent foundation/map statuses distinct.
+ */
+export function composeMapQaReport(mapPlan,probeResult,proofGate=null) {
+  if(!object(mapPlan)||mapPlan.schema!==1||
+     mapPlan.mapAcceptance!=='NOT_TESTED'||
+     mapPlan.execution!=='NOT_EXECUTED'||
+     typeof mapPlan.map!=='string'||!MAP.test(mapPlan.map)||
+     typeof mapPlan.revision!=='string'||!REVISION.test(mapPlan.revision)||
+     !Number.isSafeInteger(mapPlan.total)||mapPlan.total<1||
+     mapPlan.total>MAX_REQUIREMENTS||
+     !Number.isSafeInteger(mapPlan.selectedCount)||
+     mapPlan.selectedCount<1||mapPlan.selectedCount>mapPlan.total||
+     !Number.isSafeInteger(mapPlan.required)||mapPlan.required<0||
+     mapPlan.required>mapPlan.total||
+     !list(mapPlan.evidenceNeeded,5,x=>EVIDENCE.has(x))||
+     !object(probeResult)||probeResult.schema!==1)refuse();
+
+  const knownStatus=new Set(['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW',
+    'WAITING','INCOMPLETE','BLOCKED']);
+  const status=knownStatus.has(probeResult.status)?
+    probeResult.status:'BLOCKED';
+  const foundation={status,
+    evidenceOrigin:['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW'].includes(status)?
+      'UNATTRIBUTED_ORIGINAL_PROBE_LOG':'NO_COMPLETE_AUTHENTICATED_PROBE_RESULT',
+    gameplayAcceptance:'NOT_VERIFIED'};
+  if(['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW'].includes(
+      probeResult.probeReportedStatus)) {
+    foundation.probeReportedStatus=probeResult.probeReportedStatus;
+  }
+  if(Number.isSafeInteger(probeResult.expectedCount)&&
+      probeResult.expectedCount>=0&&probeResult.expectedCount<=MAX_AUTO_PROBES) {
+    foundation.expectedCount=probeResult.expectedCount;
+  }
+  const counts=probeResult.counts;
+  if(object(counts)&&['pass','fail','info','look'].every(key=>
+      Number.isSafeInteger(counts[key])&&counts[key]>=0&&
+      counts[key]<=MAX_AUTO_PROBES)) {
+    foundation.counts=Object.freeze({
+      pass:counts.pass,fail:counts.fail,info:counts.info,look:counts.look});
+  }
+  if(['dev','release'].includes(probeResult.reportedBuild)){
+    foundation.reportedBuild=probeResult.reportedBuild;
+  }
+  // The three runtime proof gates are ALWAYS unsatisfied in this source-only
+  // report; a caller cannot remove them using an empty or false proof list.
+  const requiredProof=['AUTHORIZED_PLAYER_ADMIN_COMMAND_DELIVERY',
+    'EXACT_QA_WORLD_IDENTITY','SOURCE_BOUND_CONTENT_LOG_ORIGIN'];
+  const additional=Array.isArray(proofGate?.missingEvidence)?
+    proofGate.missingEvidence.filter(code=>typeof code==='string'&&
+      /^[A-Z_]{3,56}$/.test(code)): [];
+  const missing=[...new Set([...requiredProof,...additional])].slice(0,8);
+  return Object.freeze({
+    schema:1,kind:'SOURCE_ONLY_QA_REPORT',
+    foundation:Object.freeze(foundation),
+    map:Object.freeze({
+      id:mapPlan.map,revision:mapPlan.revision,
+      ...(typeof mapPlan.contractSha256==='string'&&
+        /^[a-f0-9]{64}$/.test(mapPlan.contractSha256)?
+        {contractSha256:mapPlan.contractSha256}:{}),
+      requestedScope:mapPlan.requestedScope,
+      effectiveScope:mapPlan.effectiveScope,
+      required:mapPlan.required,selected:mapPlan.selectedCount,
+      skipped:mapPlan.total-mapPlan.selectedCount,
+      tested:0,passed:0,failed:0,notTested:mapPlan.total,
+      status:'NOT_TESTED',
+    }),
+    evidence:Object.freeze({
+      mapEvidence:'NOT_COLLECTED',
+      needed:Object.freeze([...mapPlan.evidenceNeeded]),
+      verifiedEvidenceFamilies:0,
+      missingProof:Object.freeze(missing),
+    }),
+    commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
+    acceptance:'NOT_ACCEPTED',
+  });
 }
 
 let cached=null,ongoing=null;

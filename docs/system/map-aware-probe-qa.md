@@ -7,7 +7,7 @@ authority: WORKING
 lifecycle: SOURCE_ONLY
 ---
 
-# Map-Aware Probe QA — P1 source-only
+# Map-Aware Probe QA — source-only P1–P3
 
 The original team Skills Probe remains the exclusive foundation-probe
 runner. The new map planner is source-only data, not a second in-game test
@@ -98,7 +98,10 @@ snapshot remains historical; only explicit restart begins a fresh plan.
 - Skipped tests remain NOT_TESTED, never PASS.
 
 Plan responses contain total/required counts, no more than 12 selected
-IDs, omitted count and required evidence families. They cannot establish
+checks with bounded precondition, action, state observation, expected outcome,
+required evidence family and NOT_TESTED status. They also distinguish
+required selected versus required skipped checks; more than 12 selected
+checks are counted without dumping the full contract. They cannot establish
 world identity, installed adapters, authorized command dispatch, actual
 game input, or map acceptance. Foundation Probe result is separate.
 
@@ -153,6 +156,58 @@ reopen worlds or execute Windows games based on these instructions.
 Runtime proof requires explicit separate authorization and real
 observation. This milestone prepares the trust boundary; it does
 not satisfy the external-world identity gate.
+
+## P3 — Map Test Contract → original Probe → evidence → report
+
+When a reviewed map contract is configured, the **same** `probe_qa`
+returns two separate source-only projections:
+
+- `mapPlan`: the selected checks (up to 12 detailed checks), counts,
+  dependency-aware scope, and evidence families **required**, not available.
+- `qaReport`: an allowlisted synthesis of the original Probe's compact
+  status plus this map plan, with the hard boundary that **zero map
+  requirements have been executed**. It never runs any code from a map
+  contract and never uses arbitrary model-supplied gameplay observations.
+
+The map plan and derived report carry an optional `contractSha256`
+fingerprint of the exact local JSON bytes read at preparation.
+This binds the historical summary to a source snapshot; the hash
+does **not** authenticate the map author, a running world or gameplay.
+
+The first prepared response includes the plan and report in a
+`BLOCKED` foundation state. When the official Skills Probe ZIP or capture
+is unavailable, an independently valid map contract still returns its
+plan/report in the **PREFLIGHT** refusal; it does not create a fake game
+run. Intermediate `WAITING` calls remain small and need no repeated plan,
+ZIP scan or native target poll. A terminal outcome freezes the same plan,
+`proofGate` and one derived `qaReport` in the existing per-slot memory.
+Further calls return the exact same snapshot without extra source/capture
+or game reads; only explicit `restart=true` starts a new checkpoint.
+
+The `qaReport.foundation.status` conveys the **original Probe's**
+reported PASS/FAIL/NEEDS_REVIEW or its incomplete/blocked state. If
+native target identity is missing/replaced, the terminal status is
+`INCOMPLETE` while `probeReportedStatus` can preserve the original
+limited report for diagnosis. Such a report is still unauthenticated to
+the Minecraft world. `qaReport.map` always retains
+`status=NOT_TESTED`, `tested=0`, `passed=0`, `failed=0` and
+`notTested=total`, including checks skipped by a narrow plan.
+`qaReport.evidence` explicitly lists needed families, reports zero
+verified map-evidence families and retains mandatory Player/admin,
+QA-world and Content Log proof gaps. Overall
+`qaReport.acceptance=NOT_ACCEPTED`, even when foundation Probe markers
+report all PASS.
+
+Only fixed, validated summary fields reach the MCP caller; no raw logs,
+player identifiers, private paths, world data, source code or arbitrary
+`result.detail` are forwarded. The existing optional diagnostic evidence
+tools remain separately read-only and are **not** silently treated as
+map-specific pass evidence. This is one report projection within the
+existing owners, not a second result database or test/score engine.
+
+Without a configured map contract, old `probe_qa`, its legacy
+`prepare_probe_qa`/`read_probe_qa_result` tools and normal output
+shape remain compatible; no `mapPlan` or `qaReport` is added.
 
 ## Boundaries and next runtime proof
 

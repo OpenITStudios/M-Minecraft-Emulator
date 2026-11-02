@@ -25,7 +25,7 @@ import {readPinnedProbeCatalogCached,probeSourceRevisionStatus,
   parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult,
   probeQaProofGate} from './probe-qa.mjs';
 import {readMapTestContractCached,mapContractSourceStatus,planMapTests,
-  compactMapTestPlan} from './map-test-plan.mjs';
+  compactMapTestPlan,composeMapQaReport} from './map-test-plan.mjs';
 
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
@@ -1047,9 +1047,15 @@ export function createHandler(config,{
         reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
     }
     if(plan.terminalReport)return plan.terminalReport;
+    // Pure final projection: existing Probe parser owns all foundation
+    // outcomes; map requirements remain NOT_TESTED. No extra ZIP/native/
+    // capture read, second QA engine, game command or output archive.
+    const qaReport=plan.mapPlan?
+      composeMapQaReport(plan.mapPlan,report,plan.proofGate):null;
     const frozen=Object.freeze({...report,
       ...(plan.proofGate?{proofGate:plan.proofGate}:{}),
       ...(plan.mapPlan && !Object.hasOwn(report,'mapPlan')?{mapPlan:plan.mapPlan}:{}),
+      ...(qaReport?{qaReport}:{}),
       terminal:true,
       ...(report.counts?{counts:Object.freeze({...report.counts})}:{}),
       ...(report.missingIds?{missingIds:Object.freeze([...report.missingIds])}:{})});
@@ -1288,7 +1294,14 @@ export function createHandler(config,{
           if(config.mapContractPath) {
             try {
               const loaded=await mapContract(config.mapContractPath);
-              mapPlan=compactMapTestPlan(planMapTests(loaded.contract,{scope:mapScope}));
+              const planned=compactMapTestPlan(
+                planMapTests(loaded.contract,{scope:mapScope}));
+              // Byte fingerprint is a historical source binding only,
+              // never an approval signature or proof of a live game.
+              mapPlan=Object.freeze({...planned,
+                ...(typeof loaded.contentSha256==='string'&&
+                  /^[a-f0-9]{64}$/.test(loaded.contentSha256)?
+                    {contractSha256:loaded.contentSha256}:{})});
               mapSourceRevision=loaded.sourceRevision;
             } catch {
               return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
@@ -1304,7 +1317,9 @@ export function createHandler(config,{
                 'PROBE_SOURCE_REVIEW_REQUIRED':'PROBE_SOURCE_OR_CAPTURE_UNAVAILABLE',
               commandSentByLazyTester:false,
               gameplayAcceptance:'NOT_VERIFIED',
-              next:'Check the approved ZIP and local capture configuration; do not dispatch a command.'};
+              next:'Check the approved ZIP and local capture configuration; do not dispatch a command.',
+              ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
+                {schema:1,status:'BLOCKED'},probeQaProofGate())}:{})};
           }
           if(prepared.status!=='PREPARED_SOURCE_ONLY') {
             return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
@@ -1312,7 +1327,9 @@ export function createHandler(config,{
               gameplayAcceptance:'NOT_VERIFIED',
               next:prepared.status==='CAPTURE_SLOT_COLLISION'?
                 'MC slots must use distinct original capture files; verify collection provenance before a new QA checkpoint.':
-                'Configure the approved ZIP and stable capture once; retry probe_qa.'};
+                'Configure the approved ZIP and stable capture once; retry probe_qa.',
+              ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
+                {schema:1,status:'BLOCKED'},probeQaProofGate())}:{})};
           }
           const activePlan=probeQaPlans.get(slot);
           if(activePlan?.sessionId!==prepared.sessionId) {
@@ -1382,7 +1399,8 @@ export function createHandler(config,{
             requires:'AUTHORIZED_PLAYER_ADMIN_AND_QA_WORLD',
             commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
             proofGate,
-            ...(mapPlan?{mapPlan}:{})};
+            ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
+              {schema:1,status:'BLOCKED'},proofGate)}:{})};
         }
         // Do NOT read/hash/parse the ZIP again on every result query.
         // Only compare cheap filesystem change tokens against the pinned
@@ -1461,12 +1479,14 @@ export function createHandler(config,{
         if(plan.targetIdentity&&target==='CHANGED_OR_UNAVAILABLE') {
           compact={...compact,status:'INCOMPLETE',
             reason:'QA_NATIVE_TARGET_CHANGED',
+            ...(plan.mapPlan?{probeReportedStatus:compact.status}:{}),
             gameplayAcceptance:'NOT_VERIFIED'};
         } else if(!plan.targetIdentity) {
-          // Without a pinned game, even an official Probe FAIL/REVIEW
-          // remains unattributed. Preserve bounded counts, not a verdict.
+          // Preserve the original Probe's limited reported outcome for
+          // troubleshooting without presenting it as map/world acceptance.
           compact={...compact,status:'INCOMPLETE',
             reason:'QA_NATIVE_TARGET_NOT_BOUND',
+            ...(plan.mapPlan?{probeReportedStatus:compact.status}:{}),
             gameplayAcceptance:'NOT_VERIFIED'};
         }
         return settleProbeQa(slot,plan,{...compact,target});

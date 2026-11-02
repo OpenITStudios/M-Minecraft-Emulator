@@ -50,7 +50,7 @@ may request/observe work, but cannot take ownership from its runtime owner:
 | Window composition / session exit | Workspace/DWM owner -> original verified game window; game controller owns normal close and exact process lifecycle | A DWM tile cannot own or terminate Minecraft |
 | External AI/MCP | Optional `Development/tooling/agent/mcp.mjs` (stdio) -> same-image CLI/authenticated original controller | Reading target identity or native ACK cannot prove gameplay input |
 | Original Skills Probe | Reviewed ZIP/cache -> `probe_qa` local capture checkpoint -> externally authorized Player/admin command -> appended original runner markers -> frozen source report | Original Probe-reported PASS cannot verify a map/world or gameplay |
-| Map-aware QA | Map-owned JSON -> `map-test-plan.mjs` -> bounded optional `probe_qa.mapPlan` | A plan is NOT_TESTED and never executes map tests |
+| Map-aware QA | Map-owned JSON -> `map-test-plan.mjs` -> bounded `probe_qa.mapPlan` and terminal `qaReport` | A source-only report shows original Probe outcome, missing evidence and zero executed map tests; never a gameplay PASS |
 | Team module changes | Explicit local ZIP comparison -> approved team locks/source -> separately reviewed team sync | Lazy Tester does not install or fork analytics/scoring |
 | Diagnostic evidence | Explicit local JSONL import -> ignored `Data/Diagnostics` -> bounded read-only MCP | File identity/checksum does not prove Minecraft world origin |
 | Developer checks / package | `DEV.cmd` -> reviewed local tools -> existing check/package owners | Source checks or unsigned packages do not certify gameplay |
