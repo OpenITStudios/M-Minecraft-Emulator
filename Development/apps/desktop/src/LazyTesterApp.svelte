@@ -794,9 +794,9 @@
   });
 </script>
 <svelte:head><title>Lazy Tester</title></svelte:head>
+<svelte:window on:keydown={closeReviewKeydown}/>
 <div class="lt-app">
   <WindowTitlebar backendSupport={nativeBackend} />
-  <svelte:window on:keydown={closeReviewKeydown}/>
   <header class="lt-topbar">
     <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
     <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress||nativeBackend!=='WindowsNative'} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
