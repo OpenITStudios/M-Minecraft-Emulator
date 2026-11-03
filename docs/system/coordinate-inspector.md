@@ -751,3 +751,50 @@ position-only teleport text and no floating-point block drift.
 They are AUTHORED_NOT_EXECUTED. No typecheck, desktop render,
 Windows/Minecraft runtime, native IPC, clipboard API, game command
 or CI was run.
+
+## P13 — F3 Inspector read-only selected-client UI (3 November 2026)
+
+**Product choice:** Minecraft Education does not offer Java's native F3
+debug screen. Official Education support instead documents Show Coordinates
+in world Settings. Lazy Tester therefore introduces a separate custom F3
+Inspector for *native process diagnostics*, not a fabricated Minecraft
+player/world data feed.
+
+New source owners:
+- Desktop src/app/presentation/f3Inspector.ts is a PURE, stateless
+  projection of already parsed native ProfileSession and SettingsReport;
+  its statuses are NO_SELECTION, NOT_CURRENT, NATIVE_PROCESS_OBSERVED.
+- Desktop src/F3InspectorPanel.svelte is a compact, collapsed, read-only
+  disclosure in Play's existing header alongside Paste XYZ. It uses
+  native details/summary and Escape scoped to focus inside the panel.
+- Existing LazyTesterApp.svelte is the ONLY source of truth for active
+  selection. It admits a native observation only while WindowsNative,
+  binding configured, session available, in Play, not detached, not
+  closing, not marked for uncertain window recovery, and the original
+  cached selected PID/FILETIME/Windows session/HWND matches the current
+  ProfileSession. Otherwise F3 suppresses PID and settings fields.
+
+Visible data for a current selected game: MC01–MC05 slot, native
+process state, PID, Windows session, window responding observation
+and the manager's last configured active/background FPS limits
+(explicitly not measured). The panel ALWAYS reports measured
+FPS, player XYZ, rotation and dimension as not available/not
+connected because no trusted game-local transport exists. Native
+process binding is not a player/world or actual gameplay assertion.
+
+Selecting another game updates the projection; missing/changed
+selection, connection loss, or uncertain recovery suppresses
+the process facts instead of showing a stale former client.
+The summary is native observation only; nothing polls or sends
+new IPC requests. No extra lifecycle owner or telemetry collector
+is created. The original P4 Paste XYZ remains a separate user
+entered, unverified text tool; the native DXGI HUD remains
+in-process and is NOT forwarded to F3.
+
+Source regression fixtures are AUTHORED_NOT_EXECUTED. Actual Svelte
+compilation, Windows viewport/popover rendering, Minecraft Education
+client readiness and five-profile correctness are NOT_EXECUTED.
+
+Official education sources:
+- https://edusupport.minecraft.net/hc/en-us/community/posts/27889945431572-How-to-display-the-debug-screen-in-minecraft-education-edition
+- https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features

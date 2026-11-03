@@ -514,3 +514,13 @@
 .lt-coordinate-popup .lt-coordinate-output button{flex:none;font-size:12px;padding:8px}
 .lt-coordinate-popup .lt-coordinate-help{font-size:11px;line-height:1.45;color:var(--lt-muted)}
 @media(max-width:1080px){.lt-play-header{flex-wrap:wrap}.lt-play-header .lt-header-actions{margin-left:auto}}
+
+/* Read-only custom F3 Inspector, using the same collapsed Play-header
+   disclosure as Paste XYZ. No game viewport/DWM geometry changes. */
+.lt-f3-popup{width:420px;max-height:min(540px,76vh)}
+.lt-f3-popup .lt-f3-summary{font-size:12px;line-height:1.45;color:var(--lt-accent)}
+.lt-f3-data{display:grid;grid-template-columns:minmax(110px,38%) minmax(0,1fr);gap:8px 10px;margin:4px 0;font-size:12px;line-height:1.45}
+.lt-f3-data dt{color:var(--lt-muted)}
+.lt-f3-data dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.lt-f3-popup .lt-f3-disclaimer{font-size:11px;line-height:1.45;color:var(--lt-muted);border-top:1px solid var(--lt-line);padding-top:10px}
+@media(max-width:650px){.lt-f3-popup{max-width:calc(100vw - 48px)}.lt-play-header .lt-header-actions{flex-wrap:wrap;justify-content:flex-end}}

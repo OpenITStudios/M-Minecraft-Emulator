@@ -189,6 +189,20 @@ new-revision acceptance.
   Fixtures AUTHORED_NOT_EXECUTED; no UI, FPS, controller,
   clipboard, game command or new telemetry work.
 
+- **P13 F3 Inspector selected-client UI (3 November, source-only):**
+  officially Education lacks Java F3 debug screen; Show Coordinates
+  is native world-settings fallback. Added an opt-in read-only
+  F3 Inspector in Play header, independent of P4 Paste XYZ.
+  It projects only current selected native PID/session/window and
+  latest configured FPS limits from the existing SessionSnapshot.
+  No active client, mismatched native PID/FILETIME/HWND, recovery
+  ambiguity, lost binding or connection suppresses native details.
+  Measured FPS, XYZ, rotation and dimension remain explicitly
+  UNAVAILABLE rather than guessed. No new native IPC, Script API
+  emitter, game hook, extra HUD, polling, clipboard, or controller.
+  Pure-view and UI source tests AUTHORED_NOT_EXECUTED; no Windows
+  gameplay or source compilation claimed.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -410,11 +424,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P12 corrects loss of
-precision in user-pasted coordinates while retaining the existing
-manual UI, five-card rail, and native FPS HUD. Do not create
-automatic F3 infrastructure without independently verified
-client/player/world provenance. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P13 creates the
+initial read-only custom F3 Inspector for existing native selected
+client observations. Preserve P12 exact manual paste and existing
+native HUD; the outstanding goal is verified live local-player
+position/rotation/world and future true per-client telemetry. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -423,18 +437,21 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: bounded source review of the P12 digit-string formatter
-and existing manual panel for any demonstrable bug; otherwise
-STOP speculative manual UI/formatter churn. Stronger validation
-needs separately authorized frontend/Windows acceptance (not
-requested in this source-only run). The P4 panel remains
-manual, ephemeral and USER_PASTED_UNVERIFIED.
+Next: audit the P13 custom F3 Inspector source, particularly
+selection changes, native-recovery state, and the display distinction
+between configured FPS versus measured FPS. Fix any concrete
+source-only bug under the existing presentation owner. The
+F3 surface is real UI code but NOT a verified in-game debug HUD.
 
-Automatic Minecraft Education 26.33 XYZ/Copy remains BLOCKED by
-missing original local-player/world/source transport. Native FPS
-stays same-process DXGI only; do not add another collector,
-WebSocket listener, Tauri IPC, game control, account/world mutation,
-clipboard permission or global hotkey. Source suites, Windows,
-Minecraft and CI NOT_EXECUTED. Unrelated Testing recovery sealed
-CAS remains independently BLOCKED pending native attestation and
-authenticated operator approval.
+Separately, real live XYZ/rotation/dimension requires a
+per-client/player/world authenticated Education source; it remains
+BLOCKED. Official Minecraft Education has Show Coordinates in
+world settings but not Java's built-in F3 screen. Do not
+open /connect, create a WebSocket listener, install a duplicate
+team logger, infer world ownership from PID, add auto clipboard
+or change any game/world permissions. Native DXGI FPS remains
+local to its original child HUD and is NOT exposed as desktop FPS.
+
+Rust/C++/Svelte/TS source tests, native Windows, Minecraft
+gameplay and CI are NOT_EXECUTED. Unrelated Testing recovery
+sealed CAS remains BLOCKED pending independent attestation.
