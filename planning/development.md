@@ -10,6 +10,19 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Controller-missing Inspect correction (3 November, source-only):**
+  a disconnected or disappeared native session actor previously allowed
+  \`Inspect\` to return five STOPPED profiles without checking for independently
+  running registered Education processes. This could also clear the manager's
+  request-uncertainty gate on a false idle receipt. The existing
+  \`inspect_native_workspace()\` inventory now gates all four absent-controller
+  fallback paths (\`Inspect\`, \`InspectSettings\`, \`SaveAudio\`, \`SavePerformance\`)
+  **before** stopped-status reporting or settings writes. Observed running
+  game candidates, or an uninspectable OS inventory, fail closed rather than
+  inventing MC01–MC05 ownership. A focused pure-Rust fixture is
+  AUTHORED_NOT_EXECUTED. No controller, game, account, profile, CI, or
+  Windows/source test was executed; exact-revision runtime proof remains open.
+
 - **Native session preparation ordering (3 November, source-only):**
   the existing MC01–MC05 controller now validates its reviewed bootstrap
   DLLs before `registered_slots::<5>(true)` may recover an unfinished

@@ -1137,6 +1137,18 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     }
 }
 
+// Without the retained controller, even a successful IPC round trip cannot
+// assign an observed game to MC01–MC05. Never publish all STOPPED (or change
+// global settings) while independently observed Minecraft processes remain.
+// A failed/partial OS inventory already fails closed at the caller.
+fn require_absent_controller_idle(registered_process_count: usize) -> io::Result<()> {
+    if registered_process_count != 0 {
+        return Err(io::Error::new(io::ErrorKind::WouldBlock,
+            "Minecraft processes remain but no compatible Lazy Tester controller is available. Their per-slot state is unknown; stopped status and settings changes were refused. Existing games are preserved."));
+    }
+    Ok(())
+}
+
 // A disappeared controller does not prove that its resumed game exited.
 // Without retained per-slot ownership, CloseOne MUST NOT report success even
 // when no official Minecraft process is visible. CloseAll can still confirm
@@ -1179,6 +1191,13 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         return Ok(absent_controller_close_reply(&request,observation.processes.len()));
     }
     if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..}) {
+        // The old fallback returned five STOPPED profiles on Inspect without
+        // checking whether a game survived the controller. Such a false idle
+        // receipt could also clear the caller's pending-request uncertainty.
+        // Reuse the existing signed registered-game inventory before creating
+        // a stopped snapshot or touching global settings.
+        let observation = super::native_clients::inspect_native_workspace()?;
+        require_absent_controller_idle(observation.processes.len())?;
         let mut snapshot = SessionSnapshot::stopped();
         if let SessionRequest::SaveAudio {mode}=request {super::manager_settings::save_audio(mode)?;}
         if let SessionRequest::SavePerformance { active_fps, background_fps } = request {
@@ -1578,6 +1597,18 @@ mod tests {
         drop(handle);
         assert!(!existing_controller_gate(&name).unwrap());
     }
+    #[test]
+    fn missing_controller_inspect_and_settings_require_no_observed_games() {
+        // Pure admission fixture: no Windows inventory, controller, game or
+        // settings mutation. Each fallback operation shares this same gate.
+        assert!(require_absent_controller_idle(0).is_ok());
+        for observed in [1, 2, 5, 16] {
+            let error = require_absent_controller_idle(observed).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
+            assert!(error.to_string().contains("per-slot state is unknown"));
+        }
+    }
+
     #[test]
     fn missing_controller_refuses_false_close_when_native_game_candidates_exist() {
         // Full manager shutdown may confirm an already-idle host, but a
