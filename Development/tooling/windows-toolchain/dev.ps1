@@ -481,7 +481,7 @@ Push-Location $DevelopmentRoot
 try {
     # Any command that may install dependencies, build or launch the desktop
     # must prove pinned local binaries first; "doctor" is not an optional guard.
-    if ($Command -in @("setup", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev")) {
+    if ($Command -in @("setup", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package")) {
         Test-DeveloperToolchain
     }
     switch ($Command) {
