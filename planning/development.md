@@ -31,6 +31,17 @@ new-revision acceptance.
   resource-pack diagnostics use native disclosure; basic Storage actions
   remain visible. No visual theme, five-slot rail, native IPC or game
   session change. Regression fixtures AUTHORED_NOT_EXECUTED.
+- **F3 Coordinate Copy P0 (3 November, source-only):** the desktop pure
+  `src/app/coordinates.ts` now parses an explicitly UNBOUND, minimal
+  Script API-shaped position/rotation/dimension/gameTick contract. It
+  provides full-decimal XYZ, floor-based block/chunk and same-dimension
+  /tp text (yaw then pitch) without reading data or calling clipboard.
+  It rejects fabricated slot/world/source/verified metadata. Focused
+  Vitest regression fixtures AUTHORED_NOT_EXECUTED; Windows/Minecraft
+  identity, live coordinates, bridge, UI, clipboard, hotkeys and game
+  behavior are NOT_VERIFIED / NOT_IMPLEMENTED. Canonical team telemetry
+  and the existing FPS HUD remain unchanged. See
+  [coordinate inspector design](../docs/system/coordinate-inspector.md).
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -252,24 +263,25 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority:** source-only Map Test Contract →
-original Skills Probe → evidence gap projection → `qaReport` integration,
-with safe repository maintenance. Do not request local testing, run
+**Current operator priority (3 November):** source-only F3 Coordinate Copy
+foundation; retain the existing source-only Map Test Contract and original
+Skills Probe integration. No local test execution, CI, game-world or native
+HUD/clipboard changes are authorized by this P0 step. Do not request local testing, run
 source test suites, install packages, use CI or delete private artifacts. Preserve
 `App/`, `Data/`, old pilot data, and all historical proof.
 
 ## Single next step
 
-Next: implement a native private Data/Testing archive verification gate, then
-an independently authenticated Windows operator challenge (Windows Hello
-interop review, no ordinary confirmation-only fallback). Only those native
-gates may construct the sealed recovery markers; the staged original-controller
-CAS core must remain uncallable from MCP, Tauri and the CLI until then. The observed OS-parent
-exit is not proof of MCP-script authenticity or operator consent;
-`transferAllowed=false` remains mandatory until those gates exist. Runtime tests remain deferred. Retain
-the source-only P3 report with map tests NOT_TESTED and real-world
-evidence gates BLOCKED. When a separately authorized Windows QA
-environment eventually becomes available, validate **one** original
-Skills Probe Player/admin run and its process/world-bound Content Log
-before considering command dispatch. This gate is deferred; no local
-testing is requested now.
+Next: review the ORIGINAL team Script API implementation and define
+a read-only, per-client/world-attributable position evidence contract
+before connecting coordinate data to Lazy Tester. Do not enable
+clipboard, an F3 HUD, a global hotkey or a new telemetry emitter until
+the existing native controller can bind the exact client and reject
+unverified/stale world observations. Runtime tests remain deferred.
+
+The separate Testing recovery P0 remains BLOCKED: native Data/Testing
+archive admission and independent Windows operator authentication
+must precede any live sealed-CAS transfer. Its existing source gate,
+no-transfer behavior, and all Probe/world provenance safeguards remain
+unchanged. Do not enable transfer, game commands, CI, installation,
+or account/world modifications.
