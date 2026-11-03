@@ -30,6 +30,14 @@ new-revision acceptance.
   BLOCKED F3 or experimental AI-input work; the single next action
   below remains unchanged.
 
+- **Post-package desktop startup verifier (3 November, source-only):**
+  the existing Windows verification script now refuses automatic manager
+  cleanup unless the observed process was created after the explicit launch
+  request and its Explorer-parented root launcher matches the staged receipt.
+  A concurrently observed older/unverified manager is left alone; no game
+  is launched or stopped. Fixture AUTHORED_NOT_EXECUTED; actual PowerShell,
+  desktop UI, packaged startup and five-client acceptance NOT_EXECUTED.
+
 - **Desktop:** Tauri/Svelte manager for up to five separately licensed
   native Minecraft Education Windows profiles; the operator launches
   games explicitly. Svelte/typed bridge is presentation only.

@@ -32,7 +32,11 @@ if (-not $desktop) { throw 'Interactive Windows Explorer desktop is unavailable.
 $explorer = @(Get-Process -Name explorer | Where-Object SessionId -eq (Get-Process -Id $PID).SessionId)
 $manager = $null
 $observation = $null
+$cleanupPermitted = $false
 try {
+    # The shortcut action does not return a PID. Refuse to clean up a
+    # different, older process that appears during the observation window.
+    $launchRequestedAtUtc = [DateTime]::UtcNow
     $desktop.Document.Application.ShellExecute($shortcutPath, '', '', 'open', 1)
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     while ([DateTime]::UtcNow -lt $deadline) {
@@ -42,8 +46,13 @@ try {
             $manager = $candidates[0]
             $process = Get-CimInstance Win32_Process -Filter "ProcessId=$($manager.Id)"
             $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($process.ParentProcessId)"
-            if ($parent.ExecutablePath -ine $launcher -or $parent.ParentProcessId -notin $explorer.Id) { throw 'Root launcher was not launched by Windows Explorer.' }
+            if (-not $process -or -not $parent -or $parent.ExecutablePath -ine $launcher -or $parent.ParentProcessId -notin $explorer.Id) { throw 'Root launcher was not launched by Windows Explorer.' }
+            if ($manager.StartTime.ToUniversalTime() -lt $launchRequestedAtUtc.AddSeconds(-2)) { throw 'Observed manager predates this Desktop launch; leave it running.' }
             if (-not $receipt.launcher -or (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash -ine $receipt.launcher.sha256) { throw 'Root launcher does not match the receipt.' }
+            # Cleanup requires positive recent launch + Explorer parent + exact
+            # local launcher hash. Failure before these checks cannot authorize
+            # closing an unrelated live manager.
+            $cleanupPermitted = $true
             $window = [System.Windows.Automation.AutomationElement]::FromHandle($manager.MainWindowHandle)
             $elements = @($window.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition))
             $names = @($elements | ForEach-Object { $_.Current.Name })
@@ -72,7 +81,7 @@ try {
     $observation | ConvertTo-Json -Compress | Write-Output
 } finally {
     # Only this verifier's Explorer-launched manager, and only when no game exists.
-    if ($manager -and -not $KeepOpen -and -not $manager.HasExited) {
+    if ($cleanupPermitted -and $manager -and -not $KeepOpen -and -not $manager.HasExited) {
         $games = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -match '^Minecraft' -and $_.ProcessName -notmatch 'Updater' })
         if (-not $games.Count) {
             [void]$manager.CloseMainWindow()

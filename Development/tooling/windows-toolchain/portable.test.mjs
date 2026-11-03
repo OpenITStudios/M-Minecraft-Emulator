@@ -48,6 +48,18 @@ test('read-only localcheck and bootstrap error propagation are source-gated', ()
   assert.match(developer,/if \(\$Command -in @\([^\r\n]*"dev", "package"\)\)/);
   assert.doesNotMatch(inspection,/\b(?:Invoke-WebRequest|Start-Process|Remove-Item|Set-Content|Copy-Item|Move-Item|New-Item|Invoke-Expression)\b/i);
 });
+test('desktop startup verifier refuses to close an unverified manager process', () => {
+  const startup=read('tooling/windows-toolchain/verify-desktop-startup.ps1');
+  assert.match(startup,/\$cleanupPermitted = \$false/);
+  assert.match(startup,/\$launchRequestedAtUtc = \[DateTime\]::UtcNow/);
+  assert.match(startup,/\$manager\.StartTime\.ToUniversalTime\(\)/);
+  assert.match(startup,/\$parent\.ExecutablePath -ine \$launcher/);
+  assert.match(startup,/Get-FileHash -LiteralPath \$launcher -Algorithm SHA256/);
+  assert.match(startup,/\$cleanupPermitted = \$true/);
+  assert.match(startup,/if \(\$cleanupPermitted -and \$manager -and -not \$KeepOpen/);
+  assert.doesNotMatch(startup,/Stop-Process|\.Kill\s*\(/);
+});
+
 test('AI DEV.cmd routes use pinned Node and preserve legacy PowerShell execution', () => {
   for (const operation of ['inspect','catalog','plan','run']) {
     assert.ok(launcher.includes('if /I "%~1"=="'+operation+'" goto controller'));
