@@ -651,3 +651,31 @@ do not build that transport merely to show a number. The Play
 Paste XYZ fallback stays manual and UNVERIFIED. The next useful source
 pass is a bounded review of the P4 panel's existing accessibility,
 focus/closing, and safe output disclosure, not new telemetry.
+
+## P10 — Manual Paste XYZ keyboard and assistive-technology corrections (3 November 2026)
+
+Audit found that the P4 disclosure relied on native details toggle only:
+it lacked Escape-to-close and did not associate invalid-coordinate
+feedback with the editable input. Both are corrected in the same owner.
+
+The existing CoordinatePastePanel.svelte now handles Escape only while
+the disclosure is open AND the key event came from inside its own
+DOM subtree. It closes the native details element and restores focus
+to the summary without scrolling. Escape in Minecraft/launcher or
+the separate selected-game close review is not intercepted.
+
+The XYZ textarea exposes aria-invalid and connects its guidance
+and any active visible validation error through aria-describedby.
+The readonly formatted text connects to its own Ctrl+C instruction.
+Select text still only highlights the prepared string for manual Ctrl+C.
+
+This is a nonmodal native details disclosure, not a focus-trapping
+dialog. On close, existing resetOnClose still clears user input,
+chosen output mode and text; Play unmount discards the component.
+
+No native clipboard read/write, game input, cross-process FPS route,
+timer, local storage, CSS layout change or fifth-card regression was
+introduced. All new Vitest checks are AUTHORED_NOT_EXECUTED;
+TypeScript/Svelte compile, actual keyboard/screen-reader use, Windows
+and Minecraft gameplay remain NOT_EXECUTED. This does not authorize
+live XYZ/F3 or copyAllowed for an unverified player or world.

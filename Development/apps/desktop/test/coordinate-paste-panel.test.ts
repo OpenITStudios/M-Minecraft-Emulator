@@ -25,6 +25,29 @@ describe('optional manual XYZ user-paste UI',()=>{
     ])expect(panel).toContain(anchor);
   });
 
+  it('closes an in-panel Escape, restores summary focus and preserves native toggle reset',()=>{
+    expect(panel).toContain("<svelte:window on:keydown={closeOnEscape} />");
+    expect(panel).toContain("bind:this={detailsElement}");
+    expect(panel).toContain("bind:this={summaryElement}");
+    expect(panel).toContain("event.key !== 'Escape' || !detailsElement?.open");
+    expect(panel).toContain("event.target instanceof Node");
+    expect(panel).toContain("!detailsElement.contains(event.target)");
+    expect(panel).toContain("detailsElement.open = false;");
+    expect(panel).toContain("summaryElement?.focus({preventScroll: true});");
+    expect(panel).toContain("on:toggle={resetOnClose}");
+    expect(panel).toContain("raw = '';");
+  });
+
+  it('links invalid text and readonly output help for screen readers',()=>{
+    expect(panel).toContain('id="lt-coordinate-input-hint"');
+    expect(panel).toContain("aria-invalid={invalid}");
+    expect(panel).toContain("aria-describedby={invalid ? 'lt-coordinate-input-hint lt-coordinate-error' : 'lt-coordinate-input-hint'}");
+    expect(panel).toContain('id="lt-coordinate-error" class="lt-coordinate-error" role="alert"');
+    expect(panel).toContain('aria-describedby="lt-coordinate-copy-help"');
+    expect(panel).toContain('id="lt-coordinate-copy-help" class="lt-coordinate-help"');
+    expect(panel).toContain("outputField.select()");
+    expect(panel).not.toContain('role="dialog"');
+  });
   it('does not read/write clipboard, persist coordinates, invoke native game or send commands',()=>{
     for(const forbidden of [
       'navigator.clipboard', 'readText(', 'writeText(', 'execCommand(',

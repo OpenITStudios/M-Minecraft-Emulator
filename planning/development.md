@@ -156,6 +156,15 @@ new-revision acceptance.
   DXGI interception or clipboard. C++ tests AUTHORED_NOT_EXECUTED;
   Windows/gameplay/source builds/CI NOT_EXECUTED.
 
+- **P10 manual Paste XYZ keyboard/a11y (3 November, source-only):**
+  Scope Escape to a focused/open manual details panel only, close
+  disclosure and restore focus to its summary. The XYZ textarea
+  now exposes aria-invalid and links guidance/validation error;
+  the readonly output links the Ctrl+C instruction. No clipboard
+  I/O, selected-game Escape conflict, modal focus trap, persistent
+  input, five-launcher layout or controller mutation. Fixtures
+  AUTHORED_NOT_EXECUTED, Windows/gameplay NOT_EXECUTED.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -377,11 +386,10 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P9 closed the existing
-FPS owner-generation race and confirmed that BootstrapHudSnapshot
-is only an in-process C++ diagnostic, not desktop-native telemetry.
-Keep existing FPS overlay, manual P4 Paste XYZ, and original team
-analytics ownership unchanged; automatic live F3 stays BLOCKED. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P10 corrects manual Paste
+XYZ keyboard/assistive-technology behavior without changing the
+original native FPS HUD, five-card rail or team analytics source.
+Automatic local-player/world coordinate transport remains BLOCKED. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -390,17 +398,16 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: source-only audit the existing P4 CoordinatePastePanel.svelte
-and its Play-header wrapper for keyboard/assistive-tech usability,
-focus/close/reset correctness and safely selectable output. Fix one
-bounded frontend issue if confirmed, without new clipboard permissions,
-game input, native status collector or layout of the five launchers.
-Native FPS stays in its same-process overlay; BootstrapHudSnapshot
-has no authorized manager transport and no live desktop FPS claim.
+Next: source-only review exact manual coordinate output semantics
+against the strict parser and selected format, including partial
+input, output selection after mode switch, and whether position-only
+/tp text is clearly distinguished from a game command. Any change
+must remain inside the existing pure formatter/panel source and
+authored fixtures, without clipboard capability, game input,
+native IPC, FPS collector or five-launcher layout changes.
 
-Automatic XYZ/Copy via Code Builder /connect remains BLOCKED by
-unverified Education 26.33 protocol and client/player/world binding.
-Keep P4 data labeled USER_PASTED_UNVERIFIED. Source tests, Windows,
-Minecraft and CI remain NOT_EXECUTED. The separate Testing recovery
-sealed CAS remains BLOCKED pending native archive attestation and
-independent Windows operator approval.
+Automatic live F3 and Copy remain BLOCKED: Education 26.33 per-client
+source/player/world mapping and native transport are NOT_VERIFIED.
+BootstrapHudSnapshot remains an in-child C++ diagnostic only.
+Source tests, Windows, Minecraft and CI remain NOT_EXECUTED;
+unrelated Testing recovery sealed CAS remains independently BLOCKED.
