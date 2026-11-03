@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseSelectedClose, firstEmbeddedProfile, separateSlotsForCurrentProfiles, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -182,6 +182,41 @@ describe('Lazy Tester profile contract', () => {
       {manifested:0,partial:true,issue:null},
       {...resourcePacks,activeInWorld:true},null,
     ]) expect(()=>parseSession({...stopped(),storage:row(bad)})).toThrow();
+  });
+  it('binds separate-window UI status to the original PID, birth, session and HWND',()=>{
+    const base=stopped();
+    const profiles=parseSession({...base,
+      profiles:[running(1),running(2),...base.profiles.slice(2)],
+    }).profiles;
+    const bindings=new Map<ProfileSlot,NonNullable<ProfileSession['process']>>([
+      [1,profiles[0]!.process!],[2,profiles[1]!.process!],
+    ]);
+    const separated=(next:ProfileSession[]) =>
+      [...separateSlotsForCurrentProfiles(bindings,next)];
+    expect(separated(profiles)).toEqual([1,2]);
+    // A replacement may reuse the original PID or HWND; process birth
+    // and the other original native identity fields still fence it off.
+    const changed=(process:NonNullable<ProfileSession['process']>|null,
+      state:ProfileSession['state']='RUNNING') =>
+        profiles.map(profile=>profile.slot===2?{...profile,state,process}:profile);
+    const original=profiles[1]!.process!;
+    for(const replacement of [
+      {...original,createdFileTime:'999999'},
+      {...original,pid:original.pid+300},
+      {...original,sessionId:original.sessionId+1},
+      {...original,windowHandle:'0xabcd'},
+    ])expect(separated(changed(replacement))).toEqual([1]);
+    // A missing HWND/process is not proof that the old game exited.
+    // The stored binding survives, but its display-only slot membership
+    // is withheld until the same verified original identity reappears.
+    expect(separated(changed(null,'NOT_RESPONDING'))).toEqual([1]);
+    expect(separated(profiles)).toEqual([1,2]);
+    expect(separated([])).toEqual([]);
+    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    expect(source).toContain('$: separateSlots = separateSlotsForCurrentProfiles(separateWindowBindings, profiles);');
+    expect(source).toContain('separateWindowBindings=new Map(separateWindowBindings).set(slot,{...target});');
+    expect(source).not.toContain('separateSlots=new Set([...separateSlots,slot]);');
+    expect(source).not.toContain('separateSlots = new Set([...separateSlots].filter');
   });
   it('leaves separately opened games alone while another game remains playable here',()=>{
     const snapshot=stopped();

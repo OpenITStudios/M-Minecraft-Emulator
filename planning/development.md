@@ -10,6 +10,20 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Detached-window identity binding (3 November, source-only):**
+  UI `separateSlots` formerly retained only an MC01–MC05 slot number.
+  A new game or replacement HWND could inherit its predecessor's "Separate
+  window" display status, suppressing the new session's preview/selection.
+  The original Play owner now stores the exact native PID/birth/session/HWND
+  only after a confirmed manual target release, and derives the existing
+  `separateSlots` Set from live matching profile observations. A temporarily
+  missing process does not cause forced game/window actions; a replacement
+  cannot reuse the old detached status. Normal selection, confirmed CloseOne
+  and full close clear the original UI-only binding; no second native owner,
+  polling, storage migration or MCP mutation added. Pure fixture
+  AUTHORED_NOT_EXECUTED; TypeScript/Vitest, Tauri/Windows/DWM and Minecraft
+  five-client acceptance NOT_EXECUTED.
+
 - **Selected-window release during reconnect (3 November, source-only):**
   a read-only Refresh may observe a replaced native process and start
   releasing the obsolete embedded HWND. If a CloseOne review begins while

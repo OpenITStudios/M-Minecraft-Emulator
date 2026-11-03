@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, nextProfile, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, separateSlotsForCurrentProfiles, nextProfile, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -51,7 +51,11 @@
   let manualRefreshRequested=false, manualRefreshing=false;
   let queuedLaunch:ProfileSlot|null=null;
   let mounted = false, disposed = false, dirty = false, detached = false;
+  // Presentation-only detach bindings are pinned to the observed native
+  // process/window. A new child in the same slot cannot inherit "Separate".
+  let separateWindowBindings = new Map<ProfileSlot,NonNullable<ProfileSession['process']>>();
   let separateSlots = new Set<ProfileSlot>();
+  $: separateSlots = separateSlotsForCurrentProfiles(separateWindowBindings, profiles);
   // Alert context is authored, not a retained raw backend exception.
   let issueKey: UserMessageKey | null = null, connectionIssueKey: UserMessageKey | null = null;
   let previewIssue = '', selectedIdentity = '';
@@ -221,7 +225,7 @@
       await lazyTester.present(slot, viewport.getBoundingClientRect());
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
-      separateSlots = new Set([...separateSlots].filter(value=>value!==slot));
+      separateWindowBindings = new Map([...separateWindowBindings].filter(([value])=>value!==slot));
     } catch (error) { issueKey='selection'; dirty = true; }
     finally { busy = false; }
   }
@@ -452,7 +456,7 @@
       const wasActive=active===slot;
       if (wasActive) {
         active=null;selectedIdentity='';requested=null;queued=null;
-        separateSlots=new Set([...separateSlots].filter(value=>value!==slot));
+        separateWindowBindings=new Map([...separateWindowBindings].filter(([value])=>value!==slot));
       }
       if (report.snapshot) {
         profiles=report.snapshot.profiles;available=true;connectionIssueKey=null;storage=null;
@@ -503,7 +507,7 @@
     try {
       await lazyTester.clearPreviews();
       await workspaceSurface.releaseTarget(target); active = null; selectedIdentity = ''; requested = null; queued = null;
-      separateSlots=new Set([...separateSlots,slot]);
+      separateWindowBindings=new Map(separateWindowBindings).set(slot,{...target});
       queued=firstEmbeddedProfile(profiles,separateSlots);
       detached = queued===null; previewStatuses = []; dirty = true;
     } catch (error) { issueKey='workspace'; }
@@ -797,7 +801,7 @@
       nativeExitReview = false;
       closeFailure = userMessage('closeAll');
       active = null; selectedIdentity = ''; requested = null; queued = null; queuedLaunch = null;
-      separateSlots = new Set<ProfileSlot>();
+      separateWindowBindings = new Map<ProfileSlot,NonNullable<ProfileSession['process']>>();
       previewStatuses = []; detached = true; page = 'workspace'; dirty = true;
       void refresh(); // Observation only; does not start or capture Minecraft.
     }).then(retain).catch(error => { issueKey='event'; });
