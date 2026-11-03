@@ -102,6 +102,8 @@ describe('explicit user-paste XYZ fallback, never live game attribution', () => 
     });
     expect(parseUserPastedCoordinates('123.456, 64, -45.125').position)
       .toEqual({x: 123.456, y: 64, z: -45.125});
+    expect(parseUserPastedCoordinates('1,2,3').position)
+      .toEqual({x: 1, y: 2, z: 3});
     expect(parseUserPastedCoordinates(' +12\t-.5\t.25 ').position)
       .toEqual({x: 12, y: -0.5, z: 0.25});
   });
@@ -119,7 +121,7 @@ describe('explicit user-paste XYZ fallback, never live game attribution', () => 
   it('rejects malformed, unbounded, multiline and command-bearing text', () => {
     for (const raw of [
       null, 123, {}, [], '', '1 2', '1 2 3 4', '1,,2,3',
-      '1, 2,', '1 2;3', '/tp @s 1 2 3', 'XYZ: 1 2 3',
+      '1, 2,', '1 2,3', '1,2 3', '1 2;3', '/tp @s 1 2 3', 'XYZ: 1 2 3',
       '1 2 3\nsay hi', '1 2 3\r\n', '1 2 3\0',
       '1e3 2 3', 'Infinity 2 3', 'NaN 2 3',
       '1000000001 0 0', '1 2 999999999999999999999',

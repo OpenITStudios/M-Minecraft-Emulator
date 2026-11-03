@@ -163,13 +163,15 @@ export type PastedCoordinateOutput = 'XYZ' | 'BLOCK' | 'TELEPORT_POSITION_ONLY';
 
 // Exactly three signed ASCII decimals on a single line; no command text,
 // player names, floating exponents, locale ambiguity or extra metadata.
-const PASTED_XYZ = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))(?:[ \t]+|[ \t]*,[ \t]*)([+-]?(?:\d+(?:\.\d+)?|\.\d+))(?:[ \t]+|[ \t]*,[ \t]*)([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
+const PASTED_XYZ_SPACES = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]+([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]+([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
+const PASTED_XYZ_COMMAS = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]*,[ \t]*([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]*,[ \t]*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
 
 export function parseUserPastedCoordinates(raw: unknown): UserPastedCoordinates {
   if (typeof raw !== 'string' || raw.length > 128 || /[\r\n]/.test(raw)) {
     throw new TypeError('Paste one XYZ coordinate line');
   }
-  const matches = PASTED_XYZ.exec(raw.trim());
+  const text = raw.trim();
+  const matches = PASTED_XYZ_SPACES.exec(text) ?? PASTED_XYZ_COMMAS.exec(text);
   if (!matches) throw new TypeError('Invalid pasted XYZ coordinates');
   const x = Number(matches[1]);
   const y = Number(matches[2]);
