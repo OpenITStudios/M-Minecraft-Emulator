@@ -149,3 +149,101 @@ export function coordinateCopyText(value: unknown, mode: CoordinateCopyMode): st
       throw new TypeError('Unsupported coordinate copy mode');
   }
 }
+
+// Read-only candidate screening for a future per-client coordinate source.
+// A matching synthetic hint is NEVER verified player/world evidence.
+import {parseObservedProcess} from './bridge/observedProcess.js';
+import type {ProfileSession, ProfileSlot} from './bridge/lazyTester.js';
+
+export type CoordinateCandidateStatus =
+  | 'NO_CANDIDATE'
+  | 'MALFORMED_CANDIDATE'
+  | 'NO_RESPONDING_CLIENT'
+  | 'SLOT_MISMATCH'
+  | 'PROCESS_MISMATCH'
+  | 'STALE_OR_UNTIMED'
+  | 'PLAYER_WORLD_ORIGIN_UNVERIFIED';
+
+export interface CoordinateCandidateAssessment {
+  readonly status: CoordinateCandidateStatus;
+  readonly copyAllowed: false;
+}
+
+export interface CoordinateCandidateContext {
+  readonly selectedSlot: ProfileSlot;
+  readonly profile: ProfileSession | null;
+  // Must be assigned by a future receiving owner, NOT by source payload.
+  // Clock screening does not independently authenticate a game world.
+  readonly receivedAtMonotonicMs: number | null;
+  readonly nowMonotonicMs: number;
+}
+
+const MAX_CANDIDATE_AGE_MS = 2000;
+
+function parseCoordinateProcessHint(value: unknown) {
+  if (!record(value) ||
+      !exact(value, ['pid', 'createdFileTime', 'sessionId', 'windowHandle'])) {
+    throw new TypeError('Invalid coordinate process hint');
+  }
+  return parseObservedProcess({...value, responding: false});
+}
+
+const denyCandidate = (status: CoordinateCandidateStatus): CoordinateCandidateAssessment =>
+  ({status, copyAllowed: false});
+
+export function assessUnverifiedCoordinateCandidate(
+  candidate: unknown,
+  context: CoordinateCandidateContext,
+): CoordinateCandidateAssessment {
+  if (candidate === null || candidate === undefined) return denyCandidate('NO_CANDIDATE');
+  if (!record(candidate) ||
+      !exact(candidate, ['schema', 'slot', 'process', 'sample']) ||
+      candidate.schema !== 1 ||
+      typeof candidate.slot !== 'number' ||
+      !Number.isInteger(candidate.slot) ||
+      candidate.slot < 1 || candidate.slot > 5) {
+    return denyCandidate('MALFORMED_CANDIDATE');
+  }
+
+  let hintedProcess: ReturnType<typeof parseCoordinateProcessHint>;
+  try {
+    hintedProcess = parseCoordinateProcessHint(candidate.process);
+    parseUnboundCoordinateSample(candidate.sample);
+  } catch {
+    return denyCandidate('MALFORMED_CANDIDATE');
+  }
+
+  const {profile, selectedSlot, receivedAtMonotonicMs, nowMonotonicMs} = context;
+  if (!profile || profile.slot !== selectedSlot ||
+      profile.state !== 'RUNNING' || !profile.process ||
+      profile.process.responding !== true) {
+    return denyCandidate('NO_RESPONDING_CLIENT');
+  }
+  if (candidate.slot !== selectedSlot) return denyCandidate('SLOT_MISMATCH');
+
+  let current: ReturnType<typeof parseObservedProcess>;
+  try {
+    current = parseObservedProcess(profile.process);
+  } catch {
+    return denyCandidate('NO_RESPONDING_CLIENT');
+  }
+
+  if (hintedProcess.pid !== current.pid ||
+      hintedProcess.createdFileTime !== current.createdFileTime ||
+      hintedProcess.sessionId !== current.sessionId ||
+      hintedProcess.windowHandle !== current.windowHandle) {
+    return denyCandidate('PROCESS_MISMATCH');
+  }
+  if (receivedAtMonotonicMs === null ||
+      !Number.isFinite(receivedAtMonotonicMs) ||
+      !Number.isFinite(nowMonotonicMs) ||
+      receivedAtMonotonicMs < 0 ||
+      nowMonotonicMs < receivedAtMonotonicMs ||
+      nowMonotonicMs - receivedAtMonotonicMs > MAX_CANDIDATE_AGE_MS) {
+    return denyCandidate('STALE_OR_UNTIMED');
+  }
+
+  // Process hints, local freshness and Script API output cannot prove which
+  // world and player produced the sample. The native issuer does not exist.
+  return denyCandidate('PLAYER_WORLD_ORIGIN_UNVERIFIED');
+}

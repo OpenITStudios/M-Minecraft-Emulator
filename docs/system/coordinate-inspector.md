@@ -98,3 +98,73 @@ Official references (review actual Education parity before use):
 - https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/entity?view=minecraft-bedrock-stable
 - https://learn.microsoft.com/en-us/minecraft/creator/reference/content/commandsreference/examples/commands/teleport?view=minecraft-bedrock-stable
 - https://v2.tauri.app/plugin/clipboard/
+
+
+## Original-team source audit and P1 candidate gate (3 November 2026)
+
+Original user-uploaded archives (3)(1) and (3)(2) are byte-identical:
+SHA-256 26c0a322cabed172ca74970413d5bb7a20d6f67181446df5f688e36057c54e21.
+This is a pinned upload, not evidence about current private team HEAD.
+
+- modules/coords/coords.ts already owns spawn and block conversion. Its
+  integer X/Z +0.5 centring belongs to spawn/reference parsing; DO NOT
+  silently centre copied exact player XYZ.
+- modules/analytics/analytics.ts exposes opt-in tier-3 position capture.
+  modules/analytics/capture.ts stores [tick, floor(x), floor(y), floor(z)]
+  as position_samples; no rotation, sub-block precision or live-player
+  world binding. modules/analytics/analytics-export.ts emits historical
+  [ANALYTICS] output through the original scriptevent pull, not a live HUD.
+- modules/display/hud-line.ts already owns multiplexed game actionbar
+  display. Avoid adding an independent actionbar sender.
+- Existing Lazy Tester evidence-summary.mjs keeps world/player provenance
+  NOT_VERIFIED. MC01-MC05 Content Log file names alone do not authenticate
+  the game process or the actor whose coordinates were captured.
+
+The original modules cannot supply an authenticated F3 live coordinate
+source in their current form. Do not reinterpret historic analytics rows
+as realtime XYZ, do not add a duplicate diagnostics/telemetry pack, and do
+not silently change the team module from this repository.
+
+### Read-only candidate screen
+
+Existing desktop src/app/coordinates.ts now exports
+assessUnverifiedCoordinateCandidate and typed status reasons. This is a
+pure candidate comparator, not a network reader or a proof issuer.
+
+- Candidate shape is exactly {schema,slot,process,sample}. The slot is an
+  untrusted hint, never proof of Minecraft player/profile identity.
+- It screens the already selected ProfileSession and original observed
+  PID, createdFileTime, Windows session ID and HWND. Matching fields
+  only prove value equality, not source authenticity.
+- Independently supplied receiver monotonic time has a two-second age
+  bound. A time in source log cannot substitute; a recent receipt does
+  not exclude replay without a native non-replay proof.
+- Unknown fields claiming verification, raw player/world identity or
+  timestamp are rejected. No candidate can issue its own authority.
+- Every outcome has copyAllowed=false. Even matching fresh hints remain
+  PLAYER_WORLD_ORIGIN_UNVERIFIED. Raw coordinates are not projected
+  into the assessment result.
+
+No new Tauri IPC, MCP tool, native DLL, HUD, global shortcut, clipboard,
+game command, telemetry emitter, runtime observer or status storage was
+added. Source-only regression scenarios are AUTHORED_NOT_EXECUTED.
+
+### Unresolved independent trust boundary
+
+The ORIGINAL team owner must explicitly approve an opt-in, bounded
+live-position producer that reads local player.location, getRotation(),
+dimension.id and game tick under compatible Education APIs. The original
+native controller must independently attribute the delivered observation
+to the exact live client process, local player and world session. It
+must reject replay, changed process/world/actor, dimension transitions,
+out-of-order delivery and stale samples. A matching PID, local screenshot,
+selected slot, log filename, world label, self-issued nonce or actor ID
+cannot independently establish that proof.
+
+Only after an audited native proof issuer exists may selected-client
+presentation and a narrow write-only clipboard action be considered.
+Original testing recovery CAS remains a separate blocked feature.
+
+Official API references:
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/entity?view=minecraft-bedrock-stable
+- https://learn.microsoft.com/en-us/minecraft/creator/reference/content/commandsreference/examples/commands/teleport?view=minecraft-bedrock-stable

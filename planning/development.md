@@ -42,6 +42,19 @@ new-revision acceptance.
   behavior are NOT_VERIFIED / NOT_IMPLEMENTED. Canonical team telemetry
   and the existing FPS HUD remain unchanged. See
   [coordinate inspector design](../docs/system/coordinate-inspector.md).
+- **F3 Coordinate Evidence P1 (3 November, source-only):** read identical
+  original uploaded team skills ZIP snapshots (SHA-256
+  26c0a322cabed172ca74970413d5bb7a20d6f67181446df5f688e36057c54e21).
+  Team modules/coords already handles spawn/block math; tier-3
+  analytics position_samples are opt-in HISTORICAL floored XYZ
+  without rotation or live player/world attribution. Added a read-only
+  per-slot/process candidate screen to existing src/app/coordinates.ts
+  with exact PID/birth/session/HWND, selected slot and receipt-age
+  screening; every status has copyAllowed=false and still refuses
+  actual player/world origin as UNVERIFIED. Tests AUTHORED_NOT_EXECUTED;
+  no new source emitter, collector, IPC, HUD, clipboard, hotkey,
+  native lifecycle, gameplay, CI or release action.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -272,16 +285,15 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: review the ORIGINAL team Script API implementation and define
-a read-only, per-client/world-attributable position evidence contract
-before connecting coordinate data to Lazy Tester. Do not enable
-clipboard, an F3 HUD, a global hotkey or a new telemetry emitter until
-the existing native controller can bind the exact client and reject
-unverified/stale world observations. Runtime tests remain deferred.
+Next: design the opt-in live-position source in the ORIGINAL team module
+ownership and a genuinely independent native source/player/world
+attribution contract. Historical analytics position_samples are not
+a live F3 feed. Until the original native controller can issue
+authenticated source/world admission, candidate copyAllowed=false,
+HUD and clipboard remain disconnected. No parallel telemetry engine,
+input hook, global shortcut, CI, user PC test or gameplay action.
 
-The separate Testing recovery P0 remains BLOCKED: native Data/Testing
-archive admission and independent Windows operator authentication
-must precede any live sealed-CAS transfer. Its existing source gate,
-no-transfer behavior, and all Probe/world provenance safeguards remain
-unchanged. Do not enable transfer, game commands, CI, installation,
-or account/world modifications.
+Separate Testing recovery CAS remains BLOCKED until independent native
+Data/Testing archive verification and authenticated Windows operator
+approval. Do not expose that transfer route or infer real-world
+provenance from authored source fixtures.
