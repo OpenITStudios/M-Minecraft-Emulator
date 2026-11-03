@@ -3,7 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createVisualObserver,summarizeTeamVisualState,
   verifyTeamObservationBasis,evaluateTeamActionFeedback,
-  summarizeTeamCoordination,projectF3VisualReview} from './visual-observer.mjs';
+  summarizeTeamCoordination,projectF3VisualReview,
+  reviewVisibleXYZFromFrame} from './visual-observer.mjs';
 
 function clockFixture() {
   let now=1000;
@@ -689,4 +690,71 @@ test('F3 cached frame triage fails closed on stale, missing and replaced visual 
     assert.equal(r.coordinateExtraction,'NOT_PERFORMED');
     assert.equal(r.automaticCopyAllowed,false);
   }
+});
+
+test('F3 MVP recognizes only one labelled Position line from the same fresh visual frame',()=>{
+  const identity={pid:313,windowId:1313,sessionId:1,
+    createdFileTime:'134000000000000001'};
+  const meta={
+    schema:1,slot:3,active:true,freshFrameAvailable:true,
+    captureIdentity:identity,width:800,height:600,frameAgeMs:120,
+    sequence:9,sourceFrameAtMs:456000,
+    sourceTimeKind:'WGC_READBACK_COMPLETED',
+  };
+  const review={frameSequence:9,sourceFrameAtMs:456000,
+    identity,recognizedLine:'Position: -123, 64, 45'};
+  assert.deepEqual(reviewVisibleXYZFromFrame(meta,review),{
+    schema:1,status:'SCREEN_XYZ_CANDIDATE_UNVERIFIED',
+    source:'AI_TRANSCRIBED_SCREEN_TEXT_UNVERIFIED',
+    xyz:'-123 64 45',
+    playerWorldAttribution:'NOT_VERIFIED',
+    automaticCopyAllowed:false,
+  });
+  for(const line of [
+    'Position: 0, 70, -0',
+    'POSITION: +001, 64, -00042',
+  ]) {
+    assert.equal(reviewVisibleXYZFromFrame(meta,{...review,recognizedLine:line}).status,
+      'SCREEN_XYZ_CANDIDATE_UNVERIFIED');
+  }
+  assert.equal(reviewVisibleXYZFromFrame(meta,{...review,
+    recognizedLine:'Position: 0, 70, -0'}).xyz,'0 70 0');
+});
+
+test('F3 screen review rejects a changed/stale/cross-slot frame and invalid text',()=>{
+  const identity={pid:213,windowId:102,sessionId:1,
+    createdFileTime:'134000000000000001'};
+  const m={
+    schema:1,slot:2,active:true,freshFrameAvailable:true,
+    captureIdentity:identity,width:800,height:600,frameAgeMs:120,
+    sequence:5,sourceFrameAtMs:2000,
+    sourceTimeKind:'WGC_READBACK_COMPLETED',
+  };
+  const evidence={frameSequence:5,sourceFrameAtMs:2000,identity,
+    recognizedLine:'Position: -10, 64, 99'};
+  const reject=(meta,review,status)=>{
+    const result=reviewVisibleXYZFromFrame(meta,review);
+    assert.equal(result.status,status);
+    assert.equal(result.xyz,null);
+    assert.equal(result.automaticCopyAllowed,false);
+  };
+  for(const bad of [
+    {...m,active:false}, {...m,freshFrameAvailable:false},
+    {...m,frameAgeMs:5000}, {...m,sourceTimeKind:null},
+    {...m,slot:6},
+  ])reject(bad,evidence,'SCREEN_FRAME_STALE_OR_REPLACED');
+  for(const bad of [
+    {...evidence,frameSequence:4}, {...evidence,sourceFrameAtMs:2001},
+    {...evidence,identity:{...identity,pid:999}},
+    {...evidence,identity:{...identity,windowId:999}},
+    {...evidence,identity:{...identity,createdFileTime:'134000000000000002'}},
+    {...evidence,extra:'world:trusted'},
+  ])reject(m,bad,bad.extra?'INVALID_SCREEN_REVIEW':'SCREEN_FRAME_STALE_OR_REPLACED');
+  for(const recognizedLine of [
+    '12, 64, 42', '/tp @s 12 64 42', 'Player: 12, 64, 42',
+    'Position: 12, 64', 'Position: 12, 64, 42\nPosition: 1, 2, 3',
+    'Position: 1e6, 64, 42', 'Position: 1.2, 64, 42',
+  ])reject(m,{...evidence,recognizedLine},'SCREEN_COORDINATES_NOT_READABLE');
+  reject(m,{...evidence,recognizedLine:'Position: 1000000001, 70, 0'},
+    'SCREEN_COORDINATES_OUT_OF_RANGE');
 });

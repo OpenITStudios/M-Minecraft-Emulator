@@ -24,7 +24,7 @@ import {validateTestingArchiveRoot,archiveTestingResult,
 import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
   evaluateTeamActionFeedback,summarizeTeamCoordination,
-  projectF3VisualReview} from './visual-observer.mjs';
+  projectF3VisualReview,reviewVisibleXYZFromFrame} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 import {readPinnedProbeCatalogCached,probeSourceRevisionStatus,
   parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult,
@@ -1012,7 +1012,17 @@ export const TOOL_LIST=[
           'sourceFrameAtMs','sourceTimeKind','producerSequence','captureIdentity'],
         additionalProperties:false}},
     },additionalProperties:false}},
-  {name:'read_visual_observation',description:'Retrieve only a NEW locally cached frame (and status), or metadata without pixels. Never triggers a screenshot itself.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},afterSequence:{type:'integer',minimum:0},includeImage:{type:'boolean'}},required:['slot'],additionalProperties:false}},
+    {name:'read_visual_observation',description:'Read an existing cached frame; optional model-transcribed Show Coordinates text is screened against exact existing frame identity without OCR or new screenshot.',inputSchema:{type:'object',properties:{
+    slot:{type:'integer',minimum:1,maximum:5},afterSequence:{type:'integer',minimum:0},includeImage:{type:'boolean'},
+    screenReview:{type:'object',properties:{
+      frameSequence:{type:'integer',minimum:1},sourceFrameAtMs:{type:'integer',minimum:1},
+      identity:{type:'object',properties:{
+        pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},sessionId:{type:'integer',minimum:0},
+        createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'},
+      },required:['pid','windowId','sessionId','createdFileTime'],additionalProperties:false},
+      recognizedLine:{type:'string',minLength:1,maxLength:128},
+    },required:['frameSequence','sourceFrameAtMs','identity','recognizedLine'],additionalProperties:false},
+  },required:['slot'],additionalProperties:false}},
   {name:'stop_visual_observation',description:'Stop one or more bounded visual samplers and immediately drop their in-memory image caches.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}}},required:['slots'],additionalProperties:false}},
   {name:'observe_client',description:'Read-only screenshot of one AI-owned native Minecraft window via an explicitly configured Cua Driver daemon; rejects a replaced or stale window, never takes foreground or sends input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'get_computer_use_target',description:'Resolve one AI-owned native Minecraft PID/HWND for read-only Cua Driver window capture without switching Windows focus. Does NOT capture pixels or control game input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
@@ -2193,16 +2203,26 @@ export function createHandler(config,{
       }};
     }
     if (name==='read_visual_observation') {
-      keysExactly(args,['slot','afterSequence','includeImage']);
+      keysExactly(args,['slot','afterSequence','includeImage','screenReview']);
       const slot=slotOf(args.slot);
       protectedSlot(slot);
+      // An AI may submit one visually transcribed Position line only AFTER
+      // an earlier explicit image read. The review itself returns text only.
+      if (args.screenReview!==undefined && args.includeImage!==false) {
+        throw new Error('Screen text review requires includeImage=false');
+      }
       const observation=visualObserver.read(slot,{
         afterSequence:args.afterSequence??0,
-        includeImage:args.includeImage??true,
+        includeImage:args.screenReview===undefined ? args.includeImage??true : false,
       });
       // Existing volatile cache only: NO new capture, worker or game command.
-      return {...observation,metadata:{...observation.metadata,
-        f3VisualReview:projectF3VisualReview(observation.metadata)}};
+      // Response still never asserts player/world or authorizes clipboard.
+      const metadata={...observation.metadata,
+        f3VisualReview:projectF3VisualReview(observation.metadata)};
+      if(args.screenReview!==undefined){
+        metadata.f3ScreenXYZ=reviewVisibleXYZFromFrame(metadata,args.screenReview);
+      }
+      return {...observation,metadata};
     }
     if (name==='stop_visual_observation') {
       keysExactly(args,['slots']);

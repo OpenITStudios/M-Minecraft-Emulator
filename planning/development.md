@@ -244,6 +244,19 @@ new-revision acceptance.
   NO team source or product runtime was changed; no Script API,
   command, network, new tool, UI/IPC, account/world mutation or CI.
 
+- **P17 simplified F3 screen-XYZ candidate (3 November, source-only):**
+  Reused original MCP read_visual_observation screenshot cache.
+  Optional screenReview accepts one AI-transcribed top-left
+  `Position: X, Y, Z` line with exact frame sequence, source time
+  and process PID/birth/session/HWND. New pure validator refuses
+  stale/replaced/invalid frames, ambiguous text and forged fields.
+  Candidate always AI_TRANSCRIBED_SCREEN_TEXT_UNVERIFIED;
+  `automaticCopyAllowed=false`. No actual OCR engine, new MCP
+  tool, new capture, Windows Media OCR/MSIX packaging change,
+  native IPC, in-app Copy, world command, CI or test execution.
+  Static source scenarios AUTHORED_NOT_EXECUTED; real screenshot
+  readability and desktop linkage remain unresolved.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -465,12 +478,12 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P16 confirms that the
-original team HUD is a per-player OUTPUT only; there is NO existing
-native/game handshake. Separate the screen-observed Show Coordinates
-candidate path (manual unverified review) from authenticated
-pairing (blocked by missing independent actor/world bridge).
-Do not expand F3 source claims until actual runtime proof exists. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P17 implements one
+screen-readable XYZ candidate from the existing exact-client MCP
+capture only when an AI/operator explicitly transcribes
+`Position: X, Y, Z` from the image. This is NOT automatic OCR
+or desktop F3 integration. The MVP remains simple and does not
+require HUD pairing or network transport from Minecraft. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -479,25 +492,20 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: source-only design a bounded, **explicit-operator-review**
-screen-visible Show Coordinates candidate against the EXISTING
-native exact-window screenshot output. The review must refuse
-missing/stale/replaced windows, fabricated XYZ metadata, absent
-overlay and cross-client reuse; no automated OCR, screenshot
-extraction or gameplay-origin assumption. Implement only a
-concrete, non-authorizing UI/metadata contract if source ownership
-and runtime truthfulness can be preserved; else stop and document.
+Next: determine the smallest **existing desktop/native** route
+for an explicit operator-requested, exact-window PNG and locally
+recognized Show Coordinates line. Reuse already checked window
+PID/creation FILETIME/session/HWND and refuse missing/stale frames;
+do not create a second window monitor or claim WinRT OCR works
+in this unpackaged NSIS build. Require an Education 26.33 sample
+and reviewed OCR capability before wiring a one-click desktop
+Copy; otherwise keep Copy disabled and say why.
 
-Do NOT implement the hypothetical HUD pairing protocol unless
-the original team owner provides a reviewed player-specific
-handshake with independently authenticated native/server channel,
-and the operator separately approves isolated Education 26.33
-Windows validation. Team HUD ownership, map scripts and uploaded
-worlds are not modified by Lazy Tester.
-
-Existing F3 Inspector remains selected native process + last
-reported FPS settings only. No live XYZ, rotation, dimension,
-measured desktop FPS or automatic Copy. P12 Paste XYZ is
-USER_PASTED_UNVERIFIED. Source tests, Windows, Minecraft and
-CI remain NOT_EXECUTED. Unrelated Testing sealed-CAS remains
-separately BLOCKED pending native attestation/approval.
+No pairing challenge, Code Builder/WebSocket, team analytics
+fork, new Minecraft Script API, game command, persistent screenshot
+store, global hotkey, automatic clipboard or silent OCR install.
+Current desktop F3 still shows selected native process and
+last reported FPS targets; XYZ, rotation, dimension and
+measured FPS are NOT_CONNECTED. Source suites, native Windows,
+Minecraft Education and CI are NOT_EXECUTED. Testing recovery
+sealed CAS remains separately BLOCKED pending attestation.

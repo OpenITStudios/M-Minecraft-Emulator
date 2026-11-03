@@ -133,6 +133,64 @@ export function projectF3VisualReview(meta) {
   } : refusal;
 }
 
+
+/**
+ * Screen-coordinate MVP: check a model-transcribed Show Coordinates LINE
+ * against an already captured, still-current MCxx visual frame.
+ *
+ * Input is untrusted transcription, NOT pixels or a game-origin receipt.
+ * The model must explicitly inspect read_visual_observation PNG first.
+ * No OCR engine, new capture, world binding, game input or clipboard writes.
+ */
+export function reviewVisibleXYZFromFrame(meta, review) {
+  const reject=status=>({
+    schema:1,status,source:'AI_TRANSCRIBED_SCREEN_TEXT_UNVERIFIED',
+    xyz:null,playerWorldAttribution:'NOT_VERIFIED',
+    automaticCopyAllowed:false,
+  });
+  if(!review || typeof review!=='object' || Array.isArray(review) ||
+     Object.keys(review).length!==4 ||
+     !['frameSequence','sourceFrameAtMs','identity','recognizedLine'].every(
+       key=>Object.hasOwn(review,key)) ||
+     !Number.isSafeInteger(review.frameSequence) || review.frameSequence<1 ||
+     !Number.isSafeInteger(review.sourceFrameAtMs) || review.sourceFrameAtMs<1 ||
+     typeof review.recognizedLine!=='string' || review.recognizedLine.length>128 ||
+     !review.identity || typeof review.identity!=='object' ||
+     Array.isArray(review.identity) ||
+     Object.keys(review.identity).length!==4 ||
+     !['pid','windowId','sessionId','createdFileTime'].every(
+       key=>Object.hasOwn(review.identity,key))) {
+    return reject('INVALID_SCREEN_REVIEW');
+  }
+  const observed=meta?.captureIdentity;
+  const expected=review.identity;
+  if(!observed || !Number.isInteger(meta?.slot) || meta.slot<1 || meta.slot>5 ||
+     projectF3VisualReview(meta).status!=='WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY' ||
+     meta.active!==true || meta.freshFrameAvailable!==true ||
+     meta.sequence!==review.frameSequence ||
+     meta.sourceFrameAtMs!==review.sourceFrameAtMs ||
+     observed.pid!==expected.pid ||
+     observed.windowId!==expected.windowId ||
+     observed.sessionId!==expected.sessionId ||
+     observed.createdFileTime!==expected.createdFileTime) {
+    return reject('SCREEN_FRAME_STALE_OR_REPLACED');
+  }
+  // The built-in Bedrock/Education screen shows block coordinates as
+  // "Position: X, Y, Z" at top left. No guessed digits, decimal points,
+  // OCR substitutions, unlabelled chat text, commands or extra lines.
+  const line=/^Position:\s*([+-]?\d{1,10})\s*,\s*([+-]?\d{1,10})\s*,\s*([+-]?\d{1,10})$/i.exec(
+    review.recognizedLine.trim());
+  if(!line) return reject('SCREEN_COORDINATES_NOT_READABLE');
+  const numbers=line.slice(1).map(Number);
+  if(numbers.some(n=>!Number.isSafeInteger(n) || Math.abs(n)>1000000000)) {
+    return reject('SCREEN_COORDINATES_OUT_OF_RANGE');
+  }
+  return {
+    ...reject('SCREEN_XYZ_CANDIDATE_UNVERIFIED'),
+    xyz:numbers.join(' '),
+  };
+}
+
 /**
  * No external worker, timer service, disk frame store, browser or extra native
  * controller. The caller owns this sampler for the MCP connection lifetime.

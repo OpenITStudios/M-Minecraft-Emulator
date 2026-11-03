@@ -998,3 +998,74 @@ References:
 - https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/scripteventsource?view=minecraft-bedrock-stable
 - https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features
 - https://edusupport.minecraft.net/hc/en-us/articles/360061369132-Classroom-Settings
+
+## P17 — Simplified F3 MVP: AI-read screen text, no new OCR engine (3 November 2026)
+
+User-selected MVP: choose MCxx, capture its already-owned window,
+visually read built-in **Show Coordinates**, and obtain XYZ for
+explicit review/copy. The existing desktop F3 Inspector does NOT
+yet receive screenshot frames from MCP; this milestone does not
+claim one-click in-app Copy.
+
+### Actual source and dependency decision
+
+- The approved MCP already has `read_visual_observation`, which
+  supplies a recent pinned MCxx window PNG on explicit request.
+- An AI viewing the PNG can transcribe the single top-left
+  `Position: X, Y, Z` line. This is a bounded visual interpretation,
+  not an externally authenticated local-player record.
+- Windows.Media.Ocr is not assumed available: Microsoft documents
+  package-identity requirements (MSIX) while this Tauri installer
+  uses NSIS. No new Tesseract runtime/installer, model API,
+  image-recognition package or DLL was added.
+
+### P17 implemented source-only slice
+
+Extend the EXISTING `read_visual_observation` tool with an optional
+`screenReview` argument, accepted ONLY with `includeImage:false`,
+containing `frameSequence`, `sourceFrameAtMs`, exact
+`{pid,windowId,sessionId,createdFileTime}` and AI-transcribed
+`recognizedLine`. Reuse the *same existing in-memory window-frame
+cache* and the previous P15 `f3VisualReview` status. No additional
+screenshot or worker starts when reporting the result.
+
+New pure `reviewVisibleXYZFromFrame()` refuses missing/aged images,
+replaced PID/birth/HWND, mismatching source timestamp or image
+sequence, extra forged fields, non-labelled/free-form coordinate
+text, commands, decimal/exponent values, and values outside
++/-1,000,000,000. It normalizes safe integer XYZ from a single
+exact `Position: X, Y, Z` line. An accepted result is always
+`SCREEN_XYZ_CANDIDATE_UNVERIFIED` with
+`source=AI_TRANSCRIBED_SCREEN_TEXT_UNVERIFIED`,
+`playerWorldAttribution=NOT_VERIFIED` and
+`automaticCopyAllowed=false`.
+
+**It does not run OCR automatically.** A model/operator must
+explicitly inspect the PNG and submit what was visible. A model
+can misread or fabricate text; this step cannot independently
+verify that the pixels show those digits. The candidate may be
+reviewed/copied manually outside the app but cannot be labeled
+live local-player coordinates or injected into the F3 desktop
+panel. There is still no backend-to-Svelte image/XYZ channel.
+
+### Simplest next engineering step
+
+Review whether one *existing* authenticated native desktop owner
+can safely provide the same window PNG and one local image-text
+recognition operation to the selected F3 panel, without exposing
+raw process handles or changing the installer/CI. Only after
+an actual Education 26.33 screen sample and Windows acceptance
+should a user-initiated Copy button be enabled, and it must
+clear immediately on game switch, source expiry or missing text.
+No continuous polling or keyboard-injection fallback by default.
+
+Source regression cases for integer XYZ, stale/replaced/forged
+screens, unlabelled/ambiguous model text and denied clipboard
+are AUTHORED_NOT_EXECUTED. No game or account/world command,
+WebSocket, native IPC, installed module, desktop code, CI,
+Windows or Minecraft execution occurred.
+
+References:
+- https://edusupport.minecraft.net/hc/en-us/community/posts/27889945431572-How-to-display-the-debug-screen-in-minecraft-education-edition
+- https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr?view=winrt-26100
+- https://github.com/tesseract-ocr/tessdoc/blob/main/Installation.md
