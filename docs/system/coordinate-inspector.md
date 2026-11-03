@@ -592,3 +592,62 @@ Official Microsoft DXGI source:
 - https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-present
 - https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_frame_statistics
 - https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-getframestatistics
+
+## P9 — BootstrapHudSnapshot ownership and binding-safe FPS readings (3 November 2026)
+
+The actual active source graph is closed:
+
+- compat.def exports BootstrapHudSnapshot, and compat.cpp implements a
+  strictly sizeof(fps_hud::Snapshot)-checked C ABI entry in the *child's*
+  bootstrap-compat.dll. It calls dxgi_pacing::hud_snapshot() in that
+  process. It is NOT an external desktop FPS-reading service.
+- The concrete GetProcAddress consumer is bootstrap-ordering/probe.cpp
+  in its own test process. frame-pacing-control.cpp also reads
+  dxgi_pacing::hud_snapshot() directly for its C++ control fixture.
+  The inspected Rust session_controller.rs, native_clients_session.rs,
+  agent_cli.rs, command allowlist and Svelte bridge have NO current
+  BootstrapHudSnapshot read route.
+- The original Rust controller holds the separate native Minecraft
+  process identities and windows, but cannot call another process's
+  DLL export by GetProcAddress in the manager and recover its per-process
+  HUD state. No shared memory, private pipe, user-approved snapshot
+  transport or native source attestation exists for this metric.
+- The accepted-rate sample covers outer native successful DXGI
+  Present/Present1 only. It does not certify display scanout, simulation,
+  configured frame ceiling, game readiness or local player/world origin.
+
+### P9 bounded correction (source-only)
+
+Hud::snapshot() now reads state, QPC meter and worker flag under the
+EXISTING State::gate shared lock, following the State::bind/unbind
+exclusive gate -> meter reset lock order. This prevents an unbind
+from changing the owner generation between retrieving display state
+and rate. It invalidates reading.valid when owner or ownerThread is
+absent, even if the single HUD worker is still alive in its normal
+one-second unbind grace, or when workerActive is false. It preserves
+the historical reading.accepted counter for diagnostic purposes.
+
+The existing fps-hud-control.cpp hidden-window control now has an
+authored source scenario that calls unbind(), records eight accepted
+synthetic presentations while the owner window intentionally stays
+alive, and asserts the snapshot reports no valid current rate.
+This supplements P8's destroyed-HWND/retired-worker fixture.
+
+NO new sampler thread, hook, BPP/GDI surface, overlay, FPS label,
+Tauri command, native game transport, event subscription, clipboard
+API or file/network stream has been added. This is a conservative
+C++ source correction and it is **AUTHORED_NOT_EXECUTED**; MSVC
+build, Windows native HUD self-test and Minecraft validation remain
+NOT_EXECUTED at this exact HEAD.
+
+### P10 direction — no unjustified cross-process export
+
+Treat desktop F3 performance and live XYZ as distinct unresolved
+capabilities. The native FPS overlay already works in its own
+process/source design, but obtaining a process-identified rate inside
+the manager would require a newly reviewed transport and genuine
+Windows evidence. Under the current no-new-IPC/no-local-test boundary,
+do not build that transport merely to show a number. The Play
+Paste XYZ fallback stays manual and UNVERIFIED. The next useful source
+pass is a bounded review of the P4 panel's existing accessibility,
+focus/closing, and safe output disclosure, not new telemetry.

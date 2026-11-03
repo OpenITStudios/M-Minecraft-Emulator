@@ -383,13 +383,18 @@ void Hud::present(HRESULT result, UINT flags) noexcept {
 }
 Snapshot Hud::snapshot() noexcept {
     auto& s = *state_;
-    AcquireSRWLockShared(&s.gate); auto value = s.display; ReleaseSRWLockShared(&s.gate);
+    // Keep the owner binding and meter reading in one snapshot generation.
+    // bind/unbind take this gate EXCLUSIVE before resetting the meter;
+    // readers retain the identical lock order: state gate, then meter.
+    AcquireSRWLockShared(&s.gate);
+    auto value = s.display;
     value.reading = s.meter.read();
     value.workerActive = s.workerActive.load(std::memory_order_acquire);
-    // A still-fresh QPC rate outlives a retired/failed HUD worker.
-    // Preserve the accepted-present count for diagnostic comparison,
-    // but never publish its last rate as a CURRENT worker observation.
-    if (!value.workerActive) value.reading.valid = false;
+    // A still-alive HUD worker may be in the one-second unbound grace.
+    // A successful synthetic/native Present must not resurrect a live
+    // rate after the game owner was dropped. Counts remain diagnostic.
+    if (!s.owner || !s.ownerThread || !value.workerActive) value.reading.valid = false;
+    ReleaseSRWLockShared(&s.gate);
     return value;
 }
 }

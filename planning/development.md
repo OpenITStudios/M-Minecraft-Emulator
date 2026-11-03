@@ -142,6 +142,20 @@ new-revision acceptance.
   Svelte fields or clipboard handling. C++ fixture AUTHORED_NOT_EXECUTED;
   source compilation, Windows HUD tests, Minecraft and CI NOT_EXECUTED.
 
+- **F3 FPS P9 in-process path and unbind gate (3 November, source-only):**
+  BootstrapHudSnapshot is a fixed-size C++ export in the game child;
+  only probe.cpp and frame-pacing-control.cpp currently consume it
+  inside the same process. Original Rust SessionSnapshot and Tauri/Svelte
+  have no read route; adding desktop FPS now would require a separately
+  reviewed interprocess transport, not a call to the manager DLL.
+  Corrected Hud::snapshot() to hold the existing State gate across
+  display/meter/worker reads, invalidating rate while unbound (even
+  during normal one-second worker grace), while preserving the accepted
+  counter. Extended hidden-window control fixture for synthetic
+  Present calls after unbind. No new renderer, native IPC, worker,
+  DXGI interception or clipboard. C++ tests AUTHORED_NOT_EXECUTED;
+  Windows/gameplay/source builds/CI NOT_EXECUTED.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -363,11 +377,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** preserve P7 block on
-unverified Education network position source. P8 confirmed the
-existing one-per-process native DXGI FPS HUD and corrected its
-retired-worker diagnostic validity. Keep P4 manual Paste XYZ
-explicitly UNVERIFIED and retain original team analytics ownership. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P9 closed the existing
+FPS owner-generation race and confirmed that BootstrapHudSnapshot
+is only an in-process C++ diagnostic, not desktop-native telemetry.
+Keep existing FPS overlay, manual P4 Paste XYZ, and original team
+analytics ownership unchanged; automatic live F3 stays BLOCKED. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -376,22 +390,17 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: source-only trace the private in-process BootstrapHudSnapshot
-consumers and original native session controller to determine whether
-a bounded read-only process-identity-validated Present-rate projection
-is feasible **without any new game-process IPC, DLL hook, worker
-or sampling loop**. If not, retain the current native FPS overlay
-only and do not add a Svelte F3 number based on unsupported evidence.
-Never label accepted Present rate as actual displayed FPS.
+Next: source-only audit the existing P4 CoordinatePastePanel.svelte
+and its Play-header wrapper for keyboard/assistive-tech usability,
+focus/close/reset correctness and safely selectable output. Fix one
+bounded frontend issue if confirmed, without new clipboard permissions,
+game input, native status collector or layout of the five launchers.
+Native FPS stays in its same-process overlay; BootstrapHudSnapshot
+has no authorized manager transport and no live desktop FPS claim.
 
-Automatic live XYZ/Copy via Code Builder /connect stays BLOCKED:
-Education 26.33 source protocol and independently attributed
-client/player/world data are NOT_VERIFIED. No WebSocket listener,
-permission/cheats changes, loopback exemption, third-party addon
-or synthetic PID proof can lift that block. P4 user-pasted XYZ
-remains unverified and manual.
-
-Windows DXGI controls, C++/Rust/Node/TypeScript source suites,
-Minecraft and CI are NOT_EXECUTED. The unrelated Testing
-recovery sealed CAS remains BLOCKED pending native archive
-attestation and independent Windows operator approval.
+Automatic XYZ/Copy via Code Builder /connect remains BLOCKED by
+unverified Education 26.33 protocol and client/player/world binding.
+Keep P4 data labeled USER_PASTED_UNVERIFIED. Source tests, Windows,
+Minecraft and CI remain NOT_EXECUTED. The separate Testing recovery
+sealed CAS remains BLOCKED pending native archive attestation and
+independent Windows operator approval.

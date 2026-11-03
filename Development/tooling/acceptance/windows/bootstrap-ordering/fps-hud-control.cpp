@@ -195,6 +195,12 @@ int run() {
         check(closing.bind(stillAlive,GetCurrentThreadId()));
         until([&] {auto state=closing.snapshot();return state.workerActive && state.window!=nullptr;});
         closing.unbind();
+        // During the one-second native rebind grace, Present callbacks may
+        // still be observed. No unbound owner can claim current FPS, even
+        // if the meter has had enough accepted samples to compute a rate.
+        for (unsigned i=0;i<8;++i) { closing.present(S_OK,0); Sleep(75); }
+        const auto unbound = closing.snapshot();
+        check(unbound.reading.accepted==8 && !unbound.reading.valid);
         until([&] {return !closing.snapshot().workerActive;});
         check(IsWindow(stillAlive) && GetWindowThreadProcessId(stillAlive,nullptr)==GetCurrentThreadId());
         // Rebind must explicitly join the retired std::thread and start a
