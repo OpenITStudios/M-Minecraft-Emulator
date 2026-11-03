@@ -220,11 +220,23 @@ test('visual snapshots keep sample-count changes separate from PNG-byte changes'
 });
 
 test('observed action basis rejects incomplete, stale, changed and reordered client identities',()=>{
-  const slots=[2,3,4,5],frames=slots.map(slot=>visualMeta(slot));
+  const slots=[2,3,4,5],frames=slots.map(slot=>visualMeta(slot,{
+    screenReviewFrameDelivered:true,
+  }));
   const baselines=summarizeTeamVisualState('human-plus-four-ai',
     slots,frames).frames.map(v=>v.baseline);
   const good=verifyTeamObservationBasis('human-plus-four-ai',slots,baselines,frames);
   assert.equal(good.frameCount,4);
+  const undelivered=frames.map(frame=>frame.slot===3?
+    {...frame,screenReviewFrameDelivered:false}:frame);
+  assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
+    slots,baselines,undelivered),/TEAM_OBSERVATION_IMAGE_NOT_DELIVERED/);
+  // An earlier PNG receipt for a replaced frame cannot match the frozen
+  // baseline, even if the new frame itself has been delivered.
+  const advanced=frames.map(frame=>frame.slot===4?
+    {...frame,sequence:frame.sequence+1,successfulSamples:frame.successfulSamples+1}:frame);
+  assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
+    slots,baselines,advanced),/STALE_OR_REPLACED/);
   assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
     slots,baselines.slice(1),frames),/STALE_OR_REPLACED/);
   assert.throws(()=>verifyTeamObservationBasis('human-plus-four-ai',
@@ -556,7 +568,9 @@ test('coordinated 4/5 AI visual cohorts fail closed per slot without silently sh
   for(const [mode,slots] of [
     ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]],
   ]) {
-    const readings=slots.map(slot=>visualMeta(slot));
+    const readings=slots.map(slot=>visualMeta(slot,{
+      screenReviewFrameDelivered:true,
+    }));
     const visual=summarizeTeamVisualState(mode,slots,readings);
     const admitted=summarizeTeamCoordination(mode,visual,[],true);
     assert.equal(admitted.observedActionEligible,true);
@@ -564,6 +578,14 @@ test('coordinated 4/5 AI visual cohorts fail closed per slot without silently sh
     assert.deepEqual(admitted.blockedSlots,[]);
     assert.equal(admitted.dispatch,'NO_INPUT_DISPATCHED');
     assert.equal(admitted.gameplayVerification,'NOT_VERIFIED');
+    const notDelivered=summarizeTeamVisualState(mode,slots,
+      readings.map(frame=>frame.slot===slots[1]?
+        {...frame,screenReviewFrameDelivered:false}:frame));
+    const needsImage=summarizeTeamCoordination(mode,notDelivered,[],true);
+    assert.deepEqual(needsImage.readySlots,slots,
+      'Source metadata readiness is not a model image receipt');
+    assert.equal(needsImage.observedActionEligible,false);
+    assert.equal(needsImage.dispatch,'NO_INPUT_DISPATCHED');
 
     const oneMissing=slots[1];
     const missing=summarizeTeamVisualState(mode,slots,
@@ -654,7 +676,8 @@ test('reconnect status is explicit and remains a subset of originally held AI cl
   for(const [mode,slots] of [
     ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]],
   ]) {
-    const fresh=summarizeTeamVisualState(mode,slots,slots.map(slot=>visualMeta(slot)));
+    const fresh=summarizeTeamVisualState(mode,slots,
+      slots.map(slot=>visualMeta(slot,{screenReviewFrameDelivered:true})));
     const status=summarizeTeamCoordination(mode,fresh,slots,true,slots);
     assert.equal(status.status,'HOLD_SELECTED_COHORT');
     assert.equal(status.observedActionEligible,false);

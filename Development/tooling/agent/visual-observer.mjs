@@ -726,7 +726,11 @@ export function summarizeTeamCoordination(
     status:blockedSlots.length?'HOLD_SELECTED_COHORT':
       optedIn?'SOURCE_COHORT_READY_NOT_NATIVE_ACCEPTED':
       'READ_ONLY_NO_INPUT_PERMISSION',
-    observedActionEligible:optedIn&&blockedSlots.length===0,
+    // The source may be healthy before a model has actually received its
+    // baseline PNG. Keep readySlots as source-only diagnostics, but never
+    // advertise an observed-action opportunity without per-frame delivery.
+    observedActionEligible:optedIn&&blockedSlots.length===0&&
+      visual.frames.every(frame=>frame.imageDeliveredForReview===true),
     reselect:'NEVER_AUTOMATICALLY_DROP_UNREADY_SLOTS',
     explicitHealthySubset:'MUST_REPLAN_ACTIONS_AND_READ_FRESH_BASELINES',
     uncertainInputRecovery:'EXPLICIT_STOP_NEUTRAL_ACK_REQUIRED_PER_SLOT',
@@ -777,6 +781,14 @@ export function verifyTeamObservationBasis(mode,slots,basis,readings) {
        id?.createdFileTime!==actual.captureIdentity.createdFileTime) {
       throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
     }
+  }
+  // The exact baseline can be fresh and native-identical without having
+  // been exposed as a PNG to the AI. The existing observer records a
+  // per-frame delivery receipt; metadata-only queries never set it.
+  // Refuse the WHOLE selected cohort when any pre-action frame has not
+  // been delivered. No partial replay or inference from metadata alone.
+  if(current.frames.some(frame=>frame.imageDeliveredForReview!==true)){
+    throw new Error('TEAM_OBSERVATION_IMAGE_NOT_DELIVERED');
   }
   return current;
 }

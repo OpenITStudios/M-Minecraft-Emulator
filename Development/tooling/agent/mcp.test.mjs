@@ -2485,6 +2485,15 @@ function teamVisualFixture(mode='human-plus-four-ai') {
     };
   };
   return {slots,records,reads,factory,
+    // Synthetic receipt for unit tests ONLY: a real receipt is created by
+    // the native-checked MCP read_visual_observation PNG delivery path.
+    markDelivered(selected=slots){
+      for(const slot of selected){
+        const current=records.get(slot);
+        if(!current)throw new Error('Unknown visual fixture slot');
+        records.set(slot,{...current,screenReviewFrameDelivered:true});
+      }
+    },
     native:async(_exe,operation,slot)=>{
       assert.equal(operation,'target');
       assert.ok(slots.includes(slot));
@@ -2530,6 +2539,53 @@ test('team visual snapshot is metadata-only, names all four AI targets and prote
   h.shutdown();
 });
 
+test('metadata-only pre-action baseline is refused without native writer or batch I/O',async()=>{
+  for(const mode of ['human-plus-four-ai','five-ai']){
+    const fixture=teamVisualFixture(mode);
+    let acquire=0,batches=0,nativeReads=0;
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      native:async(...args)=>{nativeReads++;return fixture.native(...args);},
+      aiLease:async(...args)=>{acquire++;return leaseAck(...args);},
+      aiInput:async(_exe,packet)=>({schema:1,slot:packet.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false}),
+      aiMultiBatch:async()=>{batches++;throw new Error('DO_NOT_DISPATCH');},
+    });
+    await handler.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
+    acquire=0;
+    const view=await handler.callTool('get_multi_client_visual_state',{});
+    const basis=view.frames.map(frame=>frame.baseline);
+    assert.equal(view.allSlotsHaveRecentFrames,true);
+    assert.equal(view.coordination.observedActionEligible,false);
+    await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
+      actions:fixture.slots.map(aiMove),basis,
+    }),/TEAM_OBSERVATION_IMAGE_NOT_DELIVERED/);
+    assert.deepEqual([acquire,batches,nativeReads],[0,0,0],
+      'Missing image delivery must refuse BEFORE native target/lease calls');
+    fixture.markDelivered(fixture.slots.slice(0,-1));
+    await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
+      actions:fixture.slots.map(aiMove),basis,
+    }),/TEAM_OBSERVATION_IMAGE_NOT_DELIVERED/);
+    assert.deepEqual([acquire,batches,nativeReads],[0,0,0]);
+    fixture.markDelivered([fixture.slots.at(-1)]);
+    const ready=await handler.callTool('get_multi_client_visual_state',{});
+    assert.equal(ready.coordination.observedActionEligible,true);
+    // A new frame after the image read revokes that frame's delivery proof.
+    const changedSlot=fixture.slots[0];
+    const prior=fixture.records.get(changedSlot);
+    fixture.records.set(changedSlot,{...prior,
+      sequence:prior.sequence+1,successfulSamples:prior.successfulSamples+1,
+      screenReviewFrameDelivered:false});
+    await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
+      actions:fixture.slots.map(aiMove),basis:ready.frames.map(frame=>frame.baseline),
+    }),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
+    assert.deepEqual([acquire,batches,nativeReads],[0,0,0]);
+    handler.shutdown();
+  }
+});
+
 test('observed cross-slot action uses exact recent visual basis and one existing native batch',async()=>{
   const fixture=teamVisualFixture();
   const batches=[],released=[];
@@ -2554,6 +2610,11 @@ test('observed cross-slot action uses exact recent visual basis and one existing
   released.length=0;
   const previous=await h.callTool('get_multi_client_visual_state',{});
   const basis=previous.frames.map(f=>f.baseline);
+  assert.equal(previous.coordination.observedActionEligible,false,
+    'A metadata-only baseline cannot authorize an observed AI action');
+  fixture.markDelivered();
+  assert.equal((await h.callTool('get_multi_client_visual_state',{}))
+    .coordination.observedActionEligible,true);
   const actions=fixture.slots.map(aiMove);
   const receipt=await h.callTool('run_experimental_observed_actions',{actions,basis});
   assert.equal(batches.length,1);
@@ -2604,6 +2665,7 @@ test('observed actions reject a replaced live native window before ANY lease or 
     await handler.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
     leaseMutations=0;
     const view=await handler.callTool('get_multi_client_visual_state',{});
+    fixture.markDelivered();
     const actions=fixture.slots.map(aiMove);
     await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
       actions,basis:view.frames.map(f=>f.baseline),
@@ -2637,6 +2699,7 @@ test('a visual frame changed during async native preflight cannot authorize old 
   });
   await handler.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
   leaseMutations=0;
+  fixture.markDelivered();
   const state=await handler.callTool('get_multi_client_visual_state',{});
   await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
     actions:fixture.slots.map(aiMove),basis:state.frames.map(f=>f.baseline),
@@ -2689,6 +2752,10 @@ test('five-AI visual decision supports MC01 only when explicitly selected as an 
   });
   await h.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
   const status=await h.callTool('get_multi_client_visual_state',{});
+  assert.equal(status.coordination.observedActionEligible,false);
+  fixture.markDelivered();
+  assert.equal((await h.callTool('get_multi_client_visual_state',{}))
+    .coordination.observedActionEligible,true);
   assert.deepEqual(status.slots,[1,2,3,4,5]);
   const result=await h.callTool('run_experimental_observed_actions',{
     actions:fixture.slots.map(aiMove),
@@ -3014,7 +3081,11 @@ test('uncertain native batch blocks only touched AI slots until explicit neutral
     });
     const full=await handler.callTool('get_multi_client_visual_state',{slots});
     assert.deepEqual(full.coordination.blockedSlots,[]);
-    assert.equal(full.coordination.observedActionEligible,true);
+    assert.equal(full.coordination.observedActionEligible,false,
+      'Neutral recovery restores source readiness, not an image review');
+    fixture.markDelivered();
+    assert.equal((await handler.callTool('get_multi_client_visual_state',{slots}))
+      .coordination.observedActionEligible,true);
     handler.shutdown();
   }
 });
@@ -3048,6 +3119,7 @@ test('revoked visual slot aborts the entire observed native sequence and latches
   });
   released.length=0;
   const view=await handler.callTool('get_multi_client_visual_state',{});
+  fixture.markDelivered();
   const actions=fixture.slots.map(aiMove);
   const pending=handler.callTool('run_experimental_observed_actions',{
     actions,basis:view.frames.map(f=>f.baseline),
@@ -3100,6 +3172,7 @@ test('first nonbusy observed capture error requests whole-cohort abort, never pa
   });
   released.length=0;
   const before=await handler.callTool('get_multi_client_visual_state',{});
+  fixture.markDelivered();
   const pending=handler.callTool('run_experimental_observed_actions',{
     actions:fixture.slots.map(aiMove),
     basis:before.frames.map(frame=>frame.baseline),
@@ -3176,7 +3249,11 @@ test('new 4/5 AI MCP connection does not trust any old channel without explicit 
     });
     const resolved=await handler.callTool('get_multi_client_visual_state',{});
     assert.deepEqual(resolved.coordination.pendingReconnectSlots,[]);
-    assert.equal(resolved.coordination.observedActionEligible,true);
+    assert.equal(resolved.coordination.observedActionEligible,false,
+      'Native neutral acknowledgement does not deliver any visual PNG');
+    fixture.markDelivered();
+    assert.equal((await handler.callTool('get_multi_client_visual_state',{}))
+      .coordination.observedActionEligible,true);
     assert.equal(resolved.coordination.gameplayVerification,'NOT_VERIFIED');
     handler.shutdown();
   }

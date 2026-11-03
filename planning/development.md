@@ -10,6 +10,22 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Pre-action PNG delivery admission (3 November, source-only):**
+  The existing observed-action validator previously admitted a fresh and
+  native-matched visual baseline even if MCP had never delivered its PNG.
+  Now `verifyTeamObservationBasis` refuses the entire selected AI
+  cohort unless every current per-slot frame carries the existing exact
+  image-delivery receipt; it checks this both before and after the awaited
+  native identity preflight. `get_multi_client_visual_state` keeps its
+  inexpensive metadata/source-ready projection but does not advertise
+  `observedActionEligible` until each PNG has been delivered.
+  An explicit read of the current PNG is needed before opting into
+  `run_experimental_observed_actions`, but delivery does not prove the
+  model actually examined the pixels, player identity or gameplay effect.
+  The original controller still exclusively owns native write admission.
+  Only synthetic/pure regression fixtures were AUTHORED_NOT_EXECUTED;
+  Node, Windows, Minecraft and five-client acceptance remain NOT_EXECUTED.
+
 - **Post-action image delivery evidence gate (3 November, source-only):**
   The read-only multi-client evaluator previously counted caller-reported
   visible changes from a recent same-process frame even when the exact

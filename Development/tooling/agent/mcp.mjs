@@ -68,7 +68,8 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC02_SEQUENCE_DEADLINE','MC02_SEQUENCE_ABORTED','MC02_RELEASE_UNCONFIRMED',
   'MULTI_CLIENT_EXPERIMENT_DISABLED','MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS',
   'TEAM_OBSERVATION_INCOMPLETE','TEAM_OBSERVATION_STALE_OR_REPLACED',
-  'TEAM_OBSERVATION_TIMING_UNAVAILABLE','TEAM_ACTION_RECEIPT_MISMATCH',
+  'TEAM_OBSERVATION_TIMING_UNAVAILABLE','TEAM_OBSERVATION_IMAGE_NOT_DELIVERED',
+  'TEAM_ACTION_RECEIPT_MISMATCH',
   'AI_SEQUENCE_ABORTED','AI_RELEASE_UNCONFIRMED','AI_INPUT_NATIVE_RESULT_UNVERIFIED',
   'AI_WRITER_LEASE_INVALID','AI_WRITER_LEASE_REQUIRED',
   'AI_LEASE_EPOCH_REQUIRED',
@@ -1148,7 +1149,7 @@ const EXPERIMENTAL_MULTI_CLIENT_TOOLS=[
 // original game controller's independent input admission checks.
 const EXPERIMENTAL_OBSERVED_TEAM_TOOL={
   name:'run_experimental_observed_actions',
-  description:'EXPERIMENTAL: require exact recent visual baselines for every AI slot, then reuse the existing one-CLI native action batch. Follow with get_multi_client_visual_state to check newer samples. No automatic gameplay perception or success claim.',
+  description:'EXPERIMENTAL: require an explicitly delivered current PNG and exact recent visual baseline for EVERY selected AI slot, then reuse the original native batch. Follow with get_multi_client_visual_state to inspect newer samples; PNG delivery is not proof of model review or gameplay success.',
   inputSchema:{type:'object',properties:{
     actions:EXPERIMENTAL_MULTI_CLIENT_TOOLS[0].inputSchema.properties.actions,
     basis:{type:'array',minItems:1,maxItems:5,uniqueItems:true,
@@ -2486,8 +2487,10 @@ export function createHandler(config,{
       const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       // Compile and validate the caller's exact visual baseline even if
-      // reconnect recovery is still required; malformed image identities
-      // never silently become authorized by a neutral release.
+      // reconnect recovery is still required. The existing observer must
+      // have delivered the SAME current PNG for every selected AI slot;
+      // metadata-only samples and malformed identities never authorize
+      // input or imply the model actually reviewed the pixels.
       let state=verifyTeamObservationBasis(
         config.mode,schedule.slots,args.basis,
         schedule.slots.map(slot=>visualObserver.read(slot,{
