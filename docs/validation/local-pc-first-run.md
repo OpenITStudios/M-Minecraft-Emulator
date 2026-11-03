@@ -162,6 +162,9 @@ not a missing feature in Git. If a previous local `App/` folder contains
 native DLLs, `DEV.cmd localcheck` will check their SHA-256 against the
 current Rust policy; matching binaries can be reused by pointing the
 environment variable to that `App/independent-bootstrap` folder.
+Until the variable is set, `localcheck` deliberately exits **BLOCKED** even
+when the old `App/` DLL hashes match: the build's staging script will not
+implicitly reuse those binaries.
 Do **not** copy accounts, profile data, worlds or arbitrary DLLs, override
 the hashes, create placeholders, or enable experimental AI input.
 

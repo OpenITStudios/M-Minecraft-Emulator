@@ -35,6 +35,8 @@ test('read-only localcheck and bootstrap error propagation are source-gated', ()
   assert.match(inspection,/Get-FileHash -LiteralPath \$file -Algorithm SHA256/);
   assert.match(inspection,/LAZY_TESTER_NATIVE_PAYLOAD_DIR/);
   assert.match(inspection,/App\/independent-bootstrap/);
+  assert.match(inspection,/Report 'BLOCKED' 'Existing App DLLs match, but dev\/package requires LAZY_TESTER_NATIVE_PAYLOAD_DIR/);
+  assert.doesNotMatch(inspection,/Report 'NEXT' 'Existing App DLLs match/);
   assert.match(inspection,/workspace\/toolchains\/node\/node\.exe/);
   assert.match(inspection,/workspace\/toolchains\/cargo\/bin\/rustfmt\.exe/);
   assert.match(inspection,/exact x64 architecture not established/);

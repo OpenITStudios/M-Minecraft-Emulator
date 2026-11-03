@@ -30,6 +30,12 @@ new-revision acceptance.
   BLOCKED F3 or experimental AI-input work; the single next action
   below remains unchanged.
 
+- **Native DLL first-run admission correction (3 November, source-only):**
+  a source-pinned DLL pair discovered in existing `App/` is not sufficient
+  to declare dev/package ready if `LAZY_TESTER_NATIVE_PAYLOAD_DIR` is unset.
+  Read-only localcheck now reports BLOCKED with the exact action instead of
+  returning a false-success 0 exit code. Test fixture AUTHORED_NOT_EXECUTED.
+
 - **Post-package desktop startup verifier (3 November, source-only):**
   the existing Windows verification script now refuses automatic manager
   cleanup unless the observed process was created after the explicit launch

@@ -193,7 +193,7 @@ try {
             }
         }
         if ($matched -and $existingApp) {
-            Report 'NEXT' 'Existing App DLLs match; set LAZY_TESTER_NATIVE_PAYLOAD_DIR to the absolute App\independent-bootstrap directory before dev/package.'
+            Report 'BLOCKED' 'Existing App DLLs match, but dev/package requires LAZY_TESTER_NATIVE_PAYLOAD_DIR set explicitly to the absolute App\independent-bootstrap directory.'
         }
     }
 } catch {
