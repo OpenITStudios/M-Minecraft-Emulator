@@ -160,3 +160,43 @@ describe('manual copy output matches each current input and selected mode', () =
     }
   });
 });
+
+describe('lossless pasted decimals and floor boundaries (source-only fixtures)', () => {
+  it('preserves significant decimal digits rather than rounding through Number', () => {
+    const raw = '0.99999999999999999 1.00000000000000001 -1.00000000000000001';
+    expect(formatUserPastedCoordinates(raw, 'XYZ')).toBe(raw);
+    expect(formatUserPastedCoordinates(raw, 'TELEPORT_POSITION_ONLY'))
+      .toBe('/tp @s ' + raw);
+    expect(formatUserPastedCoordinates(raw, 'BLOCK')).toBe('0 1 -2');
+    // The compatibility numeric sample can round, but never drives copy output.
+    expect(parseUserPastedCoordinates(raw).origin).toBe('USER_PASTED_UNVERIFIED');
+  });
+
+  it('floors tiny negative fractions and does not move near-integer positives to the next block', () => {
+    expect(formatUserPastedCoordinates(
+      '-0.00000000000000000001 0.99999999999999999999 -1.0000000000000000001',
+      'BLOCK',
+    )).toBe('-1 0 -2');
+    expect(formatUserPastedCoordinates(
+      '0001.2500 +000.0000001 -000.0000', 'XYZ',
+    )).toBe('1.25 0.0000001 0');
+    expect(formatUserPastedCoordinates(
+      '0001.2500 +000.0000001 -000.0000', 'BLOCK',
+    )).toBe('1 0 0');
+  });
+
+  it('checks the exact 1e9 bound before floating-point rounding', () => {
+    for (const raw of [
+      '1000000000.00000000001 0 0',
+      '-1000000000.00000000001 0 0',
+      '0001000000001 0 0',
+    ]) {
+      expect(() => parseUserPastedCoordinates(raw)).toThrow();
+      for (const mode of ['XYZ', 'BLOCK', 'TELEPORT_POSITION_ONLY'] as const) {
+        expect(() => formatUserPastedCoordinates(raw, mode)).toThrow();
+      }
+    }
+    expect(formatUserPastedCoordinates('1000000000.0000 -1000000000 0', 'XYZ'))
+      .toBe('1000000000 -1000000000 0');
+  });
+});

@@ -166,31 +166,79 @@ export type PastedCoordinateOutput = 'XYZ' | 'BLOCK' | 'TELEPORT_POSITION_ONLY';
 const PASTED_XYZ_SPACES = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]+([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]+([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
 const PASTED_XYZ_COMMAS = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]*,[ \t]*([+-]?(?:\d+(?:\.\d+)?|\.\d+))[ \t]*,[ \t]*([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
 
-export function parseUserPastedCoordinates(raw: unknown): UserPastedCoordinates {
+interface PastedDecimal {
+  // Exact plain-decimal value, after harmless sign/zero normalization.
+  readonly text: string;
+  readonly block: string;
+  // Only for compatibility with the numeric unverified sample API.
+  // NEVER use this rounded double for Exact XYZ or Block XYZ output.
+  readonly approximateNumber: number;
+}
+
+// JavaScript Number rounds values near integer/block boundaries. Parsing
+// digit strings avoids producing a different /tp or Block XYZ from a valid
+// user-entered precise decimal (e.g. 0.99999999999999999 is NOT block 1).
+function parsePastedDecimal(token: string): PastedDecimal {
+  const negative = token.startsWith('-');
+  const magnitude = /^[+-]/.test(token) ? token.slice(1) : token;
+  const [whole = '', rawFraction = ''] = magnitude.split('.');
+  const integer = (whole || '0').replace(/^0+(?=\d)/, '');
+  const fraction = rawFraction.replace(/0+$/, '');
+
+  // Bound based on exact digits, not a rounded JavaScript Number;
+  // a tiny fractional part beyond +/-1e9 must also be rejected.
+  if (integer.length > 10) throw new TypeError('Pasted XYZ coordinate outside supported bounds');
+  const integerNumber = Number(integer);
+  if (integerNumber > MAX_ABSOLUTE_VALUE ||
+      (integerNumber === MAX_ABSOLUTE_VALUE && fraction.length > 0)) {
+    throw new TypeError('Pasted XYZ coordinate outside supported bounds');
+  }
+
+  const zero = integer === '0' && fraction.length === 0;
+  const text = (negative && !zero ? '-' : '') + integer +
+    (fraction.length ? '.' + fraction : '');
+  const blockNumber = negative && !zero
+    ? -(integerNumber + (fraction.length ? 1 : 0))
+    : integerNumber;
+  return {text, block: String(blockNumber), approximateNumber: Number(text)};
+}
+
+function parsePastedDecimalTriplet(raw: unknown): readonly [PastedDecimal, PastedDecimal, PastedDecimal] {
   if (typeof raw !== 'string' || raw.length > 128 || /[\r\n]/.test(raw)) {
     throw new TypeError('Paste one XYZ coordinate line');
   }
   const text = raw.trim();
   const matches = PASTED_XYZ_SPACES.exec(text) ?? PASTED_XYZ_COMMAS.exec(text);
   if (!matches) throw new TypeError('Invalid pasted XYZ coordinates');
-  const x = Number(matches[1]);
-  const y = Number(matches[2]);
-  const z = Number(matches[3]);
-  if (![x, y, z].every(boundedNumber)) {
-    throw new TypeError('Pasted XYZ coordinate outside supported bounds');
-  }
-  return {origin: 'USER_PASTED_UNVERIFIED', position: {x, y, z}};
+  return [
+    parsePastedDecimal(matches[1]!),
+    parsePastedDecimal(matches[2]!),
+    parsePastedDecimal(matches[3]!),
+  ];
+}
+
+export function parseUserPastedCoordinates(raw: unknown): UserPastedCoordinates {
+  const [x, y, z] = parsePastedDecimalTriplet(raw);
+  // The typed numeric sample is a compatibility projection. Floating-point
+  // position may lose digits; only the token formatter below is lossless.
+  return {
+    origin: 'USER_PASTED_UNVERIFIED',
+    position: {x: x.approximateNumber, y: y.approximateNumber, z: z.approximateNumber},
+  };
 }
 
 export function formatUserPastedCoordinates(raw: unknown, output: PastedCoordinateOutput): string {
-  const {position} = parseUserPastedCoordinates(raw);
+  const parts = parsePastedDecimalTriplet(raw);
   switch (output) {
-    case 'XYZ': return positionText(position);
-    case 'BLOCK': return positionText(blockCoordinates(position));
+    case 'XYZ':
+      return parts.map(part => part.text).join(' ');
+    case 'BLOCK':
+      return parts.map(part => part.block).join(' ');
     case 'TELEPORT_POSITION_ONLY':
       // No guessed yaw/pitch, world or dimension. TEXT ONLY, not executed.
-      return '/tp @s ' + positionText(position);
-    default: throw new TypeError('Unsupported pasted coordinate format');
+      return '/tp @s ' + parts.map(part => part.text).join(' ');
+    default:
+      throw new TypeError('Unsupported pasted coordinate format');
   }
 }
 

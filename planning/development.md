@@ -177,6 +177,18 @@ new-revision acceptance.
   extra timer, five-client layout or telemetry change.
   Tests AUTHORED_NOT_EXECUTED; Svelte/Windows/gameplay NOT_EXECUTED.
 
+- **P12 lossless manual-coordinate correction (3 November, source-only):**
+  found that Number('0.99999999999999999') can round to 1,
+  causing incorrect Block XYZ and lost pasted digits. The existing
+  coordinates.ts manual formatter now validates/normalizes exact
+  digit strings before producing XYZ, position-only /tp text and
+  mathematically floored BLOCK. Numeric parseUserPastedCoordinates
+  API remains backward-compatible but approximate and is not
+  used for text/block output. +/-1e9 bounds checked from digits;
+  significant precision and tiny negative fractions retained.
+  Fixtures AUTHORED_NOT_EXECUTED; no UI, FPS, controller,
+  clipboard, game command or new telemetry work.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -398,11 +410,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P11 hardens the manual
-Paste XYZ copy-selection race across input changes and three formats.
-Keep the native FPS HUD, five-card launchers and original team
-analytics owners unchanged. Automatic live per-client F3 and
-Copy remain BLOCKED pending independent source/player/world proof. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P12 corrects loss of
+precision in user-pasted coordinates while retaining the existing
+manual UI, five-card rail, and native FPS HUD. Do not create
+automatic F3 infrastructure without independently verified
+client/player/world provenance. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -411,18 +423,18 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: examine the existing P11 manual-paste panel and parser
-for any remaining source-verifiable mismatch or actual user-visible
-ambiguity. Do not manufacture another integration feature or
-new data collector. If no concrete defect is found, STOP source
-patching this manual fallback until permitted Svelte/Windows
-acceptance is available. The current Copy text is explicitly
-user-initiated and USER_PASTED_UNVERIFIED.
+Next: bounded source review of the P12 digit-string formatter
+and existing manual panel for any demonstrable bug; otherwise
+STOP speculative manual UI/formatter churn. Stronger validation
+needs separately authorized frontend/Windows acceptance (not
+requested in this source-only run). The P4 panel remains
+manual, ephemeral and USER_PASTED_UNVERIFIED.
 
-Automatic live Minecraft Education 26.33 XYZ/Copy remains
-BLOCKED by absent independently attributable local player/world
-transport. Native FPS remains the same-process DXGI HUD; no
-desktop cross-process metric route is authorized. No WebSocket
-listener, clipboard permission, game hook, CI or installer change.
-Source suites, Windows, Minecraft and CI remain NOT_EXECUTED.
-Unrelated Testing recovery sealed CAS remains independently BLOCKED.
+Automatic Minecraft Education 26.33 XYZ/Copy remains BLOCKED by
+missing original local-player/world/source transport. Native FPS
+stays same-process DXGI only; do not add another collector,
+WebSocket listener, Tauri IPC, game control, account/world mutation,
+clipboard permission or global hotkey. Source suites, Windows,
+Minecraft and CI NOT_EXECUTED. Unrelated Testing recovery sealed
+CAS remains independently BLOCKED pending native attestation and
+authenticated operator approval.

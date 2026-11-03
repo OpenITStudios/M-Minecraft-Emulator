@@ -717,3 +717,37 @@ References:
 - Svelte tick: https://svelte.dev/docs/svelte/svelte
 - MDN input.select: https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/select
 - MDN selection range: https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/setSelectionRange
+
+## P12 — Lossless manual XYZ and mathematically correct block flooring (3 November 2026)
+
+Concrete source defect: the P3 manual parser converts each decimal
+token to a JavaScript Number. For input such as
+`0.99999999999999999`, Number can become 1, and subsequently
+Math.floor produces block 1 even though the original decimal is
+strictly below 1. Likewise exact user digits could disappear from
+XYZ and position-only teleport text.
+
+The existing pure `coordinates.ts` owner now parses each manual
+decimal as a bounded, canonicalized **digit string**. Exact XYZ and
+position-only `/tp @s X Y Z` use that value without intermediate
+floating-point rounding. Block XYZ is computed from the exact
+integer and nonzero fractional parts, including negative fractional
+values just below an integer. Leading plus signs, leading zeroes,
+insignificant fractional trailing zeroes and negative zero are
+normalized without changing the value. Large magnitudes are rejected
+using exact integer digits, so `1000000000.00000000001` cannot
+slip through via Number rounding.
+
+`parseUserPastedCoordinates` retains its existing public numeric
+`position` shape for compatibility, but this Number projection can
+round its decimals; it is explicitly **not** the source for precise
+formatted output or block math. No provenance/identity/verified field
+was added. The unbound Script API-shaped numeric coordinate contract,
+live proof gate and existing Svelte panel are unchanged.
+
+Authored Vitest scenarios cover exact significant digits, near-integer
+rounding, tiny negatives, canonical decimals, +/-1e9 bounds,
+position-only teleport text and no floating-point block drift.
+They are AUTHORED_NOT_EXECUTED. No typecheck, desktop render,
+Windows/Minecraft runtime, native IPC, clipboard API, game command
+or CI was run.
