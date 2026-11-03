@@ -386,3 +386,46 @@ Sources:
 - https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid
 - https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log
 - https://minecraft.wiki/w/Commands/wsserver
+
+## P6 — Bounded synthetic TCP PID witness (3 November 2026)
+
+The existing native process owner, Development/apps/desktop/src-tauri/src/engine/instance_identity.rs,
+now includes a PRIVATE test-only Rust module, guarded by #[cfg(test)].
+It is not mounted into the normal Lazy Tester runtime, and no Windows TCP
+table query, network listener, WebSocket endpoint, new game controller or IPC
+operation is introduced.
+
+The fixture models host-order IPv4 and IPv6 loopback four-tuples, exact
+local/remote endpoints, ESTABLISHED state, duplicate and missing TCP rows,
+non-game helper PIDs, process creation FILETIME changes, and port reuse.
+Every unique matching OS PID classification is named
+PidCandidateOnlyUnverified; two stable synthetic process/connection snapshots
+only produce PidOnlyStillUnverified. Neither status means the source player,
+world, Minecraft client or Copy Coordinate is verified.
+
+Microsoft IP Helper uses MIB_TCPTABLE_OWNER_PID for IPv4 and
+MIB_TCP6TABLE_OWNER_PID for IPv6. In a future OS adapter, convert the
+network-order dwLocalPort and dwRemotePort fields to host-order u16,
+normalize IPv6 scope IDs separately and require an exact established
+connection four-tuple. The owning PID must be checked against the retained
+original native process HANDLE and creation FILETIME before and after any
+observation. OS rows do not themselves provide process birth or game
+player/world attribution. A Code Builder/WebView helper PID must never be
+silently assigned to the owning Minecraft client.
+
+The new fixtures do NOT call GetExtendedTcpTable; no wire protocol, real
+connection, Education Code Builder runtime, source player identity or
+automatic F3 output was added. Synthetic results cannot grant any
+clipboard or game-control authority. Authored Rust tests are
+AUTHORED_NOT_EXECUTED; Windows and Minecraft 26.33 remain unverified.
+
+Next source question: without an authorized Education 26.33 client-originated
+connection and an independently established local player/world source,
+what real endpoint would a native TCP table lookup legitimately target?
+Do not add speculative listeners or self-issued provenance. Preserve
+the manual Paste XYZ fallback.
+
+Official references:
+- https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable
+- https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcptable_owner_pid
+- https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcp6table_owner_pid

@@ -101,6 +101,17 @@ new-revision acceptance.
   No native code, game action, WebSocket endpoint, clipboard, CI,
   installed team pack or auth/Testing route was changed.
 
+- **F3 TCP owner witness P6 (3 November, source-only):** in the EXISTING
+  native instance_identity.rs owner, authored a private #[cfg(test)]
+  Rust fixture for IPv4/IPv6 loopback 4-tuple, ESTABLISHED state,
+  wrong/helper PID, duplicate/missing rows, network-port mismatch,
+  process creation FILETIME changes and port reuse. Even unique PID
+  equality yields PidCandidateOnlyUnverified, never local-player/world
+  proof or Copy permission. No OS GetExtendedTcpTable call, listener,
+  Tauri/native IPC, team telemetry, game command or HUD change.
+  Rust test fixtures AUTHORED_NOT_EXECUTED; source builds, Windows,
+  Minecraft and CI NOT_EXECUTED. Manual Paste XYZ unchanged.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -334,17 +345,16 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: source-only inspect whether a read-only GetExtendedTcpTable
-socket-owner witness can be contained inside the original native
-instance_identity.rs owner, with synthetic IPv4/IPv6/4-tuple,
-helper-PID, PID-birth and port-reuse scenarios. Do NOT open a
-listener, add a new controller or permit F3 Copy from PID alone.
-Education 26.33 actual /connect/Code Builder interoperability
-and player/world identity are NOT_VERIFIED. If those runtime
-capabilities are unavailable, retain the manual Paste XYZ path
-instead of injecting or running a legacy Code Connection.
+Next: examine whether an actual Education 26.33 client-originated
+connection/position protocol exists before adding an OS TCP table
+adapter. A real observed endpoint and a way to attribute local player
+and world to the original MCxx process are mandatory. The P6 test-only
+witness provides no such evidence, never reads Windows TCP tables
+or permits live F3 Copy. Do not open a speculative listener,
+write game commands, add a controller, auto-read clipboard or
+enable global shortcuts. Keep manual Paste XYZ as the safe fallback.
 
-Source suites, Windows, Minecraft and CI are NOT_EXECUTED.
-The unrelated Testing recovery sealed CAS remains BLOCKED pending
-native archive verification and independently authenticated
-Windows operator consent. No native IPC or ownership changed.
+Source Rust/Node/TS test suites, Windows, Minecraft and CI remain
+NOT_EXECUTED. Testing recovery sealed CAS remains separately BLOCKED
+pending native archive verification and independently authenticated
+operator approval; no Testing or IPC paths changed.

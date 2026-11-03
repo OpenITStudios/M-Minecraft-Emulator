@@ -42,7 +42,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Manual game launch / reaping / normal CloseOne and CloseAll | `src-tauri/src/engine/independent_bootstrap/session_controller.rs` | `independent_bootstrap.rs` |
 | Game image, native enrollment and reviewed DLL checks | `src-tauri/src/engine/independent_bootstrap.rs` | `independent_bootstrap/owned_handoff.rs` |
 | Profile data, binding, settings and storage inspection | `src-tauri/src/engine/independent_bootstrap/` | `product_profiles.rs`, `profile_binding.rs`, `profile_storage.rs`, `game_preset.rs` |
-| Verified process/window identity | `src-tauri/src/engine/instance_identity.rs`, `process_identity.rs` | Existing native process and workspace callers |
+| Verified process/window identity | `src-tauri/src/engine/instance_identity.rs`, `process_identity.rs` | Existing native process/workspace callers. The identity owner additionally contains a P6 private test-only TCP four-tuple/PID classifier that cannot verify player/world or enable Copy; see `docs/system/coordinate-inspector.md`. |
 | Retained authenticated controller transport | `src-tauri/src/engine/native_clients_session.rs` | `native_clients_session/pipe.rs` |
 | Window placement / restoration | `src-tauri/src/engine/workspace_surface.rs` | `workspace_surface/controller.rs`, `native.rs` |
 | DWM preview scheduling and native Windows worker | `src-tauri/src/engine/workspace_surface/previews.rs` | `workspace_surface/previews/windows.rs` |
