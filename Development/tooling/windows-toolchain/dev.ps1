@@ -479,6 +479,11 @@ function Invoke-SourceBenchmark {
 
 Push-Location $DevelopmentRoot
 try {
+    # Native desktop runs must verify the actual OS architecture, not merely
+    # the process architecture: x64 binaries may be emulated on Windows ARM64.
+    if ($Command -in @("dev", "package")) {
+        Assert-NativePilotHost
+    }
     # Any command that may install dependencies, build or launch the desktop
     # must prove pinned local binaries first; "doctor" is not an optional guard.
     if ($Command -in @("setup", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package")) {

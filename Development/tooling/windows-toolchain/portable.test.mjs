@@ -37,6 +37,8 @@ test('read-only localcheck and bootstrap error propagation are source-gated', ()
   assert.match(inspection,/App\/independent-bootstrap/);
   assert.match(inspection,/workspace\/toolchains\/node\/node\.exe/);
   assert.match(inspection,/workspace\/toolchains\/cargo\/bin\/rustfmt\.exe/);
+  assert.match(inspection,/exact x64 architecture not established/);
+  assert.match(developer,/if \(\$Command -in @\("dev", "package"\)\) \{\s*Assert-NativePilotHost\s*\}/);
   assert.match(inspection,/git -C \$Root ls-files --error-unmatch -- \$lock/);
   assert.match(inspection,/Test-OrdinaryDirectoryChain/);
   assert.match(inspection,/VC\/Tools\/MSVC/);

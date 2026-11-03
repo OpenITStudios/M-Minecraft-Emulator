@@ -76,6 +76,9 @@ git rev-parse HEAD
 This checks the clean Git checkout, tracked source lockfiles, six portable
 tool files (including rustfmt), the SDK resource compiler, installed MSVC x64
 compiler/linker paths, and source-pinned DLL hashes including directory links.
+The PowerShell 5.1 check can confirm a 64-bit Windows host, but cannot
+reliably prove native x64 rather than emulated x64 on ARM64. The existing
+PowerShell 7 native gate now also runs before `dev` and `package`.
 It checks file presence/integrity, **not actual compiler execution**. It needs only
 Windows PowerShell/Git, does **not** change files, and normally reports
 BLOCKED on a fresh clone until bootstrap and native DLLs are prepared.

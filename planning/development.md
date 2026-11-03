@@ -21,7 +21,10 @@ new-revision acceptance.
   without downloads or execution; `bootstrap` now propagates the real
   PowerShell exit status. Follow-up source-only hardening verifies tracked
   lockfiles, rustfmt, MSVC x64 compiler/linker files and native DLL directory
-  ancestry; package now runs pinned toolchain doctor before npm. Regression
+  ancestry; package now verifies native x64 OS architecture and runs pinned
+  toolchain doctor before npm; dev verifies architecture before startup.
+  PowerShell 5.1 localcheck labels platform architecture unverified rather
+  than claiming native x64. Regression
   fixtures are AUTHORED_NOT_EXECUTED. No Windows, package, account or gameplay action
   was executed or approved by documenting it. This does not resume
   BLOCKED F3 or experimental AI-input work; the single next action

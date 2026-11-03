@@ -39,9 +39,10 @@ Write-Output 'Lazy Tester / Local PC prerequisites (READ ONLY)'
 Write-Output 'Source and file checks only: not an app, compiler, installer, or Minecraft test.'
 if ($env:OS -ceq 'Windows_NT' -and [Environment]::Is64BitOperatingSystem -and
     [Environment]::OSVersion.Version.Major -ge 10) {
-    Report 'FOUND' 'Windows 10/11 x64 host; actual game behavior untested.'
+    Report 'FOUND' 'Windows 10/11 64-bit host; exact x64 architecture not established by this read-only PowerShell 5.1 check.'
+    Report 'CHECK' 'DEV.cmd preflight/dev/package must verify native x64 OS architecture with PowerShell 7.'
 } else {
-    Report 'BLOCKED' 'Windows 10/11 x64 required.'
+    Report 'BLOCKED' 'Windows 10/11 64-bit OS required; native x64 verification follows in PowerShell 7.'
 }
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     Report 'BLOCKED' 'Git for Windows not available.'
