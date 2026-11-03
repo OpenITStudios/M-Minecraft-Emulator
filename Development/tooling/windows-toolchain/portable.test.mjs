@@ -36,7 +36,14 @@ test('read-only localcheck and bootstrap error propagation are source-gated', ()
   assert.match(inspection,/LAZY_TESTER_NATIVE_PAYLOAD_DIR/);
   assert.match(inspection,/App\/independent-bootstrap/);
   assert.match(inspection,/workspace\/toolchains\/node\/node\.exe/);
+  assert.match(inspection,/workspace\/toolchains\/cargo\/bin\/rustfmt\.exe/);
+  assert.match(inspection,/git -C \$Root ls-files --error-unmatch -- \$lock/);
+  assert.match(inspection,/Test-OrdinaryDirectoryChain/);
+  assert.match(inspection,/VC\/Tools\/MSVC/);
+  assert.match(inspection,/Hostx64\/x64\/cl\.exe/);
+  assert.match(inspection,/Hostx64\/x64\/link\.exe/);
   assert.match(inspection,/x64\/rc\.exe/);
+  assert.match(developer,/if \(\$Command -in @\([^\r\n]*"dev", "package"\)\)/);
   assert.doesNotMatch(inspection,/\b(?:Invoke-WebRequest|Start-Process|Remove-Item|Set-Content|Copy-Item|Move-Item|New-Item|Invoke-Expression)\b/i);
 });
 test('AI DEV.cmd routes use pinned Node and preserve legacy PowerShell execution', () => {
