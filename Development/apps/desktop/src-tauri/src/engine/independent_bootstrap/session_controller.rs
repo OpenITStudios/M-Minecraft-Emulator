@@ -44,9 +44,11 @@ impl Sessions {
                 "Existing Minecraft sessions are preserved. Close them normally before starting managed profiles."));
         }
         let (path, image) = registered_image(true)?;
-        let stores = registered_slots::<5>(true)?.into_iter().map(Some).collect();
-        // Validate the reviewed DLLs before the first settings write or game process.
+        // Opening five product profiles can recover an interrupted clear or
+        // persist the data-location pointer. Reject missing/unreviewed DLLs
+        // BEFORE any of those profile-side effects or a game launch.
         drop(BootstrapLibrary::reviewed()?);
+        let stores = registered_slots::<5>(true)?.into_iter().map(Some).collect();
         Ok(Self {
             stores,
             running: (0..5).map(|_| None).collect(),

@@ -8,6 +8,19 @@ import {reviewedDigests,stageNativePayload} from '../scripts/prepare-native-payl
 import {processRoles,roleMuiNames} from '../scripts/prepare-process-roles.mjs';
 
 describe('Lazy Tester native package',()=>{
+  it('validates native DLL admission before startup can mutate product profiles',()=>{
+    // Source-order fixture only; no DLL, Windows registry, profile or game I/O.
+    const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap/session_controller.rs',import.meta.url),'utf8');
+    const start=source.indexOf('fn prepare() -> io::Result<Self> {');
+    expect(start).toBeGreaterThanOrEqual(0);
+    const end=source.indexOf('fn reap(&mut self)',start);
+    expect(end).toBeGreaterThan(start);
+    const startup=source.slice(start,end);
+    const native=startup.indexOf('drop(BootstrapLibrary::reviewed()?);');
+    const profiles=startup.indexOf('registered_slots::<5>(true)?');
+    expect(native).toBeGreaterThanOrEqual(0);
+    expect(profiles).toBeGreaterThan(native);
+  });
   it('keeps independent installer identity and excludes private bindings and legacy payloads',()=>{
     const {config,policy}=verifyLazyTesterPackage();
     expect(config.productName).toBe('Lazy Tester');

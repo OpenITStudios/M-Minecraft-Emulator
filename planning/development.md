@@ -10,6 +10,14 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Native session preparation ordering (3 November, source-only):**
+  the existing MC01–MC05 controller now validates its reviewed bootstrap
+  DLLs before `registered_slots::<5>(true)` may recover an unfinished
+  clear or persist the profile locator. Missing/mismatched DLLs therefore
+  refuse before these profile-side effects. The controller and installed
+  data contracts are unchanged. Source-order fixture AUTHORED_NOT_EXECUTED;
+  no Windows DLL load, Rust build, session or Minecraft acceptance occurred.
+
 - **First local Windows PC test handoff (3 November, source-only):**
   [one standard desktop runbook](../docs/validation/local-pc-first-run.md)
   now routes clean `Local` clone, pinned toolchain, source preflight,
