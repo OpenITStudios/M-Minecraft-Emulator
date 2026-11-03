@@ -90,7 +90,7 @@ describe('F3 Inspector presentation-only integration', () => {
       'setInterval(', 'addEventListener(', 'fetch(', 'localStorage', 'writeText(']) {
       expect(ui).not.toContain(forbidden);
     }
-    expect(ui).toContain('Not connected');
+    expect(ui).toContain('{view.coordinates}');
     expect(ui).toContain('Show Coordinates');
     expect(ui).toContain('F3 Inspector');
     expect(ui).toContain('<svelte:window on:keydown={closeOnEscape} />');
