@@ -677,6 +677,7 @@ test('MCP local visual sampler returns only changed cached frames on demand',asy
   assert.equal(pending.metadata.status,'WAITING_FOR_FIRST_FRAME');
   assert.equal(pending.metadata.f3VisualReview.status,'NO_CURRENT_WINDOW_FRAME');
   assert.equal(pending.metadata.f3VisualReview.automaticCopyAllowed,false);
+  assert.equal(pending.metadata.screenReviewFrameDelivered,false);
   const reviewed=await handler.callTool('read_visual_observation',{
     slot:2,includeImage:false,screenReview:{frameSequence:1,sourceFrameAtMs:1000,
       identity:{pid:502,windowId:1202,createdFileTime:'134000000000000001',sessionId:1},

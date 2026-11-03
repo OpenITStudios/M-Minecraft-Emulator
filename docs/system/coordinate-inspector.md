@@ -1069,3 +1069,47 @@ References:
 - https://edusupport.minecraft.net/hc/en-us/community/posts/27889945431572-How-to-display-the-debug-screen-in-minecraft-education-edition
 - https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr?view=winrt-26100
 - https://github.com/tesseract-ocr/tessdoc/blob/main/Installation.md
+
+## P18 — Desktop screenshot boundary + visible-image gate (3 November 2026)
+
+Source conclusion: the desktop workspace renders original Minecraft
+windows via DWM thumbnails, which are compositor surfaces and do
+not expose pixel/PNG data to Svelte. The optional native WGC
+worker is standalone, not built or bundled. Current usable
+exact-window PNG reads belong to the separately opted-in MCP
+observer. No authenticated MCP→Tauri screenshot/XYZ transport
+exists in the current product.
+
+Microsoft states that `Windows.Media.Ocr` requires MSIX package
+identity for desktop apps, whereas the active Lazy Tester
+installer is NSIS. That OCR engine cannot be assumed present.
+
+P17 also contained a real source bug: model-transcribed XYZ
+could be accepted after an ordinary metadata-only frame read.
+The same existing volatile observer now remembers ONLY the last
+explicitly image-delivered frame's sequence, captured source time
+and native process-window generation. A later text review must
+match this exposed frame; otherwise the result is
+`SCREEN_FRAME_NOT_DELIVERED_FOR_REVIEW` and contains no XYZ.
+Changing frame sequence, source time, process identity, a failed
+capture, expiry or stop invalidates that delivery witness.
+
+This still cannot prove that the model visually inspected the
+PNG or read numbers correctly. All accepted coordinates remain
+`AI_TRANSCRIBED_SCREEN_TEXT_UNVERIFIED` with
+`automaticCopyAllowed=false`. No extra PNG copy, collector,
+native IPC, OCR, world operation, telemetry or clipboard was added.
+
+To complete the actual user MVP (select MCxx → F3 → XYZ → Copy)
+requires two missing, reviewable capabilities: one explicitly
+requested exact-window PNG into the existing F3 desktop and a
+real, deployable local text recognizer. Do not add a fake button
+or duplicate Paste XYZ until a source image and recognition
+accuracy have been verified on Education 26.33 Windows.
+
+References:
+- https://learn.microsoft.com/en-us/uwp/api/windows.media.ocr?view=winrt-26100
+- https://learn.microsoft.com/en-us/windows/uwp/audio-video-camera/screen-capture
+
+Node regression fixtures AUTHORED_NOT_EXECUTED; Windows,
+Minecraft, TS/Svelte, Rust, package and CI NOT_EXECUTED.

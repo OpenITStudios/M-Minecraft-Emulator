@@ -692,6 +692,43 @@ test('F3 cached frame triage fails closed on stale, missing and replaced visual 
   }
 });
 
+test('F3 model transcription requires a previously exposed current PNG',async()=>{
+  const t=clockFixture();
+  const observer=createVisualObserver({...t,capture:async()=>({
+    ...frame(2),
+    metadata:{...frame(2).metadata,captureStartedAtMs:t.clock()-10},
+  })});
+  observer.start([2],{intervalMs:800,durationMs:10000});
+  await t.next();
+  const unseen=observer.read(2,{includeImage:false}).metadata;
+  assert.equal(unseen.freshFrameAvailable,true);
+  assert.equal(unseen.screenReviewFrameDelivered,false);
+  const review={frameSequence:unseen.sequence,
+    sourceFrameAtMs:unseen.sourceFrameAtMs,
+    identity:unseen.captureIdentity,
+    recognizedLine:'Position: 12, 70, -8'};
+  assert.equal(reviewVisibleXYZFromFrame(unseen,review).status,
+    'SCREEN_FRAME_NOT_DELIVERED_FOR_REVIEW');
+  assert.equal(reviewVisibleXYZFromFrame(unseen,review).xyz,null);
+  const delivered=observer.read(2,{afterSequence:0,includeImage:true});
+  assert.equal(typeof delivered.imageBase64,'string');
+  assert.equal(delivered.metadata.screenReviewFrameDelivered,true);
+  const next=observer.read(2,{includeImage:false});
+  assert.equal(next.imageBase64,null);
+  assert.equal(next.metadata.screenReviewFrameDelivered,true);
+  const untrusted=reviewVisibleXYZFromFrame(next.metadata,review);
+  assert.equal(untrusted.status,'SCREEN_XYZ_CANDIDATE_UNVERIFIED');
+  assert.equal(untrusted.xyz,'12 70 -8');
+  assert.equal(untrusted.automaticCopyAllowed,false);
+  t.advance(3600);
+  const aged=observer.read(2,{includeImage:false});
+  assert.equal(aged.metadata.screenReviewFrameDelivered,false);
+  assert.equal(reviewVisibleXYZFromFrame(aged.metadata,review).xyz,null);
+  observer.stop([2]);
+  assert.equal(observer.read(2,{includeImage:false}).metadata.screenReviewFrameDelivered,false);
+  observer.shutdown();
+});
+
 test('F3 MVP recognizes only one labelled Position line from the same fresh visual frame',()=>{
   const identity={pid:313,windowId:1313,sessionId:1,
     createdFileTime:'134000000000000001'};
@@ -699,7 +736,7 @@ test('F3 MVP recognizes only one labelled Position line from the same fresh visu
     schema:1,slot:3,active:true,freshFrameAvailable:true,
     captureIdentity:identity,width:800,height:600,frameAgeMs:120,
     sequence:9,sourceFrameAtMs:456000,
-    sourceTimeKind:'WGC_READBACK_COMPLETED',
+    sourceTimeKind:'WGC_READBACK_COMPLETED',screenReviewFrameDelivered:true,
   };
   const review={frameSequence:9,sourceFrameAtMs:456000,
     identity,recognizedLine:'Position: -123, 64, 45'};
@@ -728,7 +765,7 @@ test('F3 screen review rejects a changed/stale/cross-slot frame and invalid text
     schema:1,slot:2,active:true,freshFrameAvailable:true,
     captureIdentity:identity,width:800,height:600,frameAgeMs:120,
     sequence:5,sourceFrameAtMs:2000,
-    sourceTimeKind:'WGC_READBACK_COMPLETED',
+    sourceTimeKind:'WGC_READBACK_COMPLETED',screenReviewFrameDelivered:true,
   };
   const evidence={frameSequence:5,sourceFrameAtMs:2000,identity,
     recognizedLine:'Position: -10, 64, 99'};
@@ -738,6 +775,9 @@ test('F3 screen review rejects a changed/stale/cross-slot frame and invalid text
     assert.equal(result.xyz,null);
     assert.equal(result.automaticCopyAllowed,false);
   };
+  const missingPng=reviewVisibleXYZFromFrame({...m,screenReviewFrameDelivered:false},evidence);
+  assert.equal(missingPng.status,'SCREEN_FRAME_NOT_DELIVERED_FOR_REVIEW');
+  assert.equal(missingPng.automaticCopyAllowed,false);
   for(const bad of [
     {...m,active:false}, {...m,freshFrameAvailable:false},
     {...m,frameAgeMs:5000}, {...m,sourceTimeKind:null},

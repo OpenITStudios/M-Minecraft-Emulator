@@ -175,6 +175,10 @@ export function reviewVisibleXYZFromFrame(meta, review) {
      observed.createdFileTime!==expected.createdFileTime) {
     return reject('SCREEN_FRAME_STALE_OR_REPLACED');
   }
+  // Public frame metadata does not prove this MCP actually returned PNG bytes.
+  if (meta.screenReviewFrameDelivered!==true) {
+    return reject('SCREEN_FRAME_NOT_DELIVERED_FOR_REVIEW');
+  }
   // The built-in Bedrock/Education screen shows block coordinates as
   // "Position: X, Y, Z" at top left. No guessed digits, decimal points,
   // OCR substitutions, unlabelled chat text, commands or extra lines.
@@ -226,6 +230,7 @@ export function createVisualObserver({
     state.status=status;
     state.imageBase64=null;
     state.lastHash=null;
+    state.lastDeliveredFrame=null;
     state.identity=null;
     state.captureIdentity=null;
     state.sourceFrameAtMs=null;
@@ -362,6 +367,7 @@ export function createVisualObserver({
         state.lastError=/changed|target|identity|stale/i.test(error?.message??'') ?
           'WINDOW_IDENTITY_UNCONFIRMED':'CAPTURE_UNAVAILABLE';
         state.imageBase64=null; // Never serve an old image as a fresh one.
+        state.lastDeliveredFrame=null;
         state.lastHash=null;
         state.status='CAPTURE_ERROR';
         // Surface the FIRST non-busy capture failure to an active observed
@@ -405,7 +411,7 @@ export function createVisualObserver({
         identity:null,captureIdentity:null,
         sourceFrameAtMs:null,sourceTimeKind:null,producerSequence:null,
         duplicateGpuReads:0,
-        lastHash:null,lastCollectedAt:null,lastCollectedMs:null,
+        lastHash:null,lastDeliveredFrame:null,lastCollectedAt:null,lastCollectedMs:null,
         width:null,height:null,windowBackground:null,
         successfulSamples:0,sameBytesCount:0,
         skippedBusy:0,totalErrors:0,consecutiveErrors:0,lastError:null,
@@ -450,12 +456,23 @@ export function createVisualObserver({
     const fresh=state.active && !tooOld &&
       state.imageBase64!==null && state.captureIdentity!==null;
     const deliver=includeImage && fresh && state.sequence>afterSequence;
+    if (deliver) {
+      // No extra image buffer: remember only the exact PNG frame exposed
+      // by this observer connection, not a metadata-only read.
+      state.lastDeliveredFrame={sequence:state.sequence,
+        sourceFrameAtMs:state.sourceFrameAtMs,identity:state.identity};
+    }
+    const delivered=fresh && state.lastDeliveredFrame!==null &&
+      state.lastDeliveredFrame.sequence===state.sequence &&
+      state.lastDeliveredFrame.sourceFrameAtMs===state.sourceFrameAtMs &&
+      state.lastDeliveredFrame.identity===state.identity;
     return {
       metadata:{
         schema:1,slot,sequence:state.sequence,
         status:state.active && tooOld && state.imageBase64!==null ?
           'CACHED_FRAME_AGED_OUT' : state.status,
         hasNewImage:deliver,active:state.active,
+        screenReviewFrameDelivered:delivered,
         // Frame availability is independent from whether PNG bytes changed
         // or whether this particular MCP read requested a binary image.
         freshFrameAvailable:fresh,

@@ -257,6 +257,17 @@ new-revision acceptance.
   Static source scenarios AUTHORED_NOT_EXECUTED; real screenshot
   readability and desktop linkage remain unresolved.
 
+- **P18 F3 image delivery gate and desktop transport blocker (3 November):**
+  DWM thumbnails supply no Svelte pixel buffer. Exact-window PNG
+  exists only in opt-in MCP; the separate WGC helper is unbuilt.
+  Microsoft Windows.Media.Ocr needs MSIX identity, while this
+  product uses NSIS. Corrected P17's metadata-only XYZ review:
+  original volatile visual observer now remembers the last
+  explicitly delivered PNG sequence/source time/owner, denying
+  reviews without that image witness. All candidates unverified,
+  Copy always false. No new capture, IPC, installer or UI.
+  Node fixtures AUTHORED_NOT_EXECUTED.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -478,12 +489,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P17 implements one
-screen-readable XYZ candidate from the existing exact-client MCP
-capture only when an AI/operator explicitly transcribes
-`Position: X, Y, Z` from the image. This is NOT automatic OCR
-or desktop F3 integration. The MVP remains simple and does not
-require HUD pairing or network transport from Minecraft. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P18 identifies the
+actual MVP blocker: selected-client pixels and an accepted local
+recognizer must reach desktop F3. Neither DWM thumbnails nor
+MCP alone offers an approved in-app XYZ/Copy channel. Stop adding
+fake controls or speculative frame collectors. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -492,20 +502,17 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: determine the smallest **existing desktop/native** route
-for an explicit operator-requested, exact-window PNG and locally
-recognized Show Coordinates line. Reuse already checked window
-PID/creation FILETIME/session/HWND and refuse missing/stale frames;
-do not create a second window monitor or claim WinRT OCR works
-in this unpackaged NSIS build. Require an Education 26.33 sample
-and reviewed OCR capability before wiring a one-click desktop
-Copy; otherwise keep Copy disabled and say why.
+STOP speculative F3 source changes until one authorized Windows
+Education 26.33 real screenshot confirms Show Coordinates
+readability and a deployable OCR/recognition route is chosen.
+Then consider ONE explicit user-initiated exact-window PNG
+handoff to the existing F3 panel, with independently reviewed
+process binding and bounded memory, never a second collector.
 
-No pairing challenge, Code Builder/WebSocket, team analytics
-fork, new Minecraft Script API, game command, persistent screenshot
-store, global hotkey, automatic clipboard or silent OCR install.
-Current desktop F3 still shows selected native process and
-last reported FPS targets; XYZ, rotation, dimension and
-measured FPS are NOT_CONNECTED. Source suites, native Windows,
-Minecraft Education and CI are NOT_EXECUTED. Testing recovery
-sealed CAS remains separately BLOCKED pending attestation.
+Do not silently add Tauri IPC, alter NSIS packaging, launch
+the experimental unbuilt WGC executable, enable game
+commands, connect Code Builder/WebSocket or present model
+text as authenticated gameplay. Existing manual P12 Paste
+XYZ remains usable; live F3 XYZ and one-click Copy stay
+NOT_CONNECTED. Node/Vitest/TS/Svelte/Rust/Windows/Minecraft
+and CI remain NOT_EXECUTED. Testing sealed CAS BLOCKED.
