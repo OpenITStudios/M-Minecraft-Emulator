@@ -10,6 +10,20 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Post-action image delivery evidence gate (3 November, source-only):**
+  The read-only multi-client evaluator previously counted caller-reported
+  visible changes from a recent same-process frame even when the exact
+  PNG was never delivered for explicit image review. The existing visual
+  observer already tracks whether the exact current frame was delivered;
+  the original summary now projects that boolean, and the existing
+  `evaluateTeamActionFeedback` refuses visible-change/no-change claims
+  without it. Non-reported/undetermined source metadata remains available,
+  and other independently reviewed slots remain evaluable. Existing
+  PID/birth/session/HWND and source timestamp gates still reject replaced
+  or stale post-action frames. No new native call, screenshot or gameplay
+  actor. Regression fixtures AUTHORED_NOT_EXECUTED; actual Node, Windows,
+  Minecraft and five-client acceptance remain NOT_EXECUTED.
+
 - **MCP cached-image read identity admission (3 November, source-only):**
   `read_visual_observation` formerly returned a recent cached PNG or
   accepted a transcription review without a fresh native ownership check.

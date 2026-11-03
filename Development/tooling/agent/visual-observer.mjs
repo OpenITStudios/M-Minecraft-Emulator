@@ -636,6 +636,10 @@ export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
       sourceTimeKind:validSourceTime?origin:null,
       producerSequence:validSourceTime?producerSequence:null,
       sourceTimingUsable:validSourceTime,
+      // This flag is issued by the same ephemeral observer only after the
+      // exact current PNG was explicitly read through the native-checked
+      // MCP image path. A fresh metadata sample is not visual model review.
+      imageDeliveredForReview:Boolean(fresh&&meta.screenReviewFrameDelivered===true),
       baseline:basis,observedSameProcessSinceBaseline:previous?sameTarget:null,
       sampledSinceBaseline:sampledSince,pngBytesChangedSinceBaseline:pngBytesChanged,
       // Only requesting a single already-cached frame via existing
@@ -909,6 +913,18 @@ export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after
       suppliedAfter.captureIdentity?.sessionId===current.captureIdentity?.sessionId&&
       suppliedAfter.captureIdentity?.createdFileTime===
         current.captureIdentity?.createdFileTime);
+    // A caller-reported visible change or lack of change requires evidence
+    // that THIS particular post-action PNG was delivered for model review.
+    // Metadata freshness alone is not an image observation. The original
+    // observer resets the delivery bit on a newer frame, changed native
+    // process, expiry, or reconnect; this evaluator never takes a screenshot.
+    const categories=[...requested.get(slot)].sort();
+    const imageClaim=categories.some(category=>{
+      const assessment=reported.get(slot+':'+category)?.assessment;
+      return assessment==='VISIBLE_CHANGE_REPORTED' ||
+        assessment==='NO_VISIBLE_CHANGE_REPORTED';
+    });
+    const deliveryBound=!imageClaim||frame.imageDeliveredForReview===true;
     // CUA's query started after completion, or the WGC worker completed
     // readback after completion. Neither is the actual game presentation
     // timestamp: this only gates whether the image may be reviewed as a
@@ -917,7 +933,7 @@ export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after
       sameTarget && timingBound&&frame.sampledSinceBaseline===true &&
       Number.isSafeInteger(frame.samples)&&frame.samples>before.samples&&
       Number.isSafeInteger(frame.sequence)&&frame.sequence>=before.sequence&&
-      beforeTime<=start&&afterTime>end;
+      beforeTime<=start&&afterTime>end&&deliveryBound;
     const cause=!frame.freshFrameAvailable?'NO_RECENT_POST_FRAME':
       !afterMatches?'POST_FRAME_SNAPSHOT_MISSING_OR_CHANGED':
       !sameTarget?'GAME_WINDOW_IDENTITY_CHANGED':
@@ -925,8 +941,8 @@ export function evaluateTeamActionFeedback(mode,actions,receipt,comparison,after
       frame.sampledSinceBaseline!==true?'NO_NEW_SAME_PROCESS_SAMPLE':
       beforeTime>start||afterTime<=end?
         'FRAME_SOURCE_EVENT_NOT_AFTER_ACTION':
-      frame.sequence<before.sequence?'FRAME_SEQUENCE_REGRESSION':'NONE';
-    const categories=[...requested.get(slot)].sort();
+      frame.sequence<before.sequence?'FRAME_SEQUENCE_REGRESSION':
+      !deliveryBound?'POST_IMAGE_NOT_DELIVERED_FOR_REVIEW':'NONE';
     const findings=categories.map(category=>{
       const review=reported.get(slot+':'+category);
       let status='UNDETERMINED_NOT_REVIEWED';

@@ -2729,7 +2729,8 @@ test('MCP evaluates four AI action categories only from cached same-process visu
     const prior=fixture.records.get(slot);
     fixture.records.set(slot,{...prior,sequence:2,successfulSamples:4,
       frameAgeMs:100,collectedAt:'2026-11-01T05:00:02.000Z',
-      sourceFrameAtMs:Date.parse('2026-11-01T05:00:02.000Z')-100});
+      sourceFrameAtMs:Date.parse('2026-11-01T05:00:02.000Z')-100,
+      screenReviewFrameDelivered:slot===2||slot===3});
   }
   const after=await handler.callTool('get_multi_client_visual_state',{
     slots:fixture.slots,since:receipt.visualBaseline});
@@ -2775,6 +2776,47 @@ test('MCP evaluates four AI action categories only from cached same-process visu
   handler.shutdown();
 });
 
+test('MCP model visual change is not credited when post-action PNG was never delivered',async()=>{
+  const fixture=teamVisualFixture();
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    native:async()=>{throw Error('Evaluation must remain metadata-only');},
+  });
+  const base=await handler.callTool('get_multi_client_visual_state',{});
+  const receipt={schema:1,mode:'human-plus-four-ai',slots:fixture.slots,
+    status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+    actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',
+    gameplayObserved:false,visualBaseline:base.frames.map(frame=>frame.baseline),
+    actionFingerprint:fingerprintActions('human-plus-four-ai',fixture.slots.map(aiMove)),
+    transportStartedAt:'2026-11-01T05:00:00.250Z',
+    transportCompletedAt:'2026-11-01T05:00:01.250Z'};
+  for(const slot of fixture.slots){
+    const earlier=fixture.records.get(slot);
+    fixture.records.set(slot,{...earlier,sequence:2,successfulSamples:4,
+      collectedAt:'2026-11-01T05:00:02.000Z',
+      sourceFrameAtMs:Date.parse('2026-11-01T05:00:02.000Z')-100});
+  }
+  const after=await handler.callTool('get_multi_client_visual_state',{
+    slots:fixture.slots,since:receipt.visualBaseline});
+  const arguments_={actions:fixture.slots.map(aiMove),receipt,
+    after:after.frames.map(frame=>frame.baseline),
+    reviews:[{slot:3,category:'movement',assessment:'VISIBLE_CHANGE_REPORTED',
+      cue:'A claimed moved target appears near the same background wall'}]};
+  const rejected=await handler.callTool('evaluate_experimental_multi_client_outcomes',arguments_);
+  assert.equal(rejected.outcomes.find(row=>row.slot===3).postFrameUsable,false);
+  assert.equal(rejected.outcomes.find(row=>row.slot===3).sourceStatus,
+    'POST_IMAGE_NOT_DELIVERED_FOR_REVIEW');
+  assert.equal(rejected.totals.reportedVisibleChanges,0);
+  const current=fixture.records.get(3);
+  fixture.records.set(3,{...current,screenReviewFrameDelivered:true});
+  const reviewed=await handler.callTool('evaluate_experimental_multi_client_outcomes',arguments_);
+  assert.equal(reviewed.outcomes.find(row=>row.slot===3).postFrameUsable,true);
+  assert.equal(reviewed.outcomes.find(row=>row.slot===3).findings[0].status,
+    'MODEL_REPORTS_VISUAL_CHANGE_UNVERIFIED');
+  assert.equal(reviewed.gameplayAcceptance,'NOT_VERIFIED');
+  handler.shutdown();
+});
+
 test('MCP feedback evaluation cannot enable multi-client input or evaluate human MC01 in hybrid',async()=>{
   const fixture=teamVisualFixture();
   const disabled=createHandler(config(),{visualObserverFactory:fixture.factory});
@@ -2813,7 +2855,8 @@ test('five AI outcome feedback covers MC01 but never treats reported view moveme
     fixture.records.set(slot,{...fixture.records.get(slot),
       sequence:2,successfulSamples:5,frameAgeMs:100,
       collectedAt:'2026-11-01T05:00:02.000Z',
-      sourceFrameAtMs:Date.parse('2026-11-01T05:00:02.000Z')-100});
+      sourceFrameAtMs:Date.parse('2026-11-01T05:00:02.000Z')-100,
+      screenReviewFrameDelivered:slot===1});
   }
   const after=await handler.callTool('get_multi_client_visual_state',{});
   const output=await handler.callTool('evaluate_experimental_multi_client_outcomes',{

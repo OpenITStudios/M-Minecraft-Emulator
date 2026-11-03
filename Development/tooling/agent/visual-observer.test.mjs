@@ -269,6 +269,9 @@ function teamFeedbackFixture(){
   const after=slots.map(slot=>visualMeta(slot,{
     sequence:2,successfulSamples:4,
     collectedAt:'2026-11-01T04:00:02.000Z',
+    // Source fixture represents an explicit same-frame image read, never
+    // an automatic delivery just because the image metadata was fresh.
+    screenReviewFrameDelivered:true,
   }));
   const receipt={
     schema:1,mode:'human-plus-four-ai',slots,
@@ -331,6 +334,65 @@ test('new sampled frame with IDENTICAL PNG bytes cannot support positive appeara
   assert.equal(out.outcomes[1].findings[0].status,
     'MODEL_REPORT_CONFLICTS_WITH_IDENTICAL_PNG');
   assert.equal(out.totals.reportedVisibleChanges,0);
+});
+
+test('post-action model reports cannot use undelivered PNGs, while peers remain evaluable',()=>{
+  const f=teamFeedbackFixture();
+  const after=f.after.map(meta=>meta.slot===3?
+    {...meta,screenReviewFrameDelivered:false}:meta);
+  const reviews=[
+    {slot:2,category:'movement',assessment:'VISIBLE_CHANGE_REPORTED',
+      cue:'A nearby landmark appears to change position after moving'},
+    {slot:3,category:'attack',assessment:'VISIBLE_CHANGE_REPORTED',
+      cue:'A target reaction appears in the post-action game frame'},
+  ];
+  const comparison=f.compare(after);
+  assert.equal(comparison.frames[0].imageDeliveredForReview,true);
+  assert.equal(comparison.frames[1].imageDeliveredForReview,false);
+  const result=evaluateTeamActionFeedback('human-plus-four-ai',
+    f.actions,f.receipt,comparison,f.afterBases(after),reviews);
+  const mc02=result.outcomes.find(row=>row.slot===2);
+  const mc03=result.outcomes.find(row=>row.slot===3);
+  assert.equal(mc02.postFrameUsable,true);
+  assert.equal(mc02.findings.find(row=>row.category==='movement').status,
+    'MODEL_REPORTS_VISUAL_CHANGE_UNVERIFIED');
+  assert.equal(mc03.postFrameUsable,false);
+  assert.equal(mc03.sourceStatus,'POST_IMAGE_NOT_DELIVERED_FOR_REVIEW');
+  assert.equal(mc03.findings[0].status,'NOT_EVALUABLE');
+  assert.equal(mc03.findings[0].cue,null);
+  assert.equal(result.totals.reportedVisibleChanges,1);
+  assert.equal(result.gameplayAcceptance,'NOT_VERIFIED');
+
+  // No appearance assertion: metadata-only comparison is still possible,
+  // but it never manufactures a model-observed outcome.
+  const unreviewed=evaluateTeamActionFeedback('human-plus-four-ai',
+    f.actions,f.receipt,comparison,f.afterBases(after),[]);
+  assert.equal(unreviewed.outcomes.find(row=>row.slot===3).postFrameUsable,true);
+  assert.equal(unreviewed.outcomes.find(row=>row.slot===3).findings[0].status,
+    'UNDETERMINED_NOT_REVIEWED');
+});
+
+test('replaced post-action client remains NOT_EVALUABLE across PID, birth, session and HWND',()=>{
+  const f=teamFeedbackFixture();
+  for(const [field,value] of [
+    ['pid',901],['createdFileTime','134000000000000002'],
+    ['sessionId',2],['windowId',9999],
+  ]){
+    const after=f.after.map(row=>row.slot===3?{...row,
+      captureIdentity:{...row.captureIdentity,[field]:value}}:row);
+    const result=evaluateTeamActionFeedback('human-plus-four-ai',
+      f.actions,f.receipt,f.compare(after),f.afterBases(after),[
+        {slot:2,category:'movement',assessment:'VISIBLE_CHANGE_REPORTED',
+          cue:'A known wall edge looks farther from the camera'},
+        {slot:3,category:'attack',assessment:'VISIBLE_CHANGE_REPORTED',
+          cue:'A claimed attack reaction is only from a replaced game'},
+      ]);
+    assert.equal(result.outcomes.find(row=>row.slot===2).postFrameUsable,true);
+    assert.equal(result.outcomes.find(row=>row.slot===3).postFrameUsable,false);
+    assert.equal(result.outcomes.find(row=>row.slot===3).sourceStatus,
+      'GAME_WINDOW_IDENTITY_CHANGED');
+    assert.equal(result.gameplayAcceptance,'NOT_VERIFIED');
+  }
 });
 
 test('missing, stale, replaced or misordered post-action images remain per-slot NOT_EVALUABLE',()=>{
