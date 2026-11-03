@@ -15,7 +15,7 @@ for the proof ceiling at the latest revision.
 
 | Goal | Entry point | Canonical details |
 | --- | --- | --- |
-| First test on a Windows PC | Clone `Local`, then use the existing `DEV.cmd` | [Windows first-run checklist](docs/validation/local-pc-first-run.md) |
+| First test on a Windows PC | Clone `Local`, then `DEV.cmd localcheck` (read-only) | [Windows first-run checklist](docs/validation/local-pc-first-run.md) |
 | Open an already prepared app | Root `Lazy Tester.exe` or compatibility `RUN.cmd` | [Desktop workspace](docs/product/unified-workspace.md) |
 | Develop or package locally **when explicitly authorized** | `DEV.cmd` | [Developer controller](Development/tooling/developer/README.md), [distribution](Development/engine/distribution/README.md) |
 | Inspect or launch profiles through an external model | Optional `Development/tooling/agent/mcp.mjs` | [MCP bridge](Development/tooling/agent/README.md) |
@@ -95,6 +95,7 @@ are retired from the active runtime; historical evidence is retained.
 ## Developer entrypoints (reference only; not executed by repository review)
 
 ```text
+DEV.cmd localcheck
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json

@@ -3,10 +3,8 @@ setlocal
 set "PROJECT_ROOT=%~dp0"
 if "%~1"=="" goto help
 if /I "%~1"=="help" goto help
-if /I "%~1"=="bootstrap" (
-  powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%PROJECT_ROOT%Development\tooling\windows-toolchain\bootstrap.ps1"
-  exit /b %ERRORLEVEL%
-)
+if /I "%~1"=="bootstrap" goto bootstrap
+if /I "%~1"=="localcheck" goto localcheck
 rem AI-facing control operations use only the reviewed workspace-local Node.
 if /I "%~1"=="inspect" goto controller
 if /I "%~1"=="catalog" goto controller
@@ -21,6 +19,14 @@ if not exist "%LOCAL_PWSH%" (
 "%LOCAL_PWSH%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%PROJECT_ROOT%Development\tooling\windows-toolchain\dev.ps1" %*
 exit /b %ERRORLEVEL%
 
+:bootstrap
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%PROJECT_ROOT%Development\tooling\windows-toolchain\bootstrap.ps1"
+exit /b %ERRORLEVEL%
+
+:localcheck
+powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "%PROJECT_ROOT%Development\tooling\windows-toolchain\local-readiness.ps1"
+exit /b %ERRORLEVEL%
+
 :controller
 set "LOCAL_NODE=%PROJECT_ROOT%workspace\toolchains\node\node.exe"
 if not exist "%LOCAL_NODE%" (
@@ -32,6 +38,7 @@ exit /b %ERRORLEVEL%
 
 :help
 echo M-Minecraft-Emulator ^(Windows x64, single developer entry^)
+echo   DEV.cmd localcheck                     - read-only Windows/native prerequisites
 echo   DEV.cmd bootstrap                      - reviewed opt-in toolchain setup
 echo   DEV.cmd inspect --json                - source state, changes, tool availability
 echo   DEV.cmd catalog --json                - safe, versioned task capabilities

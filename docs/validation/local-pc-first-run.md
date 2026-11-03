@@ -69,6 +69,15 @@ git status --porcelain
 git rev-parse HEAD
 ```
 
+**Read-only inspection before downloads:**
+```powershell
+.\DEV.cmd localcheck
+```
+This checks the Git checkout, source lockfiles, portable toolchain presence,
+the SDK resource compiler and source-pinned DLL hashes. It needs only
+Windows PowerShell/Git, does **not** change files, and normally reports
+BLOCKED on a fresh clone until bootstrap and native DLLs are prepared.
+
 The branch must read `Local`, `git status --porcelain` must be empty, and
 the last command must return a full **40-character SHA**. Keep that SHA in
 your test notes. If local work is dirty or the pull cannot fast-forward,
@@ -83,7 +92,12 @@ When the operator authorizes downloads/toolchain setup, run **once**:
 ```powershell
 .\DEV.cmd bootstrap
 .\DEV.cmd doctor
+.\DEV.cmd localcheck
 ```
+
+The launcher now propagates bootstrap's actual failure exit code instead
+of falsely succeeding. Stop if bootstrap or doctor fails. The read-only
+localcheck can still report missing DLLs until those files are provided.
 
 `bootstrap` provisions pinned portable Node, npm, PowerShell and Rust
 inside ignored `workspace/toolchains/`. It **downloads files and changes
@@ -139,14 +153,19 @@ The source authority for their approved SHA-256 values is
 The existing staging script verifies **both** hashes before use.
 Obtain the matching reviewed pair from an authorized build/artifact
 process; if unavailable, report **BLOCKED: REVIEWED_NATIVE_PAYLOAD_MISSING**,
-not a missing feature in Git. Never copy an arbitrary DLL, override the
-hashes, create placeholders, or enable the experimental AI input.
+not a missing feature in Git. If a previous local `App/` folder contains
+native DLLs, `DEV.cmd localcheck` will check their SHA-256 against the
+current Rust policy; matching binaries can be reused by pointing the
+environment variable to that `App/independent-bootstrap` folder.
+Do **not** copy accounts, profile data, worlds or arbitrary DLLs, override
+the hashes, create placeholders, or enable experimental AI input.
 
 Only after the reviewed pair is genuinely available on the PC, in the
 **same PowerShell session**, set its actual absolute path:
 
 ```powershell
 $env:LAZY_TESTER_NATIVE_PAYLOAD_DIR = 'C:\path\to\reviewed-native-payload'
+.\DEV.cmd localcheck
 .\DEV.cmd dev
 ```
 

@@ -23,6 +23,22 @@ test('DEV.cmd dispatches only workspace-local PowerShell after opt-in bootstrap'
   assert.match(launcher, /"%LOCAL_PWSH%" -NoLogo -NoProfile/);
   assert.doesNotMatch(launcher, /(?:^|\n)\s*pwsh -NoLogo/m);
 });
+test('read-only localcheck and bootstrap error propagation are source-gated', () => {
+  const inspection=read('tooling/windows-toolchain/local-readiness.ps1');
+  assert.match(launcher,/if \/I "%~1"=="bootstrap" goto bootstrap/);
+  assert.match(launcher,/if \/I "%~1"=="localcheck" goto localcheck/);
+  assert.match(launcher,/:bootstrap\r?\npowershell\.exe[^\n]*bootstrap\.ps1"\r?\nexit \/b %ERRORLEVEL%/);
+  assert.match(launcher,/:localcheck\r?\npowershell\.exe[^\n]*local-readiness\.ps1"\r?\nexit \/b %ERRORLEVEL%/);
+  assert.doesNotMatch(launcher,/if \/I "%~1"=="bootstrap" \(/);
+  assert.match(inspection,/REVIEWED_EDUCATION_BOOTSTRAP/);
+  assert.match(inspection,/Get-ExpectedDigest/);
+  assert.match(inspection,/Get-FileHash -LiteralPath \$file -Algorithm SHA256/);
+  assert.match(inspection,/LAZY_TESTER_NATIVE_PAYLOAD_DIR/);
+  assert.match(inspection,/App\/independent-bootstrap/);
+  assert.match(inspection,/workspace\/toolchains\/node\/node\.exe/);
+  assert.match(inspection,/x64\/rc\.exe/);
+  assert.doesNotMatch(inspection,/\b(?:Invoke-WebRequest|Start-Process|Remove-Item|Set-Content|Copy-Item|Move-Item|New-Item|Invoke-Expression)\b/i);
+});
 test('AI DEV.cmd routes use pinned Node and preserve legacy PowerShell execution', () => {
   for (const operation of ['inspect','catalog','plan','run']) {
     assert.ok(launcher.includes('if /I "%~1"=="'+operation+'" goto controller'));
@@ -213,6 +229,7 @@ test('portable setup scripts parse in Windows PowerShell without running downloa
     'tooling/windows-toolchain/bootstrap.ps1',
     'tooling/windows-toolchain/local-env.ps1',
     'tooling/windows-toolchain/dev.ps1',
+    'tooling/windows-toolchain/local-readiness.ps1',
   ]) {
     const file=resolve(root,name).replace(/'/g,"''");
     const command = "$tokens=$null;$errors=$null;" +
