@@ -44,6 +44,12 @@
       "scope": "source"
     },
     {
+      "id": "source.quick",
+      "description": "Scoped first-run source smoke: structure, dependency locks, repository fixtures, frontend and Rust checks; no game or installer",
+      "command": "check:quick",
+      "scope": "source"
+    },
+    {
       "id": "source.preflight",
       "description": "Run exact-SHA pinned full preflight (may install locked npm dependencies)",
       "command": "preflight",

@@ -15,6 +15,13 @@ No VMware/Sandboxie provider is selected in the active product.
 GitHub Actions CI is disabled; all optional verification commands
 remain on-demand, not hosted workflows.
 
+For the **default efficient first local acceptance**, start with the
+[13-scenario progressive local smoke plan](efficient-local-testing.md).
+The explicit read-only `DEV.cmd plan --profile local-smoke --json` works
+after approved portable Node setup; it does not confuse a docs-only latest
+commit with completed first-run acceptance. Source quick check, game acceptance
+and optional installer remain separate approvals.
+
 For a **standard desktop clone, first UI run and optional native package**,
 start at the [Windows first-run checklist](local-pc-first-run.md).
 It records the missing reviewed-DLL prerequisite and distinguishes

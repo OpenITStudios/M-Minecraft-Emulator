@@ -24,6 +24,7 @@ const POLICY = Object.freeze({
   'check:frontend': {risk:'build', approval:false},
   'check:rust': {risk:'build', approval:false},
   'check': {risk:'build', approval:false},
+  'check:quick': {risk:'build', approval:false},
   'preflight': {risk:'dependency-write', approval:true},
   'test': {risk:'build', approval:false},
   'dev': {risk:'interactive', approval:false},
@@ -37,6 +38,44 @@ const STORAGE_MODES = new Set(['report','explain','plan','cargo']);
 const ID = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const SHA = /^[a-f0-9]{40}$/;
 const SCOPE = new Set(['environment','repository','frontend','rust','source','desktop','package','storage','benchmark']);
+const PLAN_PROFILES = new Set(['fast','local-smoke','five-client','release','experimental']);
+const MANUAL_PLANS = Object.freeze({
+  'local-smoke': Object.freeze({
+    taskIds:['source.quick'],
+    manualCaseIds:Array.from({length:13},(_,i)=>'LT-'+String(i+1).padStart(2,'0')),
+    prerequisites:['Windows x64 and reviewed standard DLLs','Approved pinned toolchain and locked npm setup','Operator-approved test profiles and disposable Minecraft world'],
+    reason:'First same-revision baseline is independent of the last commit diff; quick source screening is not full source acceptance.'
+  }),
+  'five-client': Object.freeze({
+    taskIds:[],
+    manualCaseIds:['FC-01','FC-02','FC-03','FC-04'],
+    prerequisites:['Local smoke PASS on the same exact SHA','Five distinct licensed Education accounts','Explicit Windows/Minecraft runtime authorization'],
+    reason:'Extend an accepted two-client baseline to five live clients; no repeated source work without new changes.'
+  }),
+  'release': Object.freeze({
+    taskIds:['source.preflight','build.candidate'],
+    manualCaseIds:['RL-01','RL-02','RL-03'],
+    prerequisites:['Separate approval for full source verification and package staging','Reviewed standard DLLs','Disposable Windows user/PC and data backup'],
+    reason:'Full verification and installer/preservation are separate, explicitly consent-gated steps; this plan never dispatches them.'
+  }),
+  'experimental': Object.freeze({
+    taskIds:[],
+    manualCaseIds:['EX-01','EX-02','EX-03','EX-04'],
+    prerequisites:['Separate experimental permission','Reviewed AI feature/ABI/digest and native payload (not present in standard package)','Prior same-revision standard game acceptance'],
+    reason:'AI input, visual observation and Skills Probe are isolated from standard product smoke; missing AI binary remains BLOCKED.'
+  })
+});
+export function planForProfile(profile,revision,paths=[]) {
+  if(!PLAN_PROFILES.has(profile)) throw Error('Unknown local-test profile');
+  if(profile==='fast') return {...planForPaths(paths,revision),profile:'fast',manualCaseIds:[],
+    manualGuide:'docs/validation/efficient-local-testing.md'};
+  if(paths.length!==0) throw Error('Manual test profiles never route changed paths or automatic execution');
+  const cfg=MANUAL_PLANS[profile];
+  return {status:'READY',sourceSha:revision,profile,taskIds:[...cfg.taskIds],
+    manualCaseIds:[...cfg.manualCaseIds],prerequisites:[...cfg.prerequisites],
+    manualGuide:'docs/validation/efficient-local-testing.md',manualExecution:'OPERATOR_ONLY',
+    reason:cfg.reason};
+}
 
 export function validatedRegistry(input) {
   if(!input || input.schema!==1 || !Array.isArray(input.tasks) ||
@@ -176,13 +215,13 @@ export function classifyCompletion(before,after,exitCode,spawnError=false,interr
 }
 function report(operation,data) {return {schema:1,operation,...data};}
 function usage() {
-  return 'Usage: DEV.cmd inspect|catalog|plan [--json] [--base-sha <ancestor-40-char-SHA>] [--paths <source paths>...]\n'+
+  return 'Usage: DEV.cmd inspect|catalog|plan [--json] [--profile fast|local-smoke|five-client|release|experimental] [--base-sha <ancestor-40-char-SHA>] [--paths <source paths>...]\n'+
     '       DEV.cmd run auto --expect-sha <40-char Local SHA> [--base-sha <ancestor-40-char-SHA>] [--json]\n'+
     '       DEV.cmd run <task-id> --expect-sha <40-char Local SHA> [--approve <task-id>] [--json]\n'+
     '       DEV.cmd bootstrap (existing reviewed opt-in setup)';
 }
 export function parseFlags(tokens,operation) {
-  const result={json:false,paths:[],taskId:null,expectSha:null,approval:null,baseSha:null};
+  const result={json:false,paths:[],taskId:null,expectSha:null,approval:null,baseSha:null,profile:null};
   const rest=[...tokens];
   if(operation==='run') {
     result.taskId=rest.shift();
@@ -192,6 +231,11 @@ export function parseFlags(tokens,operation) {
   for(let i=0;i<rest.length;i++) {
     const token=rest[i];
     if(token==='--json' && !seen.has(token)){result.json=true;seen.add(token);continue;}
+    if(operation==='plan' && token==='--profile' && !seen.has(token)) {
+      const profile=rest[++i];
+      if(!PLAN_PROFILES.has(profile)) throw Error('--profile requires fast, local-smoke, five-client, release or experimental');
+      result.profile=profile;seen.add(token);continue;
+    }
     if((operation==='plan'||operation==='run') && token==='--base-sha' && !seen.has(token)) {
       const base=rest[++i];
       if(!SHA.test(base??'')) throw Error('--base-sha requires one exact 40-character commit SHA');
@@ -211,6 +255,10 @@ export function parseFlags(tokens,operation) {
     throw Error('Unexpected or repeated developer controller argument');
   }
   if(result.baseSha!==null && result.paths.length) throw Error('--base-sha cannot be combined with --paths');
+  if(operation==='plan' && result.profile!==null && result.profile!=='fast' &&
+      (result.baseSha!==null || result.paths.length)) {
+    throw Error('Manual profiles cannot be combined with --base-sha or --paths');
+  }
   if(result.baseSha!==null && operation==='run' && result.taskId!=='auto') {
     throw Error('--base-sha is only supported by run auto');
   }
@@ -373,11 +421,14 @@ export async function main(argv=process.argv.slice(2)) {
   }
   if(operation==='plan') {
     if(source.branch!=='Local') return blocked(operation,'Planning requires branch Local',parsed.json);
+    const profile=parsed.profile??'fast';
     let selection;
-    try {selection=parsed.paths.length
-      ?{paths:parsed.paths,basis:'declared-paths'}:automaticChangeSet(parsed.baseSha);}
+    try {selection=profile==='fast'
+      ?(parsed.paths.length
+        ?{paths:parsed.paths,basis:'declared-paths'}:automaticChangeSet(parsed.baseSha))
+      :{paths:[],basis:'explicit-profile'};}
     catch(error){return blocked(operation,error.message,parsed.json);}
-    const planned=planForPaths(selection.paths,source.sha);
+    const planned=planForProfile(profile,source.sha,selection.paths);
     emit(report(operation,{...planned,basis:selection.basis,
       ...(selection.baseSha ? {baseSha:selection.baseSha} : {}),
       sourceBranch:source.branch,proof:'STATIC_RECOMMENDATION_ONLY'}),parsed.json);

@@ -15,7 +15,7 @@ for the proof ceiling at the latest revision.
 
 | Goal | Entry point | Canonical details |
 | --- | --- | --- |
-| First test on a Windows PC | Clone `Local`, then `DEV.cmd localcheck` (read-only) | [Windows first-run checklist](docs/validation/local-pc-first-run.md) |
+| First efficient Windows test | `DEV.cmd localcheck`, then `DEV.cmd plan --profile local-smoke --json` after approved toolchain setup | [13-step local smoke](docs/validation/efficient-local-testing.md), [Windows first-run](docs/validation/local-pc-first-run.md) |
 | Plan **all** tests and required evidence | 306 uniquely identified planned test cases, not yet executed | [Complete master](docs/validation/lazy-tester-test-master.md), [198 standard cases](docs/validation/lazy-tester-test-cases-standard.md), [108 MCP/AI/QA cases](docs/validation/lazy-tester-test-cases-experimental.md) |
 | Open an already prepared app | Root `Lazy Tester.exe` or compatibility `RUN.cmd` | [Desktop workspace](docs/product/unified-workspace.md) |
 | Develop or package locally **when explicitly authorized** | `DEV.cmd` | [Developer controller](Development/tooling/developer/README.md), [distribution](Development/engine/distribution/README.md) |
@@ -100,6 +100,8 @@ DEV.cmd localcheck
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
+DEV.cmd plan --profile local-smoke --json
+DEV.cmd check:quick
 DEV.cmd run auto --expect-sha <exact-Local-HEAD-SHA> --json
 DEV.cmd dev
 DEV.cmd package

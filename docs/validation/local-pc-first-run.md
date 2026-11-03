@@ -16,6 +16,11 @@ For experimental independent AI keyboard/mouse input use the separate
 [controlled AI Computer Use guide](ai-computer-use-localtest.md); that
 feature is compile-OFF/default-OFF and **not** in a normal package.
 
+For a practical **first day** with no need to traverse 306 cases, follow the
+[13-scenario local smoke](efficient-local-testing.md). It selects a
+quick source screen and only MC01/MC02 first. Full-source and five-client
+acceptance remain separate; no tests are executed by reading these guides.
+
 For a full operator-facing checklist beyond this short command runbook,
 see the [master test guide](lazy-tester-test-master.md),
 [198 standard cases](lazy-tester-test-cases-standard.md), and
@@ -131,20 +136,34 @@ the native Lazy Tester acceptance path.
 
 ## 3. Verify source before opening a desktop window
 
-After permission to execute source tests and locked npm dependency
-installation, from a **clean** `Local` checkout:
+For an **efficient initial local smoke** after authorized toolchain and locked
+npm setup, from a **clean** `Local` checkout:
+
+```powershell
+.\DEV.cmd setup
+.\DEV.cmd plan --profile local-smoke --json
+.\DEV.cmd check:quick
+```
+
+`setup` installs locked npm dependencies and must be explicitly authorized;
+skip it if already prepared. The `plan` is read-only. `check:quick` runs
+repository/lock checks, repository fixtures, frontend typecheck/Vitest and
+desktop/runtime Rust compilation, but no full Rust test matrix or installer.
+Record its actual result and full SHA. A failure stops this baseline; no
+gameplay PASS can be inferred from a source check.
+
+For **full regression / release verification**, separately authorize and run:
 
 ```powershell
 .\DEV.cmd preflight
 ```
 
-This checks the actual toolchain and committed Cargo/npm locks, reuses or
-installs the locked frontend dependencies, executes the existing source
-verification, and writes a bounded local manifest under ignored
-`workspace/runs/`. Record the **actual exit code and full HEAD**. On
-failure, **stop** and report the first error; do not skip checks or
-mark the application ready. This step does **not** launch Minecraft,
-compile the experimental AI-input path, or generate an installer.
+Full `preflight` checks the pinned tools and committed locks, reuses or
+installs locked dependencies, runs all existing source verification, and
+writes a metadata-only run manifest in ignored `workspace/runs/`.
+Neither the quick route nor full preflight launches Minecraft, compiles
+experimental AI input by default, or creates an installer. Do not bypass
+the reviewed DLL gate in the next section.
 
 ## 4. Supply the reviewed native payload — hard prerequisite
 

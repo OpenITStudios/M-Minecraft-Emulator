@@ -11,6 +11,14 @@ lifecycle: ACTIVE
 
 **Disusun:** 3 November 2026 · **Repository:** OpenITStudios/M-Minecraft-Emulator · **Branch:** `Local` · **Status seluruh pengujian:** **NOT_EXECUTED**. Pembuatan panduan ini **tidak** menjalankan Node/Vitest, Rust, Windows, installer, Minecraft, input AI, atau CI. Tes aktual memerlukan persetujuan operator sendiri.
 
+**Catatan penggunaan:** katalog 306 kasus di bawah adalah cakupan *full
+regression*, **bukan checklist wajib pada local test pertama**. Untuk
+pengujian yang lebih efisien, jalankan [13 skenario core local smoke]
+(efficient-local-testing.md) terlebih dahulu; pilih `DEV.cmd plan
+--profile local-smoke --json` setelah toolchain siap. Prioritas P0 pada
+katalog adalah *severity/risiko*, bukan perintah untuk mengeksekusi seluruh
+P0 setiap kali. `check:quick` adalah screen source, bukan full-source PASS.
+
 Panduan ini menjelaskan **urutan, command, persiapan, bukti dan syarat lulus**. Detail langkah per kasus berada di:
 - [Matriks uji produk standar](lazy-tester-test-cases-standard.md) — source, desktop, MC01–MC05, window/DWM, lifecycle, penyimpanan, installer dan performa.
 - [Matriks uji MCP, AI, QA](lazy-tester-test-cases-experimental.md) — terpisah, fitur experimental/source-only dan aturan pengujian khusus.
@@ -77,7 +85,7 @@ P0 = data safety, original process/window ownership, identitas account/slot, inp
 | Tahap | Mulai jika | Harus terjadi sebelum lanjut |
 | --- | --- | --- |
 | T00 Checkout | A1 | `Local`, SHA 40 karakter, clean status, backup direncanakan |
-| T01 Source | A2 + T00 | Pinned toolchain, lockfiles, actual preflight PASS |
+| T01 Source | A2 + T00 | Quick source screen PASS untuk local smoke; full preflight PASS untuk release/full regression |
 | T02 Reviewed DLL | Binary resmi disediakan | Dua digest sesuai source standar; bukan test/AI DLL |
 | T03 UI tanpa game | A3 + T02 | Satu manager dan lima kartu, tidak auto-launch game |
 | T04 MC01 | A4 + T03 | World interaktif, manual login, normal close/reopen, data utuh |
@@ -122,7 +130,7 @@ lokal atau tidak bisa fast-forward, **STOP** dan review; jangan reset/hapus.
 `localcheck` adalah pemeriksaan read-only dan mungkin mencetak BLOCKED pada
 clone baru; itu tidak berarti build/test dijalankan.
 
-### 5.2 Bootstrap, doctor, source preflight (setelah A2)
+### 5.2 Bootstrap, doctor, quick source atau full preflight (setelah A2)
 
 ~~~powershell
 .\DEV.cmd bootstrap
@@ -131,6 +139,10 @@ clone baru; itu tidak berarti build/test dijalankan.
 .\DEV.cmd inspect --json
 .\DEV.cmd catalog --json
 .\DEV.cmd plan --json
+.\DEV.cmd plan --profile local-smoke --json
+.\DEV.cmd setup
+.\DEV.cmd check:quick
+# Untuk full regression/release dengan izin terpisah:
 .\DEV.cmd preflight
 ~~~
 

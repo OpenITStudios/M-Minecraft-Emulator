@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {dirname,resolve,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
-import {validatedRegistry,classifyPath,planForPaths,automaticChangeSet,legacyArgs,parseFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
+import {validatedRegistry,classifyPath,planForPaths,planForProfile,automaticChangeSet,legacyArgs,parseFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const registry=JSON.parse(readFileSync(new URL('./tasks.json',import.meta.url),'utf8'));
@@ -48,6 +48,29 @@ test('registry refuses injected command, duplicate identity, and unreviewed mode
   const rogue=structuredClone(registry);
   rogue.tasks[0].script='../../Data/worlds/secret';
   assert.throws(()=>validatedRegistry(rogue),/Invalid/);
+});
+
+test('first-run profile uses a real baseline regardless of a docs-only latest commit',()=>{
+  const first=planForProfile('local-smoke',SHA);
+  assert.equal(first.status,'READY');
+  assert.equal(first.profile,'local-smoke');
+  assert.deepEqual(first.taskIds,['source.quick']);
+  assert.deepEqual(first.manualCaseIds,Array.from({length:13},(_,i)=>'LT-'+String(i+1).padStart(2,'0')));
+  assert.equal(first.manualExecution,'OPERATOR_ONLY');
+  assert.ok(!first.taskIds.includes('dev.start'));
+  assert.equal(tasks.find(t=>t.id==='source.quick').requiresApproval,false);
+  assert.equal(tasks.find(t=>t.id==='source.quick').command,'check:quick');
+  assert.throws(()=>planForProfile('local-smoke',SHA,['docs/README.md']),/never route/);
+});
+
+test('progressive profiles never auto-execute gameplay, AI or packaging',()=>{
+  assert.deepEqual(planForProfile('fast',SHA,['docs/README.md']).taskIds,['repository.validate']);
+  assert.deepEqual(planForProfile('five-client',SHA).taskIds,[]);
+  assert.equal(planForProfile('five-client',SHA).manualCaseIds.length,4);
+  assert.deepEqual(planForProfile('release',SHA).taskIds,['source.preflight','build.candidate']);
+  assert.ok(planForProfile('release',SHA).prerequisites.some(x=>/approval/.test(x)));
+  assert.deepEqual(planForProfile('experimental',SHA).taskIds,[]);
+  assert.throws(()=>planForProfile('unknown',SHA),/Unknown/);
 });
 
 test('source routing uses minimum relevant checks, but unknown and mixed fail wide',()=>{
@@ -137,6 +160,12 @@ test('no arbitrary argument vectors can reach a shell command',()=>{
 
 test('AI controller CLI arguments are constrained and source-pinned',()=>{
   assert.equal(parseFlags(['--json'],'catalog').json,true);
+  assert.equal(parseFlags(['--profile','local-smoke','--json'],'plan').profile,'local-smoke');
+  assert.equal(parseFlags(['--profile','fast','--paths','docs/README.md'],'plan').profile,'fast');
+  assert.throws(()=>parseFlags(['--profile','unknown'],'plan'),/--profile requires/);
+  assert.throws(()=>parseFlags(['--profile','local-smoke','--base-sha',SHA],'plan'),/Manual profiles/);
+  assert.throws(()=>parseFlags(['--profile','release','--paths','docs/README.md'],'plan'),/Manual profiles/);
+  assert.throws(()=>parseFlags(['auto','--profile','local-smoke','--expect-sha',SHA],'run'),/Unexpected/);
   assert.equal(parseFlags(['--json','--paths','docs/README.md'],'plan').paths[0],'docs/README.md');
   assert.equal(parseFlags(['frontend.validate','--expect-sha',SHA],'run').expectSha,SHA);
   assert.equal(parseFlags(['--base-sha',SHA,'--json'],'plan').baseSha,SHA);

@@ -10,6 +10,19 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Efficient progressive local-test route (3 November 2026, source-only):**
+  Added the [13-scenario first-run smoke guide](../docs/validation/efficient-local-testing.md),
+  explicit read-only developer profiles (`fast`, `local-smoke`,
+  `five-client`, `release`, `experimental`) and guarded
+  `check:quick` source screening. First-run selection does not
+  accidentally collapse to the docs-only last commit; ordinary
+  `run auto` and its approval gates remain unchanged. Full 306-case
+  inventory, exact-SHA full preflight and Windows package verification
+  remain intact and separately scoped. AUTHORED_NOT_EXECUTED fixtures
+  cover profile selection, CLI refusal and non-dispatch boundaries.
+  No Node, Rust, Windows, Education, package, AI, CI or game tests were
+  executed; prior product F3 and AI blockers are unchanged.
+
 - **Complete future testing notes (3 November 2026, source-only):**
   [operator master guide](../docs/validation/lazy-tester-test-master.md),
   [198 standard product test cases](../docs/validation/lazy-tester-test-cases-standard.md)

@@ -11,12 +11,39 @@ npm, Tauri, the native DLL, or the Lazy Tester runtime.
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
+DEV.cmd plan --profile local-smoke --json
+DEV.cmd plan --profile five-client --json
+DEV.cmd plan --profile release --json
+DEV.cmd plan --profile experimental --json
 DEV.cmd plan --json --paths Development/apps/desktop/src/LazyTesterApp.svelte
 DEV.cmd plan --base-sha <40-char-ancestor-SHA> --json
 DEV.cmd run frontend.validate --expect-sha <40-char-Local-SHA> --json
 DEV.cmd run auto --expect-sha <40-char-Local-SHA> --json
 DEV.cmd run auto --expect-sha <40-char-Local-SHA> --base-sha <40-char-ancestor-SHA> --json
 ```
+
+**Choose a profile explicitly for the first Windows session.** The default
+`plan` (equivalent to `--profile fast`) is only a changed-source recommendation,
+which on a clean checkout looks at the last commit. It is not an initial
+end-to-end baseline: a docs-only latest commit may legitimately select only
+repository structure. `--profile local-smoke` instead always recommends the
+new `source.quick` task plus thirteen human-operated checks regardless of the
+commit diff. `five-client` requires prior same-SHA two-client acceptance;
+`release` separately proposes fully approved preflight and package tasks;
+`experimental` stays manual and compile-OFF. Non-fast profiles refuse
+`--paths` and `--base-sha`. `plan` does not execute any task or game.
+Use the [efficient local-testing runbook](../../../docs/validation/efficient-local-testing.md)
+for the actual LT/FC/RL/EX cases.
+
+`source.quick` runs structure/locked-dependency checks, repository fixtures,
+Svelte typecheck and frontend tests, plus desktop/runtime Rust compile checks
+on a clean pinned Local revision. After separately approved toolchain setup:
+`DEV.cmd check:quick` or `DEV.cmd run source.quick --expect-sha <SHA>`.
+This does **not** run all Rust tests, packaging, Minecraft or a full
+`source.preflight`; do not promote its exit code into release readiness.
+For a fresh clone, locked npm dependency setup is a separately authorized
+`DEV.cmd setup` action. The normal `run auto` stays unchanged and cannot
+run manual profile plans or request approval on your behalf.
 
 `inspect` reports the Git revision, changed file counts/scopes and *presence*
 of portable tools, not version or gameplay proof. `catalog` lists task IDs,
