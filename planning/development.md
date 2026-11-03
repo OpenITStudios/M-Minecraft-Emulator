@@ -10,6 +10,17 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Complete future testing notes (3 November 2026, source-only):**
+  [operator master guide](../docs/validation/lazy-tester-test-master.md),
+  [198 standard product test cases](../docs/validation/lazy-tester-test-cases-standard.md)
+  and [108 separately approved MCP/AI/QA cases](../docs/validation/lazy-tester-test-cases-experimental.md)
+  cover exact-SHA source checks, Windows prerequisites, five real Minecraft
+  profiles, DWM, lifecycle/reconnect, storage, installer, performance,
+  experimental feature gates and an evidence worksheet. All **306 unique
+  test cases are NOT_EXECUTED**; writing them does not authorize running
+  Node/Rust, installing software, launching games, enabling AI input or CI.
+  The existing current status/next-action owner remains this file.
+
 - **Pre-action PNG delivery admission (3 November, source-only):**
   The existing observed-action validator previously admitted a fresh and
   native-matched visual baseline even if MCP had never delivered its PNG.

@@ -16,6 +16,13 @@ For experimental independent AI keyboard/mouse input use the separate
 [controlled AI Computer Use guide](ai-computer-use-localtest.md); that
 feature is compile-OFF/default-OFF and **not** in a normal package.
 
+For a full operator-facing checklist beyond this short command runbook,
+see the [master test guide](lazy-tester-test-master.md),
+[198 standard cases](lazy-tester-test-cases-standard.md), and
+[108 separately gated MCP/AI/QA cases](lazy-tester-test-cases-experimental.md).
+These are planned **NOT_EXECUTED** scenarios, not a report of successful
+Windows, Minecraft or installer tests.
+
 **Start here, rather than using legacy G0/VMware instructions.** The one
 development command entry is the existing root `DEV.cmd`. No new
 launcher, runtime owner, CI workflow or data directory is introduced.

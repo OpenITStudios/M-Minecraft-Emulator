@@ -20,6 +20,14 @@ start at the [Windows first-run checklist](local-pc-first-run.md).
 It records the missing reviewed-DLL prerequisite and distinguishes
 preflight, UI smoke tests, packaging and real game acceptance.
 
+For the **complete future testing inventory**, use the
+[master operator guide](lazy-tester-test-master.md), the
+[198-case standard product matrix](lazy-tester-test-cases-standard.md), and
+the [108-case MCP/AI/QA matrix](lazy-tester-test-cases-experimental.md).
+Each case has a unique ID, priority, action, expected observation and
+reporting rules. **All 306 cases remain NOT_EXECUTED** at authoring;
+these docs do not authorize execution or create a new runner or status database.
+
 **Current AI Computer Use validation is routed only through the
 [controlled Windows local-test guide](ai-computer-use-localtest.md).**
 It distinguishes standard source preflight, opt-in native compilation/ABI,
