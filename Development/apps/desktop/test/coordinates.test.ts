@@ -129,3 +129,34 @@ describe('explicit user-paste XYZ fallback, never live game attribution', () => 
     ]) expect(() => parseUserPastedCoordinates(raw)).toThrow();
   });
 });
+
+describe('manual copy output matches each current input and selected mode', () => {
+  it('reformats changed input in exact XYZ, negative block XYZ and position-only teleport modes', () => {
+    const modes = ['XYZ', 'BLOCK', 'TELEPORT_POSITION_ONLY'] as const;
+    const inputs = [
+      {raw: '123.456 64 -45.125', expected: [
+        '123.456 64 -45.125', '123 64 -46', '/tp @s 123.456 64 -45.125',
+      ]},
+      {raw: '-0.01 70.999 -16.01', expected: [
+        '-0.01 70.999 -16.01', '-1 70 -17', '/tp @s -0.01 70.999 -16.01',
+      ]},
+      {raw: '0.0000001 -0.0000001 -0', expected: [
+        '0.0000001 -0.0000001 0', '0 -1 0', '/tp @s 0.0000001 -0.0000001 0',
+      ]},
+    ];
+    for (const {raw, expected} of inputs) {
+      modes.forEach((mode, i) => {
+        expect(formatUserPastedCoordinates(raw, mode)).toBe(expected[i]);
+      });
+    }
+  });
+
+  it('refuses partial input and rejected values in every output mode', () => {
+    for (const raw of ['12 34', '12 34 ', '12 34 invalid', '12 34 56 78',
+      '1,2 3', '/tp @s 1 2 3', '1 2 3\n4']) {
+      for (const mode of ['XYZ', 'BLOCK', 'TELEPORT_POSITION_ONLY'] as const) {
+        expect(() => formatUserPastedCoordinates(raw, mode)).toThrow();
+      }
+    }
+  });
+});

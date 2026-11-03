@@ -48,6 +48,29 @@ describe('optional manual XYZ user-paste UI',()=>{
     expect(panel).toContain("outputField.select()");
     expect(panel).not.toContain('role="dialog"');
   });
+  it('rechecks the latest coordinate input and format after DOM updates before selecting',()=>{
+    expect(panel).toContain("import {tick} from 'svelte';");
+    expect(panel).toContain('async function selectOutput(): Promise<void>');
+    expect(panel).toContain('const source = raw;');
+    expect(panel).toContain('const format = mode;');
+    expect(panel).toContain('expected = formatUserPastedCoordinates(source, format);');
+    expect(panel).toContain('await tick();');
+    expect(panel).toContain('!detailsElement?.open || source !== raw || format !== mode');
+    expect(panel).toContain('invalid || output !== expected || !outputField?.isConnected');
+    expect(panel).toContain('outputField.value !== expected');
+    expect(panel).toContain('outputField.focus({preventScroll: true});');
+    expect(panel).toContain('outputField.select();');
+    expect(panel).not.toContain('if (!output || !outputField) return;');
+  });
+
+  it('clears earlier output selection when the user types or changes format',()=>{
+    expect(panel).toContain('on:input={clearOutputSelection}');
+    expect(panel).toContain('on:change={clearOutputSelection}');
+    expect(panel).toContain('outputField.setSelectionRange(0, 0);');
+    expect(panel).toContain('bind:value={raw}');
+    expect(panel).toContain('bind:value={mode}');
+    expect(panel).toContain('disabled={!output}');
+  });
   it('does not read/write clipboard, persist coordinates, invoke native game or send commands',()=>{
     for(const forbidden of [
       'navigator.clipboard', 'readText(', 'writeText(', 'execCommand(',

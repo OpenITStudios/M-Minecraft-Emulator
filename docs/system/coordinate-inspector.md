@@ -679,3 +679,41 @@ introduced. All new Vitest checks are AUTHORED_NOT_EXECUTED;
 TypeScript/Svelte compile, actual keyboard/screen-reader use, Windows
 and Minecraft gameplay remain NOT_EXECUTED. This does not authorize
 live XYZ/F3 or copyAllowed for an unverified player or world.
+
+## P11 — Fresh input/mode selection for manual XYZ output (3 November 2026)
+
+The existing component's reactive block already uses
+`formatUserPastedCoordinates(raw, mode)` to render the text for exact
+XYZ, floored Block XYZ or position-only `/tp @s X Y Z`. P11 addresses
+the narrower UI race: the old Select text button trusted the last
+rendered `output` without checking that it still represented the
+latest input and selected format when the selection occurred.
+
+Select text now captures the current raw input and output format,
+reformats synchronously through the same strict parser and refuses
+empty, malformed or command-bearing input. It then waits for one
+Svelte `tick()` and selects only if the disclosure is still open,
+input and mode are unchanged, the validation is valid, the
+output field is connected, and its DOM value exactly equals the
+fresh formatted text. A mode change, edit, close or unmount during
+the pending update causes a quiet no-op rather than selecting stale
+content. No polling, background work or global shortcut is added.
+
+To prevent retaining an earlier selected string, typing new XYZ or
+changing the dropdown clears the readonly output's selection range.
+The output still requires explicit Select text then Ctrl+C; none of
+these actions read or write clipboard contents or execute a command.
+
+Authored source fixtures now cover all three modes across several
+inputs, including negative floor and tiny decimal precision, plus
+incomplete/invalid input. Separate UI source checks require
+fresh input/mode comparison, the tick boundary and DOM equality.
+These tests are AUTHORED_NOT_EXECUTED; actual Svelte rendering,
+keyboard selection, typecheck, Windows and game runtime remain
+NOT_EXECUTED. Manual text remains USER_PASTED_UNVERIFIED and
+does not provide an authenticated MC01–MC05 player/world coordinate.
+
+References:
+- Svelte tick: https://svelte.dev/docs/svelte/svelte
+- MDN input.select: https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/select
+- MDN selection range: https://developer.mozilla.org/en-US/docs/Web/API/HTMLInputElement/setSelectionRange

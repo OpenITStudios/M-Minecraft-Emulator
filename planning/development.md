@@ -165,6 +165,18 @@ new-revision acceptance.
   input, five-launcher layout or controller mutation. Fixtures
   AUTHORED_NOT_EXECUTED, Windows/gameplay NOT_EXECUTED.
 
+- **P11 Paste XYZ latest-value selection (3 November, source-only):**
+  Reactive XYZ/Block/Teleport formatting already existed. Hardened
+  Select text: independently reformat current raw input/mode, wait
+  for Svelte tick, and select only when the panel is still open,
+  input/mode and valid output remain unchanged, and readonly DOM
+  field equals fresh text. Typing or switching mode clears any
+  prior selected output. Additional regression fixtures cover
+  mode transitions, negative floor, tiny decimals, partial and
+  malformed values. NO clipboard I/O, game control, native IPC,
+  extra timer, five-client layout or telemetry change.
+  Tests AUTHORED_NOT_EXECUTED; Svelte/Windows/gameplay NOT_EXECUTED.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -386,10 +398,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P10 corrects manual Paste
-XYZ keyboard/assistive-technology behavior without changing the
-original native FPS HUD, five-card rail or team analytics source.
-Automatic local-player/world coordinate transport remains BLOCKED. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P11 hardens the manual
+Paste XYZ copy-selection race across input changes and three formats.
+Keep the native FPS HUD, five-card launchers and original team
+analytics owners unchanged. Automatic live per-client F3 and
+Copy remain BLOCKED pending independent source/player/world proof. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -398,16 +411,18 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: source-only review exact manual coordinate output semantics
-against the strict parser and selected format, including partial
-input, output selection after mode switch, and whether position-only
-/tp text is clearly distinguished from a game command. Any change
-must remain inside the existing pure formatter/panel source and
-authored fixtures, without clipboard capability, game input,
-native IPC, FPS collector or five-launcher layout changes.
+Next: examine the existing P11 manual-paste panel and parser
+for any remaining source-verifiable mismatch or actual user-visible
+ambiguity. Do not manufacture another integration feature or
+new data collector. If no concrete defect is found, STOP source
+patching this manual fallback until permitted Svelte/Windows
+acceptance is available. The current Copy text is explicitly
+user-initiated and USER_PASTED_UNVERIFIED.
 
-Automatic live F3 and Copy remain BLOCKED: Education 26.33 per-client
-source/player/world mapping and native transport are NOT_VERIFIED.
-BootstrapHudSnapshot remains an in-child C++ diagnostic only.
-Source tests, Windows, Minecraft and CI remain NOT_EXECUTED;
-unrelated Testing recovery sealed CAS remains independently BLOCKED.
+Automatic live Minecraft Education 26.33 XYZ/Copy remains
+BLOCKED by absent independently attributable local player/world
+transport. Native FPS remains the same-process DXGI HUD; no
+desktop cross-process metric route is authorized. No WebSocket
+listener, clipboard permission, game hook, CI or installer change.
+Source suites, Windows, Minecraft and CI remain NOT_EXECUTED.
+Unrelated Testing recovery sealed CAS remains independently BLOCKED.
