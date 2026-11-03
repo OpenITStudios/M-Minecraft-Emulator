@@ -55,6 +55,18 @@ new-revision acceptance.
   no new source emitter, collector, IPC, HUD, clipboard, hotkey,
   native lifecycle, gameplay, CI or release action.
 
+- **F3 Coordinate Continuity P2 (3 November, source-only):** separated
+  coordinates.ts (pure XYZ/block/chunk/teleport formatting) from
+  coordinateEvidence.ts (untrusted candidate screening). Added stateless
+  two-frame checks for slot, PID/birth/HWND, dimension changes, tick
+  replay/reset and receiver monotonic gaps. The original team's analytics
+  position_samples remain historical and cannot identify the local
+  Minecraft player in a Windows multi-client session. Every source-only
+  assessment still returns copyAllowed=false; independent game/world
+  attribution remains missing. Focused Vitest fixtures AUTHORED_NOT_EXECUTED.
+  No runtime capture, Script API command, source logger, native IPC,
+  HUD, clipboard, UI, CI or installer change.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -285,15 +297,16 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: design the opt-in live-position source in the ORIGINAL team module
-ownership and a genuinely independent native source/player/world
-attribution contract. Historical analytics position_samples are not
-a live F3 feed. Until the original native controller can issue
-authenticated source/world admission, candidate copyAllowed=false,
-HUD and clipboard remain disconnected. No parallel telemetry engine,
-input hook, global shortcut, CI, user PC test or gameplay action.
+Next: evaluate the ORIGINAL team module's player-scoped one-shot
+position source and identify a truly independent per-client Windows
+process/player/world delivery channel. A ScriptEvent's server origin,
+a selected slot, a PID hint or world.getPlayers()[0] are not identity
+proof. Keep actual F3 HUD/clipboard disabled until the original native
+controller can attest the local player and world to a specific client.
+Do not introduce another emitter, timer, gameplay command, input hook,
+global shortcut, installer, CI or runtime action; source tests remain
+AUTHORED_NOT_EXECUTED.
 
-Separate Testing recovery CAS remains BLOCKED until independent native
-Data/Testing archive verification and authenticated Windows operator
-approval. Do not expose that transfer route or infer real-world
-provenance from authored source fixtures.
+The unrelated Testing recovery CAS remains BLOCKED until native
+archive admission and independently authenticated Windows operator
+consent exist. No Testing controller change belongs to this F3 work.

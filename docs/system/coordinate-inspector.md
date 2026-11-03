@@ -168,3 +168,45 @@ Original testing recovery CAS remains a separate blocked feature.
 Official API references:
 - https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/entity?view=minecraft-bedrock-stable
 - https://learn.microsoft.com/en-us/minecraft/creator/reference/content/commandsreference/examples/commands/teleport?view=minecraft-bedrock-stable
+
+## P2 source ownership and continuity (3 November 2026)
+
+The original uploaded team modules are canonical for all in-world
+analytics and HUD display. Their analytics position_samples are opt-in
+history only, with floored block XYZ but no rotation or authenticated
+local-player-to-Windows-client association.
+
+A future live-position snapshot must originate in the ORIGINAL team
+module, by an explicit player-scoped request under compatible Script API
+support. Microsoft documents ScriptEventSource.Server for commands
+initiated by server console or runCommand, so a server-originated request
+must NOT choose world.getPlayers()[0] as an assumed local user. An
+entity-originated request can scope a player inside the world but still
+cannot establish which MC01-MC05 Windows process controls that player.
+Do not add another in-game logger or change installed team module copies.
+
+The pure code is now split for maintenance:
+- Desktop src/app/coordinates.ts owns validation, XYZ/block/chunk and
+  teleport text. It never reads or writes clipboard.
+- Desktop src/app/coordinateEvidence.ts owns only UNVERIFIED candidate
+  shape comparison, profile/process hints and receiver-time screening.
+- Separate authored Vitest suites correspond to the two owners.
+
+The new assessUnverifiedCoordinateSequence pure function compares
+consecutive candidate frames and returns a denial status for a changed
+slot, PID/birth/session/HWND, dimension, duplicate/rewound game tick,
+invalid or excessive monotonic receiver interval. It holds no state and
+starts no scheduler. Continuous samples still report only
+CONTINUOUS_BUT_UNVERIFIED with copyAllowed=false. This check cannot
+prove source authenticity, local actor ownership or world identity.
+
+A real user-facing F3 requires an independently attributable source
+for each client and an original-controller admission binding that
+rejects source mismatch and stale/replayed world sessions. Neither
+an actor-provided ID nor a log filename is proof. Native transport,
+clipboard, UI, global hotkeys, Script API emitter and live source are
+NOT_IMPLEMENTED. Windows and Minecraft acceptance are NOT_EXECUTED.
+
+References:
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/world?view=minecraft-bedrock-stable
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/scripteventsource?view=minecraft-bedrock-stable
