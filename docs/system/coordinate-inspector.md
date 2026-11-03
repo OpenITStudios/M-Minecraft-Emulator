@@ -210,3 +210,33 @@ NOT_IMPLEMENTED. Windows and Minecraft acceptance are NOT_EXECUTED.
 References:
 - https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/world?view=minecraft-bedrock-stable
 - https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/scripteventsource?view=minecraft-bedrock-stable
+
+## P3: Bedrock Copy Coordinate UI — manual text fallback (3 November 2026)
+
+Microsoft's Bedrock creator documentation describes **Enable Copy Coordinate UI**
+under Settings > Creator. Where supported, Ctrl+Alt+C copies player position
+and Ctrl+Alt+X copies the selected block position. Bedrock clipboard text
+can be pasted into another Windows text field.
+
+**Minecraft Education 26.33 compatibility is UNVERIFIED.** The Bedrock
+documentation does not establish that the same toggle/shortcut exists in
+Education. Do not auto-send the shortcut to a game or claim live support.
+
+The pure desktop coordinate owner now accepts *explicitly pasted* XYZ text
+as USER_PASTED_UNVERIFIED. No source, player, world, dimension or process
+identity is inferred. Accepted input is one bounded line of three signed
+ASCII decimal numbers (spaces/tabs or comma separators). Unexpected extra
+tokens, commands, multiline, exponent notation and out-of-range values
+are rejected. Outputs are XYZ, floored BLOCK and /tp @s XYZ **without**
+any fabricated yaw/pitch. The parser never reads the OS clipboard or
+executes a command. No desktop UI or live game transport was wired.
+
+This fallback is independent from the blocked native F3 live source. A
+future manual paste interface may use it with explicit provenance labels;
+the separate original-controller player/world proof gate remains required
+for automated live coordinate capture and any automatic per-client claim.
+
+Authoritative Bedrock feature guide:
+https://github.com/MicrosoftDocs/minecraft-creator/blob/main/creator/Documents/CopyCoordinates.md
+Education changelog:
+https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log

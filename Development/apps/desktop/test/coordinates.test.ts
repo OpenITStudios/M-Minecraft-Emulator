@@ -2,6 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {
   blockCoordinates, chunkCoordinates, coordinateCopyText,
   coordinateDisplayXYZ, parseUnboundCoordinateSample,
+  parseUserPastedCoordinates, formatUserPastedCoordinates, displayUserPastedCoordinates,
 } from '../src/app/coordinates.js';
 
 const sample = () => ({
@@ -91,5 +92,38 @@ describe('copy and presentation formatting, not game control', () => {
     expect(() => coordinateCopyText(sample(), 'COMMAND' as never)).toThrow();
     expect(() => coordinateCopyText({...sample(), position: {x: NaN, y: 64, z: 1}}, 'XYZ'))
       .toThrow();
+  });
+});
+describe('explicit user-paste XYZ fallback, never live game attribution', () => {
+  it('accepts Bedrock-style plain and comma-separated coordinate text', () => {
+    expect(parseUserPastedCoordinates(' 123.456 64 -45.125 ')).toEqual({
+      origin: 'USER_PASTED_UNVERIFIED',
+      position: {x: 123.456, y: 64, z: -45.125},
+    });
+    expect(parseUserPastedCoordinates('123.456, 64, -45.125').position)
+      .toEqual({x: 123.456, y: 64, z: -45.125});
+    expect(parseUserPastedCoordinates(' +12\t-.5\t.25 ').position)
+      .toEqual({x: 12, y: -0.5, z: 0.25});
+  });
+  it('formats XYZ, negative block floors and self teleport without fabricated rotation', () => {
+    const input = '123.456 64 -45.125';
+    expect(formatUserPastedCoordinates(input, 'XYZ')).toBe('123.456 64 -45.125');
+    expect(formatUserPastedCoordinates(input, 'BLOCK')).toBe('123 64 -46');
+    expect(formatUserPastedCoordinates(input, 'TELEPORT_POSITION_ONLY'))
+      .toBe('/tp @s 123.456 64 -45.125');
+    expect(displayUserPastedCoordinates(input)).toBe('123.456 / 64.000 / -45.125');
+    expect(formatUserPastedCoordinates('0.0000001 -0.0000001 -0', 'XYZ'))
+      .toBe('0.0000001 -0.0000001 0');
+    expect(() => formatUserPastedCoordinates('0 0 0', 'TELEPORT' as never)).toThrow();
+  });
+  it('rejects malformed, unbounded, multiline and command-bearing text', () => {
+    for (const raw of [
+      null, 123, {}, [], '', '1 2', '1 2 3 4', '1,,2,3',
+      '1, 2,', '1 2;3', '/tp @s 1 2 3', 'XYZ: 1 2 3',
+      '1 2 3\nsay hi', '1 2 3\r\n', '1 2 3\0',
+      '1e3 2 3', 'Infinity 2 3', 'NaN 2 3',
+      '1000000001 0 0', '1 2 999999999999999999999',
+      '1.234,5 6', '1 2 3'.padEnd(129, ' '),
+    ]) expect(() => parseUserPastedCoordinates(raw)).toThrow();
   });
 });

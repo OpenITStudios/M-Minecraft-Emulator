@@ -149,3 +149,53 @@ export function coordinateCopyText(value: unknown, mode: CoordinateCopyMode): st
       throw new TypeError('Unsupported coordinate copy mode');
   }
 }
+
+/**
+ * Explicitly pasted text, NOT a live Minecraft or authenticated player feed.
+ * Bedrock's native Copy Coordinate UI may produce XYZ; Education 26.33
+ * support has not been verified. This has NO clipboard or game side effects.
+ */
+export interface UserPastedCoordinates {
+  readonly origin: 'USER_PASTED_UNVERIFIED';
+  readonly position: CoordinateVector3;
+}
+export type PastedCoordinateOutput = 'XYZ' | 'BLOCK' | 'TELEPORT_POSITION_ONLY';
+
+// Exactly three signed ASCII decimals on a single line; no command text,
+// player names, floating exponents, locale ambiguity or extra metadata.
+const PASTED_XYZ = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+))(?:[ \t]+|[ \t]*,[ \t]*)([+-]?(?:\d+(?:\.\d+)?|\.\d+))(?:[ \t]+|[ \t]*,[ \t]*)([+-]?(?:\d+(?:\.\d+)?|\.\d+))$/;
+
+export function parseUserPastedCoordinates(raw: unknown): UserPastedCoordinates {
+  if (typeof raw !== 'string' || raw.length > 128 || /[\r\n]/.test(raw)) {
+    throw new TypeError('Paste one XYZ coordinate line');
+  }
+  const matches = PASTED_XYZ.exec(raw.trim());
+  if (!matches) throw new TypeError('Invalid pasted XYZ coordinates');
+  const x = Number(matches[1]);
+  const y = Number(matches[2]);
+  const z = Number(matches[3]);
+  if (![x, y, z].every(boundedNumber)) {
+    throw new TypeError('Pasted XYZ coordinate outside supported bounds');
+  }
+  return {origin: 'USER_PASTED_UNVERIFIED', position: {x, y, z}};
+}
+
+export function formatUserPastedCoordinates(raw: unknown, output: PastedCoordinateOutput): string {
+  const {position} = parseUserPastedCoordinates(raw);
+  switch (output) {
+    case 'XYZ': return positionText(position);
+    case 'BLOCK': return positionText(blockCoordinates(position));
+    case 'TELEPORT_POSITION_ONLY':
+      // No guessed yaw/pitch, world or dimension. TEXT ONLY, not executed.
+      return '/tp @s ' + positionText(position);
+    default: throw new TypeError('Unsupported pasted coordinate format');
+  }
+}
+
+export function displayUserPastedCoordinates(raw: unknown): string {
+  const {position} = parseUserPastedCoordinates(raw);
+  return [position.x, position.y, position.z].map(value => {
+    const s = value.toFixed(3);
+    return s === '-0.000' ? '0.000' : s;
+  }).join(' / ');
+}

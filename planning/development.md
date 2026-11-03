@@ -67,6 +67,16 @@ new-revision acceptance.
   No runtime capture, Script API command, source logger, native IPC,
   HUD, clipboard, UI, CI or installer change.
 
+- **F3 manual Copy Coordinate P3 (3 November, source-only):** Microsoft
+  documents Bedrock Creator Copy Coordinate UI and Ctrl+Alt+C/X for
+  player/target XYZ, but Minecraft Education 26.33 compatibility
+  remains UNVERIFIED. Added bounded user-pasted XYZ parser and
+  XYZ/BLOCK/position-only /tp string formatting in the existing pure
+  desktop coordinates.ts; source is USER_PASTED_UNVERIFIED and no
+  player/client/world trust is invented. Test fixtures AUTHORED_NOT_EXECUTED.
+  No new source emitter, game input, clipboard read/write, native IPC,
+  Svelte panel, installer, CI or source test execution.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -297,16 +307,13 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: evaluate the ORIGINAL team module's player-scoped one-shot
-position source and identify a truly independent per-client Windows
-process/player/world delivery channel. A ScriptEvent's server origin,
-a selected slot, a PID hint or world.getPlayers()[0] are not identity
-proof. Keep actual F3 HUD/clipboard disabled until the original native
-controller can attest the local player and world to a specific client.
-Do not introduce another emitter, timer, gameplay command, input hook,
-global shortcut, installer, CI or runtime action; source tests remain
-AUTHORED_NOT_EXECUTED.
+Next: integrate an explicitly manual, user-pasted coordinate preview
+into the existing desktop presentation using the pure P3 parser.
+Only show unverified text; do not add native clipboard permissions,
+global shortcuts, log collection, game commands or claims of actual
+Education 26.33 Copy Coordinate UI support. Automated per-client F3
+still requires independently verified live player/world attribution.
+Source tests are AUTHORED_NOT_EXECUTED; no CI or PC execution.
 
-The unrelated Testing recovery CAS remains BLOCKED until native
-archive admission and independently authenticated Windows operator
-consent exist. No Testing controller change belongs to this F3 work.
+Unrelated Testing recovery CAS remains BLOCKED until native
+archive admission and independent Windows operator authentication.
