@@ -19,8 +19,10 @@ new-revision acceptance.
   executable. `DEV.cmd localcheck` now checks clean Local/source locks,
   toolchain presence, the Windows SDK and two pinned native DLL hashes
   without downloads or execution; `bootstrap` now propagates the real
-  PowerShell exit status. Relevant regression fixtures are
-  AUTHORED_NOT_EXECUTED. No Windows, package, account or gameplay action
+  PowerShell exit status. Follow-up source-only hardening verifies tracked
+  lockfiles, rustfmt, MSVC x64 compiler/linker files and native DLL directory
+  ancestry; package now runs pinned toolchain doctor before npm. Regression
+  fixtures are AUTHORED_NOT_EXECUTED. No Windows, package, account or gameplay action
   was executed or approved by documenting it. This does not resume
   BLOCKED F3 or experimental AI-input work; the single next action
   below remains unchanged.
