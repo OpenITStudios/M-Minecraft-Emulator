@@ -10,6 +10,21 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **MCP observed-action live identity admission (3 November, source-only):**
+  the prior `run_experimental_observed_actions` checked only source-time
+  identities in the cached visual baseline. A same-slot Minecraft restart
+  after that capture could otherwise acquire a new writer lease using an AI
+  decision about the *old* game. The same MCP handler now uses its existing
+  native target CLI to compare exact PID/HWND/Windows-session/process-birth
+  for **every** selected slot before any batch lease/input, revokes a
+  positively replaced slot's obsolete visual cache/worker, and rechecks
+  its original complete cached baseline after the asynchronous reads.
+  Native identity unavailability fails closed and cannot publish an all-ready
+  action. The prior single original native actor remains the only write
+  authority; the read-time check is not an atomic gameplay attestation.
+  Pure and integration regression fixtures AUTHORED_NOT_EXECUTED; Node,
+  Windows/Minecraft and five-client execution remain NOT_EXECUTED.
+
 - **Detached-window identity binding (3 November, source-only):**
   UI `separateSlots` formerly retained only an MC01–MC05 slot number.
   A new game or replacement HWND could inherit its predecessor's "Separate

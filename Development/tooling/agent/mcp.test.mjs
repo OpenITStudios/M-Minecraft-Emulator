@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
-  sendExperimentalAiWriterLeaseNative} from './mcp.mjs';
+  sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -2353,6 +2353,16 @@ function teamVisualFixture(mode='human-plus-four-ai') {
     };
   };
   return {slots,records,reads,factory,
+    native:async(_exe,operation,slot)=>{
+      assert.equal(operation,'target');
+      assert.ok(slots.includes(slot));
+      const identity=records.get(slot)?.captureIdentity;
+      assert.ok(identity);
+      return {schema:1,ok:true,operation:'target',slot,...identity,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+        gameplayInput:'NOT_VERIFIED'};
+    },
     revoke(slot,reason='TARGET_REPLACED_REFUSE_CAPTURE'){
       finishObservation?.(slot,reason);
     },
@@ -2362,6 +2372,16 @@ function teamVisualFixture(mode='human-plus-four-ai') {
   };
 }
 const aiMove=slot=>({slot,kind:'move_forward',atMs:0,durationMs:320});
+
+test('native visual identity equality includes process birth and Windows session',()=>{
+  const identity={pid:403,windowId:1403,createdFileTime:'134000000000000001',sessionId:1};
+  assert.equal(sameNativeVisualTarget(identity,identity),true);
+  for(const [field,value] of [
+    ['pid',404],['windowId',1404],
+    ['createdFileTime','134000000000000002'],['sessionId',2],
+  ])assert.equal(sameNativeVisualTarget({...identity,[field]:value},identity),false);
+  assert.equal(sameNativeVisualTarget(null,identity),false);
+});
 
 test('team visual snapshot is metadata-only, names all four AI targets and protects human MC01',async()=>{
   const fixture=teamVisualFixture();
@@ -2383,6 +2403,7 @@ test('observed cross-slot action uses exact recent visual basis and one existing
   const batches=[],released=[];
   const h=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    native:fixture.native,
     aiLease:leaseAck,
     aiMultiBatch:async(_exe,entries)=>{batches.push(entries);return{
       schema:1,slots:entries.map(e=>e.slot),
@@ -2427,6 +2448,72 @@ test('observed cross-slot action uses exact recent visual basis and one existing
   h.shutdown();
 });
 
+test('observed actions reject a replaced live native window before ANY lease or input',async()=>{
+  for(const changedField of ['pid','windowId','sessionId','createdFileTime']){
+    const fixture=teamVisualFixture();
+    let nativeReads=0,leaseMutations=0,inputMutations=0;
+    const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      native:async(...arguments_)=>{
+        const target=await fixture.native(...arguments_);
+        nativeReads++;
+        if(target.slot!==3)return target;
+        return {...target,[changedField]:changedField==='createdFileTime'?
+          '134000000000000999':target[changedField]+1};
+      },
+      aiLease:async(...args)=>{leaseMutations++;return leaseAck(...args);},
+      aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false}),
+      aiMultiBatch:async()=>{inputMutations++;throw Error('SHOULD_NOT_WRITE_INPUT');},
+    });
+    // Reconcile the explicit native-input recovery gate before attempting
+    // the independently captured visual action. Count only later mutations.
+    await handler.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
+    leaseMutations=0;
+    const view=await handler.callTool('get_multi_client_visual_state',{});
+    const actions=fixture.slots.map(aiMove);
+    await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
+      actions,basis:view.frames.map(f=>f.baseline),
+    }),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
+    assert.deepEqual([leaseMutations,inputMutations],[0,0]);
+    assert.deepEqual(nativeReads,[2,3].length);
+    handler.shutdown();
+  }
+});
+
+test('a visual frame changed during async native preflight cannot authorize old AI input',async()=>{
+  const fixture=teamVisualFixture();
+  let mutated=false,leaseMutations=0;
+  const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    native:async(...arguments_)=>{
+      const live=await fixture.native(...arguments_);
+      if(live.slot===3&&!mutated){
+        const old=fixture.records.get(3);
+        fixture.records.set(3,{...old,sequence:old.sequence+1,
+          successfulSamples:old.successfulSamples+1});
+        mutated=true;
+      }
+      return live;
+    },
+    aiLease:async(...args)=>{leaseMutations++;return leaseAck(...args);},
+    aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+      gameplayObserved:false}),
+    aiMultiBatch:async()=>{throw Error('SHOULD_NOT_DISPATCH');},
+  });
+  await handler.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
+  leaseMutations=0;
+  const state=await handler.callTool('get_multi_client_visual_state',{});
+  await assert.rejects(()=>handler.callTool('run_experimental_observed_actions',{
+    actions:fixture.slots.map(aiMove),basis:state.frames.map(f=>f.baseline),
+  }),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
+  assert.equal(mutated,true);
+  assert.equal(leaseMutations,0);
+  handler.shutdown();
+});
+
 test('no opt-in, missing capture, stale image or replaced client cannot enter observed action dispatch',async()=>{
   const fixture=teamVisualFixture();
   let nativeBatches=0;
@@ -2459,6 +2546,7 @@ test('five-AI visual decision supports MC01 only when explicitly selected as an 
   const fixture=teamVisualFixture('five-ai');
   const h=createHandler({...config('five-ai'),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    native:fixture.native,
     aiLease:leaseAck,
     aiMultiBatch:async(_exe,entries)=>({
       schema:1,slots:entries.map(e=>e.slot),
@@ -2763,6 +2851,7 @@ test('revoked visual slot aborts the entire observed native sequence and latches
   const released=[];
   const handler=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    native:fixture.native,
     aiLease:leaseAck,
     aiMultiBatch:async(_exe,_batches,{signal})=>{
       announce();
@@ -2814,6 +2903,7 @@ test('first nonbusy observed capture error requests whole-cohort abort, never pa
   const handler=createHandler({...config('five-ai'),
     experimentalMultiClientInputEnabled:true},{
     visualObserverFactory:fixture.factory,
+    native:fixture.native,
     aiLease:leaseAck,
     aiMultiBatch:async(_exe,_batches,{signal})=>{
       notifyStart();

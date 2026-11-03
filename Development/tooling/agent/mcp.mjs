@@ -190,6 +190,18 @@ export function validateNativeWindowTarget(value,slot) {
   return value;
 }
 
+// Observation cache identity is evidence, never an input target authority.
+// A batch grounded in old pixels must verify the SAME exact native process
+// immediately before requesting new writer leases. Rust remains the sole
+// final owner and rechecks its original child on every native input frame.
+export function sameNativeVisualTarget(target,frameIdentity) {
+  return !!target && !!frameIdentity &&
+    target.pid===frameIdentity.pid &&
+    target.windowId===frameIdentity.windowId &&
+    target.sessionId===frameIdentity.sessionId &&
+    target.createdFileTime===frameIdentity.createdFileTime;
+}
+
 function computerUseTarget(value,slot,mode) {
   validateNativeWindowTarget(value,slot);
   return {
@@ -2419,15 +2431,54 @@ export function createHandler(config,{
       // Compile and validate the caller's exact visual baseline even if
       // reconnect recovery is still required; malformed image identities
       // never silently become authorized by a neutral release.
-      const state=verifyTeamObservationBasis(
+      let state=verifyTeamObservationBasis(
         config.mode,schedule.slots,args.basis,
         schedule.slots.map(slot=>visualObserver.read(slot,{
           includeImage:false,
         }).metadata));
       refuseUncertain(schedule.slots);
-      // No await between freshness check and the original controller's
-      // exclusive MCP lock. The existing observer revocation callback can
-      // abort exactly this observed action if a selected source disappears.
+      // A frame was verified when CAPTURED, not at action time. A client can
+      // exit/restart between cache collection and AI dispatch. Revalidate
+      // every exact PID/birth/session/HWND through the ORIGINAL native CLI
+      // before acquiring any active writer lease. Keep this existing MCP
+      // mutation gate during the bounded read-only checks; no concurrent
+      // action can pass through this handler while they are in progress.
+      inFlight=true;
+      try {
+        for(const frame of state.frames) {
+          let live;
+          try {
+            live=validateNativeWindowTarget(
+              await native(config.executable,'target',frame.slot),frame.slot);
+          } catch {
+            // Unavailable native identity is NOT permission to use cached
+            // imagery for a new input batch. Do not guess a replacement PID.
+            throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+          }
+          if(!sameNativeVisualTarget(live,frame.baseline?.captureIdentity)) {
+            // Known different native child: revoke only this slot's obsolete
+            // visual cache and GPU producer. Do not touch another game.
+            visualObserver.stop([frame.slot]);
+            gpuSource?.stop([frame.slot]);
+            throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+          }
+        }
+        // A sampler may finish, fail, or advance a frame while awaiting the
+        // native checks. Recheck the exact original per-slot baseline after
+        // ALL awaits, before the single controller is allowed to dispatch.
+        state=verifyTeamObservationBasis(
+          config.mode,schedule.slots,args.basis,
+          schedule.slots.map(slot=>visualObserver.read(slot,{
+            includeImage:false,
+          }).metadata));
+        refuseUncertain(schedule.slots);
+      } finally {
+        inFlight=false;
+      }
+      // There is no await between releasing the read-only preflight gate
+      // and entering the existing exclusive native action path below.
+      // Native lease acquisition still validates its exact original child;
+      // this preflight is not atomic Windows/gameplay attestation.
       const transportStartedAt=new Date().toISOString();
       observedSequenceSlots=[...schedule.slots];
       try {
