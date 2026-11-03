@@ -63,6 +63,24 @@ test('first-run profile uses a real baseline regardless of a docs-only latest co
   assert.throws(()=>planForProfile('local-smoke',SHA,['docs/README.md']),/never route/);
 });
 
+test('local-smoke is a self-contained ordered risk-based evidence plan, not gameplay execution',()=>{
+  const plan=planForProfile('local-smoke',SHA);
+  assert.equal(plan.checkpoints.length,13);
+  assert.deepEqual(plan.checkpoints.map(step=>step.id),plan.manualCaseIds);
+  assert.equal(new Set(plan.checkpoints.map(step=>step.id)).size,13);
+  assert.equal(plan.checkpoints[1].evidenceKind,'SOURCE_QUICK');
+  assert.equal(plan.checkpoints[1].stopOnFail,true);
+  assert.equal(plan.checkpoints.at(-1).stopOnFail,false);
+  for(const step of plan.checkpoints){
+    assert.ok(step.action.length>16 && step.passCondition.length>20);
+    assert.match(step.legacyCases,/^STD-/);
+    assert.equal(typeof step.stopOnFail,'boolean');
+    assert.ok(!step.action.includes('Full Clear'));
+  }
+  assert.equal(plan.manualExecution,'OPERATOR_ONLY');
+  assert.ok(!plan.taskIds.includes('dev.start'));
+});
+ 
 test('progressive profiles never auto-execute gameplay, AI or packaging',()=>{
   assert.deepEqual(planForProfile('fast',SHA,['docs/README.md']).taskIds,['repository.validate']);
   assert.deepEqual(planForProfile('five-client',SHA).taskIds,[]);

@@ -10,6 +10,18 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **First-run evidence integrity and actionable plan (3 November 2026,
+  source-only):** The existing `local-test/session.mjs` owner now also
+  supports fail-closed `SOURCE_QUICK` receipts without changing existing
+  full `SOURCE_PREFLIGHT` acceptance: exact-SHA local path, bounded metadata
+  only, wall elapsed time, first failure stage, never full source/game PASS.
+  The existing `check:quick` PowerShell path records quick start/final
+  status on actual execution (not executed in GitHub). `local-smoke` plan
+  now returns thirteen ordered case actions, pass conditions, evidence
+  categories and fail-fast flags in one read-only response, not just IDs.
+  Synthetic regression fixtures authored NOT_EXECUTED; no toolchain,
+  source tests, Windows, Education, package, CI or input test ran.
+
 - **Efficient progressive local-test route (3 November 2026, source-only):**
   Added the [13-scenario first-run smoke guide](../docs/validation/efficient-local-testing.md),
   explicit read-only developer profiles (`fast`, `local-smoke`,

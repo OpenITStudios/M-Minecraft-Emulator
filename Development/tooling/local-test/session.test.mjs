@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { beginPreflight, finishPreflight } from './session.mjs';
+import { beginPreflight, finishPreflight, beginQuick, finishQuick } from './session.mjs';
 
 const commit = 'a'.repeat(40);
 function fixture(t) {
@@ -78,4 +78,46 @@ test('exclusive finalization prevents a competing process from recording PASS', 
   unlinkSync(join(folder, '.finalize.lock'));
   finishPreflight(root, folder, 'PASS', 'complete');
   assert.equal(manifest(folder).status, 'PASS');
+});
+
+test('quick source receipt measures elapsed time without upgrading full source or Minecraft acceptance', (t) => {
+  const root = fixture(t);
+  const start = new Date('2026-11-03T13:10:00Z');
+  const run = beginQuick(root, commit, start);
+  const initial = manifest(run);
+  assert.equal(initial.scenario,'SOURCE_QUICK');
+  assert.equal(initial.quickSourceScreen,'NOT_EXECUTED');
+  assert.equal(initial.sourceVerification,'NOT_EXECUTED');
+  assert.equal(initial.windowsGameplay,'NOT_EXECUTED');
+  const result = finishQuick(root,run,'PASS','complete',new Date('2026-11-03T13:10:06.500Z'));
+  assert.equal(result.quickSourceScreen,'PASS');
+  assert.equal(result.durationMilliseconds,6500);
+  assert.equal(result.sourceVerification,'NOT_EXECUTED');
+  assert.equal(result.packageVerification,'NOT_EXECUTED');
+  assert.equal(result.windowsGameplay,'NOT_EXECUTED');
+  assert.throws(()=>finishQuick(root,run,'PASS','complete'),/already been finalized/);
+  assert.throws(()=>finishPreflight(root,run,'PASS','complete'),/preflight run directory/);
+});
+
+test('failed quick screen is not a source PASS and rejects fake stage or reversed time', (t) => {
+  const root=fixture(t);
+  const start=new Date('2026-11-03T13:10:00Z');
+  const run=beginQuick(root,commit,start);
+  assert.throws(()=>finishQuick(root,run,'PASS','verify-quick'),/Invalid quick/);
+  assert.throws(()=>finishQuick(root,run,'FAIL','setup'),/Invalid quick/);
+  assert.throws(()=>finishQuick(root,run,'PASS','complete',new Date('2026-11-03T13:09:59Z')), /predates/);
+  assert.throws(()=>finishPreflight(root,run,'FAIL','setup'),/preflight run directory/);
+  const result=finishQuick(root,run,'FAIL','verify-quick',new Date('2026-11-03T13:10:05Z'));
+  assert.equal(result.quickSourceScreen,'INCOMPLETE_OR_FAILED');
+  assert.equal(result.sourceVerification,'NOT_EXECUTED');
+  assert.equal(result.lastStage,'verify-quick');
+});
+
+test('quick receipt refuses modified source identity and symlinked run storage', (t) => {
+  const root=fixture(t);
+  const run=beginQuick(root,commit);
+  const record=manifest(run);
+  record.source.commit='b'.repeat(40);
+  writeFileSync(join(run,'manifest.json'),JSON.stringify(record));
+  assert.throws(()=>finishQuick(root,run,'PASS','complete'),/manifest identity/);
 });

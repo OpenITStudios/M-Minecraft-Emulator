@@ -39,10 +39,25 @@ const ID = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/;
 const SHA = /^[a-f0-9]{40}$/;
 const SCOPE = new Set(['environment','repository','frontend','rust','source','desktop','package','storage','benchmark']);
 const PLAN_PROFILES = new Set(['fast','local-smoke','five-client','release','experimental']);
+const LOCAL_SMOKE_CHECKPOINTS = Object.freeze([
+  Object.freeze({id:"LT-01",phase:"readiness",action:"Pin clean Local SHA, Windows x64, data backup policy and reviewed standard DLL paths",passCondition:"Exact revision and prerequisites; do not treat missing payload as PASS",evidenceKind:"METADATA",stopOnFail:true,legacyCases:"STD-SRC-01..05;STD-SRC-13"}),
+  Object.freeze({id:"LT-02",phase:"source",action:"Execute approved check:quick on clean SHA",passCondition:"Real exit 0 and source-quick receipt; full source verification remains NOT_EXECUTED",evidenceKind:"SOURCE_QUICK",stopOnFail:true,legacyCases:"STD-SRC-05;STD-SRC-11 (partial only)"}),
+  Object.freeze({id:"LT-03",phase:"desktop",action:"Manually launch the approved Tauri manager",passCondition:"One rendered responsive manager window",evidenceKind:"WINDOW_OBSERVATION",stopOnFail:true,legacyCases:"STD-UI-01"}),
+  Object.freeze({id:"LT-04",phase:"desktop",action:"Inspect fixed cards MC01–MC05 without launching game",passCondition:"Exactly five stable slots; no automatic game, Microsoft sign-in or AI input",evidenceKind:"WINDOW_OBSERVATION",stopOnFail:true,legacyCases:"STD-UI-02..04"}),
+  Object.freeze({id:"LT-05",phase:"desktop",action:"Use Refresh then close/reopen an idle manager",passCondition:"No duplicate native controller, fabricated running state or data rewrite",evidenceKind:"WINDOW_OBSERVATION",stopOnFail:true,legacyCases:"STD-UI-05;STD-UI-11"}),
+  Object.freeze({id:"LT-06",phase:"mc01",action:"Manually sign into licensed MC01 and open dummy world",passCondition:"Rendered playable world with physical movement/camera/interaction",evidenceKind:"MINECRAFT_RUNTIME",stopOnFail:true,legacyCases:"STD-GAME-01..03"}),
+  Object.freeze({id:"LT-07",phase:"mc01",action:"Normal save/close and reopen MC01",passCondition:"Saved world and original account/profile survive a normal close",evidenceKind:"MINECRAFT_RUNTIME",stopOnFail:true,legacyCases:"STD-GAME-04..05"}),
+  Object.freeze({id:"LT-08",phase:"mc02",action:"Launch MC02 while MC01 remains playable",passCondition:"Distinct licensed account and PID/birth/HWND slot; two independently playable worlds",evidenceKind:"MINECRAFT_RUNTIME",stopOnFail:true,legacyCases:"STD-GAME-06..08;STD-GAME-12"}),
+  Object.freeze({id:"LT-09",phase:"two-client",action:"Switch selected game, focus and workspace surface",passCondition:"Correct window/slot, no accidental cross-client input",evidenceKind:"WINDOW_IDENTITY",stopOnFail:true,legacyCases:"STD-WIN-01;STD-WIN-03;STD-WIN-05"}),
+  Object.freeze({id:"LT-10",phase:"two-client",action:"Normal CloseOne on MC02 while MC01 remains active",passCondition:"Only MC02 closes after game confirmation; MC01 remains interactive",evidenceKind:"NATIVE_LIFECYCLE",stopOnFail:true,legacyCases:"STD-LIFE-01..04"}),
+  Object.freeze({id:"LT-11",phase:"two-client",action:"Close/reopen manager with an owned game still active",passCondition:"Original session is correctly recovered or explicitly UNKNOWN; never fake STOPPED",evidenceKind:"NATIVE_LIFECYCLE",stopOnFail:true,legacyCases:"STD-LIFE-12..13"}),
+  Object.freeze({id:"LT-12",phase:"data",action:"Inspect only bounded storage metadata across stopped slots",passCondition:"No reset, account/world disclosure or cross-slot folder confusion",evidenceKind:"STORAGE_METADATA",stopOnFail:true,legacyCases:"STD-DATA-01..03"}),
+  Object.freeze({id:"LT-13",phase:"ui-smoke",action:"Paste negative/fraction XYZ and inspect read-only F3",passCondition:"Correct manual formatting; live XYZ/Copy unavailable until actual source exists",evidenceKind:"UI_OBSERVATION",stopOnFail:false,legacyCases:"STD-SET-12..13;STD-SET-15..16"})
+]);
 const MANUAL_PLANS = Object.freeze({
   'local-smoke': Object.freeze({
     taskIds:['source.quick'],
-    manualCaseIds:Array.from({length:13},(_,i)=>'LT-'+String(i+1).padStart(2,'0')),
+    manualCaseIds:LOCAL_SMOKE_CHECKPOINTS.map(step=>step.id),
     prerequisites:['Windows x64 and reviewed standard DLLs','Approved pinned toolchain and locked npm setup','Operator-approved test profiles and disposable Minecraft world'],
     reason:'First same-revision baseline is independent of the last commit diff; quick source screening is not full source acceptance.'
   }),
@@ -74,6 +89,7 @@ export function planForProfile(profile,revision,paths=[]) {
   return {status:'READY',sourceSha:revision,profile,taskIds:[...cfg.taskIds],
     manualCaseIds:[...cfg.manualCaseIds],prerequisites:[...cfg.prerequisites],
     manualGuide:'docs/validation/efficient-local-testing.md',manualExecution:'OPERATOR_ONLY',
+    checkpoints:profile==='local-smoke'?LOCAL_SMOKE_CHECKPOINTS.map(step=>({...step})):[],
     reason:cfg.reason};
 }
 

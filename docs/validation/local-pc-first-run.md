@@ -149,6 +149,10 @@ npm setup, from a **clean** `Local` checkout:
 skip it if already prepared. The `plan` is read-only. `check:quick` runs
 repository/lock checks, repository fixtures, frontend typecheck/Vitest and
 desktop/runtime Rust compilation, but no full Rust test matrix or installer.
+The existing `tooling/local-test/session.mjs` writer records a private
+metadata-only `*-quick-*/manifest.json` receipt with actual result and
+elapsed wall time. `quickSourceScreen` alone may pass; full
+`sourceVerification` and `windowsGameplay` stay `NOT_EXECUTED`.
 Record its actual result and full SHA. A failure stops this baseline; no
 gameplay PASS can be inferred from a source check.
 

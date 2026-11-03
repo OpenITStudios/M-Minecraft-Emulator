@@ -25,6 +25,12 @@ by a source plan. Use an authorized dummy world and licensed accounts.
 | `release` | Installer candidate | Explicitly gated `source.preflight`, then `build.candidate` | RL-01–RL-03, disposable install/repair/uninstall |
 | `experimental` | AI/MCP/Skills Probe | No standard action proposed: approved separate ABI, feature and source evidence needed | EX-01–EX-04, only if explicitly authorized |
 
+For `local-smoke`, the JSON plan includes **all 13 actions, objective
+pass conditions, expected evidence families, original case cross-references
+and per-case fail-fast flags**. It is self-contained for an operator or
+local AI reviewer, but it never evaluates, executes or auto-records a manual
+game step. No screenshot is taken automatically.
+
 These are **read-only plans**. The controller's `plan` never runs source
 checks, starts the manager, launches Minecraft, stages installers or enables AI.
 Do not use `DEV.cmd run auto` for first-run acceptance: on a clean checkout
@@ -50,7 +56,10 @@ its changed-source basis can be a documentation-only latest commit.
    clean checkout; it performs repository layout/lock checks, repository
    fixtures, frontend typecheck/Vitest and Rust compile checks. It does
    **not** run all Rust tests or full `preflight`. A nonzero status is a
-   first-failure blocker, not a reason to weaken tests.
+   first-failure blocker, not a reason to weaken tests. The command writes
+   only a private source-quick receipt under `workspace/runs`, with
+   `quickSourceScreen`, elapsed milliseconds and first failing stage;
+   `sourceVerification`, installer and gameplay remain `NOT_EXECUTED`.
 6. Configure `LAZY_TESTER_NATIVE_PAYLOAD_DIR` to the reviewed standard
    two-DLL directory. `DEV.cmd localcheck` must recognize the pinned
    hashes. Only then, **with approval**, `DEV.cmd dev` starts the manager.
@@ -111,6 +120,7 @@ email/account identifiers, world files, tokens or registry hives.
 | Field | Evidence |
 | --- | --- |
 | Revision | Full 40-character `Local` SHA and Windows / Education versions |
+| Source receipt | Private `workspace/runs/*-quick-*/manifest.json`; only `quickSourceScreen` can be PASS |
 | Stage | Source screen / manager / MC01 / MC02 / five-client / package / experimental |
 | Case | LT/FC/RL/EX ID, actual action, expected/observed and PASS/FAIL/BLOCKED/INCONCLUSIVE/NOT_EXECUTED |
 | Failure | First wrong source owner, reproducible steps and safe sanitized log excerpt |

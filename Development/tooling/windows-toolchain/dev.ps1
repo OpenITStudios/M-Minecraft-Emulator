@@ -499,8 +499,31 @@ try {
         "check:quick" {
             $sha = Assert-LocalCheckout
             Assert-CleanSourceAtHead -ExpectedSha $sha
-            Invoke-RepositoryNpm -NpmArguments @("run", "verify:quick")
-            Assert-CleanSourceAtHead -ExpectedSha $sha
+            $recordDir = (& node "tooling/local-test/session.mjs" start quick $sha)
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($recordDir)) {
+                throw "Quick source screen cannot start a metadata-only exact-SHA run receipt."
+            }
+            Write-Host "Quick source receipt: $(Join-Path $recordDir 'manifest.json')"
+            $stage = "verify-quick"
+            try {
+                Invoke-RepositoryNpm -NpmArguments @("run", "verify:quick")
+                $stage = "source-integrity"
+                Assert-CleanSourceAtHead -ExpectedSha $sha
+                & node "tooling/local-test/session.mjs" finish-quick $recordDir PASS complete
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Quick source screen finished but its receipt could not be finalized."
+                }
+            } catch {
+                try {
+                    & node "tooling/local-test/session.mjs" finish-quick $recordDir FAIL $stage
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Warning "Quick source failure receipt could not be finalized."
+                    }
+                } catch {
+                    Write-Warning "Quick source recorder failed; preserve the original source check error."
+                }
+                throw
+            }
             Write-Host "QUICK SOURCE SCREEN PASSED for $sha (not full source, Windows, Minecraft or release acceptance)."
         }
         "check:frontend" { Invoke-RepositoryNpm -NpmArguments @("run", "check:frontend") }

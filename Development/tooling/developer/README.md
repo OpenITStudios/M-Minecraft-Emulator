@@ -39,6 +39,18 @@ for the actual LT/FC/RL/EX cases.
 Svelte typecheck and frontend tests, plus desktop/runtime Rust compile checks
 on a clean pinned Local revision. After separately approved toolchain setup:
 `DEV.cmd check:quick` or `DEV.cmd run source.quick --expect-sha <SHA>`.
+This also writes a **metadata-only exact-SHA quick receipt** via the
+existing `Development/tooling/local-test/session.mjs` owner under ignored
+`workspace/runs`: command outcome, first stage, elapsed wall time,
+`quickSourceScreen` and unchanged `sourceVerification=NOT_EXECUTED`,
+`windowsGameplay=NOT_EXECUTED`. It stores no console logs or identities.
+A successful quick receipt is not full preflight or Windows evidence.
+
+`--profile local-smoke` now returns each ordered checkpoint with action,
+objective pass condition, requested evidence family, original STD case
+references, and fail-fast policy. No step is marked executed by a plan
+response. This is intended to avoid looking up each of 13 IDs individually.
+
 This does **not** run all Rust tests, packaging, Minecraft or a full
 `source.preflight`; do not promote its exit code into release readiness.
 For a fresh clone, locked npm dependency setup is a separately authorized
