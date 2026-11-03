@@ -2339,7 +2339,7 @@ function deliveredVisualFixture() {
   const observed={...metadata};
   const reads=[],stops=[];
   let delivered=false;
-  return {identity,observed,reads,stops,
+  return {identity,observed,reads,stops,wasDelivered:()=>delivered,
     factory:()=>({
       read(slot,{afterSequence=0,includeImage=false}={}){
         assert.equal(slot,2);
@@ -2383,7 +2383,7 @@ test('an explicit cached PNG read revalidates the exact live native window once'
   assert.equal(image.metadata.hasNewImage,true);
   assert.equal(image.imageBase64,'a'.repeat(64));
   assert.equal(nativeReads,1);
-  assert.deepEqual(fixture.reads,[false,false,true]);
+  assert.deepEqual(fixture.reads,[false,false,false,true]);
   const duplicate=await handler.callTool('read_visual_observation',{
     slot:2,afterSequence:4,includeImage:true,
   });
@@ -2449,7 +2449,9 @@ test('cache advancement during native identity check cannot leak an unverified P
   await assert.rejects(()=>handler.callTool('read_visual_observation',{
     slot:2,includeImage:true,
   }),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
-  assert.deepEqual(fixture.reads,[false,true]);
+  assert.deepEqual(fixture.reads,[false,false]);
+  assert.equal(fixture.wasDelivered(),false,
+    'an unverified new cached sequence must never be marked delivered');
   handler.shutdown();
 });
 

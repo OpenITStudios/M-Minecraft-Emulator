@@ -18,7 +18,8 @@ new-revision acceptance.
   delivery and screen-review calls now first read metadata only, compare
   the exact cached PID/HWND/session/birth with the existing authenticated
   native target, and recheck that the same cached sample survives every
-  asynchronous lookup before any image/review is returned. Confirmed
+  asynchronous lookup **before** marking a PNG as delivered or allowing
+  a later transcription review. Confirmed
   replacement revokes only the affected slot's observer cache/producer;
   unknown target identity fails closed. Metadata-only reads and polls with
   no new image remain cache-only, avoiding unnecessary native calls.

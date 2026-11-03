@@ -2253,10 +2253,10 @@ export function createHandler(config,{
           throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
         }
         // A sampler may advance/revoke its cache during the native await.
-        // Deliver only the exact frame we verified; newer frames need their
-        // own live identity admission. No new screenshot is collected here.
-        observation=visualObserver.read(slot,{afterSequence,includeImage:wantsImage});
-        const a=first.metadata,b=observation.metadata;
+        // Check continuity using metadata ONLY: a rejected new frame must
+        // never be recorded as "already delivered" before the AI sees it.
+        const verified=visualObserver.read(slot,{afterSequence,includeImage:false});
+        const a=first.metadata,b=verified.metadata;
         if(b.freshFrameAvailable!==true||
            b.sequence!==a.sequence||
            b.successfulSamples!==a.successfulSamples||
@@ -2264,9 +2264,19 @@ export function createHandler(config,{
            b.sourceFrameAtMs!==a.sourceFrameAtMs||
            b.sourceTimeKind!==a.sourceTimeKind||
            b.producerSequence!==a.producerSequence||
-           !sameNativeVisualTarget(b.captureIdentity,a.captureIdentity)||
-           (wantsImage && (b.hasNewImage!==true||
-             typeof observation.imageBase64!=='string'))){
+           !sameNativeVisualTarget(b.captureIdentity,a.captureIdentity)){
+          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+        }
+        // Both reads above were metadata-only. With no async yield between
+        // this check and the actual PNG read, only the same validated cache
+        // frame may become deliverable and eligible for a later text review.
+        observation=wantsImage?
+          visualObserver.read(slot,{afterSequence,includeImage:true}):verified;
+        if(wantsImage && (observation.metadata.hasNewImage!==true||
+           observation.metadata.sequence!==b.sequence||
+           !sameNativeVisualTarget(
+             observation.metadata.captureIdentity,b.captureIdentity)||
+           typeof observation.imageBase64!=='string')){
           throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
         }
       } else if(wantsImage) {
