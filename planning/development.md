@@ -10,6 +10,19 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Operator-only incremental smoke report (3 November 2026, source-only):**
+  The existing `Development/tooling/local-test/session.mjs` now also owns
+  a bounded `LOCAL_SMOKE_OPERATOR_REPORT` receipt under ignored
+  `workspace/runs`. An explicit pinned `DEV.cmd smoke start/record/status`
+  records only ordered LT-01..LT-13 **operator-reported** results, stops
+  after the first FAIL/BLOCKED/INCONCLUSIVE, and summarizes the first blocker
+  and next case without launching Minecraft. There is no free-text
+  username/world field, second test runner, controller mutation or CI.
+  Exact clean `Local` HEAD is required for mutations; older SHA reports
+  are read-only/stale. Even thirteen reported PASS results never assert
+  independent Windows/game acceptance; full source/Windows/AI remain
+  NOT_EXECUTED. Fixtures AUTHORED_NOT_EXECUTED.
+
 - **First-run evidence integrity and actionable plan (3 November 2026,
   source-only):** The existing `local-test/session.mjs` owner now also
   supports fail-closed `SOURCE_QUICK` receipts without changing existing

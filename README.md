@@ -101,6 +101,7 @@ DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd plan --profile local-smoke --json
+DEV.cmd smoke start --expect-sha <exact-Local-HEAD-SHA>
 DEV.cmd check:quick
 DEV.cmd run auto --expect-sha <exact-Local-HEAD-SHA> --json
 DEV.cmd dev

@@ -4,6 +4,7 @@ import {lstatSync, fstatSync, readFileSync, openSync, closeSync, unlinkSync, wri
 import {spawn, spawnSync} from 'node:child_process';
 import {dirname, join, resolve, isAbsolute, posix, win32} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {beginSmoke,readSmoke,recordSmoke} from '../local-test/session.mjs';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const REGISTRY = resolve(dirname(fileURLToPath(import.meta.url)), 'tasks.json');
@@ -234,6 +235,9 @@ function usage() {
   return 'Usage: DEV.cmd inspect|catalog|plan [--json] [--profile fast|local-smoke|five-client|release|experimental] [--base-sha <ancestor-40-char-SHA>] [--paths <source paths>...]\n'+
     '       DEV.cmd run auto --expect-sha <40-char Local SHA> [--base-sha <ancestor-40-char-SHA>] [--json]\n'+
     '       DEV.cmd run <task-id> --expect-sha <40-char Local SHA> [--approve <task-id>] [--json]\n'+
+    '       DEV.cmd smoke start --expect-sha <full-SHA> [--json]\n'+
+    '       DEV.cmd smoke record --run <smoke-run-id> --case LT-01 --result PASS --observed --expect-sha <full-SHA> [--json]\n'+
+    '       DEV.cmd smoke status --run <smoke-run-id> [--json]\n'+
     '       DEV.cmd bootstrap (existing reviewed opt-in setup)';
 }
 export function parseFlags(tokens,operation) {
@@ -277,6 +281,45 @@ export function parseFlags(tokens,operation) {
   }
   if(result.baseSha!==null && operation==='run' && result.taskId!=='auto') {
     throw Error('--base-sha is only supported by run auto');
+  }
+  return result;
+}
+
+export function parseSmokeFlags(tokens) {
+  const [action,...rest] = tokens;
+  if (!['start','record','status'].includes(action)) throw Error('Invalid smoke action');
+  const allowed = {
+    start:new Set(['--expect-sha','--json']),
+    record:new Set(['--expect-sha','--run','--case','--result','--observed','--json']),
+    status:new Set(['--run','--json'])
+  }[action];
+  const result = {action,json:false,expectSha:null,runId:null,caseId:null,
+    reportedStatus:null,observed:false};
+  const seen=new Set();
+  for(let i=0;i<rest.length;i++){
+    const flag=rest[i];
+    if(!allowed.has(flag) || seen.has(flag))throw Error('Unexpected/repeated smoke argument');
+    seen.add(flag);
+    if(flag==='--json'){result.json=true;continue;}
+    if(flag==='--observed'){result.observed=true;continue;}
+    const value=rest[++i];
+    if(!value || value.startsWith('--'))throw Error('Missing smoke argument value');
+    if(flag==='--expect-sha') result.expectSha=value;
+    if(flag==='--run') result.runId=value;
+    if(flag==='--case') result.caseId=value;
+    if(flag==='--result') result.reportedStatus=value;
+  }
+  if(action!=='status' && !SHA.test(result.expectSha??''))
+    throw Error('Smoke mutation requires exact --expect-sha');
+  if(action!=='start' && (!result.runId ||
+      !/^[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}-smoke-[a-f0-9]{8}$/.test(result.runId))) {
+    throw Error('Smoke status/record requires a bounded run ID');
+  }
+  if(action==='record' && (!/^LT-(0[1-9]|1[0-3])$/.test(result.caseId??'') ||
+      !['PASS','FAIL','BLOCKED','INCONCLUSIVE'].includes(result.reportedStatus) ||
+      (result.reportedStatus==='PASS' && !result.observed) ||
+      (result.reportedStatus!=='PASS' && result.observed))) {
+    throw Error('Smoke record requires one LT-01..LT-13 result; --observed only for operator-confirmed PASS');
   }
   return result;
 }
@@ -410,8 +453,45 @@ async function runTask(task,parsed,source,selection=null) {
 }
 export async function main(argv=process.argv.slice(2)) {
   const [operation,...arguments_]=argv;
-  if(!['inspect','catalog','plan','run'].includes(operation)) {
+  if(!['inspect','catalog','plan','run','smoke'].includes(operation)) {
     console.error(usage());return 2;
+  }
+  if(operation==='smoke') {
+    let parsed;
+    try {parsed=parseSmokeFlags(arguments_);}
+    catch(error){console.error(error.message+'\n'+usage());return 2;}
+    try {startup();}
+    catch {return blocked('smoke','Pinned Node or task registry unavailable',parsed.json);}
+    let source;
+    try {source=sourceInfo();}
+    catch(error){return blocked('smoke',error.message,parsed.json);}
+    if(source.branch!=='Local')return blocked('smoke','Local branch required',parsed.json);
+    const caseIds=LOCAL_SMOKE_CHECKPOINTS.map(step=>step.id);
+    if(parsed.action!=='status') {
+      if(parsed.expectSha!==source.sha) {
+        return blocked('smoke','Exact current Local SHA required',parsed.json);
+      }
+      try {if(changedPaths().length) return blocked('smoke',
+        'Source checkout has uncommitted/untracked changes; do not mix smoke revisions',parsed.json);}
+      catch(error){return blocked('smoke',error.message,parsed.json);}
+    }
+    let output;
+    try {
+      if(parsed.action==='start') output=beginSmoke(REPO,source.sha,caseIds);
+      if(parsed.action==='record') output=recordSmoke(REPO,parsed.runId,source.sha,
+        caseIds,parsed.caseId,parsed.reportedStatus);
+      if(parsed.action==='status') output=readSmoke(REPO,parsed.runId,caseIds);
+    }catch(error){return blocked('smoke',error.message,parsed.json);}
+    const staleForCurrentHead=output.sourceSha!==source.sha;
+    const step=!staleForCurrentHead&&output.nextCaseId?
+      LOCAL_SMOKE_CHECKPOINTS.find(x=>x.id===output.nextCaseId):null;
+    emit(report('smoke',{status:staleForCurrentHead?'STALE_REVISION':'OPERATOR_REPORT_ONLY',
+      action:parsed.action,runId:output.runId??parsed.runId,
+      ...(output.manifestRelativePath?{manifestRelativePath:output.manifestRelativePath}:{}),
+      ...output,staleForCurrentHead,
+      nextCheckpoint:step?{...step}:null,
+      proof:'MANUAL_OPERATOR_REPORT_NOT_RUNTIME_ATTESTATION'}),parsed.json);
+    return staleForCurrentHead?3:0;
   }
   let parsed;
   try {parsed=parseFlags(arguments_,operation);}catch(error){console.error(error.message+'\n'+usage());return 2;}

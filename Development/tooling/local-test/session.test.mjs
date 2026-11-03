@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { beginPreflight, finishPreflight, beginQuick, finishQuick } from './session.mjs';
+import { beginPreflight, finishPreflight, beginQuick, finishQuick, beginSmoke, readSmoke, recordSmoke } from './session.mjs';
 
 const commit = 'a'.repeat(40);
 function fixture(t) {
@@ -120,4 +120,63 @@ test('quick receipt refuses modified source identity and symlinked run storage',
   record.source.commit='b'.repeat(40);
   writeFileSync(join(run,'manifest.json'),JSON.stringify(record));
   assert.throws(()=>finishQuick(root,run,'PASS','complete'),/manifest identity/);
+});
+
+const smokeIds=Array.from({length:13},(_,i)=>'LT-'+String(i+1).padStart(2,'0'));
+test('manual smoke reports only operator-reported results, never runtime attestation',t=>{
+  const root=fixture(t), start=new Date('2026-11-03T12:00:00Z');
+  const created=beginSmoke(root,commit,smokeIds,start);
+  assert.equal(created.nextCaseId,'LT-01');
+  assert.equal(created.reportStatus,'INCOMPLETE_OPERATOR_REPORTED');
+  assert.equal(created.minecraftRuntime,'NOT_INDEPENDENTLY_VERIFIED');
+  assert.equal(created.reportedCounts.NOT_REPORTED,13);
+  const result=recordSmoke(root,created.runId,commit,smokeIds,'LT-01','PASS',
+    new Date('2026-11-03T12:01:00Z'));
+  assert.equal(result.nextCaseId,'LT-02');
+  assert.equal(result.reportedCounts.PASS,1);
+  assert.equal(readSmoke(root,created.runId,smokeIds).sourceVerification,'NOT_EXECUTED');
+  assert.throws(()=>recordSmoke(root,created.runId,commit,smokeIds,'LT-01','PASS'),
+    /Only the next/);
+  assert.throws(()=>recordSmoke(root,created.runId,'b'.repeat(40),smokeIds,'LT-02','PASS'),
+    /HEAD differs/);
+});
+
+test('manual smoke stops at first reported failure and never fabricates remaining cases',t=>{
+  const root=fixture(t),created=beginSmoke(root,commit,smokeIds);
+  recordSmoke(root,created.runId,commit,smokeIds,'LT-01','PASS');
+  const failed=recordSmoke(root,created.runId,commit,smokeIds,'LT-02','FAIL');
+  assert.equal(failed.reportStatus,'STOPPED_OPERATOR_REPORTED');
+  assert.equal(failed.firstBlocker.id,'LT-02');
+  assert.equal(failed.nextCaseId,null);
+  assert.equal(failed.reportedCounts.NOT_REPORTED,11);
+  assert.throws(()=>recordSmoke(root,created.runId,commit,smokeIds,'LT-03','PASS'),
+    /Only the next/);
+});
+
+test('manual smoke completion remains self-reported, with no game or package proof',t=>{
+  const root=fixture(t),start=new Date('2026-11-03T10:00:00Z');
+  const created=beginSmoke(root,commit,smokeIds,start);
+  for(let i=0;i<smokeIds.length;i++)
+    recordSmoke(root,created.runId,commit,smokeIds,smokeIds[i],'PASS',
+      new Date(start.getTime()+(i+1)*1000));
+  const report=readSmoke(root,created.runId,smokeIds);
+  assert.equal(report.reportStatus,'COMPLETE_OPERATOR_REPORTED_UNVERIFIED');
+  assert.equal(report.nextCaseId,null);
+  assert.equal(report.reportedCounts.PASS,13);
+  assert.equal(report.sourceVerification,'NOT_EXECUTED');
+  assert.equal(report.minecraftRuntime,'NOT_INDEPENDENTLY_VERIFIED');
+});
+
+test('manual smoke refuses forged source, unsafe run IDs, and cross-case skips',t=>{
+  const root=fixture(t),created=beginSmoke(root,commit,smokeIds);
+  assert.throws(()=>readSmoke(root,'../../Data/profiles.json',smokeIds),/bounded/);
+  assert.throws(()=>recordSmoke(root,created.runId,commit,smokeIds,'LT-05','PASS'),
+    /Only the next/);
+  assert.throws(()=>recordSmoke(root,created.runId,commit,smokeIds,'LT-01','NOT_REPORTED'),
+    /Invalid operator-reported/);
+  const folder=join(root,created.manifestRelativePath);
+  const modified=JSON.parse(readFileSync(folder,'utf8'));
+  modified.minecraftRuntime='PASS';
+  writeFileSync(folder,JSON.stringify(modified));
+  assert.throws(()=>readSmoke(root,created.runId,smokeIds),/trust boundary/);
 });

@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {dirname,resolve,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
-import {validatedRegistry,classifyPath,planForPaths,planForProfile,automaticChangeSet,legacyArgs,parseFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
+import {validatedRegistry,classifyPath,planForPaths,planForProfile,automaticChangeSet,legacyArgs,parseFlags,parseSmokeFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const registry=JSON.parse(readFileSync(new URL('./tasks.json',import.meta.url),'utf8'));
@@ -50,7 +50,24 @@ test('registry refuses injected command, duplicate identity, and unreviewed mode
   assert.throws(()=>validatedRegistry(rogue),/Invalid/);
 });
 
+test('operator-only smoke commands require revision pinning, safe IDs and explicit PASS report',()=>{
+  const id='20261103T123000Z-aaaaaaaa-smoke-1234abcd';
+  assert.equal(parseSmokeFlags(['start','--expect-sha',SHA]).action,'start');
+  assert.equal(parseSmokeFlags(['record','--run',id,'--case','LT-01','--result','PASS',
+    '--observed','--expect-sha',SHA]).reportedStatus,'PASS');
+  assert.equal(parseSmokeFlags(['status','--run',id,'--json']).json,true);
+  assert.throws(()=>parseSmokeFlags(['record','--run',id,'--case','LT-01','--result','PASS',
+    '--expect-sha',SHA]),/operator-confirmed PASS/);
+  assert.throws(()=>parseSmokeFlags(['start','--expect-sha','main']),/exact --expect-sha/);
+  assert.throws(()=>parseSmokeFlags(['status','--run','../../Data']),/bounded run ID/);
+  assert.throws(()=>parseSmokeFlags(['record','--run',id,'--case','LT-14','--result','PASS',
+    '--observed','--expect-sha',SHA]),/LT-01..LT-13/);
+  assert.throws(()=>parseSmokeFlags(['status','--run',id,'--observed']),/Unexpected/);
+  assert.throws(()=>parseSmokeFlags(['start','--expect-sha',SHA,'--expect-sha',SHA]),/repeated/);
+});
+
 test('first-run profile uses a real baseline regardless of a docs-only latest commit',()=>{
+
   const first=planForProfile('local-smoke',SHA);
   assert.equal(first.status,'READY');
   assert.equal(first.profile,'local-smoke');

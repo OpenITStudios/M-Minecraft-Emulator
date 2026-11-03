@@ -12,6 +12,9 @@ DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd plan --profile local-smoke --json
+DEV.cmd smoke start --expect-sha <40-char-Local-SHA> --json
+DEV.cmd smoke record --run <smoke-run-id> --case LT-01 --result PASS --observed --expect-sha <40-char-Local-SHA> --json
+DEV.cmd smoke status --run <smoke-run-id> --json
 DEV.cmd plan --profile five-client --json
 DEV.cmd plan --profile release --json
 DEV.cmd plan --profile experimental --json
@@ -50,6 +53,20 @@ A successful quick receipt is not full preflight or Windows evidence.
 objective pass condition, requested evidence family, original STD case
 references, and fail-fast policy. No step is marked executed by a plan
 response. This is intended to avoid looking up each of 13 IDs individually.
+
+The `smoke` operations are optional, explicit **operator-reported evidence**,
+not a game tester: `start` creates one small private manifest under ignored
+`workspace/runs`, `record` accepts only the next LT-01..LT-13 result,
+and `status` shows the first blocker/next checkpoint. Record `PASS`
+only with the explicit `--observed` flag after personally observing
+the scenario. Result values are `PASS`, `FAIL`, `BLOCKED`, and
+`INCONCLUSIVE`; there is no free-text account/world/token field.
+A FAIL/BLOCKED/INCONCLUSIVE stops this run; reopen a new run after
+a fix. Recorded PASS is **never** independently authenticated gameplay
+or full source proof, even for thirteen reported PASS cases. Exact Local
+SHA and clean tracked/untracked source are required for start/record;
+a run from another HEAD is stale/read-only. Case receipt writes are
+exclusive and scoped only to that private directory.
 
 This does **not** run all Rust tests, packaging, Minecraft or a full
 `source.preflight`; do not promote its exit code into release readiness.

@@ -20,7 +20,9 @@ For the **default efficient first local acceptance**, start with the
 The explicit read-only `DEV.cmd plan --profile local-smoke --json` works
 after approved portable Node setup; it does not confuse a docs-only latest
 commit with completed first-run acceptance. Source quick check, game acceptance
-and optional installer remain separate approvals.
+and optional installer remain separate approvals. Optional `DEV.cmd smoke
+start/record/status` stores bounded operator-reported case outcomes only
+under ignored `workspace/runs`—not automatic gameplay acceptance.
 
 For a **standard desktop clone, first UI run and optional native package**,
 start at the [Windows first-run checklist](local-pc-first-run.md).

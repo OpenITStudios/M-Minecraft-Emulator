@@ -64,7 +64,30 @@ its changed-source basis can be a documentation-only latest commit.
    two-DLL directory. `DEV.cmd localcheck` must recognize the pinned
    hashes. Only then, **with approval**, `DEV.cmd dev` starts the manager.
    It is not a login/gameplay acceptance result.
-7. Perform LT-01–LT-13 manually, recording each checkpoint once. Stop
+7. Optionally create an **operator-only checkpoint report** (this does
+   not launch Minecraft or mark cases PASS):
+   
+   ```powershell
+   $sha = (git rev-parse HEAD).Trim()
+   .\DEV.cmd smoke start --expect-sha $sha --json
+   ```
+   
+   Copy the returned `runId`. After personally completing and confirming
+   each case, record one result, such as:
+   
+   ```powershell
+   .\DEV.cmd smoke record --run <runId> --case LT-01 --result PASS --observed --expect-sha $sha --json
+   .\DEV.cmd smoke status --run <runId> --json
+   ```
+   
+   Use `FAIL`, `BLOCKED` or `INCONCLUSIVE` without `--observed`
+   when the checkpoint did not pass. The first such result terminates
+   further PASS reporting for that run; create a new run after addressing
+   the blocker. The report includes next scenario details, outcome counts
+   and a strong self-report trust label. No account/world text or screenshots
+   are stored by these commands, and 13 reported PASS cases are **not**
+   automatically certified Minecraft acceptance.
+8. Perform LT-01–LT-13 manually, recording each checkpoint once. Stop
    escalation on P0 data/identity/ownership failures. Do not launch MC03–05
    before both MC01 and MC02 are genuinely playable together.
 
@@ -121,6 +144,7 @@ email/account identifiers, world files, tokens or registry hives.
 | --- | --- |
 | Revision | Full 40-character `Local` SHA and Windows / Education versions |
 | Source receipt | Private `workspace/runs/*-quick-*/manifest.json`; only `quickSourceScreen` can be PASS |
+| Operator smoke record | Private `workspace/runs/*-smoke-*/manifest.json`; case statuses are **self-reported**, never independent gameplay proof |
 | Stage | Source screen / manager / MC01 / MC02 / five-client / package / experimental |
 | Case | LT/FC/RL/EX ID, actual action, expected/observed and PASS/FAIL/BLOCKED/INCONCLUSIVE/NOT_EXECUTED |
 | Failure | First wrong source owner, reproducible steps and safe sanitized log excerpt |
