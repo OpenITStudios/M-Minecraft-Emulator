@@ -227,6 +227,23 @@ new-revision acceptance.
   No new MCP tool, native IPC, Script API, world/game input,
   Windows tests, CI or external authorization changes.
 
+- **P16 F3 window ↔ player pairing feasibility (3 November, source-only):**
+  re-read pinned team ZIP SHA-256 26c0a322...5e21.
+  display-service.ts is the only per-player actionbar writer;
+  hud-line.ts composes per-player HUD slots, refreshes every 10 ticks
+  and offers NO existing native/MCP challenge entrypoint or
+  player/world ↔ Windows PID binding. Analytics samples are historical.
+  Path A: original client Show Coordinates + pinned visual capture
+  can at most offer manually reviewed SCREEN_OBSERVED_UNVERIFIED
+  XYZ, not a real-time/actor-authenticated feed. Path B: future
+  team-owned per-player short-lived HUD challenge needs a separately
+  authenticated game/server ↔ original native controller channel;
+  nonce echo, username, @s or matching PID alone is insufficient.
+  Eight fail-closed gates EDU-HUD/ORIGIN, WIN-BIND, CHALLENGE, FRAME,
+  MULTI, WORLD, F3 are in coordinate-inspector.md, all NOT_EXECUTED.
+  NO team source or product runtime was changed; no Script API,
+  command, network, new tool, UI/IPC, account/world mutation or CI.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -448,12 +465,12 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P15 now distinguishes
-one-shot exact-window visual review metadata from actual player/world
-position evidence using existing MCP capture tools. The sole
-remaining live F3 blocker is an authenticated client-local
-coordinate source and world association; do not interpret PNGs
-or historical analytics as that proof. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P16 confirms that the
+original team HUD is a per-player OUTPUT only; there is NO existing
+native/game handshake. Separate the screen-observed Show Coordinates
+candidate path (manual unverified review) from authenticated
+pairing (blocked by missing independent actor/world bridge).
+Do not expand F3 source claims until actual runtime proof exists. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -462,17 +479,25 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: source-only map a possible one-time player-to-window pairing
-protocol through the ORIGINAL team-owned HUD/actionbar display,
-with an explicitly authorized operator handshake and exact native
-window capture. Identify precise proof gaps and reject using a
-self-reported player ID or a username as an independent binding.
-Do not change installed team modules or enable a new Script API
-sender, Minecraft commands, screenshot parsing, network listener,
-native clipboard or game input without new source/runtime proof.
+Next: source-only design a bounded, **explicit-operator-review**
+screen-visible Show Coordinates candidate against the EXISTING
+native exact-window screenshot output. The review must refuse
+missing/stale/replaced windows, fabricated XYZ metadata, absent
+overlay and cross-client reuse; no automated OCR, screenshot
+extraction or gameplay-origin assumption. Implement only a
+concrete, non-authorizing UI/metadata contract if source ownership
+and runtime truthfulness can be preserved; else stop and document.
 
-Existing F3 Inspector remains read-only native selected process
-plus last reported FPS target; live XYZ, rotation, dimension
-and measured FPS stay unavailable. Manual Paste XYZ is
-USER_PASTED_UNVERIFIED. Source tests, Windows, Minecraft and CI
-are NOT_EXECUTED. Separate Testing recovery sealed CAS is BLOCKED.
+Do NOT implement the hypothetical HUD pairing protocol unless
+the original team owner provides a reviewed player-specific
+handshake with independently authenticated native/server channel,
+and the operator separately approves isolated Education 26.33
+Windows validation. Team HUD ownership, map scripts and uploaded
+worlds are not modified by Lazy Tester.
+
+Existing F3 Inspector remains selected native process + last
+reported FPS settings only. No live XYZ, rotation, dimension,
+measured desktop FPS or automatic Copy. P12 Paste XYZ is
+USER_PASTED_UNVERIFIED. Source tests, Windows, Minecraft and
+CI remain NOT_EXECUTED. Unrelated Testing sealed-CAS remains
+separately BLOCKED pending native attestation/approval.

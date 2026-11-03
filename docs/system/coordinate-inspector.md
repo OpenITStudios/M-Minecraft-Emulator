@@ -874,3 +874,127 @@ unknown providers, stale cached captures and no Copy authorization
 are AUTHORED_NOT_EXECUTED. Windows capture, actual screen contents,
 official Education 26.33 client source and Minecraft gameplay
 remain NOT_VERIFIED/NOT_EXECUTED.
+
+## P16 — Native-window ↔ player pairing feasibility, original team HUD only (3 November 2026)
+
+### Evidence reviewed
+
+Original team archive `minecraft-bedrock-agent-skills-main (3)(2).zip`
+was inspected read-only; SHA-256:
+`26c0a322cabed172ca74970413d5bb7a20d6f67181446df5f688e36057c54e21`.
+These findings describe THAT pinned archive, not an independently
+verified up-to-date team repository:
+
+- `modules/display/display-service.ts` owns the single Script API
+  title/subtitle/actionbar writer and uses `player.onScreenDisplay`
+  for an **explicit Player**. It provides no inbound Lazy Tester
+  transport, native process identity, response receipt or coordinate
+  export. Its `showActionBar` is a one-way render call.
+- `modules/display/hud-line.ts` owns per-player actionbar slots
+  (`setHudPart`, `clearHudPart`, `flashHud`, `renderHud`) and refreshes
+  unchanged text every 10 ticks. The map must wire `renderHud()`
+  to its own tick loop. There is no existing `f3:pair`, nonce exchange
+  or native PID/world binding API. External `/title` or `/titleraw`
+  actionbar writes would compete with the existing per-player owner.
+- `modules/coords/coords.ts` is a PURE transform of spawn/block
+  references, not a reader of the currently selected client.
+- `modules/analytics/analytics.ts` retains opt-in, stored historical
+  floored position samples; analytics-export prints the stored
+  records to a server Content Log. A stored player_id and world
+  data are **not** evidence of this Windows client's local actor.
+- The team's `bedrock-onscreen-display` skill explicitly prefers
+  Script API over commands for Education compatibility and says
+  classroom restrictions can affect commands and scriptevents.
+  Existing source tests on macOS 26.3x are NOT acceptance on
+  Education Windows 26.33.
+
+### Feasibility decision: distinguish two different outcomes
+
+| Path | Required input | Achievable claim today | Missing proof |
+| --- | --- | --- | --- |
+| A. Built-in Show Coordinates + existing exact-window PNG | Operator explicitly enables the world setting where permitted and requests the already existing `observe_client` or cached visual observation for exactly one MCxx | **Screen-visible coordinate candidate**, if a human visually confirms XYZ actually appears in the captured window | Screenshot readability, exact field semantics, player/world and live frame age still require runtime checks; no rotation/dimension or automatic Copy |
+| B. One-time actionbar challenge through original team HUD | Original team source must add its OWN reviewed per-player handshake entrypoint and the native owner must provide an authenticated challenge/response transport | **Pairing candidate**, not a verified actor or world until independent provenance/epoch gates pass | Neither a challenge endpoint nor a trusted game-to-native return channel exists in the pinned archive or active manager |
+
+Do not implement B using a second Script API module, game command,
+legacy Code Connection, a global world.getPlayers()[0] choice,
+arbitrary username, player_id in stored analytics, or an ephemeral
+nonce that has only been generated and compared locally. A code
+visible on the right HWND proves at most that those pixels carried
+that code; it does not independently authenticate who rendered
+it, what world was active, or that the position payload belonged
+to that actor.
+
+### Source-only future pairing contract — NOT IMPLEMENTED
+
+1. The **original native session controller** must pin the chosen
+   MCxx PID, creation FILETIME, Windows session, root HWND and
+   the current owner/selection epoch. The MCP screenshot source
+   must revalidate this identity before and after every capture.
+2. Any future pairing flow requires an **explicit operator opt-in**
+   in a disposable, authorized Education QA world. Source startup,
+   Refresh and routine F3 panel expansion must never trigger a
+   command or mutate any live world.
+3. The **original team module author** (not Lazy Tester) would have
+   to design a single per-player, short-lived challenge slot inside
+   `setHudPart` or the canonical display owner. It must select a
+   real event-associated Player from a verifiable player-origin
+   event, not pick an arbitrary server-side player.
+4. A challenge is accepted only after proving an independent,
+   authenticated path connecting the server-issued actor/world
+   session epoch to the original controller-issued window binding.
+   A log line, echoed nonce, player-entered text or `@s` by itself
+   cannot satisfy this step. If event source is Server/Block or
+   has no uniquely attributable Player, refuse.
+5. The visual witness must be a **new** capture from that same
+   pinned HWND within a bounded challenge lifetime. Reject changed
+   PID/HWND/birth, repeated cached PNG, expired window frame,
+   multiple matching actor candidates, cross-slot replay and
+   reconnect/respawn/world/dimension uncertainty. No screenshot
+   OCR or automation is implemented in this milestone.
+6. Expire any candidate on user cancellation, window replacement,
+   disconnection, player leave, world/session restart or failure.
+   Original game HUD owner must clear any temporary challenge
+   and preserve existing map HUD priorities; never overlay a
+   global second actionbar writer.
+7. Only separate live **Education 26.33 Windows** proof for
+   both the game actor/world and native process relationship
+   could justify proposing new runtime transport or live XYZ.
+   Until then, `coordinateExtraction=NOT_PERFORMED`,
+   `playerWorldAttribution=NOT_VERIFIED`,
+   `livePositionAvailable=false`, and
+   `automaticCopyAllowed=false` must remain unchanged.
+
+### Acceptance matrix (all NOT_EXECUTED)
+
+| Gate | Acceptance evidence required | Fail-closed outcome |
+| --- | --- | --- |
+| EDU-HUD | Original team's display module is installed, wired and displays a short-lived per-player HUD part without clobbering the map | NO_TEAM_DISPLAY_OWNER |
+| EDU-ORIGIN | A verified player-origin event gives exactly one real Player and world/session epoch, never an unauthenticated username or Server source | PLAYER_ORIGIN_UNKNOWN |
+| WIN-BIND | Native PID/birth/session/HWND remained pinned through both sides of capture; no helper or replacement adopted | WINDOW_REPLACED |
+| CHALLENGE | An independent authenticated native ↔ server challenge path exists; nonce-only equality is explicitly insufficient | INDEPENDENT_PATH_MISSING |
+| FRAME | Newly produced readable pixels from that exact HWND, correct challenge and no cached/stale or cross-slot replay | FRAME_NOT_TRUSTED |
+| MULTI | Five independently managed clients cannot adopt one another's actor/world, even in a shared world | CROSS_CLIENT_NOT_ATTESTED |
+| WORLD | Rejoin, dimension/world replacement, stage changes and player leave revoke pending identity | WORLD_EPOCH_UNKNOWN |
+| F3 | Real source XYZ precision, rotation, dimensions and freshness are verified with separately reviewed field mapping | LIVE_F3_NOT_VERIFIED |
+
+### Product/permission boundary
+
+- **No code path in this change** sends a command, adds a logger,
+  patches a behavior pack, installs a team module, enables cheats,
+  changes classroom/world options, reads clipboard or obtains an
+  automatic game/world connection. All current source-only F3
+  statuses remain unchanged.
+- Operator-initiated **Show Coordinates** within the game's existing
+  world settings is the lower-risk exploratory route. It can
+  support an explicitly **screen-observed, unverified** XYZ review
+  once actual Windows pixels exist, NOT authoritative live data.
+  Some worlds/settings have permissions; do not alter them here.
+- No original-team developer work, ZIP sync, authenticated challenge
+  transport or Windows/Minecraft tests were performed in P16.
+
+References:
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/screendisplay?view=minecraft-bedrock-stable
+- https://learn.microsoft.com/en-us/minecraft/creator/documents/scripting/multiplayer-scripts?view=minecraft-bedrock-stable
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/scripteventsource?view=minecraft-bedrock-stable
+- https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features
+- https://edusupport.minecraft.net/hc/en-us/articles/360061369132-Classroom-Settings
