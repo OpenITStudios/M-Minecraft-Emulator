@@ -107,14 +107,19 @@
     previewsVisible: page === 'workspace' && !detached,
   });
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
-  // F3 is a read-only view of the selected, still-matching native game.
-  // Neither first running slot nor a stale process can stand in for it.
+  // Only reuse original Play-owner in-flight decisions; never create
+  // another controller, poller or mutable native session identity.
+  $: f3ActionPending = busy || closeReviewPending || queued !== null ||
+    queuedPage !== null || queuedLaunch !== null || requested !== null ||
+    manualRefreshRequested || manualRefreshing;
+  // Last matching native observation only, not continuously verified gameplay.
   $: f3View = projectF3Inspector({
     selectedSlot: active,
     profile: active === null ? undefined : profiles.find(profile => profile.slot === active),
+    actionPending: f3ActionPending,
     currentSelection: nativeBackend === 'WindowsNative' && page === 'workspace' &&
       !initializing && available && binding?.configured === true && !detached &&
-      !closeInProgress && !nativeExitReview && active !== null &&
+      !f3ActionPending && !closeInProgress && !nativeExitReview && active !== null &&
       !uncertainWindowSlots.has(active) && selectedIdentity !== '' &&
       selectedIdentity === identity(profiles.find(profile => profile.slot === active)),
     settings: settings ?? null,

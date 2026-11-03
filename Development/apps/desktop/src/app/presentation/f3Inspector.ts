@@ -3,7 +3,7 @@
 // authenticated local-player/world coordinates or measured display FPS.
 import type {ProfileSession, ProfileSlot, SettingsReport} from '../bridge/lazyTester.js';
 
-export type F3SourceStatus = 'NO_SELECTION' | 'NOT_CURRENT' | 'NATIVE_PROCESS_OBSERVED';
+export type F3SourceStatus = 'NO_SELECTION' | 'ACTION_PENDING' | 'NOT_CURRENT' | 'NATIVE_PROCESS_OBSERVED';
 
 export interface F3Observation {
   readonly selectedSlot: ProfileSlot | null;
@@ -12,6 +12,8 @@ export interface F3Observation {
   // current session observation, window state and retained process birth.
   // UI presentation only; it is not proof of game/player/world identity.
   readonly currentSelection: boolean;
+  // An original Play launch/close/switch pending gate, not a game-owner claim.
+  readonly actionPending: boolean;
   readonly settings: SettingsReport | null;
 }
 
@@ -52,6 +54,9 @@ export function projectF3Inspector(value: F3Observation): F3InspectorView {
     coordinates: 'Not connected', rotation: 'Not connected', dimension: 'Not connected',
   });
 
+  if (value.actionPending) {
+    return unavailable('ACTION_PENDING', 'Launcher action pending. Native F3 details are withheld until it finishes.');
+  }
   if (value.selectedSlot === null) {
     return unavailable('NO_SELECTION', 'Select a Minecraft launcher in Play to inspect its native process.');
   }
@@ -69,13 +74,13 @@ export function projectF3Inspector(value: F3Observation): F3InspectorView {
   const configuredFps = value.settings &&
     Number.isInteger(value.settings.activeFps) &&
     Number.isInteger(value.settings.backgroundFps)
-      ? 'Active ' + value.settings.activeFps + ' / background ' +
-        value.settings.backgroundFps + ' FPS (configured, not measured)'
+      ? 'Last reported targets: active ' + value.settings.activeFps + ' / background ' +
+        value.settings.backgroundFps + ' FPS (not measured or confirmed for this game)'
       : 'Not available from current settings';
   return {
     sourceStatus: 'NATIVE_PROCESS_OBSERVED',
     clientLabel,
-    summary: 'Windows process observed. Minecraft player, world and gameplay are NOT verified.',
+    summary: 'Last Windows session observation matched this client. Minecraft player, world and gameplay are NOT verified.',
     nativeState: NATIVE_STATES[profile.state],
     processId: String(process.pid),
     windowsSession: String(process.sessionId),

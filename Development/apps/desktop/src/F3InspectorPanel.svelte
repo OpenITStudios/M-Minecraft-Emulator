@@ -21,7 +21,7 @@
   <summary bind:this={summaryElement} aria-label="Open read-only F3 Inspector">F3 Inspector</summary>
   <div class="lt-coordinate-popup lt-f3-popup" role="group" aria-label="F3 Inspector for selected Minecraft">
     <strong>F3 Inspector</strong>
-    <small class="lt-coordinate-status">Read-only · Native session observations</small>
+    <small class="lt-coordinate-status">Read-only · Last native session observation</small>
     <p class="lt-f3-summary" role="status">{view.summary}</p>
     <dl class="lt-f3-data">
       <dt>Selected client</dt><dd>{view.clientLabel}</dd>
@@ -29,7 +29,7 @@
       <dt>Process PID</dt><dd>{view.processId}</dd>
       <dt>Windows session</dt><dd>{view.windowsSession}</dd>
       <dt>Game window</dt><dd>{view.nativeWindow}</dd>
-      <dt>FPS limit</dt><dd>{view.configuredFps}</dd>
+      <dt>FPS targets (last report)</dt><dd>{view.configuredFps}</dd>
       <dt>Measured FPS</dt><dd>{view.measuredFps}</dd>
       <dt>Player XYZ</dt><dd>{view.coordinates}</dd>
       <dt>Rotation</dt><dd>{view.rotation}</dd>

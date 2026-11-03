@@ -798,3 +798,34 @@ client readiness and five-profile correctness are NOT_EXECUTED.
 Official education sources:
 - https://edusupport.minecraft.net/hc/en-us/community/posts/27889945431572-How-to-display-the-debug-screen-in-minecraft-education-edition
 - https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features
+
+## P14 — Pending action exclusion and accurate F3 FPS target provenance (3 November 2026)
+
+A native F3 inspector can otherwise display a formerly selected
+PID/window while a close review, replacement selection, queued
+launch or navigation is already pending. P14 derives
+f3ActionPending from existing busy/closeReviewPending/queued
+selection/queued page/queued launch/requested launch/manual refresh
+fields. This is a read-only Svelte derivation, not another lifecycle
+manager or mutable process ownership state.
+
+During such an action the pure F3 projection emits ACTION_PENDING
+before accepting any old selected PID, Windows session, window
+or settings values. It withholds all native details until the
+original operation settles and an existing selected identity
+matches its last validated native snapshot again.
+
+The F3 view now explicitly identifies active/background FPS numbers
+as **last reported GLOBAL targets** (which may not yet have been
+applied to the currently running game). They are not measured
+frame rates or actual per-client limits. A normal periodic native
+Inspect continues to display the last observation rather than
+flickering while waiting for an observation request.
+
+Existing measured FPS, XYZ, rotation and dimension remain
+Not exposed to desktop / Not connected. No new native IPC, HUD,
+Script API module, network listener, logging or clipboard access.
+Regression fixtures cover pending action precedence over an
+otherwise matching selected process and absence of measured FPS.
+Source tests were AUTHORED_NOT_EXECUTED. Windows, Svelte/TS,
+gameplay and CI remain NOT_EXECUTED.

@@ -203,6 +203,16 @@ new-revision acceptance.
   Pure-view and UI source tests AUTHORED_NOT_EXECUTED; no Windows
   gameplay or source compilation claimed.
 
+- **P14 F3 Inspector pending-operation admission (3 November, source-only):**
+  original UI busy/close-review/switch/launch/navigation markers
+  now withhold previous PID/window/settings (ACTION_PENDING) until
+  the original operation settles. This is a derived pure projection,
+  not new process or game ownership. F3 shows last reported GLOBAL
+  FPS target limits as settings, never a per-client measured rate;
+  all live player fields remain unavailable. Added regression fixtures
+  AUTHORED_NOT_EXECUTED; no extra native IPC, game hook,
+  clipboard permission, collector or launcher layout change.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -424,11 +434,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P13 creates the
-initial read-only custom F3 Inspector for existing native selected
-client observations. Preserve P12 exact manual paste and existing
-native HUD; the outstanding goal is verified live local-player
-position/rotation/world and future true per-client telemetry. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P14 protects F3
+against stale process display during original queued/closing
+actions, and distinguishes configured FPS target settings
+from actual per-client frame measurements. The critical live
+F3 blocker remains authenticated local player/world provenance. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -437,21 +447,16 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: audit the P13 custom F3 Inspector source, particularly
-selection changes, native-recovery state, and the display distinction
-between configured FPS versus measured FPS. Fix any concrete
-source-only bug under the existing presentation owner. The
-F3 surface is real UI code but NOT a verified in-game debug HUD.
+Next: inspect original team/Skills Probe capture compatibility
+and existing exact-PID window visual evidence for any legitimate,
+independently attributable local-player/world position sample.
+Do not copy team analytics code, create a second Script API emitter,
+assume screenshot/log/PID reveals the local actor, or enable
+auto F3/Copy without real Education 26.33 evidence.
 
-Separately, real live XYZ/rotation/dimension requires a
-per-client/player/world authenticated Education source; it remains
-BLOCKED. Official Minecraft Education has Show Coordinates in
-world settings but not Java's built-in F3 screen. Do not
-open /connect, create a WebSocket listener, install a duplicate
-team logger, infer world ownership from PID, add auto clipboard
-or change any game/world permissions. Native DXGI FPS remains
-local to its original child HUD and is NOT exposed as desktop FPS.
-
-Rust/C++/Svelte/TS source tests, native Windows, Minecraft
-gameplay and CI are NOT_EXECUTED. Unrelated Testing recovery
-sealed CAS remains BLOCKED pending independent attestation.
+Native F3 currently displays the last selected Windows process
+observation and last reported global FPS TARGET settings only;
+measured FPS remains exclusively in the game's in-process DXGI HUD.
+Manual Paste XYZ stays explicitly USER_PASTED_UNVERIFIED.
+Source suites, Windows, Minecraft and CI remain NOT_EXECUTED.
+Unrelated Testing recovery sealed CAS remains independently BLOCKED.

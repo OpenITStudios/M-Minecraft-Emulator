@@ -16,7 +16,7 @@ const settings: SettingsReport = {
 describe('F3 Inspector native-only projection (no Minecraft source)', () => {
   it('never borrows a background game when Play has no selected client', () => {
     const v = projectF3Inspector({
-      selectedSlot: null, profile: profile(), currentSelection: true, settings,
+      selectedSlot: null, profile: profile(), currentSelection: true, actionPending: false, settings,
     });
     expect(v.sourceStatus).toBe('NO_SELECTION');
     expect(v.clientLabel).toBe('No selected client');
@@ -27,9 +27,9 @@ describe('F3 Inspector native-only projection (no Minecraft source)', () => {
 
   it('removes PID and other native observations if selection is stale or slot mismatched', () => {
     for (const record of [
-      {selectedSlot: 2 as ProfileSlot, profile: profile(), currentSelection: false, settings},
-      {selectedSlot: 3 as ProfileSlot, profile: profile(), currentSelection: true, settings},
-      {selectedSlot: 2 as ProfileSlot, profile: undefined, currentSelection: true, settings},
+      {selectedSlot: 2 as ProfileSlot, profile: profile(), currentSelection: false, actionPending: false, settings},
+      {selectedSlot: 3 as ProfileSlot, profile: profile(), currentSelection: true, actionPending: false, settings},
+      {selectedSlot: 2 as ProfileSlot, profile: undefined, currentSelection: true, actionPending: false, settings},
     ]) {
       const v = projectF3Inspector(record);
       expect(v.sourceStatus).toBe('NOT_CURRENT');
@@ -39,14 +39,48 @@ describe('F3 Inspector native-only projection (no Minecraft source)', () => {
     }
   });
 
+  it('withholds the former game on queued selection/launch/close even if its PID still matches', () => {
+    const pending = projectF3Inspector({
+      selectedSlot: 2, profile: profile(), currentSelection: true,
+      actionPending: true, settings,
+    });
+    expect(pending.sourceStatus).toBe('ACTION_PENDING');
+    expect(pending.processId).toBe('—');
+    expect(pending.windowsSession).toBe('—');
+    expect(pending.nativeWindow).toBe('Unavailable');
+    expect(pending.configuredFps).toBe('Not available');
+    expect(pending.summary).toContain('Launcher action pending');
+    const noSelection = projectF3Inspector({
+      selectedSlot: null, profile: profile(), currentSelection: false,
+      actionPending: true, settings,
+    });
+    expect(noSelection.sourceStatus).toBe('ACTION_PENDING');
+    expect(noSelection.processId).toBe('—');
+  });
+
+  it('labels last saved FPS targets separately from observed per-client FPS', () => {
+    const p = projectF3Inspector({
+      selectedSlot: 2, profile: profile(), currentSelection: true,
+      actionPending: false, settings,
+    });
+    expect(p.configuredFps).toContain('Last reported targets');
+    expect(p.configuredFps).toContain('not measured or confirmed for this game');
+    expect(p.measuredFps).toBe('Not exposed to desktop');
+    const noSettings = projectF3Inspector({
+      selectedSlot: 2, profile: profile(), currentSelection: true,
+      actionPending: false, settings: null,
+    });
+    expect(noSettings.configuredFps).toBe('Not available from current settings');
+  });
+
   it('shows exact selected client native process with configured (not measured) FPS', () => {
     const v = projectF3Inspector({
-      selectedSlot: 2, profile: profile(), currentSelection: true, settings,
+      selectedSlot: 2, profile: profile(), currentSelection: true, actionPending: false, settings,
     });
     expect(v).toMatchObject({
       sourceStatus: 'NATIVE_PROCESS_OBSERVED', clientLabel: 'MC02',
       processId: '232', windowsSession: '1',
-      configuredFps: 'Active 144 / background 10 FPS (configured, not measured)',
+      configuredFps: 'Last reported targets: active 144 / background 10 FPS (not measured or confirmed for this game)',
       measuredFps: 'Not exposed to desktop', coordinates: 'Not connected',
       rotation: 'Not connected', dimension: 'Not connected',
     });
@@ -57,14 +91,14 @@ describe('F3 Inspector native-only projection (no Minecraft source)', () => {
     const down = profile();
     down.state = 'NOT_RESPONDING';
     down.process = {...down.process!, responding: false};
-    const v = projectF3Inspector({selectedSlot: 2, profile: down, currentSelection: true, settings: null});
+    const v = projectF3Inspector({selectedSlot: 2, profile: down, currentSelection: true, actionPending: false, settings: null});
     expect(v.nativeState).toBe('Not responding');
     expect(v.nativeWindow).toBe('Not responding (Windows observation)');
     expect(v.measuredFps).toBe('Not exposed to desktop');
     const dead = profile();
     dead.state = 'STOPPED';
     dead.process = null;
-    expect(projectF3Inspector({selectedSlot: 2, profile: dead, currentSelection: true, settings})
+    expect(projectF3Inspector({selectedSlot: 2, profile: dead, currentSelection: true, actionPending: false, settings})
       .processId).toBe('—');
   });
 });
@@ -79,6 +113,11 @@ describe('F3 Inspector presentation-only integration', () => {
     expect(app).toContain("import {projectF3Inspector} from './app/presentation/f3Inspector.js';");
     expect(app).toContain('selectedIdentity === identity(profiles.find(profile => profile.slot === active))');
     expect(app).toContain('!uncertainWindowSlots.has(active)');
+    expect(app).toContain('actionPending: f3ActionPending,');
+    expect(app).toContain('!f3ActionPending && !closeInProgress');
+    expect(app).toContain('busy || closeReviewPending || queued !== null');
+    expect(app).toContain('queuedPage !== null || queuedLaunch !== null || requested !== null');
+    expect(app).toContain('manualRefreshRequested || manualRefreshing;');
     expect(app).toContain("<F3InspectorPanel view={f3View} />");
     expect(app).toContain("<CoordinatePastePanel />");
     expect(app).toContain('<LauncherRail {profiles} {labels} {healthIssues}');
@@ -92,6 +131,7 @@ describe('F3 Inspector presentation-only integration', () => {
     }
     expect(ui).toContain('{view.coordinates}');
     expect(ui).toContain('Show Coordinates');
+    expect(ui).toContain('FPS targets (last report)');
     expect(ui).toContain('F3 Inspector');
     expect(ui).toContain('<svelte:window on:keydown={closeOnEscape} />');
   });
