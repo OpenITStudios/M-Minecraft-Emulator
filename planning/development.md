@@ -112,6 +112,23 @@ new-revision acceptance.
   Rust test fixtures AUTHORED_NOT_EXECUTED; source builds, Windows,
   Minecraft and CI NOT_EXECUTED. Manual Paste XYZ unchanged.
 
+- **F3 P7 transport decision (3 November, research-only):** official
+  Education 26.33 changelog does not attest an external position
+  stream. Code Builder player.position() has current-player context
+  but NO proven read-only desktop export or yaw/pitch. Microsoft
+  Bedrock /connect command requires cheats/admin per its Bedrock
+  docs; Education 26.33 runtime behavior is UNKNOWN. Community
+  WebSocket bridges require extra behavior packs/servers and report
+  packaged-app loopback exemptions; do NOT add these to Lazy Tester.
+  Microsoft's old Bedrock Code Connection lost support in 2023;
+  Education's 2023 1.X compatibility entry is not 26.33 proof.
+  WIN TCP 4-tuple owner PID alone cannot authenticate coordinates.
+  Decision: no adapter/listener/game changes or more synthetic
+  authorization fixtures without a real approved endpoint. Retain
+  P4 manual unverified Paste XYZ and P6 test-only witness.
+  Next source owner is EXISTING DXGI FPS HUD for source-only
+  F3 performance feasibility review; no tests/Windows/CI run.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -333,10 +350,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** assess the actual client-local
-F3 coordinate source without copying the original team's in-game
-analytics engine. Preserve manual P4 Paste XYZ as the supported
-source-authored, UNVERIFIED fallback. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** preserve the P7
+block on unsupported/unverified game connection assumptions.
+Shift source-only F3 effort to the EXISTING native DXGI FPS HUD
+owner while keeping manual P4 Paste XYZ unverified and preserving
+the original team's analytics ownership. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -345,16 +363,23 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: examine whether an actual Education 26.33 client-originated
-connection/position protocol exists before adding an OS TCP table
-adapter. A real observed endpoint and a way to attribute local player
-and world to the original MCxx process are mandatory. The P6 test-only
-witness provides no such evidence, never reads Windows TCP tables
-or permits live F3 Copy. Do not open a speculative listener,
-write game commands, add a controller, auto-read clipboard or
-enable global shortcuts. Keep manual Paste XYZ as the safe fallback.
+Next: inspect the existing bootstrap-ordering/fps-hud.cpp native
+DXGI Present/Present1 owner plus its present-control/lifetime owners
+and canonical consumers. Identify whether a read-only per-client
+frame-present-rate observation can be reused in the F3 inspector
+without a second monitor, injected hook, new native IPC path or
+unjustified on-screen/gameplay FPS claim. If it cannot, stop and
+preserve the current native overlay unchanged.
 
-Source Rust/Node/TS test suites, Windows, Minecraft and CI remain
-NOT_EXECUTED. Testing recovery sealed CAS remains separately BLOCKED
-pending native archive verification and independently authenticated
-operator approval; no Testing or IPC paths changed.
+Automatic XYZ/Copy via Code Builder /connect remains BLOCKED:
+Education 26.33 source protocol, approved endpoint, process/socket
+ownership and world/local-player attribution are NOT_VERIFIED.
+Do not attempt a third-party MCP add-on, network listener,
+AppContainer loopback exemption, permission/cheats changes,
+external Code Connection app or Windows game execution. Manual
+Paste XYZ remains UNVERIFIED and separate from verified live F3.
+
+Source test suites, Windows, Minecraft and CI are NOT_EXECUTED.
+Unrelated Testing recovery sealed CAS remains BLOCKED pending
+native archive verification and independently authenticated
+Windows operator approval. No native IPC or Testing path was changed.

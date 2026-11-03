@@ -429,3 +429,91 @@ Official references:
 - https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable
 - https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcptable_owner_pid
 - https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcp6table_owner_pid
+
+## P7 — 26.33 client-local coordinate transport admission (3 November 2026)
+
+### Evidence outcome: no supported automatic F3 source has been verified
+
+This is an explicit STOP on speculative connection code, not a finding
+that Minecraft Education can never expose client-local position. The
+official Education changelog confirms version 26.33 released 28 October
+2026, but documents only fixes for this patch; it does not describe
+a supported desktop-read-only position streaming API.
+
+**Current supported product behavior** remains P4's user-pasted,
+USER_PASTED_UNVERIFIED XYZ -> block/teleport text. Its data cannot be
+attributed automatically to MC01-MC05, world or player. The native FPS
+overlay measures DXGI Present/Present1 acceptance, not player position.
+
+### Candidate source audit and corrected assumptions
+
+| Source | Confirmed | Not established / consequence |
+| --- | --- | --- |
+| Official Education Code Builder | Accessible through the assigned C key, MakeCode player.position() returns the current Code Builder player's world position | Does not expose a documented, authenticated read-only desktop export, yaw/pitch or full F3; the official Code Builder help says /code no longer works |
+| Microsoft /wsserver, alias /connect | Bedrock creator command docs specify connecting to a WebSocket URI, admin permission and cheats | These are Bedrock command requirements, not a verified Education 26.33 permission profile; connection can carry commands, so not a read-only telemetry contract |
+| Community Education/Bedrock WebSocket bridges | A maintained third-party source repository describes /connect and a Script API behavior pack | This is a claim about its own setup, not official Education 26.33 acceptance. It requires installing/enabling an extra world behavior pack and a separate server, conflicting with the existing team's exclusive telemetry ownership |
+| Packaged-app localhost connectivity | Official Windows UWP guidance explains loopback restrictions and CheckNetIsolation exemptions for packaged apps | A third-party guide reports needing such an exemption on Education Windows; do not modify AppContainer exemptions, elevated system policy or network settings to make this feature work |
+| Standalone Code Connection | Microsoft MakeCode announced end-of-support and removal from the Store on 1 December 2023 for the old Bedrock Windows companion | Education's historical changelog still lists Code Connection 1.X as compatible with 1.19.xx and higher; that older compatibility statement is NOT 26.33 runtime verification or current maintenance support. Do not conflate these facts |
+| Windows GetExtendedTcpTable and P6 fixture | Can map an observed IPv4/IPv6 TCP four-tuple to the OS-reported owner PID | Without an actual approved endpoint this is a hypothetical query. Even a matching PID/creation FILETIME cannot authenticate Minecraft local player, world or returned coordinate payload |
+
+### Decision and security invariants
+
+1. Keep automatic F3/Copy and any GetExtendedTcpTable runtime adapter
+   **DISCONNECTED** until an authorized Education 26.33 client-origin
+   endpoint, data format, and real actor/world provenance are observed.
+   Absence of protocol proof is a blocker, not something a type or
+   synthetic fixture can overcome.
+2. Never introduce another Script API collection module, MCWSS bridge,
+   background listener, Tauri/MCP input service, WebSocket server or
+   fallback game control; the original team modules own analytics.
+3. Never elevate permissions, change cheats/world policies, install
+   third-party behavior packs, disable WebSocket encryption, or add
+   Windows loopback exemptions as an implicit side effect.
+4. Do not reuse unrelated Education network traffic (multiplayer,
+   authentication, MakeCode HTTPS/WSS or relay connections) as a
+   provenance witness. Those sockets are not a position telemetry
+   protocol and may be owned by an unrelated helper process.
+5. No field from an unauthenticated stream or user paste can set
+   copyAllowed=true in coordinateEvidence.ts. Retain P6 PID/tuple
+   experiments as private cfg(test) fixtures with no OS calls.
+
+### Practical path not requiring an automatic connection
+
+For player-initiated use only, Minecraft Education's Code Builder
+can display player.position() within its own current-player context;
+the existing P4 panel then accepts explicitly entered XYZ text.
+This is *manual, unverified* and is not automatic Copy Coordinate.
+Code Builder's availability does not imply the old /code command
+or an external WebSocket connection is usable.
+
+### Next implementation work that is independent of the blocker
+
+Source-inspect the EXISTING native DXGI FPS HUD owner
+(Development/tooling/acceptance/windows/bootstrap-ordering/fps-hud.cpp)
+for its render-rate semantics, lifetime, client association and
+actual reuse constraints. Only consider an F3 read-only performance
+presentation if the current native source safely exposes a per-client
+sample without a second collector, added hook, new transport, or
+claim of displayed FPS. Do not repurpose the blocked position bridge.
+
+P7 changed only this design and the single handoff owner. No TCP query,
+client connection, game command, native source, behavior pack, clipboard
+permission, Windows test, compiler/test suite or CI was run.
+
+Public references:
+- Minecraft Education releases and Code Connection historical table:
+  https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log
+- Minecraft Education Code Builder help:
+  https://edusupport.minecraft.net/hc/en-us/articles/360047116992-Code-Builder-in-Minecraft-Education
+- Microsoft MakeCode current player position:
+  https://minecraft.makecode.com/reference/player/position
+- Microsoft Bedrock /wsserver documentation:
+  https://learn.microsoft.com/en-us/minecraft/creator/commands/commands/wsserver?view=minecraft-bedrock-stable
+- Microsoft PXT 2023 old Code Connection end-of-support:
+  https://github.com/microsoft/pxt/blob/master/docs/blog/minecraft/2023-release.md
+- Microsoft UWP loopback exception guidance:
+  https://learn.microsoft.com/en-us/windows/security/operating-system-security/network-security/windows-firewall/troubleshooting-uwp-firewall
+- Community implementation (untrusted as acceptance; do NOT install):
+  https://github.com/Mming-Lab/minecraft-bedrock-education-mcp
+- Windows TCP owner API:
+  https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable
