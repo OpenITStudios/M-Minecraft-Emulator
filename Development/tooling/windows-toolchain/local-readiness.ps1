@@ -2,6 +2,7 @@
 $ErrorActionPreference = 'Stop'
 $Root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../..'))
 $script:Blocked = 0
+$gitReady = $false
 function Report {
     param([string]$Status, [string]$Detail)
     Write-Output "[$Status] $Detail"
@@ -18,6 +19,21 @@ function Get-ExpectedDigest {
         throw "Invalid native digest: $Field"
     }
     return (@($octets | ForEach-Object { $_.Groups[1].Value.ToLowerInvariant() }) -join '')
+}
+# The local packager rejects reparse paths for reviewed native DLLs.
+function Test-OrdinaryDirectoryChain {
+    param([string]$Path)
+    $current = [IO.Path]::GetFullPath($Path)
+    while ($true) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+        if (-not $item.PSIsContainer -or
+            ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            return $false
+        }
+        $parent = [IO.Directory]::GetParent($current)
+        if ($null -eq $parent) { return $true }
+        $current = $parent.FullName
+    }
 }
 Write-Output 'Lazy Tester / Local PC prerequisites (READ ONLY)'
 Write-Output 'Source and file checks only: not an app, compiler, installer, or Minecraft test.'
@@ -41,6 +57,7 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         $dirtyExit -ne 0 -or $dirty.Count -gt 0) {
         Report 'BLOCKED' 'Require clean Local branch and valid SHA. Do not reset existing edits.'
     } else {
+        $gitReady = $true
         Report 'FOUND' "Clean Local source: $head (remote freshness not checked)."
     }
 }
@@ -49,23 +66,42 @@ foreach ($lock in @(
     'Development/apps/desktop/src-tauri/Cargo.lock',
     'Development/engine/runtime-core/Cargo.lock'
 )) {
-    if (Test-Path -LiteralPath (Join-Path $Root $lock) -PathType Leaf) {
-        Report 'FOUND' "Tracked lockfile present: $lock (not compiled)."
-    } else {
+    if (-not (Test-Path -LiteralPath (Join-Path $Root $lock) -PathType Leaf)) {
         Report 'BLOCKED' "Missing lockfile: $lock."
+    } elseif ($gitReady) {
+        & git -C $Root ls-files --error-unmatch -- $lock 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Report 'FOUND' "Tracked lockfile present: $lock (not compiled)."
+        } else {
+            Report 'BLOCKED' "Lockfile exists but is not tracked by Git: $lock."
+        }
+    } else {
+        Report 'CHECK' "Lockfile present but Git source authority is not verified: $lock."
     }
 }
-$missingTools = @(@(
+$requiredTools = @(
     'workspace/toolchains/node/node.exe',
     'workspace/toolchains/node/npm.cmd',
     'workspace/toolchains/powershell/pwsh.exe',
     'workspace/toolchains/cargo/bin/cargo.exe',
-    'workspace/toolchains/cargo/bin/rustc.exe'
-) | Where-Object { -not (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf) })
+    'workspace/toolchains/cargo/bin/rustc.exe',
+    'workspace/toolchains/cargo/bin/rustfmt.exe'
+)
+$missingTools = @($requiredTools | Where-Object {
+    -not (Test-Path -LiteralPath (Join-Path $Root $_) -PathType Leaf)
+})
 if ($missingTools.Count) {
-    Report 'BLOCKED' 'Portable developer toolchain missing. Use DEV.cmd bootstrap, then doctor.'
+    Report 'BLOCKED' 'Portable developer toolchain incomplete (including rustfmt). Use DEV.cmd bootstrap, then doctor.'
 } else {
-    Report 'FOUND' 'Portable tools present; DEV.cmd doctor must validate versions.'
+    $unsafeTools = @($requiredTools | Where-Object {
+        $item = Get-Item -LiteralPath (Join-Path $Root $_) -Force -ErrorAction Stop
+        ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+    })
+    if ($unsafeTools.Count) {
+        Report 'BLOCKED' 'Portable tool executable is a reparse point; review workspace toolchains.'
+    } else {
+        Report 'FOUND' 'Portable tool files present; DEV.cmd doctor must validate versions.'
+    }
 }
 # Same SDK path/versioned x64 resource compiler requirement as build-root-launcher.mjs.
 $sdk = 'C:\Program Files (x86)\Windows Kits\10\bin'
@@ -81,14 +117,27 @@ if ($resourceCompilers.Count) {
 }
 $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
 if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
-    $vs = (& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null | Out-String).Trim()
-    if ($LASTEXITCODE -eq 0 -and $vs) {
-        Report 'FOUND' 'Visual Studio MSVC x64 installation registered; compilation untested.'
-    } else {
-        Report 'CHECK' 'Verify Visual Studio MSVC x64 C++ Build Tools before building.'
+    try {
+        $vs = (& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null | Out-String).Trim()
+        $vcRoot = if ($LASTEXITCODE -eq 0 -and $vs) { Join-Path $vs 'VC/Tools/MSVC' } else { '' }
+        if ($vcRoot -and (Test-Path -LiteralPath $vcRoot -PathType Container)) {
+            $vcTools = @(Get-ChildItem -LiteralPath $vcRoot -Directory -ErrorAction Stop | Where-Object {
+                (Test-Path -LiteralPath (Join-Path $_.FullName 'bin/Hostx64/x64/cl.exe') -PathType Leaf) -and
+                (Test-Path -LiteralPath (Join-Path $_.FullName 'bin/Hostx64/x64/link.exe') -PathType Leaf)
+            })
+            if ($vcTools.Count) {
+                Report 'FOUND' 'Registered MSVC x64 cl.exe and link.exe found; compilation untested.'
+            } else {
+                Report 'BLOCKED' 'MSVC x64 cl.exe/link.exe missing under registered Visual Studio tools.'
+            }
+        } else {
+            Report 'BLOCKED' 'Visual Studio MSVC x64 Build Tools not registered.'
+        }
+    } catch {
+        Report 'BLOCKED' "MSVC x64 Build Tools inspection failed: $($_.Exception.Message)"
     }
 } else {
-    Report 'CHECK' 'MSVC installation not independently detected; inspect Visual Studio Build Tools.'
+    Report 'BLOCKED' 'Visual Studio vswhere.exe missing; install MSVC x64 C++ Build Tools before building.'
 }
 Report 'CHECK' 'WebView2 and official Minecraft Education require separate Windows observation.'
 # Parse only the existing Rust-approved standard DLL digests. This is not an
@@ -116,6 +165,8 @@ try {
     } elseif (-not [IO.Path]::IsPathRooted($directory) -or
         -not (Test-Path -LiteralPath $directory -PathType Container)) {
         Report 'BLOCKED' 'Reviewed native directory must be an existing absolute local path.'
+    } elseif (-not (Test-OrdinaryDirectoryChain -Path $directory)) {
+        Report 'BLOCKED' 'Reviewed native directory or ancestor is not an ordinary directory.'
     } else {
         $matched = $true
         foreach ($name in @('bootstrap-compat.dll', 'bootstrap-enroll.dll')) {
