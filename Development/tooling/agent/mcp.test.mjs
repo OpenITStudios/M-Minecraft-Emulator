@@ -2323,6 +2323,136 @@ test('four/five opted-in AI action streams preserve per-slot neutral cleanup',as
 });
 
 
+// Read-only fixture for an already cached PNG. There is no actual native
+// window, GPU worker or screenshot; only the MCP dispatch path is exercised.
+function deliveredVisualFixture() {
+  const identity={pid:502,windowId:1202,sessionId:1,
+    createdFileTime:'134000000000000001'};
+  const metadata={schema:1,slot:2,active:true,
+    status:'FRAME_BYTES_CHANGED_NOT_SEMANTIC_PROOF',
+    freshFrameAvailable:true,sequence:4,successfulSamples:4,
+    collectedAt:'2026-11-03T10:00:00.000Z',
+    sourceFrameAtMs:Date.parse('2026-11-03T10:00:00.000Z')-100,
+    sourceTimeKind:'CUA_QUERY_STARTED',producerSequence:null,
+    frameAgeMs:100,captureIdentity:identity,
+    width:800,height:600,screenReviewFrameDelivered:false};
+  const observed={...metadata};
+  const reads=[],stops=[];
+  let delivered=false;
+  return {identity,observed,reads,stops,
+    factory:()=>({
+      read(slot,{afterSequence=0,includeImage=false}={}){
+        assert.equal(slot,2);
+        reads.push(includeImage);
+        const send=includeImage&&observed.freshFrameAvailable===true&&
+          observed.sequence>afterSequence;
+        if(send)delivered=true;
+        return {metadata:{...observed,hasNewImage:send,
+          screenReviewFrameDelivered:delivered},
+          imageBase64:send?'a'.repeat(64):null};
+      },
+      stop(slots){stops.push([...slots]);observed.freshFrameAvailable=false;
+        return {status:'STOP_REQUESTED'};},
+      start(){throw Error('No screenshot requested');},
+      shutdown(){},
+    }),
+    native:async(_exe,operation,slot)=>({
+      schema:1,ok:true,operation:'target',slot,...identity,
+      foreground:false,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+      gameplayInput:'NOT_VERIFIED',
+    }),
+  };
+}
+
+test('an explicit cached PNG read revalidates the exact live native window once',async()=>{
+  const fixture=deliveredVisualFixture();
+  let nativeReads=0;
+  const handler=createHandler(config(),{
+    visualObserverFactory:fixture.factory,
+    native:async(...args)=>{nativeReads++;return fixture.native(...args);},
+  });
+  const metadata=await handler.callTool('read_visual_observation',{
+    slot:2,includeImage:false,
+  });
+  assert.equal(metadata.imageBase64,null);
+  assert.equal(nativeReads,0,'metadata-only reads stay local and inexpensive');
+  const image=await handler.callTool('read_visual_observation',{
+    slot:2,afterSequence:0,includeImage:true,
+  });
+  assert.equal(image.metadata.hasNewImage,true);
+  assert.equal(image.imageBase64,'a'.repeat(64));
+  assert.equal(nativeReads,1);
+  assert.deepEqual(fixture.reads,[false,false,true]);
+  const duplicate=await handler.callTool('read_visual_observation',{
+    slot:2,afterSequence:4,includeImage:true,
+  });
+  assert.equal(duplicate.imageBase64,null);
+  assert.equal(nativeReads,1,'no new image means no native lookup');
+  handler.shutdown();
+});
+
+test('a replaced Minecraft process revokes stale PNG before model delivery',async()=>{
+  for(const changedField of ['pid','windowId','sessionId','createdFileTime']){
+    const fixture=deliveredVisualFixture();
+    const handler=createHandler(config(),{
+      visualObserverFactory:fixture.factory,
+      native:async(...args)=>{
+        const v=await fixture.native(...args);
+        return {...v,[changedField]:changedField==='createdFileTime'?
+          '134000000000000002':v[changedField]+1};
+      },
+    });
+    await assert.rejects(()=>handler.callTool('read_visual_observation',{
+      slot:2,includeImage:true,
+    }),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
+    assert.deepEqual(fixture.reads,[false],
+      'old PNG must not be marked as delivered before native check');
+    assert.deepEqual(fixture.stops,[[2]]);
+    handler.shutdown();
+  }
+});
+
+test('cached screenshot review refuses an unverified replacement, even after prior image delivery',async()=>{
+  const fixture=deliveredVisualFixture();
+  let replaced=false;
+  const handler=createHandler(config(),{
+    visualObserverFactory:fixture.factory,
+    native:async(...args)=>({
+      ...await fixture.native(...args),
+      createdFileTime:replaced?'134000000000000002':fixture.identity.createdFileTime,
+    }),
+  });
+  await handler.callTool('read_visual_observation',{slot:2,includeImage:true});
+  replaced=true;
+  await assert.rejects(()=>handler.callTool('read_visual_observation',{
+    slot:2,includeImage:false,
+    screenReview:{
+      frameSequence:4,sourceFrameAtMs:fixture.observed.sourceFrameAtMs,
+      identity:fixture.identity,recognizedLine:'Position: 12, 64, -8',
+    },
+  }),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
+  assert.deepEqual(fixture.stops,[[2]]);
+  handler.shutdown();
+});
+
+test('cache advancement during native identity check cannot leak an unverified PNG',async()=>{
+  const fixture=deliveredVisualFixture();
+  const handler=createHandler(config(),{
+    visualObserverFactory:fixture.factory,
+    native:async(...args)=>{
+      const v=await fixture.native(...args);
+      fixture.observed.sequence++;
+      return v;
+    },
+  });
+  await assert.rejects(()=>handler.callTool('read_visual_observation',{
+    slot:2,includeImage:true,
+  }),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
+  assert.deepEqual(fixture.reads,[false,true]);
+  handler.shutdown();
+});
+
 function teamVisualFixture(mode='human-plus-four-ai') {
   const slots=mode==='five-ai'?[1,2,3,4,5]:[2,3,4,5];
   const records=new Map(slots.map(slot=>[slot,{

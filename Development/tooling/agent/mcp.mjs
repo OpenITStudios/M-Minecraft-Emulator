@@ -2223,12 +2223,59 @@ export function createHandler(config,{
       if (args.screenReview!==undefined && args.includeImage!==false) {
         throw new Error('Screen text review requires includeImage=false');
       }
-      const observation=visualObserver.read(slot,{
-        afterSequence:args.afterSequence??0,
-        includeImage:args.screenReview===undefined ? args.includeImage??true : false,
-      });
-      // Existing volatile cache only: NO new capture, worker or game command.
-      // Response still never asserts player/world or authorizes clipboard.
+      if (args.includeImage!==undefined && typeof args.includeImage!=='boolean') {
+        throw new Error('Invalid tool arguments');
+      }
+      const afterSequence=args.afterSequence??0;
+      const wantsImage=args.screenReview===undefined && args.includeImage!==false;
+      // First inspect metadata ONLY. Never record a PNG as delivered before
+      // checking that the original native child still owns its PID/HWND.
+      const first=visualObserver.read(slot,{afterSequence,includeImage:false});
+      let observation=first;
+      const mustRevalidate=first.metadata.freshFrameAvailable===true &&
+        (args.screenReview!==undefined ||
+         (wantsImage && first.metadata.sequence>afterSequence));
+      if(mustRevalidate){
+        let live;
+        try {
+          live=validateNativeWindowTarget(
+            await native(config.executable,'target',slot),slot);
+        } catch {
+          // No native identity proof means no cached PNG or screen-text
+          // review, even if the timestamp still falls within 3.5 seconds.
+          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+        }
+        if(!sameNativeVisualTarget(live,first.metadata.captureIdentity)){
+          // Positive replacement: revoke just this slot's stale observer
+          // frame/worker. Native game process and other slots are untouched.
+          visualObserver.stop([slot]);
+          gpuSource?.stop([slot]);
+          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+        }
+        // A sampler may advance/revoke its cache during the native await.
+        // Deliver only the exact frame we verified; newer frames need their
+        // own live identity admission. No new screenshot is collected here.
+        observation=visualObserver.read(slot,{afterSequence,includeImage:wantsImage});
+        const a=first.metadata,b=observation.metadata;
+        if(b.freshFrameAvailable!==true||
+           b.sequence!==a.sequence||
+           b.successfulSamples!==a.successfulSamples||
+           b.collectedAt!==a.collectedAt||
+           b.sourceFrameAtMs!==a.sourceFrameAtMs||
+           b.sourceTimeKind!==a.sourceTimeKind||
+           b.producerSequence!==a.producerSequence||
+           !sameNativeVisualTarget(b.captureIdentity,a.captureIdentity)||
+           (wantsImage && (b.hasNewImage!==true||
+             typeof observation.imageBase64!=='string'))){
+          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+        }
+      } else if(wantsImage) {
+        // No new PNG requested or no usable cached frame: retain the
+        // cheap metadata-only behavior without probing native windows.
+        observation=visualObserver.read(slot,{afterSequence,includeImage:true});
+      }
+      // This remains an ephemeral cache READ, not a screenshot, game input,
+      // player/world attribution or automatic clipboard operation.
       const metadata={...observation.metadata,
         f3VisualReview:projectF3VisualReview(observation.metadata)};
       if(args.screenReview!==undefined){

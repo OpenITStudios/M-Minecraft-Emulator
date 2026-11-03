@@ -10,6 +10,21 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **MCP cached-image read identity admission (3 November, source-only):**
+  `read_visual_observation` formerly returned a recent cached PNG or
+  accepted a transcription review without a fresh native ownership check.
+  A same-slot replacement within the 3.5-second freshness window could
+  therefore supply an image of the previous Minecraft game. Explicit PNG
+  delivery and screen-review calls now first read metadata only, compare
+  the exact cached PID/HWND/session/birth with the existing authenticated
+  native target, and recheck that the same cached sample survives every
+  asynchronous lookup before any image/review is returned. Confirmed
+  replacement revokes only the affected slot's observer cache/producer;
+  unknown target identity fails closed. Metadata-only reads and polls with
+  no new image remain cache-only, avoiding unnecessary native calls.
+  Source-only authored regressions NOT_EXECUTED; Windows capture, Node
+  tests and Minecraft gameplay remain NOT_EXECUTED.
+
 - **MCP observed-action live identity admission (3 November, source-only):**
   the prior `run_experimental_observed_actions` checked only source-time
   identities in the cached visual baseline. A same-slot Minecraft restart
