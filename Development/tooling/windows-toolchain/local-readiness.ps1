@@ -116,6 +116,18 @@ if ($resourceCompilers.Count) {
 } else {
     Report 'BLOCKED' 'Windows SDK x64 rc.exe not found in expected Windows Kits 10 folder.'
 }
+# prepare-process-roles.mjs uses the SDK MUI resource compiler independently
+# of the root launcher's rc.exe. Missing muirct must be caught before npm build.
+$muiResourceCompilers = @()
+if (Test-Path -LiteralPath $sdk -PathType Container) {
+    $muiResourceCompilers = @(Get-ChildItem -LiteralPath $sdk -Directory -ErrorAction Stop |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'x64/muirct.exe') -PathType Leaf })
+}
+if ($muiResourceCompilers.Count) {
+    Report 'FOUND' 'Windows SDK x64 muirct.exe exists; not executed.'
+} else {
+    Report 'BLOCKED' 'Windows SDK x64 muirct.exe required by helper MUI packaging is missing.'
+}
 $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
 if (Test-Path -LiteralPath $vswhere -PathType Leaf) {
     try {

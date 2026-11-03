@@ -30,6 +30,13 @@ new-revision acceptance.
   BLOCKED F3 or experimental AI-input work; the single next action
   below remains unchanged.
 
+- **Windows SDK packaging prerequisite correction (3 November, source-only):**
+  the native helper resource build requires x64 `muirct.exe` as well as
+  root launcher `rc.exe`. The read-only localcheck now refuses a missing
+  MUI compiler before Tauri/Cargo compilation, matching the existing
+  `prepare-process-roles.mjs` consumer. Fixture AUTHORED_NOT_EXECUTED;
+  native tool operation and package remain NOT_EXECUTED.
+
 - **Native DLL first-run admission correction (3 November, source-only):**
   a source-pinned DLL pair discovered in existing `App/` is not sufficient
   to declare dev/package ready if `LAZY_TESTER_NATIVE_PAYLOAD_DIR` is unset.

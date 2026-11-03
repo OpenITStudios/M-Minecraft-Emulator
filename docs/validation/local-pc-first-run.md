@@ -74,7 +74,7 @@ git rev-parse HEAD
 .\DEV.cmd localcheck
 ```
 This checks the clean Git checkout, tracked source lockfiles, six portable
-tool files (including rustfmt), the SDK resource compiler, installed MSVC x64
+tool files (including rustfmt), both SDK resource compilers (`rc.exe` and `muirct.exe`), installed MSVC x64
 compiler/linker paths, and source-pinned DLL hashes including directory links.
 The PowerShell 5.1 check can confirm a 64-bit Windows host, but cannot
 reliably prove native x64 rather than emulated x64 on ARM64. The existing

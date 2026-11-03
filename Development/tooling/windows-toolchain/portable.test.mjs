@@ -47,6 +47,10 @@ test('read-only localcheck and bootstrap error propagation are source-gated', ()
   assert.match(inspection,/Hostx64\/x64\/cl\.exe/);
   assert.match(inspection,/Hostx64\/x64\/link\.exe/);
   assert.match(inspection,/x64\/rc\.exe/);
+  assert.match(inspection,/x64\/muirct\.exe/);
+  const roles=read('apps/desktop/scripts/prepare-process-roles.mjs');
+  assert.match(roles,/x64\/muirct\.exe/);
+  assert.match(inspection,/Report 'BLOCKED' 'Windows SDK x64 muirct\.exe required/);
   assert.match(developer,/if \(\$Command -in @\([^\r\n]*"dev", "package"\)\)/);
   assert.doesNotMatch(inspection,/\b(?:Invoke-WebRequest|Start-Process|Remove-Item|Set-Content|Copy-Item|Move-Item|New-Item|Invoke-Expression)\b/i);
 });
