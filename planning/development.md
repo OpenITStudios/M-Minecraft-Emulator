@@ -10,6 +10,18 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **Selected-window release during reconnect (3 November, source-only):**
+  a read-only Refresh may observe a replaced native process and start
+  releasing the obsolete embedded HWND. If a CloseOne review begins while
+  native release is pending, its updated observation epoch previously
+  discarded the subsequent UI binding cleanup even after release succeeded.
+  The original Play component now retires only the exact released selected
+  binding (slot + PID/birth/session/HWND identity string) before it discards
+  the stale Refresh response. Replacement or separately selected processes
+  are not cleared. No new native caller, game input, retry, or state owner;
+  pure/UI-order regression fixtures AUTHORED_NOT_EXECUTED. Windows/DWM,
+  controller reconnect and Minecraft acceptance remain NOT_EXECUTED.
+
 - **Controller-missing Inspect correction (3 November, source-only):**
   a disconnected or disappeared native session actor previously allowed
   \`Inspect\` to return five STOPPED profiles without checking for independently

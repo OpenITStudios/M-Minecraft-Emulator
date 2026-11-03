@@ -1,10 +1,11 @@
 import {describe, expect, it} from 'vitest';
+import {readFileSync} from 'node:fs';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, nextPendingUiAction, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -47,6 +48,23 @@ describe('Lazy Tester profile contract', () => {
     }
     // Canceling the dialog does not resurrect the old in-flight inspection.
     expect(observationStillCurrent(12,13,idle)).toBe(false);
+  });
+  it('retires only the released selection despite a newer close-review epoch',()=>{
+    // The native Release already succeeded. An unrelated close-review must
+    // not resurrect that old embedded HWND; a replacement remains untouched.
+    const old={slot:2,identity:'102/134000000000000002/1/0x22'};
+    expect(releasedSelectionStillCurrent(old,{...old})).toBe(true);
+    expect(releasedSelectionStillCurrent(old,{slot:2,identity:'102/134000000000000003/1/0x22'})).toBe(false);
+    expect(releasedSelectionStillCurrent(old,{slot:3,identity:old.identity})).toBe(false);
+    expect(releasedSelectionStillCurrent(old,{slot:null,identity:''})).toBe(false);
+    expect(releasedSelectionStillCurrent({slot:null,identity:''},{slot:null,identity:''})).toBe(false);
+    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const begin=source.indexOf('const released = {slot: active, identity: selectedIdentity};');
+    const cleanup=source.indexOf('releasedSelectionStillCurrent(released,{slot: active, identity: selectedIdentity})',begin);
+    const invalidation=source.indexOf('if (!observationStillCurrent(issued, observationEpoch, reviewState())) return;',cleanup);
+    expect(begin).toBeGreaterThanOrEqual(0);
+    expect(cleanup).toBeGreaterThan(begin);
+    expect(invalidation).toBeGreaterThan(cleanup);
   });
   it('drops late preview layout observations on minimize, source swap or close review',()=>{
     const idle: CloseReview = {

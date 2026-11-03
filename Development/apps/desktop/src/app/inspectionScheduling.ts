@@ -44,6 +44,22 @@ export function previewLayoutStillCurrent(
     !current.dirty && current.managerVisible && current.workspaceAvailable;
 }
 
+// A successful native workspace release is a completed side effect, even if
+// a newer close-review epoch has invalidated the Refresh response. Retire only
+// the old selected UI binding, never a different slot/process that could have
+// been selected in the meantime. This is NOT native window ownership.
+export interface SelectedWindowBinding {
+  readonly slot: number | null;
+  readonly identity: string;
+}
+export function releasedSelectionStillCurrent(
+  released: SelectedWindowBinding,
+  current: SelectedWindowBinding,
+): boolean {
+  return released.slot !== null && released.slot === current.slot &&
+    released.identity === current.identity;
+}
+
 // The existing 2s observer remains immediate for live games, launcher and
  // workspace views, and connection recovery. Settings/storage with no active
  // game use a bounded 10s read-only cadence; user actions still refresh

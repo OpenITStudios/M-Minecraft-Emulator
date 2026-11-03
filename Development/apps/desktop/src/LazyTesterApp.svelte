@@ -15,7 +15,7 @@
   import DataStorage from './DataStorage.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
     import {userMessage, userFeedback, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, periodicInspectionDue, nextPendingUiAction, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -244,9 +244,16 @@
         settings=snapshot.settings;
       }
       if (active !== null && selectedIdentity !== identity(profiles.find(profile => profile.slot === active))) {
+        const released = {slot: active, identity: selectedIdentity};
         await workspaceSurface.release();
+        // Release may finish AFTER a CloseOne review starts and increments
+        // observationEpoch. Its completed native side effect must still
+        // retire the previous UI binding. Never clear a newer selection.
+        if (releasedSelectionStillCurrent(released,{slot: active, identity: selectedIdentity})) {
+          active = null; selectedIdentity = '';
+          previewStatuses = []; dirty = true;
+        }
         if (!observationStillCurrent(issued, observationEpoch, reviewState())) return;
-        active = null; selectedIdentity = '';
       }
       if (requested !== null) {
         const profile = profiles.find(profile => profile.slot === requested);
