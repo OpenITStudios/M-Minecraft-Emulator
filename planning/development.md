@@ -10,6 +10,17 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **First local Windows PC test handoff (3 November, source-only):**
+  [one standard desktop runbook](../docs/validation/local-pc-first-run.md)
+  now routes clean `Local` clone, pinned toolchain, source preflight,
+  reviewed native DLL admission, developer UI, optional package and
+  progressive MC01–MC05 tests through existing `DEV.cmd`/`RUN.cmd`.
+  A checkout does NOT contain the two reviewed DLL binaries or a root
+  executable. No tooling, Windows, package, account or gameplay action
+  was executed or approved by documenting it. This does not resume
+  BLOCKED F3 or experimental AI-input work; the single next action
+  below remains unchanged.
+
 - **Desktop:** Tauri/Svelte manager for up to five separately licensed
   native Minecraft Education Windows profiles; the operator launches
   games explicitly. Svelte/typed bridge is presentation only.

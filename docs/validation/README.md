@@ -15,6 +15,11 @@ No VMware/Sandboxie provider is selected in the active product.
 GitHub Actions CI is disabled; all optional verification commands
 remain on-demand, not hosted workflows.
 
+For a **standard desktop clone, first UI run and optional native package**,
+start at the [Windows first-run checklist](local-pc-first-run.md).
+It records the missing reviewed-DLL prerequisite and distinguishes
+preflight, UI smoke tests, packaging and real game acceptance.
+
 **Current AI Computer Use validation is routed only through the
 [controlled Windows local-test guide](ai-computer-use-localtest.md).**
 It distinguishes standard source preflight, opt-in native compilation/ABI,
