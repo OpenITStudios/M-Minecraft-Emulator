@@ -164,6 +164,16 @@ int run() {
         until([&] {auto state=retained.snapshot();check(!state.failures);return state.window!=nullptr;});
         check(DestroyWindow(old));
         until([&] {return retained.snapshot().window==nullptr;});
+        until([&] {return !retained.snapshot().workerActive;});
+        // A retired HUD worker cannot produce a live-rate diagnostic.
+        // Synthetic calls made after the owner HWND is gone deliberately
+        // keep the meter fresh: its history stays counted, but it MUST NOT
+        // masquerade as a current live FPS sample for a future F3 UI.
+        for (unsigned frame=0;frame<8;++frame) {
+            retained.present(S_OK,0); Sleep(100);
+        }
+        const auto retired=retained.snapshot();
+        check(!retired.workerActive && retired.reading.accepted==8 && !retired.reading.valid);
         HWND replacement=CreateWindowExW(WS_EX_NOACTIVATE|WS_EX_TOOLWINDOW,type.lpszClassName,L"",
             WS_POPUP,100,100,850,550,nullptr,nullptr,type.hInstance,nullptr);
         check(replacement);

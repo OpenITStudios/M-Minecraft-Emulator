@@ -517,3 +517,78 @@ Public references:
   https://github.com/Mming-Lab/minecraft-bedrock-education-mcp
 - Windows TCP owner API:
   https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable
+
+## P8 — Existing FPS HUD source and lifecycle audit (3 November 2026)
+
+### Confirmed source ownership and measurement semantics
+
+The active C++ owners already exist under
+Development/tooling/acceptance/windows/bootstrap-ordering:
+
+- dxgi-pacing.cpp owns exactly one process-global Policy, currently
+  at most one wrapped live IDXGISwapChain4, one paced Present route,
+  and the existing fps_hud::Hud instance. No extra collector is needed.
+- The wrapper checks the bound game's own HWND/thread/PID before
+  recording outer Present/Present1 native calls, then records only
+  S_OK returns excluding DXGI_PRESENT_TEST. It does not claim
+  scanout/displayed frames, GPU simulation FPS or the configured
+  foreground/background FPS ceiling. Microsoft explicitly states
+  that the number of Present calls differs from displayed frames.
+- fps-hud.cpp owns Meter's QPC-based interval window (500 ms),
+  two-second inactivity invalidation, a 128×32 DIP owned layered
+  overlay, and its one worker whose window/DPI/geometry changes
+  are bounded to the original game process. Unbind resets the
+  meter; a short grace period permits swap-chain recreation.
+- dxgi_pacing::hud_snapshot() returns only an **in-process**
+  fps_hud::Snapshot. compat.cpp exposes BootstrapHudSnapshot for
+  existing C++/native diagnostic consumers. This is a private DLL
+  export, **not** a Rust SessionSnapshot field or a Tauri IPC
+  route, and does not automatically associate an observed FPS value
+  with MC01–MC05's verified Windows process identity.
+
+Do not interpret Microsoft GetFrameStatistics as an automatic
+substitute: that API is swap-chain/model dependent, has documented
+multi-monitor limitations, and does not by itself supply local
+player/world position or an authorized cross-process transport.
+
+### One bounded source correction
+
+HUD::snapshot() now marks its reading invalid when the retained
+workerActive flag is false, even if the meter's accepted Present
+samples have not yet expired by QPC age. It retains the accepted
+count and does not change the native HUD overlay painting, pacing,
+Present dispatch, swap-chain ownership or worker lifetime.
+
+The existing fps-hud-control.cpp **authored, NOT_EXECUTED**
+hidden-window fixture now covers an owner HWND destroyed while the
+Policy/Hud object remains alive. After retirement it deliberately
+submits recent synthetic Present samples through the public
+diagnostic entry. A snapshot must preserve the accepted counter
+but refuse a live-rate claim, and the existing replacement-HWND
+rebinding check remains intact.
+
+This is a diagnostic truthfulness fix, NOT proof of game runtime,
+FPS cap, live F3 player/world source, desktop status integration,
+multi-client performance or gameplay acceptance. No new native
+IPC, user-facing F3 panel, bitmap allocation, extra frame sampler,
+DXGI hook, overlay worker, global shortcut or clipboard API was
+added. MSVC /W4 /WX, Windows HUD self-tests, Minecraft Education
+and five-client acceptance remain NOT_EXECUTED at this HEAD.
+
+### P9 candidate boundary (not implemented)
+
+An F3 desktop performance view would require the **original**
+native controller to receive a bounded process-bound reading
+without using a second sampler or a new unauthenticated channel.
+The only current API is an in-process compatibility DLL
+diagnostic export, so no direct read from Svelte or a random
+Windows PID is authorized. Before designating a field as
+"FPS", specify "accepted DXGI Present rate" and require
+freshness plus exact original process identity. If no safe
+existing transport is available, do not expand the HUD; leave
+its own-process overlay as-is.
+
+Official Microsoft DXGI source:
+- https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-present
+- https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_frame_statistics
+- https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiswapchain-getframestatistics

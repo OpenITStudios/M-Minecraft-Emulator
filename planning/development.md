@@ -129,6 +129,19 @@ new-revision acceptance.
   Next source owner is EXISTING DXGI FPS HUD for source-only
   F3 performance feasibility review; no tests/Windows/CI run.
 
+- **P8 existing native FPS HUD audit and diagnostic correction (3 November):**
+  one process-owned DXGI Policy/Hud already measures accepted S_OK
+  outer Present/Present1 rates, not displayed/scanned-out or configured
+  FPS. BootstrapHudSnapshot remains a private child-process DLL export,
+  unavailable as a Rust/desktop SessionSnapshot without a reviewed
+  cross-process source route. In fps-hud.cpp a worker-retired reading
+  can no longer retain `valid=true` just because its QPC age is short;
+  accepted counts remain available for diagnostics. Added a bounded
+  destroyed-HWND/retired-worker source fixture in fps-hud-control.cpp.
+  No new hooks, monitor, renderer, native IPC, game/input command,
+  Svelte fields or clipboard handling. C++ fixture AUTHORED_NOT_EXECUTED;
+  source compilation, Windows HUD tests, Minecraft and CI NOT_EXECUTED.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -350,11 +363,11 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** preserve the P7
-block on unsupported/unverified game connection assumptions.
-Shift source-only F3 effort to the EXISTING native DXGI FPS HUD
-owner while keeping manual P4 Paste XYZ unverified and preserving
-the original team's analytics ownership. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** preserve P7 block on
+unverified Education network position source. P8 confirmed the
+existing one-per-process native DXGI FPS HUD and corrected its
+retired-worker diagnostic validity. Keep P4 manual Paste XYZ
+explicitly UNVERIFIED and retain original team analytics ownership. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -363,23 +376,22 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: inspect the existing bootstrap-ordering/fps-hud.cpp native
-DXGI Present/Present1 owner plus its present-control/lifetime owners
-and canonical consumers. Identify whether a read-only per-client
-frame-present-rate observation can be reused in the F3 inspector
-without a second monitor, injected hook, new native IPC path or
-unjustified on-screen/gameplay FPS claim. If it cannot, stop and
-preserve the current native overlay unchanged.
+Next: source-only trace the private in-process BootstrapHudSnapshot
+consumers and original native session controller to determine whether
+a bounded read-only process-identity-validated Present-rate projection
+is feasible **without any new game-process IPC, DLL hook, worker
+or sampling loop**. If not, retain the current native FPS overlay
+only and do not add a Svelte F3 number based on unsupported evidence.
+Never label accepted Present rate as actual displayed FPS.
 
-Automatic XYZ/Copy via Code Builder /connect remains BLOCKED:
-Education 26.33 source protocol, approved endpoint, process/socket
-ownership and world/local-player attribution are NOT_VERIFIED.
-Do not attempt a third-party MCP add-on, network listener,
-AppContainer loopback exemption, permission/cheats changes,
-external Code Connection app or Windows game execution. Manual
-Paste XYZ remains UNVERIFIED and separate from verified live F3.
+Automatic live XYZ/Copy via Code Builder /connect stays BLOCKED:
+Education 26.33 source protocol and independently attributed
+client/player/world data are NOT_VERIFIED. No WebSocket listener,
+permission/cheats changes, loopback exemption, third-party addon
+or synthetic PID proof can lift that block. P4 user-pasted XYZ
+remains unverified and manual.
 
-Source test suites, Windows, Minecraft and CI are NOT_EXECUTED.
-Unrelated Testing recovery sealed CAS remains BLOCKED pending
-native archive verification and independently authenticated
-Windows operator approval. No native IPC or Testing path was changed.
+Windows DXGI controls, C++/Rust/Node/TypeScript source suites,
+Minecraft and CI are NOT_EXECUTED. The unrelated Testing
+recovery sealed CAS remains BLOCKED pending native archive
+attestation and independent Windows operator approval.

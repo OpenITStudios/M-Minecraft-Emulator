@@ -386,6 +386,10 @@ Snapshot Hud::snapshot() noexcept {
     AcquireSRWLockShared(&s.gate); auto value = s.display; ReleaseSRWLockShared(&s.gate);
     value.reading = s.meter.read();
     value.workerActive = s.workerActive.load(std::memory_order_acquire);
+    // A still-fresh QPC rate outlives a retired/failed HUD worker.
+    // Preserve the accepted-present count for diagnostic comparison,
+    // but never publish its last rate as a CURRENT worker observation.
+    if (!value.workerActive) value.reading.valid = false;
     return value;
 }
 }

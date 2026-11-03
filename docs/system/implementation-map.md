@@ -50,6 +50,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Pure cross-platform domain contracts | `Development/engine/runtime-core/src/independent_engine/mod.rs` | Applicable Rust module only; not a second launcher |
 | Official Education target detection | `Development/tooling/acceptance/windows/education-target.ps1` | Verified native game-image owner |
 | Active native compatibility DLL source | `Development/tooling/acceptance/windows/bootstrap-ordering/` | Reviewed payload/package admission |
+| Native DXGI measured FPS HUD (same-process overlay) | `Development/tooling/acceptance/windows/bootstrap-ordering/dxgi-pacing.cpp`, `fps-hud.cpp`, `fps-hud-control.cpp` | Original one-per-process accepted Present/Present1 rate and worker lifetime, with a private in-process BootstrapHudSnapshot export; no direct Svelte or controller telemetry transport. Retired worker cannot report a valid live rate. See `docs/system/coordinate-inspector.md`. |
 | Native Windows installer and preservation | `Development/engine/distribution/lazy-tester-package.json` | `Development/apps/desktop/src-tauri/tauri.lazy-tester.conf.json` |
 | One developer command/validation entry | `DEV.cmd` | `Development/tooling/developer/controller.mjs`, `tasks.json`, `Development/tooling/windows-toolchain/dev.ps1` |
 | Developer artifact inventory and retention | `Development/tooling/storage/` | Current storage and package scripts; no generic deletion |
