@@ -636,6 +636,10 @@ test('observe_client emits a bounded MCP image only after exact identity recheck
   const metadata=JSON.parse(response.result.content[0].text);
   assert.equal(metadata.background,true);
   assert.equal(metadata.sourceTimeKind,'CUA_QUERY_STARTED');
+  assert.equal(metadata.f3VisualReview.status,'WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY');
+  assert.equal(metadata.f3VisualReview.coordinateExtraction,'NOT_PERFORMED');
+  assert.equal(metadata.f3VisualReview.playerWorldAttribution,'NOT_VERIFIED');
+  assert.equal(metadata.f3VisualReview.automaticCopyAllowed,false);
   assert.ok(Number.isSafeInteger(metadata.captureStartedAtMs));
   assert.ok(metadata.captureStartedAtMs<=Date.now());
   assert.deepEqual(calls.map(x=>x[0]),['native','capture','native']);
@@ -671,6 +675,8 @@ test('MCP local visual sampler returns only changed cached frames on demand',asy
   assert.equal(ready.liveVideo,false);
   const pending=await handler.callTool('read_visual_observation',{slot:2});
   assert.equal(pending.metadata.status,'WAITING_FOR_FIRST_FRAME');
+  assert.equal(pending.metadata.f3VisualReview.status,'NO_CURRENT_WINDOW_FRAME');
+  assert.equal(pending.metadata.f3VisualReview.automaticCopyAllowed,false);
   const stopped=await handler.callTool('stop_visual_observation',{slots:[2]});
   assert.equal(stopped.captureFramesRetained,false);
   handler.shutdown();
@@ -710,6 +716,9 @@ test('opt-in persistent GPU observation reuses MCP tools and protects MC01',asyn
   assert.equal(frame.metadata.sourceTimeKind,'WGC_READBACK_COMPLETED');
   assert.equal(frame.metadata.capturedAtMs,latestFrame.capturedAtMs);
   assert.equal(frame.metadata.workerSequence,7);
+  assert.equal(frame.metadata.f3VisualReview.status,'WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY');
+  assert.equal(frame.metadata.f3VisualReview.playerWorldAttribution,'NOT_VERIFIED');
+  assert.equal(frame.metadata.f3VisualReview.automaticCopyAllowed,false);
   const boundRead=calls.find(([operation])=>operation==='latest');
   assert.equal(boundRead[1],2);
   assert.equal(boundRead[2].pid,602);

@@ -73,6 +73,67 @@ function boundedFrame(frame) {
 }
 
 /**
+ * F3 one-shot screen-source triage, NOT coordinate parsing.
+ *
+ * The existing native capture path already pins MCxx PID, birth, session
+ * and HWND before/after a requested screenshot. This pure projection may
+ * say a frame is available for an AI/operator to inspect; it can NEVER
+ * attest a Minecraft player/world, extract XYZ, or authorize Copy.
+ *
+ * A cached-frame metadata report can be reviewable without image bytes
+ * in this particular read: the caller must explicitly request that PNG.
+ */
+export function projectF3VisualReview(meta) {
+  const refusal={
+    schema:1,status:'NO_CURRENT_WINDOW_FRAME',
+    coordinateExtraction:'NOT_PERFORMED',
+    playerWorldAttribution:'NOT_VERIFIED',
+    livePositionAvailable:false,
+    automaticCopyAllowed:false,
+  };
+  if(meta?.schema!==1 || !Number.isInteger(meta.slot) ||
+     meta.slot<1 || meta.slot>5) return refusal;
+  const pin=meta.processIdentity??meta.captureIdentity;
+  try {
+    frameIdentity({processIdentity:pin});
+  } catch {
+    return refusal;
+  }
+
+  const validDimensions=Number.isInteger(meta.width) &&
+    meta.width>=1 && meta.width<=1536 &&
+    Number.isInteger(meta.height) &&
+    meta.height>=1 && meta.height<=1536;
+  if(!validDimensions) return refusal;
+
+  // One-shot: exact Windows PID/HWND was rechecked by captureVerifiedFrame.
+  // CUA query-start and WGC readback times are not Minecraft-present times.
+  const oneShot=
+    ['CUA_DRIVER_WINDOW_CAPTURE','NATIVE_WGC_PERSISTENT'].includes(meta.provider) &&
+    meta.screenshotStatus==='PNG_RETURNED_NOT_GAMEPLAY_PROOF' &&
+    /^[a-f0-9]{64}$/.test(meta.sha256??'') &&
+    meta.observedWindow?.pid===pin.pid &&
+    meta.observedWindow?.windowId===pin.windowId &&
+    (meta.provider!=='NATIVE_WGC_PERSISTENT' ||
+     (Number.isSafeInteger(meta.workerSequence) && meta.workerSequence>0 &&
+      Number.isSafeInteger(meta.capturedAtMs) && meta.capturedAtMs>0));
+
+  // Cached: existing observer computed receipt AND source age, and revoked
+  // replaced native process bindings; never treat a stale cache as a frame.
+  const cached=meta.active===true &&
+    meta.freshFrameAvailable===true &&
+    Number.isSafeInteger(meta.frameAgeMs) &&
+    meta.frameAgeMs>=0 && meta.frameAgeMs<=MAX_READ_FRAME_AGE_MS &&
+    ['CUA_QUERY_STARTED','WGC_READBACK_COMPLETED'].includes(meta.sourceTimeKind) &&
+    Number.isSafeInteger(meta.sourceFrameAtMs) && meta.sourceFrameAtMs>0;
+
+  return oneShot || cached ? {
+    ...refusal,
+    status:'WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY',
+  } : refusal;
+}
+
+/**
  * No external worker, timer service, disk frame store, browser or extra native
  * controller. The caller owns this sampler for the MCP connection lifetime.
  * capture(slot) must return one *already revalidated* observe_client frame.

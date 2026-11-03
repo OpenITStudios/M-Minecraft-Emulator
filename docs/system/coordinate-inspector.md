@@ -829,3 +829,48 @@ Regression fixtures cover pending action precedence over an
 otherwise matching selected process and absence of measured FPS.
 Source tests were AUTHORED_NOT_EXECUTED. Windows, Svelte/TS,
 gameplay and CI remain NOT_EXECUTED.
+
+## P15 — Existing MCP visual capture as an F3 screen-review candidate (3 November 2026)
+
+Source audit of the exact team archive SHA-256
+26c0a322cabed172ca74970413d5bb7a20d6f67181446df5f688e36057c54e21
+confirmed that team analytics position_samples are opt-in, historical
+block-floored server-world records without yaw/pitch or a native
+MC01-MC05 process binding. The original analytics export is a paced
+Content Log, NOT a live local-player signal; the original team owns it.
+
+The existing optional observe_client and read_visual_observation MCP
+routes already obtain one selected window using the original native
+controller's PID, process creation FILETIME, session and HWND checks.
+CUA and WGC observations carry PNG metadata and source-age screening
+but do not prove that the pixels depict the local Minecraft player
+or that Show Coordinates is actually visible.
+
+One bounded implementation now adds f3VisualReview to these EXISTING
+visual-read metadata responses. The new pure
+projectF3VisualReview() in visual-observer.mjs rejects missing, stale,
+invalid or contradictory frame metadata. When a usable captured
+window frame exists, it only reports
+WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY; otherwise
+NO_CURRENT_WINDOW_FRAME. Both outcomes ALWAYS state:
+coordinateExtraction=NOT_PERFORMED,
+playerWorldAttribution=NOT_VERIFIED, livePositionAvailable=false,
+and automaticCopyAllowed=false.
+
+This can support a future AI/operator manually examining Show
+Coordinates text in an actual captured MCxx window. Even that
+observation would be an unverified *visual candidate*, not a
+server-authenticated player/world position or automatic Copy.
+F3 Inspector desktop continues to show Player XYZ: Not connected.
+
+The change reused the original one-shot and bounded cached frame
+read tools. It added NO new MCP tools, capture workers, game commands,
+Script API modules, telemetry emitters, native IPC paths, clipboard
+writes, UI polling, or profile/world mutations. The human MC01
+capture restriction in hybrid mode remains unchanged.
+
+Node source fixtures covering CUA/WGC metadata, changed PID/HWND,
+unknown providers, stale cached captures and no Copy authorization
+are AUTHORED_NOT_EXECUTED. Windows capture, actual screen contents,
+official Education 26.33 client source and Minecraft gameplay
+remain NOT_VERIFIED/NOT_EXECUTED.

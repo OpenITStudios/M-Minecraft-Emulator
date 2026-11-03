@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createVisualObserver,summarizeTeamVisualState,
   verifyTeamObservationBasis,evaluateTeamActionFeedback,
-  summarizeTeamCoordination} from './visual-observer.mjs';
+  summarizeTeamCoordination,projectF3VisualReview} from './visual-observer.mjs';
 
 function clockFixture() {
   let now=1000;
@@ -622,5 +622,71 @@ test('reconnect status is explicit and remains a subset of originally held AI cl
       assert.throws(()=>summarizeTeamCoordination(mode,fresh,[1],true,[1]),
         /Invalid uncertain input slots/);
     }
+  }
+});
+
+test('F3 window-frame triage permits only explicit visual review, never XYZ or Copy',()=>{
+  const native={pid:212,windowId:102,sessionId:1,
+    createdFileTime:'134000000000000001'};
+  const observed={
+    schema:1,slot:2,provider:'CUA_DRIVER_WINDOW_CAPTURE',
+    processIdentity:native,
+    observedWindow:{pid:212,windowId:102},
+    screenshotStatus:'PNG_RETURNED_NOT_GAMEPLAY_PROOF',
+    sha256:'a'.repeat(64),width:800,height:600,
+    sourceTimeKind:'CUA_QUERY_STARTED',
+  };
+  assert.deepEqual(projectF3VisualReview(observed),{
+    schema:1,status:'WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY',
+    coordinateExtraction:'NOT_PERFORMED',
+    playerWorldAttribution:'NOT_VERIFIED',
+    livePositionAvailable:false,automaticCopyAllowed:false,
+  });
+  const denied='NO_CURRENT_WINDOW_FRAME';
+  for(const malformed of [
+    {...observed,slot:6}, {...observed,processIdentity:{...native,pid:0}},
+    {...observed,observedWindow:{pid:999,windowId:102}},
+    {...observed,observedWindow:{pid:212,windowId:999}},
+    {...observed,sha256:'bogus'}, {...observed,width:0},
+    {...observed,provider:'UNTRUSTED_TEXT'},
+    {...observed,screenshotStatus:'GAMEPLAY_VERIFIED'},
+    null,
+  ]) {
+    const assessment=projectF3VisualReview(malformed);
+    assert.equal(assessment.status,denied);
+    assert.equal(assessment.automaticCopyAllowed,false);
+  }
+  const gpu={...observed,provider:'NATIVE_WGC_PERSISTENT',
+    workerSequence:8,capturedAtMs:123456};
+  assert.equal(projectF3VisualReview(gpu).status,
+    'WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY');
+  assert.equal(projectF3VisualReview({...gpu,workerSequence:0}).status,denied);
+});
+
+test('F3 cached frame triage fails closed on stale, missing and replaced visual source',()=>{
+  const meta={
+    schema:1,slot:3,active:true,freshFrameAvailable:true,
+    captureIdentity:{pid:303,windowId:1003,
+      sessionId:1,createdFileTime:'134000000000000001'},
+    width:800,height:600,frameAgeMs:100,
+    sourceTimeKind:'WGC_READBACK_COMPLETED',sourceFrameAtMs:123456,
+  };
+  assert.equal(projectF3VisualReview(meta).status,
+    'WINDOW_FRAME_FOR_EXPLICIT_VISUAL_REVIEW_ONLY');
+  for(const invalid of [
+    {...meta,freshFrameAvailable:false},
+    {...meta,active:false},
+    {...meta,frameAgeMs:4000},
+    {...meta,frameAgeMs:-1},
+    {...meta,captureIdentity:null},
+    {...meta,captureIdentity:{...meta.captureIdentity,pid:0}},
+    {...meta,sourceFrameAtMs:null},
+    {...meta,sourceTimeKind:'UNKNOWN'},
+    {...meta,slot:8},
+  ]) {
+    const r=projectF3VisualReview(invalid);
+    assert.equal(r.status,'NO_CURRENT_WINDOW_FRAME');
+    assert.equal(r.coordinateExtraction,'NOT_PERFORMED');
+    assert.equal(r.automaticCopyAllowed,false);
   }
 });

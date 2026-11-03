@@ -23,7 +23,8 @@ import {validateTestingArchiveRoot,archiveTestingResult,
   from './testing-result-store.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
-  evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
+  evaluateTeamActionFeedback,summarizeTeamCoordination,
+  projectF3VisualReview} from './visual-observer.mjs';
 import {createGpuFrameSource,validateGpuExecutable} from './gpu-frame-source.mjs';
 import {readPinnedProbeCatalogCached,probeSourceRevisionStatus,
   parseProbeCapturedLine,reviewProbeRun,compactProbeQaResult,
@@ -1386,7 +1387,7 @@ export function createHandler(config,{
           frame.width<1 || frame.height<1) {
         throw new Error('Cua did not produce a usable PNG frame');
       }
-      return {
+      const observation = {
         metadata:{
           schema:1,slot,mode:config.mode,
           provider:gpuSource?'NATIVE_WGC_PERSISTENT':'CUA_DRIVER_WINDOW_CAPTURE',
@@ -1409,6 +1410,13 @@ export function createHandler(config,{
           note:'Pixels may be stale, blank, or unrepresentative of gameplay. Captures do not prove player login or peer-to-peer join.',
         },
         imageBase64:frame.imageBase64,
+      };
+      // No additional native read, frame parse or player/world inference.
+      // This is only a bounded capability hint on an existing screenshot.
+      return {
+        ...observation,
+        metadata:{...observation.metadata,
+          f3VisualReview:projectF3VisualReview(observation.metadata)},
       };
     } finally {
       visualReadBusy=false;
@@ -2188,10 +2196,13 @@ export function createHandler(config,{
       keysExactly(args,['slot','afterSequence','includeImage']);
       const slot=slotOf(args.slot);
       protectedSlot(slot);
-      return visualObserver.read(slot,{
+      const observation=visualObserver.read(slot,{
         afterSequence:args.afterSequence??0,
         includeImage:args.includeImage??true,
       });
+      // Existing volatile cache only: NO new capture, worker or game command.
+      return {...observation,metadata:{...observation.metadata,
+        f3VisualReview:projectF3VisualReview(observation.metadata)}};
     }
     if (name==='stop_visual_observation') {
       keysExactly(args,['slots']);

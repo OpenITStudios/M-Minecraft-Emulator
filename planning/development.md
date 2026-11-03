@@ -213,6 +213,20 @@ new-revision acceptance.
   AUTHORED_NOT_EXECUTED; no extra native IPC, game hook,
   clipboard permission, collector or launcher layout change.
 
+- **P15 F3 per-window visual-source triage (3 November, source-only):**
+  Audited pinned original analytics ZIP: historical opt-in floored
+  position_samples are not live/current per-client coordinates.
+  Existing MCP observe_client and read_visual_observation are
+  native exact-window screenshots for explicit review, not player
+  or world proof. Added f3VisualReview on their existing metadata
+  via pure projectF3VisualReview() in visual-observer.mjs.
+  It reports a reviewable fresh window frame vs. unavailable;
+  never parses XYZ, establishes a local actor/world, grants
+  Copy, starts another collector or changes the desktop HUD.
+  CUA/WGC positive/negative fixtures AUTHORED_NOT_EXECUTED.
+  No new MCP tool, native IPC, Script API, world/game input,
+  Windows tests, CI or external authorization changes.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -434,11 +448,12 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P14 protects F3
-against stale process display during original queued/closing
-actions, and distinguishes configured FPS target settings
-from actual per-client frame measurements. The critical live
-F3 blocker remains authenticated local player/world provenance. No assumed Code Builder/WebSocket
+**Current operator priority (3 November):** P15 now distinguishes
+one-shot exact-window visual review metadata from actual player/world
+position evidence using existing MCP capture tools. The sole
+remaining live F3 blocker is an authenticated client-local
+coordinate source and world association; do not interpret PNGs
+or historical analytics as that proof. No assumed Code Builder/WebSocket
 parity, automatic clipboard input, native connection listener, source
 test execution, CI, game/world mutation or installer changes.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
@@ -447,16 +462,17 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: inspect original team/Skills Probe capture compatibility
-and existing exact-PID window visual evidence for any legitimate,
-independently attributable local-player/world position sample.
-Do not copy team analytics code, create a second Script API emitter,
-assume screenshot/log/PID reveals the local actor, or enable
-auto F3/Copy without real Education 26.33 evidence.
+Next: source-only map a possible one-time player-to-window pairing
+protocol through the ORIGINAL team-owned HUD/actionbar display,
+with an explicitly authorized operator handshake and exact native
+window capture. Identify precise proof gaps and reject using a
+self-reported player ID or a username as an independent binding.
+Do not change installed team modules or enable a new Script API
+sender, Minecraft commands, screenshot parsing, network listener,
+native clipboard or game input without new source/runtime proof.
 
-Native F3 currently displays the last selected Windows process
-observation and last reported global FPS TARGET settings only;
-measured FPS remains exclusively in the game's in-process DXGI HUD.
-Manual Paste XYZ stays explicitly USER_PASTED_UNVERIFIED.
-Source suites, Windows, Minecraft and CI remain NOT_EXECUTED.
-Unrelated Testing recovery sealed CAS remains independently BLOCKED.
+Existing F3 Inspector remains read-only native selected process
+plus last reported FPS target; live XYZ, rotation, dimension
+and measured FPS stay unavailable. Manual Paste XYZ is
+USER_PASTED_UNVERIFIED. Source tests, Windows, Minecraft and CI
+are NOT_EXECUTED. Separate Testing recovery sealed CAS is BLOCKED.
