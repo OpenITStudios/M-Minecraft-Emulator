@@ -7,6 +7,7 @@
   import WindowTitlebar from './WindowTitlebar.svelte';
   import LauncherRail from './LauncherRail.svelte';
   import AgentActivityNotice from './AgentActivityNotice.svelte';
+  import CoordinatePastePanel from './CoordinatePastePanel.svelte';
   import {presentAgentActivity} from './app/presentation/agentActivity.js';
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
@@ -816,7 +817,7 @@
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
-        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={()=>{if(!closeReviewActive(reviewState()))manualRefreshRequested=true;}}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
+        <div class="lt-header-actions">{#if page==='workspace'}<CoordinatePastePanel />{/if}<button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={()=>{if(!closeReviewActive(reviewState()))manualRefreshRequested=true;}}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
       </header>
       {#if issueKey!==null||connectionIssueKey!==null}
         <div class="lt-alert" role="alert">

@@ -77,6 +77,16 @@ new-revision acceptance.
   No new source emitter, game input, clipboard read/write, native IPC,
   Svelte panel, installer, CI or source test execution.
 
+- **Manual XYZ desktop P4 (3 November, source-only):** added one
+  collapsed Paste XYZ disclosure to the existing Play-header action
+  group. Only explicit user-pasted text is formatted to exact XYZ,
+  floored block XYZ or rotation-free teleport text; readonly output
+  can be selected but there is NO clipboard reader/writer. Ephemeral
+  state clears on close or Play unmount, and is explicitly labeled
+  User-pasted · Unverified. Five-card DWM rail, native controller,
+  Testing/Probe sources and IPC remain unchanged. Authoring-only
+  Vitest fixture added, NOT_EXECUTED; no Windows/Minecraft/CI/build.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -307,13 +317,14 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 ## Single next step
 
-Next: integrate an explicitly manual, user-pasted coordinate preview
-into the existing desktop presentation using the pure P3 parser.
-Only show unverified text; do not add native clipboard permissions,
-global shortcuts, log collection, game commands or claims of actual
-Education 26.33 Copy Coordinate UI support. Automated per-client F3
-still requires independently verified live player/world attribution.
-Source tests are AUTHORED_NOT_EXECUTED; no CI or PC execution.
+Next: assess real per-client/player/world provenance for a future
+live F3 position feed in the ORIGINAL team Script API ownership and
+single native controller. The new Play manual paste panel is
+UNVERIFIED and text-only; do not add clipboard permissions,
+game commands, global shortcuts, extra telemetry or infer
+Education 26.33 Copy Coordinate UI support. Live F3 transport
+remains BLOCKED; source tests, Windows and gameplay NOT_EXECUTED.
 
-Unrelated Testing recovery CAS remains BLOCKED until native
-archive admission and independent Windows operator authentication.
+Separate Testing recovery sealed CAS remains BLOCKED pending verified
+native archive and independently authenticated operator approval.
+Do not change Testing ownership or native IPC under F3 work.

@@ -240,3 +240,27 @@ Authoritative Bedrock feature guide:
 https://github.com/MicrosoftDocs/minecraft-creator/blob/main/creator/Documents/CopyCoordinates.md
 Education changelog:
 https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log
+
+## P4: optional manual coordinate preview (3 November 2026)
+
+The existing Play header now contains one collapsed **Paste XYZ**
+disclosure in `Development/apps/desktop/src/CoordinatePastePanel.svelte`.
+The operator manually enters XYZ; the component uses the existing
+pure `formatUserPastedCoordinates` for exact XYZ, floored BLOCK and
+position-only `/tp @s ...` text. All output is **User-pasted · Unverified**.
+
+`Select text` focuses and selects the readonly output. The operator
+explicitly presses Ctrl+C; this component never reads or writes the
+clipboard, sends a Minecraft command, starts polling, invokes native
+IPC, installs an in-game module, or persists input. The input and
+output clear on disclosure close and when Play unmounts.
+
+The popup is absolutely positioned in the existing Play header; no
+additional page, game viewport, original session manager, DWM preview
+layout or five-slot launcher card is created or rearranged.
+
+This is NOT live F3 and does NOT establish a source player, world,
+dimension, process or MC01–MC05 identity. Bedrock's Copy Coordinate
+UI availability in Minecraft Education 26.33 remains NOT_VERIFIED.
+New Vitest fixtures are AUTHORED_NOT_EXECUTED. No TypeScript build,
+Windows UI, Minecraft runtime, package, CI or gameplay was executed.
