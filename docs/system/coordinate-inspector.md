@@ -264,3 +264,125 @@ dimension, process or MC01–MC05 identity. Bedrock's Copy Coordinate
 UI availability in Minecraft Education 26.33 remains NOT_VERIFIED.
 New Vitest fixtures are AUTHORED_NOT_EXECUTED. No TypeScript build,
 Windows UI, Minecraft runtime, package, CI or gameplay was executed.
+
+## P5: per-client live coordinate source feasibility (3 November 2026)
+
+### Technical decision: keep game player, client process and world origin separate
+
+This research compares source capabilities; it has **no executed Windows
+or Minecraft Education 26.33 result**. The current original Rust session
+controller still owns all MC01-MC05 process/window lifetimes. No new game
+controller, in-game telemetry module, desktop status store or listener
+is necessary for this documentation milestone.
+
+| Candidate | Potential value | Evidence still missing | Priority |
+| --- | --- | --- | --- |
+| Official Bedrock Copy Coordinate UI | User-triggered XYZ text in clipboard | Education 26.33 parity, clipboard source | Existing manual P4 fallback |
+| Education Code Builder / MakeCode player.position() | Position of the current player in that Code Builder context | Local client-to-desktop output, precision, orientation, version behavior | First client-local research candidate |
+| Education /connect (/wsserver) | Client-originated connection to a companion websocket | Actual 26.33 capability, cheats/permissions, safe read-only message protocol | Opt-in research only |
+| Windows GetExtendedTcpTable | TCP connection 4-tuple and OS-reported owning PID | Process created FILETIME, socket possibly owned by helper process, player/world provenance | Possible original native read-only witness |
+| Original-team Script API | Precise in-world position, rotation and dimension for explicitly selected Player | Server scripts see all players; host world does not identify the specific local Windows client | Only after independent client/player binding |
+| Existing verified-window GPU capture | Pixel frame tied to a game PID/HWND observation | Onscreen coordinates may be disabled, stale or misread | Manual visual evidence, not trusted automatic XYZ |
+
+**Do not combine two unverified mechanisms into an assumed working API.**
+The documented Code Builder player.position() feature and the /connect
+websocket protocol are distinct. No source has proven that Code Builder
+on Education 26.33 can emit client-scoped position events to a Lazy
+Tester-owned localhost endpoint. The MakeCode reference does not
+guarantee sub-block precision, dimension or yaw/pitch. Full F3 will
+need additional evidence.
+
+The official Education changelog lists a historical Code Connection
+1.5 client compatibility ceiling of 1.18.xx, **and** a newer 1.X
+entry compatible with clients 1.19.xx and higher. Neither entry is
+specific acceptance evidence for 26.33. Do not use legacy version 1.5
+as a 26.33 dependency; do not assume newer 1.X is verified either.
+
+The official Minecraft Creator multiplayer guide states server Script
+API runs in shared server-side context. Never choose
+world.getPlayers()[0] as a local-client guess, and never promote
+ScriptEventSource.Server to an authenticated player-origin request.
+
+### Candidate native process-bound path — designed, NOT implemented
+
+If and only if a separately approved Education runtime experiment
+confirms per-client /connect (or an equivalent client-local transport),
+the following is a possible one-controller integration:
+
+1. Operator intentionally selects one slot and requests an opt-in
+   *read-only* capability check. Launch, Refresh and window selection
+   must not silently start any bridge or send game input.
+2. The existing original native controller verifies its exact managed
+   process handle, PID, creation FILETIME, Windows session and game
+   window for that slot. A PID or title match alone is not a lease.
+3. For a deliberate loopback connection, any future listener must bind
+   only 127.0.0.1 or ::1, never a remote/wildcard interface, and
+   must have separately approved, narrowly scoped protocol authority.
+   No listener was added here. Cheat/world permissions cannot be
+   changed as a workaround.
+4. A future native owner could query GetExtendedTcpTable using
+   TCP_TABLE_OWNER_PID_CONNECTIONS, separately for AF_INET and
+   AF_INET6, and correlate an ESTABLISHED 4-tuple and network-order
+   ports with the actual connected endpoint. Reject no match,
+   multiple matches, changed states, and port reuse.
+5. Match the OS-reported socket PID with the retained process PID,
+   then recheck its exact creation FILETIME. A socket owned by
+   WebView, Electron or another helper does **not** automatically
+   prove the game process: verified helper parentage and lifetime
+   would require additional independent native evidence.
+6. A connection PID only identifies an OS process that opened a
+   socket; it does NOT prove that the messages contain local-player
+   Minecraft coordinates, correct dimensions, current world context,
+   authorized gameplay or unmodified data. Require separate
+   local actor/world epoch and response-correlation evidence.
+7. Treat exit, reconnect, window/process swap, world change,
+   dimension change, stale or reordered observations, disconnect
+   and ambiguous actor identity as immediate invalidations. Old XYZ
+   must never be presented as current.
+8. Only after independently verified native read-only proof and field
+   compatibility could the app expose true live XYZ. Do NOT admit
+   copy based on a user-provided verified flag, PID, nonce or log name.
+
+**Security boundary:** A /connect websocket channel can also expose
+game commands. This project does not authorize issuing commands,
+installing a remote gateway, overriding protected Minecraft worlds,
+automating a player login, injecting a DLL or starting a background
+network service. This plan is not authorization for those operations.
+
+### Future validation matrix (NOT_EXECUTED)
+
+| Gate | Evidence required | Without it |
+| --- | --- | --- |
+| EDU-1 | Education 26.33 supports an approved opt-in client-local position/connection mechanism | UNSUPPORTED |
+| EDU-2 | Source genuinely addresses current local game player, not arbitrary server-side world participant | PLAYER_UNATTRIBUTED |
+| WIN-1 | Native connection 4-tuple maps to exact pinned MCxx process PID and birth (or verified helper chain) | SOCKET_OWNER_UNKNOWN |
+| MULTI-1 | Five clients simultaneously bind to five distinct local-player/process contexts | CROSS_CLIENT_UNVERIFIED |
+| WORLD-1 | Actual session/world actor and its replacement/rejoin boundary independently attributable | WORLD_UNVERIFIED |
+| FRESH-1 | Ticks/time, dimensions, reconnect and PID/port reuse handled without displaying stale coordinates | STALE |
+| F3-1 | Precision, rotation, dimension and FPS have source-specific verified meanings | FIELD_UNAVAILABLE |
+
+The only released-like feature in this workstream remains the
+user-initiated **Paste XYZ** UI, clearly labeled UNVERIFIED. Existing
+source fixtures were not executed; neither Code Builder nor /connect
+was operated from ChatGPT or the user's machine.
+
+### Recommended engineering sequence after P5
+
+First, an optional **read-only Windows socket owner witness** could be
+designed alongside existing instance_identity.rs, with pure synthetic
+edge cases for IPv4/IPv6, 4-tuple ambiguity, port reuse and PID birth
+changes. This must not create a listener, socket owner, process manager
+or Copy permission. After that, only real separately authorized
+Education 26.33 compatibility evidence could justify any live
+transport implementation. If EDU-1 is false, stop this approach
+instead of forcing the obsolete Code Connection or adding hooks.
+
+Sources:
+- https://edusupport.minecraft.net/hc/en-us/articles/360047116992-Code-Builder-in-Minecraft-Education
+- https://minecraft.makecode.com/reference/player/position
+- https://learn.microsoft.com/en-us/minecraft/creator/documents/scripting/multiplayer-scripts?view=minecraft-bedrock-stable
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/scripteventsource?view=minecraft-bedrock-stable
+- https://learn.microsoft.com/en-us/windows/win32/api/iphlpapi/nf-iphlpapi-getextendedtcptable
+- https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid
+- https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log
+- https://minecraft.wiki/w/Commands/wsserver

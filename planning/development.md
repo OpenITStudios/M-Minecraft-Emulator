@@ -87,6 +87,20 @@ new-revision acceptance.
   Testing/Probe sources and IPC remain unchanged. Authoring-only
   Vitest fixture added, NOT_EXECUTED; no Windows/Minecraft/CI/build.
 
+- **Live F3 source feasibility P5 (3 November, research-only):**
+  Microsoft Education Code Builder exposes current-player position and
+  Education /connect is a possible client-originated WebSocket mechanism.
+  Win32 GetExtendedTcpTable can report OS TCP connection PID, but
+  the game or a Code Builder helper may own the socket; PID alone
+  does not prove player/world origin. These mechanisms have NOT been
+  shown to interoperate on Education 26.33. Historic Code Connection
+  v1.5 supports 1.18.xx or earlier; official changelog also lists 1.X
+  for 1.19.xx and higher, which is NOT specific 26.33 acceptance.
+  A read-only, no-listener source design and EDU/WIN/MULTI/WORLD
+  acceptance matrix are recorded in coordinate-inspector.md.
+  No native code, game action, WebSocket endpoint, clipboard, CI,
+  installed team pack or auth/Testing route was changed.
+
 - **AI/QA activity contract (2 November):** existing MCP
   `agent_capabilities.activity` projects only allowlisted in-memory
   visual-sampling, Probe checkpoint/report, and experimental AI-input
@@ -308,23 +322,29 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** source-only F3 Coordinate Copy
-foundation; retain the existing source-only Map Test Contract and original
-Skills Probe integration. No local test execution, CI, game-world or native
-HUD/clipboard changes are authorized by this P0 step. Do not request local testing, run
+**Current operator priority (3 November):** assess the actual client-local
+F3 coordinate source without copying the original team's in-game
+analytics engine. Preserve manual P4 Paste XYZ as the supported
+source-authored, UNVERIFIED fallback. No assumed Code Builder/WebSocket
+parity, automatic clipboard input, native connection listener, source
+test execution, CI, game/world mutation or installer changes.
+Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
 source test suites, install packages, use CI or delete private artifacts. Preserve
 `App/`, `Data/`, old pilot data, and all historical proof.
 
 ## Single next step
 
-Next: assess real per-client/player/world provenance for a future
-live F3 position feed in the ORIGINAL team Script API ownership and
-single native controller. The new Play manual paste panel is
-UNVERIFIED and text-only; do not add clipboard permissions,
-game commands, global shortcuts, extra telemetry or infer
-Education 26.33 Copy Coordinate UI support. Live F3 transport
-remains BLOCKED; source tests, Windows and gameplay NOT_EXECUTED.
+Next: source-only inspect whether a read-only GetExtendedTcpTable
+socket-owner witness can be contained inside the original native
+instance_identity.rs owner, with synthetic IPv4/IPv6/4-tuple,
+helper-PID, PID-birth and port-reuse scenarios. Do NOT open a
+listener, add a new controller or permit F3 Copy from PID alone.
+Education 26.33 actual /connect/Code Builder interoperability
+and player/world identity are NOT_VERIFIED. If those runtime
+capabilities are unavailable, retain the manual Paste XYZ path
+instead of injecting or running a legacy Code Connection.
 
-Separate Testing recovery sealed CAS remains BLOCKED pending verified
-native archive and independently authenticated operator approval.
-Do not change Testing ownership or native IPC under F3 work.
+Source suites, Windows, Minecraft and CI are NOT_EXECUTED.
+The unrelated Testing recovery sealed CAS remains BLOCKED pending
+native archive verification and independently authenticated
+Windows operator consent. No native IPC or ownership changed.
