@@ -10,6 +10,23 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P23 Mojang coordinate HUD structural proof (5 November 2026,
+  SOURCE_ONLY):** the previous opt-in checker only searched strings
+  in a SHA-pinned Mojang Bedrock HUD. Its reported `chat_stack`
+  location was not independently parsed as a parent/child structure.
+  It now parses bounded JSONC (comments/trailing commas), verifies the
+  direct vertical root chat-stack child, exactly one coordinate control
+  immediately before the days row and the original native image/text/
+  visibility bindings. Pinned Bedrock source observation: six stack
+  controls, coordinate index 2, days index 3. The RP manifest and
+  `ui/hud_screen.json` remain unchanged at v0.3.0/world-only; no
+  packaging, install, world edit, new Save/Load API or duplicate
+  gameplay owner. New synthetic parser fixtures are
+  AUTHORED_NOT_EXECUTED. Minecraft Education 26.33 structure and
+  JSON UI runtime parity remain UNKNOWN, as does original team forms
+  module access. See [HUD source contract](../docs/system/education-native-coordinate-hud.md).
+
+
 - **P22 world-scoped native HUD safety + source preflight
   (5 November 2026; SOURCE_ONLY):** Microsoft's pack manifest
   contract defaults an omitted `pack_scope` to `any`, leaving
@@ -770,7 +787,8 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 ## Single next step
 
 When the operator separately authorizes real Minecraft testing, first
-perform the read-only optional source preflight, then compare Education 26.33 vanilla Show Coordinates with the opt-in
+perform the read-only optional source preflight with a verified pinned
+Mojang Bedrock reference, then compare Education 26.33 vanilla Show Coordinates with the opt-in
 resource-only P22 v0.3 world-scoped sibling override in ONE disposable copied QA world. Require native
 XYZ and Agent Pos preservation, correct on/off visibility, no overlapping or displaced chat, days or Agent Pos,
 and a reversible pack disable. If the JSON UI merge fails, STOP/disable the

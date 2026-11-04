@@ -82,24 +82,129 @@ export function validateHudSource(manifest,hud) {
   });
 }
 
+// Mojang's raw Bedrock HUD is JSONC (// comments and optional trailing
+// commas). Parse read-only rather than trusting string order anywhere in the
+// file. This is a source-structure witness, NOT Education/UI runtime proof.
+function parseVanillaJsonc(text) {
+  requireContract(typeof text==='string' && text.length<500000,
+    'invalid Bedrock JSONC input');
+  let clear='';
+  let quote=false,escape=false,line=false,block=false;
+  for(let i=0;i<text.length;i++){
+    const char=text[i],next=text[i+1];
+    if(line){
+      if(char==='\n'||char==='\r'){line=false;clear+=char;}
+      else clear+=' ';
+      continue;
+    }
+    if(block){
+      if(char==='*'&&next==='/'){block=false;clear+='  ';i++;}
+      else clear+=char==='\n'?'\n':' ';
+      continue;
+    }
+    if(quote){
+      clear+=char;
+      if(escape)escape=false;
+      else if(char==='\\')escape=true;
+      else if(char==='"')quote=false;
+      continue;
+    }
+    if(char==='"'){quote=true;clear+=char;continue;}
+    if(char==='/'&&next==='/'){line=true;clear+='  ';i++;continue;}
+    if(char==='/'&&next==='*'){block=true;clear+='  ';i++;continue;}
+    clear+=char;
+  }
+  requireContract(!quote&&!block,'incomplete Bedrock JSONC input');
+  const characters=clear.split('');
+  quote=false;escape=false;
+  for(let i=0;i<characters.length;i++){
+    const char=characters[i];
+    if(quote){
+      if(escape)escape=false;
+      else if(char==='\\')escape=true;
+      else if(char==='"')quote=false;
+      continue;
+    }
+    if(char==='"'){quote=true;continue;}
+    if(char!==',')continue;
+    let j=i+1;
+    while(j<characters.length&&/\s/u.test(characters[j]))j++;
+    if(characters[j]===']'||characters[j]==='}')characters[i]=' ';
+  }
+  try{return JSON.parse(characters.join(''));}
+  catch{throw new TypeError('HUD_SOURCE_REFUSED: Bedrock JSONC cannot be parsed safely');}
+}
+
+/**
+ * Structural diagnostic, untrusted until validatePinnedVanillaSample hashes
+ * the exact original Mojang Git blob. Caller must not treat a synthetic
+ * input as Minecraft/Education acceptance.
+ */
+export function inspectVanillaHudStructure(text) {
+  const vanilla=parseVanillaJsonc(text);
+  requireContract(object(vanilla)&&object(vanilla.root_panel)&&
+    Array.isArray(vanilla.root_panel.controls),
+    'Bedrock root_panel controls unavailable');
+  const possible=vanilla.root_panel.controls.filter(item=>
+    object(item)&&Object.keys(item).length===1&&
+    Object.hasOwn(item,'chat_stack'));
+  requireContract(possible.length===1,'expected one direct root_panel/chat_stack');
+  const stack=possible[0].chat_stack;
+  requireContract(object(stack)&&stack.type==='stack_panel'&&
+    stack.orientation==='vertical'&&Array.isArray(stack.controls),
+    'expected vertical chat_stack controls');
+  const names=stack.controls.map(item=>
+    object(item)&&Object.keys(item).length===1
+      ? Object.keys(item)[0] : null);
+  const xyz='player_position@hud.player_position';
+  const days='number_of_days_played@hud.number_of_days_played';
+  const index=names.indexOf(xyz);
+  requireContract(index>=0&&names.lastIndexOf(xyz)===index&&
+    names.indexOf(days)===index+1&&names.lastIndexOf(days)===index+1,
+    'player_position must occur once immediately before days row');
+  const panel=vanilla.player_position;
+  requireContract(object(panel)&&panel.type==='image'&&
+    same(panel.size,['100%c + 6px','100%c + 2px'])&&
+    Array.isArray(panel.controls)&&panel.controls.length===1&&
+    object(panel.controls[0])&&
+    Object.hasOwn(panel.controls[0],'player_position_text'),
+    'native player_position image/text layout drift');
+  const textLabel=panel.controls[0].player_position_text;
+  const nativeText=Array.isArray(textLabel?.bindings)
+    ?textLabel.bindings.filter(b=>
+      b?.binding_name==='#player_position_text' &&
+      b.binding_name_override==='#text' &&
+      b.binding_type==='global'): [];
+  const nativeVisible=Array.isArray(panel.bindings)
+    ?panel.bindings.filter(b=>
+      b?.binding_name==='#player_position_visible' &&
+      b.binding_name_override==='#visible'&&
+      b.binding_type==='global'): [];
+  requireContract(nativeText.length===1&&nativeVisible.length===1,
+    'native position text or visibility binding unavailable');
+  return Object.freeze({
+    sampleStatus:'STRUCTURAL_REVIEW_UNTRUSTED_UNTIL_SHA_CHECK',
+    chatStackChildren:names.length,
+    nativePositionIndex:index,
+    nextControl:days,
+    nativeXyzBinding:'#player_position_text',
+    nativeVisibilityBinding:'#player_position_visible',
+    resourcePatchTarget:'root_panel/chat_stack -> insert_after(player_position)',
+    educationCompatibility:'NOT_VERIFIED',
+  });
+}
+
 export function validatePinnedVanillaSample(raw) {
   requireContract(Buffer.isBuffer(raw)&&raw.length>1000&&raw.length<500000,
     'Mojang reference must be explicit original file bytes');
   const gitBlob=createHash('sha1').update('blob '+raw.length+'\0').update(raw).digest('hex');
   requireContract(gitBlob===VANILLA_BLOB,'reference is not the exact pinned Mojang Bedrock blob');
-  const text=raw.toString('utf8');
-  const root=text.indexOf('"root_panel":');
-  const stack=text.indexOf('"chat_stack":',root);
-  const position=text.indexOf('"player_position@hud.player_position"',stack);
-  const next=text.indexOf('"number_of_days_played@hud.number_of_days_played"',position);
-  requireContract(root>=0&&stack>root&&position>stack&&next>position&&
-    text.includes('"binding_name": "#player_position_text"')&&
-    text.includes('"binding_name": "#player_position_visible"'),
-    'pinned Mojang sample does not contain expected chat-stack anchors');
+  const structure=inspectVanillaHudStructure(raw.toString('utf8'));
   return Object.freeze({
     bedrockSample:'PINNED_MOJANG_BLOB_CONFIRMED',
     gitBlob,
-    sourceLocation:'root_panel/chat_stack → player_position → number_of_days_played',
+    ...structure,
+    sampleStatus:'PINNED_BEDROCK_SOURCE_STRUCTURE_CONFIRMED',
     minecraftEducationCompatibility:'NOT_VERIFIED',
   });
 }

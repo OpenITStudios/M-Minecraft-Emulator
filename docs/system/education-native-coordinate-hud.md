@@ -183,6 +183,48 @@ failed runtime test and RP deactivation, not a second override.
 The source test was authored, not executed. No pack was built,
 installed or used in gameplay.
 
+## P23 — Structural verification of Mojang HUD source (5 November 2026)
+
+A previous read-only check validated the pinned Mojang Git SHA but
+then searched the raw file for strings. That only established token
+order, not that the coordinate control was a **direct child** of the
+right stack. The official Bedrock `hud_screen.json` also includes
+`//` comments, so `JSON.parse` cannot consume it unchanged.
+
+The revised optional
+`Development/tooling/agent/check-education-native-hud-source.mjs`
+first verifies the immutable Git blob SHA and then parses the bounded
+JSONC (comment/string aware, trailing commas handled). It requires:
+
+- Exactly one direct `root_panel.controls[].chat_stack` of vertical
+  `stack_panel` type.
+- The same direct `chat_stack.controls` list contains exactly one
+  `player_position@hud.player_position` immediately followed by
+  `number_of_days_played@hud.number_of_days_played`.
+- The native `player_position` remains a content-sized image with
+  exactly one `player_position_text` child, with
+  `#player_position_text` bound to `#text` and
+  `#player_position_visible` bound to `#visible`.
+
+The inspected pinned Bedrock sample contains six chat-stack entries;
+the native coordinate and following days controls have indices 2 and
+3 respectively. This is a remote static observation of *Bedrock*
+source, not an Education 26.33 runtime result. The checker never
+silently adapts to a renamed or rearranged control. A new unpinned
+Mojang revision requires an explicit source review, not a fuzzy match.
+
+Additional authored Node tests cover JSONC comments/trailing commas,
+missing or duplicated controls, changed bindings and forged content.
+They are **AUTHORED_NOT_EXECUTED**, and no source test suite,
+Windows process, Education runtime, pack build, deployment, or
+installer was executed. The RP remains v0.3.0 and disabled by default.
+
+The increasing migration of Bedrock screens from JSON UI to Ore UI
+also means that a JSON UI override is not a guaranteed long-term
+extension point. Preserve the manual desktop Saved Locations route,
+and stop on unsupported native HUD controls rather than bypassing
+Minecraft's UI restrictions. <https://wiki.bedrock.dev/json-ui/json-ui-intro>
+
 ## References
 
 - Mojang vanilla Bedrock HUD sample:

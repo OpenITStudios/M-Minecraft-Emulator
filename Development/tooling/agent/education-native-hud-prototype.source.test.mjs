@@ -3,7 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
-import {validateHudSource,validatePinnedVanillaSample} from './check-education-native-hud-source.mjs';
+import {validateHudSource,validatePinnedVanillaSample,inspectVanillaHudStructure} from './check-education-native-hud-source.mjs';
 
 const rp = new URL('./education-native-hud-prototype/', import.meta.url);
 const read = async name => JSON.parse(await readFile(new URL(name, rp), 'utf8'));
@@ -106,4 +106,81 @@ test('read-only preflight rejects global scope, future scripts and fake buttons'
 test('official Mojang witness is pinned by raw Git blob hash, never accepted by filename',()=>{
   assert.throws(()=>validatePinnedVanillaSample(Buffer.from('fake json')),/HUD_SOURCE_REFUSED/);
   assert.throws(()=>validatePinnedVanillaSample(Buffer.alloc(2048)),/HUD_SOURCE_REFUSED/);
+});
+
+
+const syntheticBedrockJsonc=String.raw`{
+  // This deliberately contains comments, a trailing comma and a literal
+  // string with a URL. A simplistic regex that deletes // in strings fails.
+  "test_url": "https://minecraft.net/vanilla",
+  "root_panel": {
+    "controls": [
+      {
+        "chat_stack": {
+          "type": "stack_panel",
+          "orientation": "vertical",
+          "controls": [
+            {"paper_doll_padding": {}},
+            {"player_position@hud.player_position": {}},
+            {"number_of_days_played@hud.number_of_days_played": {}},
+          ],
+        }
+      },
+    ]
+  },
+  "player_position": {
+    "type": "image",
+    "size": ["100%c + 6px", "100%c + 2px"],
+    "controls": [
+      {"player_position_text": {
+        "type": "label",
+        "bindings": [
+          {"binding_name":"#player_position_text",
+           "binding_name_override":"#text",
+           "binding_type":"global"},
+        ]
+      }}
+    ],
+    "bindings": [
+      {"binding_name":"#player_position_visible",
+       "binding_name_override":"#visible",
+       "binding_type":"global"},
+    ]
+  }
+}`;
+
+test('JSONC structure diagnostic locates the actual vanilla sibling and preserves bindings',()=>{
+  const report=inspectVanillaHudStructure(syntheticBedrockJsonc);
+  assert.equal(report.sampleStatus,'STRUCTURAL_REVIEW_UNTRUSTED_UNTIL_SHA_CHECK');
+  assert.equal(report.chatStackChildren,3);
+  assert.equal(report.nativePositionIndex,1);
+  assert.equal(report.nextControl,'number_of_days_played@hud.number_of_days_played');
+  assert.equal(report.nativeXyzBinding,'#player_position_text');
+  assert.equal(report.nativeVisibilityBinding,'#player_position_visible');
+  assert.equal(report.educationCompatibility,'NOT_VERIFIED');
+});
+
+test('JSONC structure refuses missing/duplicated/nonadjacent coordinate instance',()=>{
+  const replace=(before,after)=>syntheticBedrockJsonc.replace(before,after);
+  for(const source of [
+    replace('"chat_stack"', '"renamed_chat_stack"'),
+    replace('"player_position@hud.player_position"', '"other_position@hud.player_position"'),
+    replace('"number_of_days_played@hud.number_of_days_played"', '"renamed_days"'),
+    replace('{"player_position@hud.player_position": {}},',
+      '{"player_position@hud.player_position": {}}, {"player_position@hud.player_position": {}},'),
+    replace('{"player_position@hud.player_position": {}},',
+      '{"player_position@hud.player_position": {}}, {"intermediate_hint": {}},'),
+    replace('"#player_position_visible"', '"#some_other_visible"'),
+    replace('"#player_position_text"', '"#some_other_text"'),
+    replace('"orientation": "vertical"', '"orientation": "horizontal"'),
+  ]) {
+    assert.throws(()=>inspectVanillaHudStructure(source),/HUD_SOURCE_REFUSED/);
+  }
+});
+
+test('synthetic JSONC structure never substitutes for the official Mojang blob SHA',()=>{
+  assert.throws(
+    ()=>validatePinnedVanillaSample(Buffer.from(syntheticBedrockJsonc,'utf8')),
+    /HUD_SOURCE_REFUSED.*reference is not the exact pinned/,
+  );
 });

@@ -89,14 +89,24 @@ node Development/tooling/agent/check-education-native-hud-source.mjs
 
 For an **optional** check against an operator-supplied exact Mojang
 Bedrock `hud_screen.json` file, use
-`--pinned-vanilla <absolute-file-path>`. The tool verifies the original
-Git blob SHA, not merely a name or editable excerpt; no reference
-file is downloaded. Omitting this file reports `NOT_SUPPLIED` but
-does not claim compatibility.
+`--pinned-vanilla <absolute-file-path>`. The tool verifies the original Git blob SHA, then parses the original Mojang JSONC
+(comments and trailing commas) and confirms a **direct child**
+`root_panel > chat_stack` containing the vanilla coordinate control
+immediately before the days row. It also confirms the actual
+`hud.player_position` image and native XYZ/visibility bindings.
+The source snapshot contains six chat-stack controls with
+`player_position` at index 2 and `number_of_days_played` at index 3.
+A text search for these names anywhere in the file is insufficient.
+No reference file is downloaded. Omitting it reports `NOT_SUPPLIED`;
+synthetic JSONC fixtures may exercise the parser, but can never pass the
+SHA-pinned official-reference gate. No step proves Education parity.
 
 Official Mojang source: `15701fa9c13923f12662984c32c124327e40e3d3`.
 This check is source-only and must not be described as validating the
-Minecraft Education renderer or multi-client behavior.
+Minecraft Education renderer or multi-client behavior. JSON UI is
+version-fragile and is being displaced by Ore UI in parts of Minecraft;
+if Education migrates this HUD to an unmodifiable screen, keep the
+desktop notebook instead of patching game binaries.
 
 ## Operator-only QA — intentionally NOT_EXECUTED
 
