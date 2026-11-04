@@ -24,14 +24,19 @@ The Mojang Bedrock sample `resource_pack/ui/hud_screen.json` defines:
 - `hud.root_panel`: the general HUD controls owner; changing the complete
   screen or replacing `root_panel` is unnecessary for a minimal test.
 
-The experimental Resource Pack lives in
-`Development/tooling/agent/education-native-hud-prototype/` and declares
-only `player_position.modifications[0]` using
-`controls.insert_back`. The inserted label is a **static, truthful
-hint**, not a button and not a source of position or world identity. The
-patch never copies/redefines the native XYZ binding, root panel,
-touch controls, hotbar, chat, actionbar, scoreboard, F3/FPS or telemetry.
-Nothing in the current standard Lazy Tester build installs the pack.
+The experimental Resource Pack v0.2.0 lives in
+`Development/tooling/agent/education-native-hud-prototype/` and
+**does not modify the `player_position` definition**. Instead it
+declares one static `hud.lt_native_coordinates_hint` and inserts
+the label immediately *after* the existing `player_position`
+instance in `root_panel/chat_stack` via `insert_after`.
+The label observes the native `#player_position_visible` binding.
+Minecraft still owns the original content-sized position image and
+`#player_position_text` data. Its nested-path insertion behavior
+and chat-stack layout are **not yet runtime verified**. The hint is
+not a button or player/world data source. No touch, hotbar, actionbar,
+scoreboard, F3/FPS, Script API or telemetry owner is added.
+Nothing in the standard Lazy Tester build installs the pack.
 
 **Compatibility warning:** Microsoft's cooperative Add-Ons guidance says
 JSON UI overrides cannot be combined reliably as cooperative Add-Ons.
@@ -45,7 +50,7 @@ product path.
 | Feature | Owner | Current status | Hard limitation |
 | --- | --- | --- | --- |
 | Vanilla XYZ and Agent Pos | Minecraft `hud.player_position` | Existing native binding | Do not re-render, parse, overwrite or suppress |
-| Static companion hint | This optional RP | Authored, NOT_TESTED | Plain static label; can overlap native HUD |
+| Static sibling hint after XYZ | This optional RP | Authored, NOT_TESTED | Nested path may fail; possible chat-stack reflow |
 | Facing / pitch / yaw | Existing team gameplay `Player` | NOT_CONNECTED | No native JSON UI binding established |
 | Dimension and chunk | Existing team gameplay `Player` | NOT_CONNECTED | A separate, supported UI data path is needed |
 | Saved location count | Existing team world/player storage | NOT_CONNECTED | Desktop data is not accessible by in-game JSON UI |
@@ -107,8 +112,8 @@ verified, propose one narrow extension via the team's actual, existing
 | ID | Condition | Accept | Refuse / stop |
 | --- | --- | --- | --- |
 | HUD-01 | Education 26.33 copied world with Show Coordinates ON and **no** prototype | Native XYZ (and Agent Pos when applicable) visible | Native setting blocked or coordinate field missing |
-| HUD-02 | Activate prototype RP *only* on copied QA world | Native XYZ still reads and updates; exactly one LT static hint; no other HUD changes | Client refuses JSON UI, native coordinate missing, or UI relocated |
-| HUD-03 | Flip Show Coordinates OFF | Original visibility semantics preserved; no orphan LT line | Hint remains visible when vanilla field is disabled |
+| HUD-02 | Activate prototype RP *only* on copied QA world | Native XYZ still reads and updates; one small sibling hint below the position row | Client refuses nested patch, coordinate missing, or text/day/chat overlap |
+| HUD-03 | Flip Show Coordinates OFF | Both native XYZ and new hint disappear (same visible signal) | Hint remains visible when native field is disabled |
 | HUD-04 | Small/large GUI scales, windowed/fullscreen, touchscreen if available | No overlap with agent, chat, scoreboard, inventory/hotbar, safe zones | Clipping, blocked controls or unreadable position |
 | HUD-05 | Competing RP/education pack | Clear incompatibility evidence and safe disable | Never force pack priority or patch vanilla files |
 | HUD-06 | Disable prototype and reload copied world | Exact vanilla HUD restored without loss of world/profile data | Any persistent UI defect |
@@ -119,6 +124,30 @@ verified, propose one narrow extension via the team's actual, existing
 authored source check is NOT a pass. No Node, TypeScript, Rust, Windows,
 resource pack packaging, Minecraft, multiplayer, five-client or Education
 HUD screenshot acceptance has been executed or observed for this prototype.
+
+## v0.2 source correction and pinned Mojang witness (5 November 2026)
+
+The previous v0.1 prototype added a second label **inside**
+`hud.player_position.controls`, whose native image size is
+`100%c + 6px` by `100%c + 2px`. The old child declared
+its own `100%c` size, risking unexpected content-size growth
+and Agent Pos overlap. The v0.2 source deliberately inserts a
+short sibling in the existing chat stack and uses the vanilla
+visible binding without altering the native position definition.
+
+Pinned Mojang Bedrock revision:
+`Mojang/bedrock-samples@15701fa9c13923f12662984c32c124327e40e3d3`,
+`resource_pack/ui/hud_screen.json` blob
+`e2037b2d0d789a1431610a8f639ccd16e63686c3`.
+This is a **Bedrock reference**, not a verified Minecraft
+Education 26.33 JSON UI schema or a guarantee of merge behavior.
+
+An `insert_after` on the nested
+`root_panel/chat_stack` path may fail if the Education HUD tree
+is different. Any UI rearrangement or orphan hint must cause a
+failed runtime test and RP deactivation, not a second override.
+The source test was authored, not executed. No pack was built,
+installed or used in gameplay.
 
 ## References
 

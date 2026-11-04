@@ -1,34 +1,37 @@
 {
   "namespace": "hud",
-  "player_position": {
+  "lt_native_coordinates_hint": {
+    "type": "label",
+    "text": "LT: XYZ notes in app",
+    "localize": false,
+    "font_size": "small",
+    "shadow": true,
+    "layer": 1,
+    "color": [
+      0.78,
+      0.88,
+      0.98
+    ],
+    "offset": [
+      2,
+      0
+    ],
+    "bindings": [
+      {
+        "binding_name": "#player_position_visible",
+        "binding_name_override": "#visible",
+        "binding_type": "global"
+      }
+    ]
+  },
+  "root_panel/chat_stack": {
     "modifications": [
       {
-        "array_name": "controls",
-        "operation": "insert_back",
+        "control_name": "player_position",
+        "operation": "insert_after",
         "value": [
           {
-            "lt_native_coordinates_hint": {
-              "type": "label",
-              "text": "LT: Save XYZ in Lazy Tester",
-              "localize": false,
-              "shadow": true,
-              "color": [
-                0.83,
-                0.9,
-                0.98
-              ],
-              "layer": 2,
-              "anchor_from": "top_left",
-              "anchor_to": "bottom_left",
-              "offset": [
-                0,
-                4
-              ],
-              "size": [
-                "100%c",
-                "100%c"
-              ]
-            }
+            "lt_native_coordinates_hint@hud.lt_native_coordinates_hint": {}
           }
         ]
       }

@@ -206,9 +206,10 @@ are displayed but never executed by the helper.
 
 **Source-only native HUD prototype:** The optional
 `education-native-hud-prototype/` is an isolated resource-only pack
-containing a minimal `hud.player_position.controls` additive JSON UI
-patch. It is **not** installed/bundled and can show only a static
-Save-to-desktop reminder beside Minecraft's existing XYZ, if accepted
+containing a minimal `root_panel/chat_stack`
+`insert_after(player_position)` JSON UI patch. The revised v0.2
+does not modify Minecraft's content-sized `player_position` image;
+it can show only a static visibility-bound hint below XYZ, if accepted
 by Education 26.33. It has no Script API, dynamic dimension/facing,
 in-game Save/Load, or clipboard capability. See
 [HUD extension contract](../../../docs/system/education-native-coordinate-hud.md).

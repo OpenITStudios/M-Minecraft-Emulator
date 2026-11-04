@@ -10,6 +10,22 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P21 native-coordinate layout correction (5 November 2026;
+  SOURCE_ONLY):** Pinned Mojang Bedrock UI source exposed a
+  concrete risk in P20: its extra `100%c` label was inside
+  Minecraft's auto-sized `hud.player_position` image.
+  RP candidate v0.2.0 now keeps that native definition untouched:
+  it inserts a short static, visibility-bound sibling **after**
+  `player_position` in `root_panel/chat_stack`. This reduces
+  risk of altering the native XYZ background/Agent Pos at source
+  level, but the nested JSON UI path, visibility and potential
+  chat-stack reflow remain UNVERIFIED on Education 26.33.
+  Updated source checks are AUTHORED_NOT_EXECUTED; no pack build,
+  install, world mutation, gameplay, five-client test, CI, or
+  new in-game Save/Load logic. See
+  [HUD contract](../docs/system/education-native-coordinate-hud.md).
+
+
 - **Native HUD JSON UI prototype (5 November 2026; source-only):**
   Operator approved one isolated, manually opt-in Resource Pack prototype
   that targets vanilla `hud.player_position.controls.insert_back` with
@@ -723,7 +739,7 @@ Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
 **Current operator priority (5 November):** Native coordinates are the
-only live HUD owner. A resource-only P20 patch is now staged in source
+only live HUD owner. A resource-only P21 layout-corrected patch is now staged in source
 but NOT installed. Its literal JSON UI merge behavior is UNKNOWN in
 Education 26.33 and is not compatible-by-assumption with other HUD packs.
 Minecraft world Save/Load, dimension, facing and count must remain
@@ -739,8 +755,8 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 
 When the operator separately authorizes real Minecraft testing, first
 compare Education 26.33 vanilla Show Coordinates with the opt-in
-resource-only P20 override in ONE disposable copied QA world. Require native
-XYZ and Agent Pos preservation, correct visibility, no overlapping controls,
+resource-only P21 v0.2 sibling override in ONE disposable copied QA world. Require native
+XYZ and Agent Pos preservation, correct on/off visibility, no overlapping or displaced chat, days or Agent Pos,
 and a reversible pack disable. If the JSON UI merge fails, STOP/disable the
 prototype; do not edit game binaries, force global packs or duplicate
 `hud.player_position`. After that proof, evaluate the original team's

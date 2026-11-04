@@ -1198,3 +1198,30 @@ Microsoft explicitly warns that JSON UI overrides can conflict across
 Add-Ons; Education 26.33 parity is NOT_VERIFIED. Prototype remains OFF and
 not installed, packaged or bundled. Authored static Node fixture is
 NOT_EXECUTED. No Node/Svelte/Rust/Windows/Minecraft or five-client proof.
+
+
+## P21 — Reduce native coordinate sizing risk (5 November 2026; source-only)
+
+Review of the pinned official Mojang Bedrock sample
+\`Mojang/bedrock-samples@15701fa9c13923f12662984c32c124327e40e3d3\`
+(\`resource_pack/ui/hud_screen.json\` blob
+\`e2037b2d0d789a1431610a8f639ccd16e63686c3\`) found
+that \`hud.player_position\` is a content-sized image
+(\`100%c + 6px\`, \`100%c + 2px\`) with a single native bound
+text child. The P20 label added another content-sized child inside
+that native image, potentially altering the coordinate box or
+overlapping Education Agent Pos.
+
+**P21 source fix:** the optional RP v0.2.0 no longer defines or
+modifies \`hud.player_position\`. Its one short static label is
+inserted as a sibling after the existing player-position instance in
+\`root_panel/chat_stack\` via \`insert_after\`, and observes the native
+\`#player_position_visible\` global binding. No native player-position
+text or image size is redefined. The chat stack may still shift
+one line; a nested-path override may also fail in Education 26.33.
+Neither has been tested in Minecraft.
+
+No install, pack build, world edit, player/world accessor, functional
+in-game Save button, Script API, HUD telemetry, clipboard, launcher or
+Tauri bridge. Node source fixtures AUTHORED_NOT_EXECUTED. See
+[HUD integration contract](education-native-coordinate-hud.md).

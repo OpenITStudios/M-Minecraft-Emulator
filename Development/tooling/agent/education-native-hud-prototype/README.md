@@ -1,77 +1,108 @@
-# Experimental Native Coordinate HUD resource pack
+# Native Coordinate HUD — isolated JSON UI candidate v0.2.0
 
-Status: **SOURCE_ONLY / NOT_INSTALLED / NOT_TESTED on Minecraft Education 26.33**.
+**Status:** SOURCE_ONLY · NOT_PACKAGED · NOT_INSTALLED · NOT_EXECUTED · Minecraft Education 26.33 compatibility UNKNOWN.
 
-This opt-in `resources` pack prototypes an extension of the existing
-`hud.player_position` UI component rather than replacing the vanilla
-`hud_screen.json`, editing Minecraft binaries or recreating the coordinates
-renderer. It uses one JSON UI `modifications` insertion into
-`player_position.controls` and adds exactly one **static information label**.
+This is an **opt-in resource-only proof of concept**. Its only intended
+visible change is a short, noninteractive note directly **after** the native
+`player_position` in Mojang's `root_panel/chat_stack`:
 
-The vanilla `#player_position_text` and `#player_position_visible` bindings are
-not redefined, so **if this partial override is accepted by the client's
-JSON UI loader**, native XYZ remains owned by Minecraft. This is an intended
-contract, NOT confirmed Education 26.33 acceptance.
+    [Minecraft native Position: X, Y, Z]
+    LT: XYZ notes in app
+    [Minecraft's other HUD rows]
 
-## Present behavior
+The exact display is hypothetical until Education runtime observation.
 
-- Intended visual: native `Position: X, Y, Z` plus one modest companion line:
-  `LT: Save XYZ in Lazy Tester`.
-- No clickable game UI, player- or world-aware Save/Load, dynamic direction,
-  dimension, chunk, saved-location count or player identification.
-- No Script API, custom event, scheduler, content log, animation, font, texture,
-  input, API dependency, clipboard access, network bridge or behavior pack.
-- Nothing auto-installs or enables this resource pack. It is excluded from the
-  standard desktop installer and existing Education team help package.
-- The desktop Saved Locations notebook remains the **only implemented**
-  explicit Save/List/Delete workflow and requires manual input.
+## Why v0.2 replaced the earlier v0.1 patch
 
-## Why this is an experiment
+The previous commit inserted a label **inside** `hud.player_position`,
+whose vanilla image size is `["100%c + 6px","100%c + 2px"]`. Adding
+a second child, especially one with its own `100%c` dimensions,
+may disturb this native auto-sized container and Agent Pos. v0.2
+**does not override `hud.player_position` at all**.
 
-The Mojang Bedrock sample defines `hud.player_position` as an image with
-`#player_position_text` and `#player_position_visible`. Community JSON UI
-documentation describes `modifications.controls.insert_back`. But Minecraft
-Education 26.33 has NOT demonstrated parity or guaranteed stable merge
-behavior. Microsoft's cooperative Add-Ons guidance explicitly warns that
-JSON UI overrides can conflict with other packs.
+It introduces `hud.lt_native_coordinates_hint` and modifies **only**
+`hud.root_panel/chat_stack` with a single `insert_after` operation
+targeting the existing `player_position` child. The new sibling is a
+small static label whose visibility reads the existing global
+`#player_position_visible` binding. It declares no size override,
+new viewport, button mappings, Script API or gameplay authority.
 
-The vanilla coordinate label may include an Education Agent Pos line. A
-fixed static accessory could overlap a second line, another add-on, the
-chat HUD or touch-scale layouts. Treat **any** overlap/vanilla-coordinate loss
-as FAIL; disable this pack on the copied QA world, do not patch installed game
-assets or increase global pack scope.
+**Trade-off:** the chat stack may shift down by one line, and nested
+control paths / `insert_after` may not load in Education 26.33.
+These are unverified engine behaviors. Any overlap, orphan hint,
+vanilla XYZ loss or pack conflict is a failed test — disable the RP.
 
-## Opt-in QA procedure (NOT EXECUTED)
+## Source contents
 
-Only after separate runtime authorization:
-1. Use an isolated COPY of a QA world and save existing pack/config state.
-2. Confirm the base game's Show Coordinates works without this resource pack.
-3. Stage the pack as a standard Bedrock-compatible resource pack from its
-   manifest and `ui/` directory; activate it ONLY on the copied world,
-   never in global resources or the five profile defaults.
-4. Verify vanilla XYZ still displays and updates, including negative
-   coordinates and the Agent Pos case; verify one static LT companion line.
-5. Repeat with GUI scales, Education UI variations, chat, scoreboard,
-   multiplayer, and competing UI packs. A JSON loader refusal or overlay
-   conflict is NOT a reason to patch game binaries.
-6. Disable the pack and confirm exact vanilla HUD restoration.
-7. Record Education version, resource pack order, original and altered UI
-   screenshots, failure modes and status. Test only with approval.
+- `manifest.json`: one `resources` module, immutable pack UUIDs,
+  experimental version `0.2.0`.
+- `ui/hud_screen.json`: one label and one targeted control insertion.
+- `README.md`: this declaration. It is not a Minecraft pack asset.
 
-## Next dynamic phase: team-owned functionality (NOT WIRED)
+No `_ui_defs.json` or new UI screen name is needed for the
+hypothesized override of an existing vanilla HUD file; the actual
+Education loader behavior is NOT verified. No other files, assets,
+libraries, dependencies, executable scripts or embedded behavior pack.
 
-See `docs/system/education-native-coordinate-hud.md` for the interface
-contract with the original team `minecraft-bedrock-agent-skills` owners.
-A JSON UI label cannot read desktop `Data/Coordinates/bookmarks.json`,
-synthesize new global binding names or dispatch a Script API callback merely
-by declaring a control. A real Save/Load menu would be authored by the
-original team's world-scoped `forms`/`coords`/`teleport` owners using an
-approved player-origin interaction and version-compatible UI API. Do not
-install a second JavaScript behavior pack from Lazy Tester.
+The installed Minecraft binary, original profile stores, five native
+session owner, original team modules and Lazy Tester
+`Data/Coordinates/bookmarks.json` are unaffected. This source folder
+is excluded from the official Lazy Tester distribution and existing
+data-only in-game help pack. No auto-activation or global RP changes.
+
+## Version-pinned research witness
+
+Bedrock samples main, reviewed 5 Nov 2026:
+
+- commit: `15701fa9c13923f12662984c32c124327e40e3d3`
+- `resource_pack/ui/hud_screen.json` blob:
+  `e2037b2d0d789a1431610a8f639ccd16e63686c3`
+- Vanilla `hud.player_position` is a content-sized image with
+  `player_position_text` bound to `#player_position_text`.
+- Its visibility is controlled by `#player_position_visible`.
+- `root_panel/chat_stack.controls` includes the instance
+  `player_position@hud.player_position` immediately before
+  `number_of_days_played`.
+
+**This is a Bedrock source witness, NOT Education compatibility proof.**
+Microsoft states that JSON UI overrides are not cooperative across packs.
+Another world RP modifying `hud_screen.json` may silently override/conflict.
+
+## Operator-only QA — intentionally NOT_EXECUTED
+
+Only after separately approved Windows / Minecraft testing:
+
+1. Use a **copy** of an Education 26.33 QA world. Record version and
+   current world RP stack; do not change global resources.
+2. Verify native XYZ and Agent Pos with Show Coordinates enabled and
+   with this prototype **disabled**. Record a baseline screenshot.
+3. Prepare an ordinary resource pack archive containing only
+   `manifest.json` and `ui/hud_screen.json`. The repo does not ship,
+   build or install this archive automatically.
+4. Enable it in **only that copied QA world**. Verify native position,
+   Agent Pos, Show Coordinates visibility, one static sibling note,
+   chat position and days/scoreboard layout.
+5. Repeat with small/large GUI scale, a negative XYZ, chat open,
+   agents active, touch-layout where available, and a competing UI RP.
+6. Disable the RP; verify vanilla HUD is restored in the copied world.
+   On any regression: do not widen the patch or edit game binaries;
+   retain the observed failure and leave the RP disabled.
+
+## Dynamic in-game features: NOT implemented here
+
+JSON UI `label` is NOT a playable Save/Load button, and this RP cannot
+read the desktop bookmark JSON file or create arbitrary game bindings.
+Actual in-game Save/Load, facing/dimension/chunk and permitted teleport
+must be implemented by the **original team's** validated
+`forms/coords/display/teleport` gameplay owners after its source and
+Education API compatibility are available. Do not fork another telemetry
+module or invent a new listener. See
+`docs/system/education-native-coordinate-hud.md`.
 
 ## References
 
-- https://github.com/Mojang/bedrock-samples/blob/main/resource_pack/ui/hud_screen.json
+- https://github.com/Mojang/bedrock-samples/blob/15701fa9c13923f12662984c32c124327e40e3d3/resource_pack/ui/hud_screen.json
 - https://wiki.bedrock.dev/json-ui/json-ui-intro
+- https://wiki.bedrock.dev/json-ui/best-practices
 - https://learn.microsoft.com/en-us/minecraft/creator/documents/practices/guidelinesforbuildingcooperativeaddons?view=minecraft-bedrock-stable
-- https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection
+- https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log
