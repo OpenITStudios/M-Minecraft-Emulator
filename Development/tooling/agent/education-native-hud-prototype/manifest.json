@@ -1,0 +1,34 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Lazy Tester - Native Coordinates HUD (Experimental)",
+    "description": "Opt-in, source-only UI prototype. Preserves vanilla XYZ; adds a static companion hint. No gameplay, Save, or telemetry.",
+    "uuid": "d1de865d-59c8-4f1e-a4f7-832a169fa150",
+    "version": [
+      0,
+      1,
+      0
+    ],
+    "min_engine_version": [
+      1,
+      26,
+      30
+    ]
+  },
+  "modules": [
+    {
+      "type": "resources",
+      "uuid": "c65a874c-bbbf-4e53-af2e-197332ccbb21",
+      "version": [
+        0,
+        1,
+        0
+      ]
+    }
+  ],
+  "metadata": {
+    "authors": [
+      "OpenITStudios"
+    ]
+  }
+}

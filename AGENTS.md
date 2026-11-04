@@ -61,6 +61,19 @@ engine is authorized. The helper cannot install team modules. Team updates use t
 skills:check / skills:sync workflow, not a copied module fork.
 Actual Education Windows capability stays NOT_VERIFIED.
 
+**Scoped operator-approved source prototype — 5 November 2026:** A new
+experimental, resource-only `education-native-hud-prototype/` is authorized
+on the `Local` branch solely to investigate an additive JSON UI patch to
+Minecraft's existing `hud.player_position` in a disposable QA world.
+It MUST remain uninstalled, unbundled, untested and disabled by default
+until separate runtime authorization. It may add only a truthful static
+hint, never replace native XYZ/visibility, inject game hooks, claim
+dynamic world/player data, offer nonfunctional buttons or change the
+existing team modules. A resource-only prototype does not supersede
+the exclusive team-owned gameplay/Script API, data-only in-game help
+or five-client process authority. See
+`docs/system/education-native-coordinate-hud.md`.
+
 **Team source update admission:** When newer team skills/Skills Probe ZIP
 snapshots are supplied, use the local read-only review gate described in
 `docs/system/education-team-source-updates.md`. No automatic module

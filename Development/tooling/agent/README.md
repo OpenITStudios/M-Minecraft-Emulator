@@ -204,6 +204,16 @@ a team module, perform runtime testing, touch a Minecraft world,
 or use Codex. Developer exports and Skills Probe-only commands
 are displayed but never executed by the helper.
 
+**Source-only native HUD prototype:** The optional
+`education-native-hud-prototype/` is an isolated resource-only pack
+containing a minimal `hud.player_position.controls` additive JSON UI
+patch. It is **not** installed/bundled and can show only a static
+Save-to-desktop reminder beside Minecraft's existing XYZ, if accepted
+by Education 26.33. It has no Script API, dynamic dimension/facing,
+in-game Save/Load, or clipboard capability. See
+[HUD extension contract](../../../docs/system/education-native-coordinate-hud.md).
+The original team remains the sole gameplay UI logic owner.
+
 **Existing local MCP** remains a bounded, read-only consumer of
 `[ANALYTICS]` and `[GAME_RESULTS]` captured records. Four
 `get_diagnostics_overview/list_issue_candidates/get_issue_details/query_diagnostic_evidence`

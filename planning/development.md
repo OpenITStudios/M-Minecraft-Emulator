@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-**Updated:** 4 November 2026. **Branch:** `Local` only;
+**Updated:** 5 November 2026. **Branch:** `Local` only;
 `main` release-reserved; GitHub Actions CI disabled.
 This file is the **single current status and next-action owner**.
 Older detailed sections are preserved in
@@ -9,6 +9,23 @@ Always pin the actual latest `Local` SHA; an old report is not
 new-revision acceptance.
 
 ## Product and owners
+
+- **Native HUD JSON UI prototype (5 November 2026; source-only):**
+  Operator approved one isolated, manually opt-in Resource Pack prototype
+  that targets vanilla `hud.player_position.controls.insert_back` with
+  a static coordinate-tools hint. New files under
+  `Development/tooling/agent/education-native-hud-prototype/` include
+  a resources-only manifest, minimal UI override and an honest README.
+  A narrow Node contract test is AUTHORED_NOT_EXECUTED. Native XYZ and
+  visibility bindings are NOT replaced. This is NOT a working in-game
+  Save/Load button, live dimension/facing display or trusted link to the
+  desktop notebook. The original team's forms/display/coords/teleport
+  modules remain the sole candidate for future world/player logic; team
+  source is not available in the connected GitHub account for direct
+  edits. The prototype is uninstalled, unbundled, test-gated and may
+  conflict with other UI resource packs. No runtime, CI, tests, package
+  or world changes. See
+  [Education HUD architecture](../docs/system/education-native-coordinate-hud.md).
 
 - **Native-first Coordinate Saved Locations (4 November 2026,
   source-only):** The operator approved native Show Coordinates + manual
@@ -705,25 +722,29 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (4 November):** Prefer Education's native
-Show Coordinates; use Copy Coordinate UI only if verified in Education
-26.33, otherwise keep the explicit manual Paste XYZ path. P18 remains
-BLOCKED for trustworthy automatic live F3/OCR; do not add speculative
-frame collectors, Code Builder/WebSocket, automatic clipboard input,
-listener, source test execution, CI, game/world mutation or installers.
+**Current operator priority (5 November):** Native coordinates are the
+only live HUD owner. A resource-only P20 patch is now staged in source
+but NOT installed. Its literal JSON UI merge behavior is UNKNOWN in
+Education 26.33 and is not compatible-by-assumption with other HUD packs.
+Minecraft world Save/Load, dimension, facing and count must remain
+UNAVAILABLE in-game until the original team source/API and explicit
+player/world attribution can be reviewed and tested. P18 automatic F3/OCR
+remains BLOCKED; no Code Builder/WebSocket, automatic clipboard input,
+second listener, source test execution, CI, game/world mutation or installer.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
 source test suites, install packages, use CI or delete private artifacts. Preserve
 `App/`, `Data/`, old pilot data, and all historical proof.
 
 ## Single next step
 
-Once the operator separately authorizes Windows/Minecraft tests, verify
-on ONE copied Education 26.33 QA world whether Show Coordinates is visible
-and whether Creator > Copy Coordinate UI and Ctrl+Alt+C actually exist.
-In the same approved run, manually paste a sample into Coordinates & Saves,
-Save/Reload/Delete a world-labelled note and check MC01/MC02 label separation.
-No shortcut automation, game command, account/world mutation or new Add-On
-is authorized by this source commit. Until that evidence, Education copy
-compatibility, live F3 XYZ and true player/world pairing remain NOT_VERIFIED.
-Node/Vitest/TS/Svelte/Rust/Windows/Minecraft and CI NOT_EXECUTED.
-Testing sealed CAS BLOCKED; speculative OCR/WebSocket stays deferred.
+When the operator separately authorizes real Minecraft testing, first
+compare Education 26.33 vanilla Show Coordinates with the opt-in
+resource-only P20 override in ONE disposable copied QA world. Require native
+XYZ and Agent Pos preservation, correct visibility, no overlapping controls,
+and a reversible pack disable. If the JSON UI merge fails, STOP/disable the
+prototype; do not edit game binaries, force global packs or duplicate
+`hud.player_position`. After that proof, evaluate the original team's
+verified forms/display API for a genuine in-game Save/Load feature.
+The desktop manual Saved Locations remains the only implemented data store.
+No local source tests/Node/TS/Rust/Windows/Minecraft/package/CI executed;
+no five-client acceptance. Testing sealed CAS remains BLOCKED.

@@ -1174,3 +1174,27 @@ Official references:
 - https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features
 - https://learn.microsoft.com/en-us/minecraft/creator/documents/copycoordinates?view=minecraft-bedrock-stable
 - https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection
+
+## P20 — Native HUD JSON UI extension prototype (5 November 2026; source-only)
+
+The operator approved a **separate, opt-in resource-only** experiment to
+modify vanilla `hud.player_position` rather than duplicate XYZ in an app
+HUD. The new `Development/tooling/agent/education-native-hud-prototype/`
+contains a `resources` manifest and one short `ui/hud_screen.json` using
+`player_position.modifications.controls.insert_back`. It appends exactly
+one **static** truthful label: "LT: Save XYZ in Lazy Tester".
+
+The original Minecraft `#player_position_text`,
+`#player_position_visible`, Agent Pos rendering, and full HUD root are
+NOT overridden. There are NO custom button mappings, Script API,
+player/world lookup, dimension/facing/chunk binding, Save/Load handler,
+teleport command, clipboard process, game-side monitor or new telemetry
+owner. Future in-game forms may only be implemented by the original
+reviewed `minecraft-bedrock-agent-skills` team modules; that upstream
+repo could not be opened through the connected GitHub account here.
+See [full feasibility and QA contract](education-native-coordinate-hud.md).
+
+Microsoft explicitly warns that JSON UI overrides can conflict across
+Add-Ons; Education 26.33 parity is NOT_VERIFIED. Prototype remains OFF and
+not installed, packaged or bundled. Authored static Node fixture is
+NOT_EXECUTED. No Node/Svelte/Rust/Windows/Minecraft or five-client proof.
