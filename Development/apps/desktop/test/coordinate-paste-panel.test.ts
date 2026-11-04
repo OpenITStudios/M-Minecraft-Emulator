@@ -8,7 +8,7 @@ const css=readFileSync(new URL('../src/lazy-tester.css',import.meta.url),'utf8')
 describe('optional manual XYZ user-paste UI',()=>{
   it('lives only in the existing Play header without changing five launcher ownership',()=>{
     expect(play).toContain("import CoordinatePastePanel from './CoordinatePastePanel.svelte';");
-    expect(play).toContain("{#if page==='workspace'}<CoordinatePastePanel />{/if}");
+    expect(play).toContain("{#if page==='workspace'}<CoordinatePastePanel selectedSlot={active} />{/if}");
     expect(play).toContain('<LauncherRail {profiles} {labels} {healthIssues}');
     expect(play).toContain('<div class="lt-stage-space" bind:this={stageSpace}>');
     expect((play.match(/setInterval\(/g)??[])).toHaveLength(1);
@@ -71,7 +71,29 @@ describe('optional manual XYZ user-paste UI',()=>{
     expect(panel).toContain('bind:value={mode}');
     expect(panel).toContain('disabled={!output}');
   });
-  it('does not read/write clipboard, persist coordinates, invoke native game or send commands',()=>{
+  it('uses only explicitly saved manual coordinates and pinned launcher labels',()=>{
+    for(const anchor of [
+      "export let selectedSlot: ProfileSlot | null = null;",
+      'coordinateBookmarks.list()', 'coordinateBookmarks.save(', 'coordinateBookmarks.delete(',
+      "selectedSlot === null", 'USER_PASTED_UNVERIFIED',
+      'Save XYZ as location', 'World label (required, entered by you)',
+      'Confirm delete', 'bookmark.xyz', 'savedStatus',
+      'no player/world attribution is verified'
+    ]) {
+      // The source may spell the disclosure warning with title case.
+      if (anchor==='USER_PASTED_UNVERIFIED') {
+        expect(panel).toContain('User-pasted · Unverified');
+      } else if (anchor==='no player/world attribution is verified') {
+        expect(panel).toContain('no player/world attribution is verified');
+      } else {
+        expect(panel).toContain(anchor);
+      }
+    }
+    expect(panel).toContain('deleteReview !== id');
+    expect(panel).toContain('loadedSlot !== selectedSlot');
+    expect(panel).toContain('loadTicket');
+  });
+  it('does not read/write clipboard, call the game controller or send commands',()=>{
     for(const forbidden of [
       'navigator.clipboard', 'readText(', 'writeText(', 'execCommand(',
       'invokeRuntime(', 'lazyTester.', 'workspaceSurface.', 'runCommand(',

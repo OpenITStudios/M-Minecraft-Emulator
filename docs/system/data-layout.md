@@ -20,6 +20,8 @@ Minecraft-Emulator/
   App/                           application, two reviewed DLLs, build receipt
   Data/
     Cache/                       WebView data and process-local temporary files
+    Coordinates/
+      bookmarks.json             optional operator-saved unverified XYZ notes (max 100)
     Diagnostics/                 optional source-only local QA evidence archive
       runs/<run-id>/
         manifest.json            final committed run marker, checksums
@@ -49,6 +51,15 @@ local App refresh preserve the legacy pointer. Catalog schema 1 uses
 `Data/Profiles/`; new schema 2 profiles use `Data/Launchers/`.
 This compatibility route never grants permission to move, overwrite, copy
 or recreate private account/world data.
+
+The optional Data/Coordinates/bookmarks.json is written only after an
+explicit Save/Delete in the Play Coordinates & Saves disclosure. It is
+project-local manual content, not an authoritative Minecraft world/player
+snapshot or an account profile record. The Rust owner validates a strict
+schema and retains existing files on parse/identity errors; list does not
+create the directory. Manually selected MCxx and typed world/dimension
+labels are NOT a verified game connection. Its contents must never be
+published to an AI or installed into a game automatically.
 
 All runtime files are ignored and never bundled or tracked. The optional
 Data/Diagnostics archive is created only by an explicit local import, not

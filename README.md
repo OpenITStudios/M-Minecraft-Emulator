@@ -18,6 +18,7 @@ for the proof ceiling at the latest revision.
 | First efficient Windows test | `DEV.cmd localcheck`, then `DEV.cmd plan --profile local-smoke --json` after approved toolchain setup | [13-step local smoke](docs/validation/efficient-local-testing.md), [Windows first-run](docs/validation/local-pc-first-run.md) |
 | Plan **all** tests and required evidence | 306 uniquely identified planned test cases, not yet executed | [Complete master](docs/validation/lazy-tester-test-master.md), [198 standard cases](docs/validation/lazy-tester-test-cases-standard.md), [108 MCP/AI/QA cases](docs/validation/lazy-tester-test-cases-experimental.md) |
 | Open an already prepared app | Root `Lazy Tester.exe` or compatibility `RUN.cmd` | [Desktop workspace](docs/product/unified-workspace.md) |
+| Save manually copied Minecraft coordinates | Play → Coordinates & Saves → paste XYZ, provide location/world labels, Save | [Native-first workflow](docs/system/coordinate-inspector.md#p19--native-first-manual-saved-locations-4-november-2026-source-only) |
 | Develop or package locally **when explicitly authorized** | `DEV.cmd` | [Developer controller](Development/tooling/developer/README.md), [distribution](Development/engine/distribution/README.md) |
 | Inspect or launch profiles through an external model | Optional `Development/tooling/agent/mcp.mjs` | [MCP bridge](Development/tooling/agent/README.md) |
 | Review the original team's Skills Probe results | Existing MCP tool `probe_qa` | [Map-Aware Probe QA](docs/system/map-aware-probe-qa.md) |

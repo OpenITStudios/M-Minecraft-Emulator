@@ -7,7 +7,7 @@ import {lstat,mkdir,open,readFile} from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const PACK_NAME='LazyTester-Team-Commands-Help-Education-2.1.0.mcpack';
+const PACK_NAME='LazyTester-Team-Commands-Help-Education-2.2.0.mcpack';
 const SOURCE=new URL('./education-team-help-pack/',import.meta.url);
 const ROOT=fileURLToPath(new URL('../../../',import.meta.url));
 const ENTRIES=[
@@ -115,12 +115,12 @@ export async function stageUniversalEducationMcpack(){
   const manifest=JSON.parse(contents[0].toString('utf8'));
   if(manifest.format_version!==2||
      manifest.header?.uuid!=='4af9d3f0-9fa1-4cb9-a011-fd37c1b2fb16'||
-     manifest.header?.version?.join('.')!=='2.1.0'||
+     manifest.header?.version?.join('.')!=='2.2.0'||
      manifest.header?.name!=='Lazy Tester - Team Commands Help'||
      !Array.isArray(manifest.modules)||manifest.modules.length!==1||
      manifest.modules[0]?.type!=='data'||
      manifest.modules[0]?.uuid!=='736d52ad-7c03-4a4b-880d-25a89072586f'||
-     manifest.modules[0]?.version?.join('.')!=='2.1.0'||
+     manifest.modules[0]?.version?.join('.')!=='2.2.0'||
      Object.hasOwn(manifest,'dependencies')) {
     throw Error('Reviewed reusable Education manifest drift');
   }
@@ -168,7 +168,7 @@ export async function stageUniversalEducationMcpack(){
     name,content:contents[i]
   })));
   const dir=await child(await child(await child(
-    path.join(ROOT,'workspace'),'diagnostics'),'education-team-help'),'v2.1');
+    path.join(ROOT,'workspace'),'diagnostics'),'education-team-help'),'v2.2');
   const file=path.join(dir,PACK_NAME);
   const hash=digest(content);
   try{
@@ -176,7 +176,7 @@ export async function stageUniversalEducationMcpack(){
     try{await h.writeFile(content);await h.sync();}
     finally{await h.close();}
     return {status:'CREATED_LOCALLY_NOT_EDUCATION_TESTED',
-      relativeFile:'workspace/diagnostics/education-team-help/v2.1/'+PACK_NAME,
+      relativeFile:'workspace/diagnostics/education-team-help/v2.2/'+PACK_NAME,
       bytes:content.length,sha256:hash,uploadedToAI:false};
   }catch(error){
     if(error?.code!=='EEXIST')throw error;
@@ -188,7 +188,7 @@ export async function stageUniversalEducationMcpack(){
     const previous=await readFile(file);
     if(!previous.equals(content))throw Error('Existing pack differs; never overwrite');
     return {status:'ALREADY_PRESENT_IDENTICAL_NOT_EDUCATION_TESTED',
-      relativeFile:'workspace/diagnostics/education-team-help/v2.1/'+PACK_NAME,
+      relativeFile:'workspace/diagnostics/education-team-help/v2.2/'+PACK_NAME,
       bytes:content.length,sha256:hash,uploadedToAI:false};
   }
 }

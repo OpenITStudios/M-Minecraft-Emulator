@@ -1,6 +1,12 @@
 <script lang="ts">
   import {tick} from 'svelte';
   import {formatUserPastedCoordinates, type PastedCoordinateOutput} from './app/coordinates.js';
+  import {coordinateBookmarks, type CoordinateBookmark, type BookmarkDimension} from './app/bridge/coordinateBookmarks.js';
+  import type {ProfileSlot} from './app/bridge/lazyTester.js';
+
+  // Selected native launcher is an OPERATOR-ASSIGNED notebook label only.
+  // Clipboard, player identity, active world and dimension are never inferred.
+  export let selectedSlot: ProfileSlot | null = null;
 
   // Ephemeral UI-only input. Never identify the selected Minecraft/world.
   let raw = '';
@@ -10,6 +16,98 @@
   let outputField: HTMLInputElement | undefined;
   let detailsElement: HTMLDetailsElement | undefined;
   let summaryElement: HTMLElement | undefined;
+  let bookmarkName = '';
+  let worldLabel = '';
+  let dimension: BookmarkDimension = 'Unknown';
+  let saved: readonly CoordinateBookmark[] = [];
+  let savedStatus = '';
+  let saving = false;
+  let loading = false;
+  let deleting = false;
+  let deleteReview: string | null = null;
+  let loadedSlot: ProfileSlot | null = null;
+  let loadTicket = 0;
+
+  $: if (detailsElement?.open && loadedSlot !== selectedSlot) {
+    loadedSlot = selectedSlot;
+    void refreshBookmarks();
+  }
+
+  async function refreshBookmarks(): Promise<void> {
+    const slot = selectedSlot;
+    const ticket = ++loadTicket;
+    saved = [];
+    deleteReview = null;
+    savedStatus = '';
+    if (!detailsElement?.open || slot === null) {
+      loading = false;
+      if (detailsElement?.open) savedStatus = 'Select an active Minecraft launcher to view its saved notes.';
+      return;
+    }
+    loading = true;
+    try {
+      const report = await coordinateBookmarks.list();
+      if (ticket !== loadTicket || !detailsElement?.open || slot !== selectedSlot) return;
+      saved = report.items.filter(item => item.slot === slot).slice().reverse();
+    } catch {
+      if (ticket === loadTicket && detailsElement?.open) {
+        savedStatus = 'Saved locations are unavailable. Existing data was not reset.';
+      }
+    } finally {
+      if (ticket === loadTicket) loading = false;
+    }
+  }
+
+  async function saveBookmark(): Promise<void> {
+    const slot = selectedSlot;
+    if (saving || loading || !detailsElement?.open || slot === null || !raw.trim() || invalid) return;
+    const source = raw;
+    const name = bookmarkName.trim();
+    const world = worldLabel.trim();
+    if (!name || !world) return;
+    saving = true;
+    savedStatus = '';
+    try {
+      const report = await coordinateBookmarks.save({slot,name,worldLabel:world,dimension,raw:source});
+      if (!detailsElement?.open || slot !== selectedSlot) return;
+      saved = report.items.filter(item => item.slot === slot).slice().reverse();
+      bookmarkName = '';
+      savedStatus = 'Location saved as a manual note. Player/world identity is unverified.';
+    } catch {
+      if (detailsElement?.open) savedStatus = 'Save failed. Check XYZ, labels or storage; existing notes were preserved.';
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function deleteBookmark(id: string): Promise<void> {
+    const slot = selectedSlot;
+    if (deleting || slot === null || deleteReview !== id || !detailsElement?.open ||
+        !saved.some(item => item.id === id)) return;
+    deleting = true;
+    deleteReview = null;
+    savedStatus = '';
+    try {
+      const report = await coordinateBookmarks.delete(id);
+      if (!detailsElement?.open || slot !== selectedSlot) return;
+      saved = report.items.filter(item => item.slot === slot).slice().reverse();
+      savedStatus = 'Saved location deleted by your explicit request.';
+    } catch {
+      if (detailsElement?.open) savedStatus = 'Delete failed. The original saved notes were not reset.';
+    } finally {
+      deleting = false;
+    }
+  }
+
+  function useBookmark(bookmark: CoordinateBookmark): void {
+    if (bookmark.slot !== selectedSlot) return;
+    raw = bookmark.xyz;
+    mode = 'XYZ';
+    worldLabel = bookmark.worldLabel;
+    dimension = bookmark.dimension;
+    clearOutputSelection();
+    savedStatus = 'Loaded saved XYZ into the manual formatter. No Minecraft command was sent.';
+  }
 
   $: {
     if (!raw.trim()) {
@@ -65,22 +163,34 @@
 
   function resetOnClose(event: Event): void {
     if (!(event.currentTarget as HTMLDetailsElement).open) {
+      ++loadTicket;
       raw = '';
       mode = 'XYZ';
       output = '';
       invalid = false;
+      bookmarkName = '';
+      worldLabel = '';
+      dimension = 'Unknown';
+      saved = [];
+      savedStatus = '';
+      deleteReview = null;
+      loadedSlot = null;
+      loading = false;
+    } else {
+      loadedSlot = selectedSlot;
+      void refreshBookmarks();
     }
   }
 </script>
 <svelte:window on:keydown={closeOnEscape} />
 
-<!-- User-initiated text only. No live game, native IPC or clipboard access. -->
+<!-- Manual input and explicit notebook actions only. No game command or clipboard access. -->
 <details class="lt-coordinate-paste" bind:this={detailsElement} on:toggle={resetOnClose}>
-  <summary bind:this={summaryElement} aria-label="Open manual coordinate formatter">Paste XYZ</summary>
+  <summary bind:this={summaryElement} aria-label="Open coordinate formatter and saved locations">Coordinates & Saves</summary>
   <div class="lt-coordinate-popup" role="group" aria-label="Manual coordinate formatter">
     <strong>Manual coordinates</strong>
     <small class="lt-coordinate-status">User-pasted · Unverified</small>
-    <p id="lt-coordinate-input-hint">Paste three XYZ numbers. This tool does not read the clipboard or connect to a Minecraft player or world.</p>
+    <p id="lt-coordinate-input-hint">In Minecraft Education, enable Settings > Show Coordinates. If your version provides Creator > Enable Copy Coordinate UI, press Ctrl+Alt+C in Minecraft and Ctrl+V here. Education 26.33 copy-shortcut support remains unverified. Otherwise type XYZ manually. This tool never reads the clipboard or identifies a player/world.</p>
     <label for="lt-coordinate-input">XYZ coordinates</label>
     <textarea
       id="lt-coordinate-input"
@@ -118,5 +228,57 @@
       <button type="button" class="lt-secondary" disabled={!output} on:click={selectOutput}>Select text</button>
     </div>
     <small id="lt-coordinate-copy-help" class="lt-coordinate-help">Press Ctrl+C to copy selected text. No game command is executed. Minecraft Education's built-in coordinate-copy shortcut is not verified.</small>
+    <section class="lt-coordinate-notes" aria-label="Saved location notes">
+      <strong>Saved Locations</strong>
+      <p class="lt-coordinate-help">Notes are stored locally in Lazy Tester, not in Minecraft. Launcher, world and dimension are manual labels; no player/world attribution is verified.</p>
+      <p class="lt-coordinate-note-owner">Launcher label: {selectedSlot === null ? 'Select a running Minecraft first' : 'MC' + String(selectedSlot).padStart(2, '0')}</p>
+      <label for="lt-coordinate-name">Location name</label>
+      <input id="lt-coordinate-name" type="text" maxlength="64" bind:value={bookmarkName} placeholder="QA Spawn" autocomplete="off" />
+      <label for="lt-coordinate-world">World label (required, entered by you)</label>
+      <input id="lt-coordinate-world" type="text" maxlength="64" bind:value={worldLabel} placeholder="QA Test World" autocomplete="off" />
+      <label for="lt-coordinate-dimension">Dimension label (manual)</label>
+      <select id="lt-coordinate-dimension" bind:value={dimension}>
+        <option value="Unknown">Unknown / not confirmed</option>
+        <option value="Overworld">Overworld</option>
+        <option value="Nether">Nether</option>
+        <option value="TheEnd">The End</option>
+      </select>
+      <button type="button" class="lt-secondary" disabled={saving || deleting || loading || selectedSlot===null || !raw.trim() || invalid || !bookmarkName.trim() || !worldLabel.trim()} on:click={() => void saveBookmark()}>
+        {saving ? 'Saving…' : 'Save XYZ as location'}
+      </button>
+      <p class="lt-coordinate-help" role="status" aria-live="polite">{savedStatus}</p>
+      {#if selectedSlot !== null}
+        <div class="lt-coordinate-saved-header">
+          <strong>MC{String(selectedSlot).padStart(2, '0')} locations ({saved.length})</strong>
+          <button class="lt-secondary" type="button" disabled={loading || saving || deleting} on:click={() => void refreshBookmarks()}>Reload</button>
+        </div>
+        {#if loading}
+          <p>Reading saved notes…</p>
+        {:else if saved.length === 0}
+          <p>No saved locations for this launcher.</p>
+        {:else}
+          <ul class="lt-coordinate-saved-list">
+            {#each saved as bookmark (bookmark.id)}
+              <li>
+                <div class="lt-coordinate-saved-text">
+                  <strong>{bookmark.name}</strong>
+                  <small>{bookmark.worldLabel} · {bookmark.dimension}</small>
+                  <code>{bookmark.xyz}</code>
+                </div>
+                <div class="lt-coordinate-saved-buttons">
+                  <button type="button" class="lt-secondary" on:click={() => useBookmark(bookmark)}>Use XYZ</button>
+                  {#if deleteReview === bookmark.id}
+                    <button type="button" class="lt-secondary" disabled={deleting} on:click={() => void deleteBookmark(bookmark.id)}>Confirm delete</button>
+                    <button type="button" class="lt-secondary" on:click={() => deleteReview = null}>Cancel</button>
+                  {:else}
+                    <button type="button" class="lt-secondary" disabled={deleting} on:click={() => deleteReview = bookmark.id}>Delete</button>
+                  {/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {/if}
+    </section>
   </div>
 </details>

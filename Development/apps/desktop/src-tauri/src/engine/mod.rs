@@ -41,5 +41,6 @@ mod independent_pipe_peer;
 #[cfg(all(windows, test))]
 mod independent_pipe_server;
 pub mod manager_settings;
+pub mod coordinate_bookmarks;
 pub mod native_clients;
 pub mod workspace_surface;

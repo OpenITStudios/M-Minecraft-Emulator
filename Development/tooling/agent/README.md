@@ -181,7 +181,11 @@ been retired from active source and must not be enabled on QA maps.
 
 The optional minimal `education-team-help-pack/` is now a
 **data-only function pack** with no Script API dependency, listener,
-background work, telemetry or gameplay writes.
+background work, telemetry or gameplay writes. The same static
+help listing now includes Minecraft Education's native Show Coordinates
+setting and the conditional Bedrock-only Ctrl+Alt+C guidance. It does not
+create an in-game Save button, read clipboard, override the native coordinate
+HUD, or claim Education 26.33 Copy Coordinate UI parity.
 
 Minecraft command (operator/cheats in a copied QA world):
 
@@ -193,9 +197,9 @@ When a map owns a conflicting `help` function, the fallback is
 `/function lazytester/help`. Minecraft's native `/help` command
 remains untouched.
 
-The offline `build-education-team-help-pack.mjs` stages one v2.1.0
+The offline `build-education-team-help-pack.mjs` stages one v2.2.0
 .mcpack only under ignored
-`workspace/diagnostics/education-team-help/v2.1/`. It does not install
+`workspace/diagnostics/education-team-help/v2.2/`. It does not install
 a team module, perform runtime testing, touch a Minecraft world,
 or use Codex. Developer exports and Skills Probe-only commands
 are displayed but never executed by the helper.

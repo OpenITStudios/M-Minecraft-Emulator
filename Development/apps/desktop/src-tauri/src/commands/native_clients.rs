@@ -57,6 +57,22 @@ pub async fn lazy_tester_session(
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
 
+// Manual location notes share the existing manager lock, but never touch the
+// game controller, saved world databases, clipboard or Minecraft commands.
+#[tauri::command]
+pub async fn lazy_tester_coordinate_bookmarks(
+    action: crate::engine::coordinate_bookmarks::BookmarkAction,
+) -> Result<crate::engine::coordinate_bookmarks::BookmarkReport, String> {
+    if crate::app_bootstrap::startup_diagnostic_mode() {
+        return Err("Startup diagnostic cannot access coordinate bookmarks".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
+        crate::engine::coordinate_bookmarks::handle(action)
+    }))
+    .await.map_err(|_| "Coordinate bookmark task failed".to_string())?
+    .map_err(|error| error.to_string())
+}
+
 // This receipt distinguishes a refusal before managed-window mutation from
 // an unconfirmed close AFTER the selected workspace was released. The
 // retained session controller, never the UI, validates live game ownership.

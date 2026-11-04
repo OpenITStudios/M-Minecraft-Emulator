@@ -24,7 +24,7 @@ be disabled in copied QA worlds. No original world is modified or
 migrated automatically.
 
 The sole optional Minecraft-side helper is **Lazy Tester - Team
-Commands Help v2.1.0**, now a **data-only behavior pack with Minecraft
+Commands Help v2.2.0**, now a **data-only behavior pack with Minecraft
 function files** and NO Script API, JavaScript module, dependency or
 event subscriber. The only normal operator command is:
 
@@ -36,6 +36,10 @@ delegates to the one canonical command list in
 own function named `help`, operators may instead use the unique
 `/function lazytester/help` path. These are two names for ONE static
 list, not two alternative analytics implementations.
+
+The command list also gives operator-only native Show Coordinates and
+conditional Ctrl+Alt+C guidance. It does not create an Add-On coordinate
+UI, copy clipboard contents, save Minecraft positions or alter the world.
 
 The command list uses `tellraw @s` to show the original team commands
 and their prerequisites to the invoking player, without broadcasting

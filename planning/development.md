@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-**Updated:** 3 November 2026. **Branch:** `Local` only;
+**Updated:** 4 November 2026. **Branch:** `Local` only;
 `main` release-reserved; GitHub Actions CI disabled.
 This file is the **single current status and next-action owner**.
 Older detailed sections are preserved in
@@ -9,6 +9,24 @@ Always pin the actual latest `Local` SHA; an old report is not
 new-revision acceptance.
 
 ## Product and owners
+
+- **Native-first Coordinate Saved Locations (4 November 2026,
+  source-only):** The operator approved native Show Coordinates + manual
+  persistence instead of extending speculative automatic F3/OCR.
+  The existing Coordinates & Saves disclosure now formats explicitly
+  pasted XYZ and offers named, world-labelled, dimension-labelled
+  manual notes for the selected MCxx. A new narrow, validated local
+  Data/Coordinates/bookmarks.json owner reuses the canonical Data root,
+  existing manager resource lock and one Tauri allowlisted command.
+  There is no player/world/clipboard-origin proof, game input, world edit,
+  background process, listener, new HUD owner or second analytics engine.
+  The existing data-only team help pack is versioned to 2.2.0 and only
+  *displays* native coordinate guidance. All new Rust/Vitest/Node tests
+  are AUTHORED_NOT_EXECUTED; no installer, Windows, Education, gameplay,
+  five-client or CI execution. Bedrock Creator Copy Coordinate UI may be
+  reused ONLY if an actual Education 26.33 build exposes it. See
+  [coordinate inspector P19](../docs/system/coordinate-inspector.md)
+  and [data layout](../docs/system/data-layout.md).
 
 - **Operator-only incremental smoke report (3 November 2026, source-only):**
   The existing `Development/tooling/local-test/session.mjs` now also owns
@@ -687,30 +705,25 @@ names, PINNED ZIP SHA, native IPC ACK nor DWM screenshot proves them.
 Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
-**Current operator priority (3 November):** P18 identifies the
-actual MVP blocker: selected-client pixels and an accepted local
-recognizer must reach desktop F3. Neither DWM thumbnails nor
-MCP alone offers an approved in-app XYZ/Copy channel. Stop adding
-fake controls or speculative frame collectors. No assumed Code Builder/WebSocket
-parity, automatic clipboard input, native connection listener, source
-test execution, CI, game/world mutation or installer changes.
+**Current operator priority (4 November):** Prefer Education's native
+Show Coordinates; use Copy Coordinate UI only if verified in Education
+26.33, otherwise keep the explicit manual Paste XYZ path. P18 remains
+BLOCKED for trustworthy automatic live F3/OCR; do not add speculative
+frame collectors, Code Builder/WebSocket, automatic clipboard input,
+listener, source test execution, CI, game/world mutation or installers.
 Map Test Contract and original Skills Probe remain unchanged. Do not request local testing, run
 source test suites, install packages, use CI or delete private artifacts. Preserve
 `App/`, `Data/`, old pilot data, and all historical proof.
 
 ## Single next step
 
-STOP speculative F3 source changes until one authorized Windows
-Education 26.33 real screenshot confirms Show Coordinates
-readability and a deployable OCR/recognition route is chosen.
-Then consider ONE explicit user-initiated exact-window PNG
-handoff to the existing F3 panel, with independently reviewed
-process binding and bounded memory, never a second collector.
-
-Do not silently add Tauri IPC, alter NSIS packaging, launch
-the experimental unbuilt WGC executable, enable game
-commands, connect Code Builder/WebSocket or present model
-text as authenticated gameplay. Existing manual P12 Paste
-XYZ remains usable; live F3 XYZ and one-click Copy stay
-NOT_CONNECTED. Node/Vitest/TS/Svelte/Rust/Windows/Minecraft
-and CI remain NOT_EXECUTED. Testing sealed CAS BLOCKED.
+Once the operator separately authorizes Windows/Minecraft tests, verify
+on ONE copied Education 26.33 QA world whether Show Coordinates is visible
+and whether Creator > Copy Coordinate UI and Ctrl+Alt+C actually exist.
+In the same approved run, manually paste a sample into Coordinates & Saves,
+Save/Reload/Delete a world-labelled note and check MC01/MC02 label separation.
+No shortcut automation, game command, account/world mutation or new Add-On
+is authorized by this source commit. Until that evidence, Education copy
+compatibility, live F3 XYZ and true player/world pairing remain NOT_VERIFIED.
+Node/Vitest/TS/Svelte/Rust/Windows/Minecraft and CI NOT_EXECUTED.
+Testing sealed CAS BLOCKED; speculative OCR/WebSocket stays deferred.

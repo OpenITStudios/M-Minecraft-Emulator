@@ -1113,3 +1113,64 @@ References:
 
 Node regression fixtures AUTHORED_NOT_EXECUTED; Windows,
 Minecraft, TS/Svelte, Rust, package and CI NOT_EXECUTED.
+
+
+## P19 — Native-first manual Saved Locations (4 November 2026; source-only)
+
+**Operator approval supersedes P18's blanket prohibition on new desktop IPC
+ONLY for explicit, manual coordinate-note persistence.** It does not approve
+OCR, game commands, automatic clipboard access, new players/world identity,
+Code Builder, background input, gameplay execution, installer changes or CI.
+
+**Preferred native path:** Minecraft Education officially documents Settings >
+Show Coordinates. Minecraft Bedrock's Creator > Enable Copy Coordinate UI,
+Ctrl+Alt+C (player) and Ctrl+Alt+X (cursor), is documented for **Bedrock**,
+NOT verified on Education 26.33 Windows. If the Education toggle exists, an
+operator may copy in the game and manually Ctrl+V into Lazy Tester; otherwise
+type XYZ from the game's visible coordinates. The application must never
+simulate a shortcut or turn Bedrock documentation into Education acceptance.
+
+**Existing owners extended:**
+- CoordinatePastePanel.svelte is now the same collapsed Play-header
+  Coordinates & Saves panel, with the original pure lossless XYZ/block/tp
+  formatter and readonly select-text output.
+- app/bridge/coordinateBookmarks.ts validates desktop requests and responses.
+  selectedSlot is a MANUAL notebook label only; not evidence for the actual
+  clipboard source, player, open world or dimension. World name is required
+  and manually entered, dimension defaults to Unknown.
+- engine/coordinate_bookmarks.rs owns schema-1 project-local
+  Data/Coordinates/bookmarks.json. The existing manager_settings path
+  checker and native_clients MANAGER_RESOURCE_LOCK are reused; no new
+  process/controller, polling, or per-client Minecraft storage access.
+  Max 100 records, 64-byte labels, exact 128-byte XYZ, bounded JSON read,
+  symlink/reparse refusal, explicit Save/Delete and temp+rename writes.
+  Existing corrupt/symlinked data is refused, never silently reset.
+- The existing data-only team help pack v2.2.0 now SHOWS native coordinate
+  guidance via its SAME tellraw @s help list. It creates no menu, new
+  functions, Script API module, event listener, telemetry, or HUD override.
+
+**Not implemented:** new button inside Minecraft's actual Show Coordinates
+HUD, in-game per-player Save/Load/Teleport forms, trusted world/actor pairing,
+clipboard reader/writer, screenshot-to-desktop/OCR, live F3 XYZ, automatic
+game /tp, or a new behavior-pack script. The static function help pack must
+be manually staged/installed (where permitted); this source commit does not
+install anything or edit worlds.
+
+**Source-only acceptance fixtures authored, NOT_EXECUTED:** frontend
+coordinates and bridge response screening; manual UI flow; Rust save/list/
+delete, exact bounds and malformed-data preservation; help pack display
+guards. No Node, TS, Svelte, Rust, Windows, Education, .mcpack packaging, game
+world or five-client test ran at this GitHub revision.
+
+**Future runtime check only when separately authorized:** (1) use a copied QA
+world, verify Education 26.33 Show Coordinates; (2) inspect Creator settings
+for optional Copy Coordinate UI without altering world permissions; (3) if
+available, confirm Ctrl+Alt+C output pasted manually, otherwise type XYZ;
+(4) verify saved notes persist on reopen, that manually labeled MC01..MC05
+remain separated in the UI, and Save/Delete never sends game input; (5)
+only then reconsider whether an in-game Add-On is valuable and compatible.
+
+Official references:
+- https://edusupport.minecraft.net/hc/en-us/articles/360047117692-FAQ-Game-Features
+- https://learn.microsoft.com/en-us/minecraft/creator/documents/copycoordinates?view=minecraft-bedrock-stable
+- https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection

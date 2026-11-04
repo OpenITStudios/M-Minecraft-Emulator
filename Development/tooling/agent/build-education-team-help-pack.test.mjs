@@ -13,16 +13,16 @@ const read=async()=>Promise.all(source.map(async([name,url])=>({
   name,content:await readFile(url),
 })));
 
-test('version 2.1 retires Script API; one data-only pack UUID is preserved',async()=>{
+test('version 2.2 retires Script API; one data-only pack UUID is preserved',async()=>{
   const m=JSON.parse((await readFile(source[0][1])).toString('utf8'));
   assert.equal(m.format_version,2);
   assert.equal(m.header.name,'Lazy Tester - Team Commands Help');
   assert.equal(m.header.uuid,'4af9d3f0-9fa1-4cb9-a011-fd37c1b2fb16');
-  assert.deepEqual(m.header.version,[2,1,0]);
+  assert.deepEqual(m.header.version,[2,2,0]);
   assert.deepEqual(m.header.min_engine_version,[1,26,30]);
   assert.deepEqual(m.modules,[{
     type:'data',uuid:'736d52ad-7c03-4a4b-880d-25a89072586f',
-    version:[2,1,0],
+    version:[2,2,0],
   }]);
   assert.equal('dependencies' in m,false);
   assert.equal(m.header.description.includes('/function help'),true);
@@ -57,6 +57,9 @@ test('canonical Minecraft function displays team source commands privately',asyn
   assert.equal(code.includes('LT_EDU_DIAG'),false);
   assert.equal(code.includes('function lt:diag'),false);
   assert.equal(code.includes('tellraw @a'),false);
+  assert.ok(code.includes('Settings > Show Coordinates'));
+  assert.ok(code.includes('Ctrl+Alt+C'));
+  assert.ok(code.includes('Saved Locations ada di aplikasi Lazy Tester'));
 });
 
 test('ZIP has exactly manifest and two static function files',async()=>{
