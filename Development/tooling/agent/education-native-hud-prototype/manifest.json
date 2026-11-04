@@ -6,14 +6,15 @@
     "uuid": "d1de865d-59c8-4f1e-a4f7-832a169fa150",
     "version": [
       0,
-      2,
+      3,
       0
     ],
     "min_engine_version": [
       1,
       26,
       30
-    ]
+    ],
+    "pack_scope": "world"
   },
   "modules": [
     {
@@ -21,7 +22,7 @@
       "uuid": "c65a874c-bbbf-4e53-af2e-197332ccbb21",
       "version": [
         0,
-        2,
+        3,
         0
       ]
     }

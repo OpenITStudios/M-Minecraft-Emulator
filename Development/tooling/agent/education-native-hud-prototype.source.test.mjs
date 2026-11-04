@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {validateHudSource,validatePinnedVanillaSample} from './check-education-native-hud-source.mjs';
 
 const rp = new URL('./education-native-hud-prototype/', import.meta.url);
 const read = async name => JSON.parse(await readFile(new URL(name, rp), 'utf8'));
@@ -12,10 +13,11 @@ test('prototype remains resource-only, with no new Script API or dependencies', 
   assert.deepEqual(Object.keys(m), ['format_version','header','modules','metadata']);
   assert.equal(m.format_version, 2);
   assert.equal(m.header.name, 'Lazy Tester - Native Coordinates HUD (Experimental)');
-  assert.deepEqual(m.header.version, [0,2,0]);
+  assert.deepEqual(m.header.version, [0,3,0]);
+  assert.equal(m.header.pack_scope,'world');
   assert.deepEqual(m.header.min_engine_version, [1,26,30]);
   assert.equal(m.modules.length, 1);
-  assert.deepEqual(m.modules[0].version, [0,2,0]);
+  assert.deepEqual(m.modules[0].version, [0,3,0]);
   assert.equal(m.modules[0].type, 'resources');
   for (const key of ['dependencies','capabilities','scripts']) {
     assert.equal(Object.hasOwn(m,key),false);
@@ -76,4 +78,32 @@ test('one HUD file never replaces coordinates, their binding, or global game con
   ]) {
     assert.equal(raw.includes(forbidden),false,forbidden);
   }
+});
+
+
+test('read-only preflight rejects global scope, future scripts and fake buttons', async () => {
+  const originalManifest=await read('manifest.json');
+  const originalHud=await read('ui/hud_screen.json');
+  assert.equal(validateHudSource(originalManifest,originalHud).packScope,'world');
+
+  const badManifest=structuredClone(originalManifest);
+  delete badManifest.header.pack_scope; // absent defaults to "any": unsafe globally
+  assert.throws(()=>validateHudSource(badManifest,originalHud),/HUD_SOURCE_REFUSED/);
+  badManifest.header.pack_scope='global';
+  assert.throws(()=>validateHudSource(badManifest,originalHud),/HUD_SOURCE_REFUSED/);
+  badManifest.header.pack_scope='world';
+  badManifest.modules.push({type:'script',uuid:badManifest.modules[0].uuid,version:[0,3,0]});
+  assert.throws(()=>validateHudSource(badManifest,originalHud),/HUD_SOURCE_REFUSED/);
+
+  const badHud=structuredClone(originalHud);
+  badHud.lt_native_coordinates_hint.type='button';
+  assert.throws(()=>validateHudSource(originalManifest,badHud),/HUD_SOURCE_REFUSED/);
+  badHud.lt_native_coordinates_hint.type='label';
+  badHud.player_position={controls:[]};
+  assert.throws(()=>validateHudSource(originalManifest,badHud),/HUD_SOURCE_REFUSED/);
+});
+
+test('official Mojang witness is pinned by raw Git blob hash, never accepted by filename',()=>{
+  assert.throws(()=>validatePinnedVanillaSample(Buffer.from('fake json')),/HUD_SOURCE_REFUSED/);
+  assert.throws(()=>validatePinnedVanillaSample(Buffer.alloc(2048)),/HUD_SOURCE_REFUSED/);
 });

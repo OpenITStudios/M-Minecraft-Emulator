@@ -68,7 +68,9 @@ the existing `player_position` in `hud.root_panel/chat_stack` within
 a disposable QA world. Never replace or append children inside the
 content-sized native `hud.player_position` image.
 It MUST remain uninstalled, unbundled, untested and disabled by default
-until separate runtime authorization. It may add only a truthful static
+until separate runtime authorization. The manifest must explicitly declare
+`pack_scope: world` (never implicit `any`) and the optional source
+preflight must remain read-only, without automatic packaging. It may add only a truthful static
 hint, never replace native XYZ/visibility, inject game hooks, claim
 dynamic world/player data, offer nonfunctional buttons or change the
 existing team modules. A resource-only prototype does not supersede

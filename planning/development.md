@@ -10,6 +10,22 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P22 world-scoped native HUD safety + source preflight
+  (5 November 2026; SOURCE_ONLY):** Microsoft's pack manifest
+  contract defaults an omitted `pack_scope` to `any`, leaving
+  the prototype accidentally eligible as a global Resource Pack.
+  Candidate v0.3.0 now sets `pack_scope: world` with coordinated
+  header/module version bumps while retaining the unchanged
+  v0.2 sibling-only HUD patch. One optional, read-only preflight
+  validates strict source allowlists, symlink refusal, no Script
+  API/button mapping, and can hash-check a manually supplied
+  pinned Mojang HUD source; no network, packaging, install, world
+  access or runtime. Authored Node fixture updated,
+  AUTHORED_NOT_EXECUTED. Education 26.33 rendering, upstream team
+  modules and in-game Saved Locations remain NOT_VERIFIED.
+  See [HUD source contract](../docs/system/education-native-coordinate-hud.md).
+
+
 - **P21 native-coordinate layout correction (5 November 2026;
   SOURCE_ONLY):** Pinned Mojang Bedrock UI source exposed a
   concrete risk in P20: its extra `100%c` label was inside
@@ -739,7 +755,7 @@ Do not authorize automatic commands, install game hooks, launch a
 world, copy tokens or mutate account/world data through this handoff.
 
 **Current operator priority (5 November):** Native coordinates are the
-only live HUD owner. A resource-only P21 layout-corrected patch is now staged in source
+only live HUD owner. A resource-only P22 world-scoped v0.3 candidate is now staged in source
 but NOT installed. Its literal JSON UI merge behavior is UNKNOWN in
 Education 26.33 and is not compatible-by-assumption with other HUD packs.
 Minecraft world Save/Load, dimension, facing and count must remain
@@ -754,8 +770,8 @@ source test suites, install packages, use CI or delete private artifacts. Preser
 ## Single next step
 
 When the operator separately authorizes real Minecraft testing, first
-compare Education 26.33 vanilla Show Coordinates with the opt-in
-resource-only P21 v0.2 sibling override in ONE disposable copied QA world. Require native
+perform the read-only optional source preflight, then compare Education 26.33 vanilla Show Coordinates with the opt-in
+resource-only P22 v0.3 world-scoped sibling override in ONE disposable copied QA world. Require native
 XYZ and Agent Pos preservation, correct on/off visibility, no overlapping or displaced chat, days or Agent Pos,
 and a reversible pack disable. If the JSON UI merge fails, STOP/disable the
 prototype; do not edit game binaries, force global packs or duplicate

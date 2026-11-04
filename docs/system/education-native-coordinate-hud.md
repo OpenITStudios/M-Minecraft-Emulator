@@ -24,7 +24,7 @@ The Mojang Bedrock sample `resource_pack/ui/hud_screen.json` defines:
 - `hud.root_panel`: the general HUD controls owner; changing the complete
   screen or replacing `root_panel` is unnecessary for a minimal test.
 
-The experimental Resource Pack v0.2.0 lives in
+The experimental Resource Pack v0.3.0 lives in
 `Development/tooling/agent/education-native-hud-prototype/` and
 **does not modify the `player_position` definition**. Instead it
 declares one static `hud.lt_native_coordinates_hint` and inserts
@@ -36,7 +36,11 @@ Minecraft still owns the original content-sized position image and
 and chat-stack layout are **not yet runtime verified**. The hint is
 not a button or player/world data source. No touch, hotbar, actionbar,
 scoreboard, F3/FPS, Script API or telemetry owner is added.
-Nothing in the standard Lazy Tester build installs the pack.
+The manifest also declares `pack_scope: "world"`, preventing optional
+global activation under Microsoft's Bedrock pack manifest contract.
+This replaces the unsafe implicit `any` scope previously present.
+Minecraft Education parity is not assumed. Nothing in the standard
+Lazy Tester build installs the pack.
 
 **Compatibility warning:** Microsoft's cooperative Add-Ons guidance says
 JSON UI overrides cannot be combined reliably as cooperative Add-Ons.
@@ -124,6 +128,36 @@ verified, propose one narrow extension via the team's actual, existing
 authored source check is NOT a pass. No Node, TypeScript, Rust, Windows,
 resource pack packaging, Minecraft, multiplayer, five-client or Education
 HUD screenshot acceptance has been executed or observed for this prototype.
+
+## P22 — World-only manifest and read-only source admission (5 November 2026)
+
+Microsoft's pack manifest documentation says omitting `pack_scope`
+defaults to `any`, which permits global activation. That was inconsistent
+with this experiment's isolated-world contract. Manifest v0.3.0 now
+declares `header.pack_scope = "world"`, preserves the same header/module
+UUIDs and the unchanged v0.2 sibling insertion, and increments both
+header and resources module versions.
+
+A new *read-only*, manually callable
+`Development/tooling/agent/check-education-native-hud-source.mjs`
+validates allowlisted resource-only files and exact reviewed manifest/HUD
+shapes, refusing scripts, unknown assets, global scope, synthetic live
+fields, UI button mappings and malformed input. If a reviewer supplies
+the exact official Mojang `hud_screen.json` from pinned revision
+`15701fa9c13923f12662984c32c124327e40e3d3`,
+it checks the raw Git blob SHA
+`e2037b2d0d789a1431610a8f639ccd16e63686c3`
+before asserting the expected Bedrock chat-stack anchors.
+No download or remote fetch is performed by the script.
+
+A valid source shape is NOT an Education 26.33 rendering pass.
+No actual checker, packager, Node tests, Windows/Minecraft or
+five-client acceptance was executed in this source-only milestone.
+The candidate remains unbundled and uninstalled; the original
+team modules and desktop bookmark notebook are untouched.
+
+Official manifest reference:
+https://learn.microsoft.com/en-us/minecraft/creator/reference/content/addonsreference/packmanifest
 
 ## v0.2 source correction and pinned Mojang witness (5 November 2026)
 

@@ -1,4 +1,4 @@
-# Native Coordinate HUD — isolated JSON UI candidate v0.2.0
+# Native Coordinate HUD — isolated JSON UI candidate v0.3.0
 
 **Status:** SOURCE_ONLY · NOT_PACKAGED · NOT_INSTALLED · NOT_EXECUTED · Minecraft Education 26.33 compatibility UNKNOWN.
 
@@ -35,7 +35,7 @@ vanilla XYZ loss or pack conflict is a failed test — disable the RP.
 ## Source contents
 
 - `manifest.json`: one `resources` module, immutable pack UUIDs,
-  experimental version `0.2.0`.
+  experimental version `0.3.0` and `header.pack_scope: world`.
 - `ui/hud_screen.json`: one label and one targeted control insertion.
 - `README.md`: this declaration. It is not a Minecraft pack asset.
 
@@ -48,7 +48,11 @@ The installed Minecraft binary, original profile stores, five native
 session owner, original team modules and Lazy Tester
 `Data/Coordinates/bookmarks.json` are unaffected. This source folder
 is excluded from the official Lazy Tester distribution and existing
-data-only in-game help pack. No auto-activation or global RP changes.
+data-only in-game help pack. The manifest explicitly sets `pack_scope: world` so Minecraft's
+normal resource-pack UI must not offer this prototype as a global pack.
+This is a pack-manifest restriction, not proof that Education 26.33
+respects the documented Bedrock behavior. No auto-activation or global
+RP changes.
 
 ## Version-pinned research witness
 
@@ -67,6 +71,32 @@ Bedrock samples main, reviewed 5 Nov 2026:
 **This is a Bedrock source witness, NOT Education compatibility proof.**
 Microsoft states that JSON UI overrides are not cooperative across packs.
 Another world RP modifying `hud_screen.json` may silently override/conflict.
+
+## Read-only source preflight — authored, NOT_EXECUTED
+
+The companion `Development/tooling/agent/check-education-native-hud-source.mjs`
+reads only this folder and rejects unexpected source files, symlinks,
+oversized files, version drift, `pack_scope` other than `world`,
+non-resource modules, UI changes outside the reviewed sibling and
+fake buttons/game hooks. It does **not** build a .mcpack, download assets,
+open Minecraft, install a pack, access a world or claim gameplay support.
+
+For a separately authorized manual source check from the repo root:
+
+```text
+node Development/tooling/agent/check-education-native-hud-source.mjs
+```
+
+For an **optional** check against an operator-supplied exact Mojang
+Bedrock `hud_screen.json` file, use
+`--pinned-vanilla <absolute-file-path>`. The tool verifies the original
+Git blob SHA, not merely a name or editable excerpt; no reference
+file is downloaded. Omitting this file reports `NOT_SUPPLIED` but
+does not claim compatibility.
+
+Official Mojang source: `15701fa9c13923f12662984c32c124327e40e3d3`.
+This check is source-only and must not be described as validating the
+Minecraft Education renderer or multi-client behavior.
 
 ## Operator-only QA — intentionally NOT_EXECUTED
 
