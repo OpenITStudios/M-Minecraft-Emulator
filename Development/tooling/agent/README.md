@@ -147,6 +147,40 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P31 — Epoch-bound native process generation (SOURCE_ONLY)
+
+An existing writer lease already binds subsequent `AiLeasedInput`,
+`AiInputGroup` and `AiLeaseRelease` to the exact original
+slot/PID/process birth/epoch. However, the earlier
+`AiLeaseAcquire` used a fully random 32-hex epoch and fetched each
+*current* game process from the retained Rust controller at admission
+time. A delayed pre-relaunch **acquire** could therefore ask for a lease
+on the replacement child after the previous process was reaped, even
+though that transaction was created for the earlier process.
+
+Without changing the private IPC schema, the existing MCP now mints
+a versioned **32-hex** transaction epoch: first 16 hex represent its
+Windows FILETIME issue timestamp (100-ns ticks since 1601), followed
+by 14 hex of fresh entropy and a 2-hex `e1` marker. It is still only
+an ephemeral writer correlator, **not** OS authentication. The original
+Rust actor checks the epoch against the birth FILETIME of **every**
+selected retained child before any group lease mutation: issue time
+must be after child creation, not more than 10 seconds old and not
+more than 1 second ahead of the native wall clock. Time drift or
+unversioned/stale epochs fail closed; a fresh separate transaction is
+required for a genuinely new game child.
+
+This is **transaction-time fencing**, not a signed process identity.
+No independent server, session owner, network endpoint, game hook,
+new resource pack, or CLI/IPC JSON field was introduced. Native
+PID/birth/epoch checks on later input/release remain unchanged.
+Synthetic Rust and Node fixtures cover a replaced child in 4/5-AI
+cohorts, malformed/stale/future epochs, fresh admission, and stale
+input/release refusal. Fixtures are AUTHORED_NOT_EXECUTED; Windows
+clock alignment, Minecraft input acceptance, real process
+replacement, Node/Rust compilation and five-client behavior
+remain NOT_VERIFIED. Native feature flags stay compile-OFF by default.
+
 ## P30 — Per-slot release after a native neutral ACK (SOURCE_ONLY)
 
 The original Rust controller validates `AiLeaseRelease` atomically for

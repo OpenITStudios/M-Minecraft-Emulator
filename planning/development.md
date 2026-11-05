@@ -10,6 +10,25 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P31 epoch-bound AI acquire (5 November 2026,
+  SOURCE_ONLY):** The existing Rust writer book already fences input
+  and release by slot/PID/birth/epoch, but native `AiLeaseAcquire`
+  previously learned the *current* retained child at admission and
+  accepted a fully random 32-hex epoch. A delayed old acquire could
+  therefore request a lease on a process replacement after the
+  previous child was reaped. MCP now mints versioned 32-hex temporal
+  epochs (`FILETIME + random + e1`) and the original Rust
+  `ai_lease_acquire` checks bounded issue age and all selected
+  original child birth FILETIMEs BEFORE mutation. Unversioned,
+  future, expired and pre-relaunch acquisitions fail closed,
+  preserving per-client and all-or-nothing cohort admission.
+  Existing native wire fields, input/release checks and compile-OFF
+  feature flags remain unchanged. New pure Rust and Node fixtures
+  AUTHORED_NOT_EXECUTED. No test suite, Windows/Minecraft
+  runtime, build, CI, external harness or installer executed.
+  See [MCP P31](../Development/tooling/agent/README.md).
+
+
 - **P30 per-slot lease release after neutral ACK (5 November 2026,
   SOURCE_ONLY):** the Rust original controller admits group
   `AiLeaseRelease` atomically. MCP's previous grouped release after

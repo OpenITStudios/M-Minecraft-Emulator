@@ -3,6 +3,7 @@
 // Every native mutation goes through the existing authenticated Lazy Tester controller.
 import {execFile} from 'node:child_process';
 import {createHash,randomBytes} from 'node:crypto';
+import {performance} from 'node:perf_hooks';
 import {lstat, open} from 'node:fs/promises';
 import {pathToFileURL} from 'node:url';
 import path from 'node:path';
@@ -614,6 +615,31 @@ export async function sendExperimentalMc02BatchNative(executable,pulses,{signal}
 // arbitrates all actual per-original-game input. Never expose it over MCP
 // or through Windows command-line arguments.
 const AI_WRITER_ID_PATTERN=/^[a-f0-9]{32}$/;
+// Versioned, transaction-local epoch without an IPC schema change.
+// First 16 hex chars encode Windows FILETIME at MCP issuance (100-ns
+// ticks since 1601); next 14 are fresh entropy; 'e1' is a format tag.
+// This is temporal fencing, NOT authentication of a same-user process.
+// The original Rust controller rechecks age and every child's PID/birth.
+const AI_EPOCH_VERSION='e1';
+const UNIX_TO_FILETIME_MS=11644473600000n;
+export function makeAiLeaseEpoch(
+    unixMs=performance.timeOrigin+performance.now(),
+    entropy=randomBytes(7)) {
+  if(typeof unixMs!=='number'||!Number.isFinite(unixMs)||unixMs<0||
+     !Number.isSafeInteger(Math.floor(unixMs))||
+     !Buffer.isBuffer(entropy)||entropy.length!==7) {
+    throw new Error('AI_LEASE_EPOCH_REQUIRED');
+  }
+  const millis=Math.floor(unixMs);
+  const subMillisecondTicks=Math.floor((unixMs-millis)*10000);
+  const born=(BigInt(millis)+UNIX_TO_FILETIME_MS)*10000n+
+    BigInt(subMillisecondTicks);
+  if(born<=0n||born>0xffffffffffffffffn) {
+    throw new Error('AI_LEASE_EPOCH_REQUIRED');
+  }
+  return born.toString(16).padStart(16,'0')+
+    entropy.toString('hex')+AI_EPOCH_VERSION;
+}
 // Only an exact native writer conflict proves that acquisition never
 // succeeded. A transport timeout, malformed receipt, or generic refusal
 // must remain uncertain until explicit owner-side reconciliation.
@@ -631,7 +657,8 @@ function writerEnvironment(writerId,mode,leaseEpoch){
      !['human-plus-four-ai','five-ai'].includes(mode)) {
     throw new Error('AI_WRITER_LEASE_REQUIRED');
   }
-  if(typeof leaseEpoch!=='string'||!AI_WRITER_ID_PATTERN.test(leaseEpoch)){
+  if(typeof leaseEpoch!=='string'||!AI_WRITER_ID_PATTERN.test(leaseEpoch)||
+     !leaseEpoch.endsWith(AI_EPOCH_VERSION)){
     throw new Error('AI_LEASE_EPOCH_REQUIRED');
   }
   return {...process.env,LAZY_TESTER_AI_WRITER_ID:writerId,
@@ -2433,7 +2460,7 @@ export function createHandler(config,{
       inFlight=true;
       // A fresh epoch for THIS explicit neutral-recovery transaction.
       // It fences old CLI input packets from the same MCP writer.
-      const leaseEpoch=randomBytes(16).toString('hex');
+      const leaseEpoch=makeAiLeaseEpoch();
       let leaseAttempted=false,leaseHeld=false;
       let released=[];
       try {
@@ -2593,7 +2620,7 @@ export function createHandler(config,{
       inFlight=true;
       // One completely new epoch per authored cross-client action.
       // No native lease may adopt stale frames from a prior invocation.
-      const leaseEpoch=randomBytes(16).toString('hex');
+      const leaseEpoch=makeAiLeaseEpoch();
       const abort=new AbortController();
       const run={abort,slots:schedule.slots};
       multiSequence=run;

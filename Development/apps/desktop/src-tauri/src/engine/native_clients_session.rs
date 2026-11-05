@@ -717,6 +717,45 @@ pub(crate) fn valid_ai_writer_id(value:&str)->bool {
     value.len()==32 && value.bytes().all(|b|b.is_ascii_hexdigit()&&
         !b.is_ascii_uppercase())
 }
+
+// P31 temporal binding prevents a delayed pre-relaunch acquisition from
+// adopting a newer original Minecraft process. Birth is the retained
+// Windows GetProcessTimes FILETIME, never a window title or MCP claim.
+// The epoch is a 32-hex private correlator, not a signed credential;
+// this is not resistance to a malicious same-user process.
+#[cfg(feature="mc02-native-input")]
+pub(crate) fn current_ai_filetime()->io::Result<u64> {
+    const UNIX_TO_FILETIME_100NS:u128=116_444_736_000_000_000;
+    let elapsed=std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_|io::Error::other("AI epoch clock unavailable"))?;
+    u64::try_from(UNIX_TO_FILETIME_100NS+
+        elapsed.as_nanos()/100)
+        .map_err(|_|io::Error::other("AI epoch clock out of range"))
+}
+#[cfg(feature="mc02-native-input")]
+pub(crate) fn validate_ai_acquire_epoch(
+    epoch:&str,now_filetime:u64,targets:&[(u32,u32,u64)]
+)->io::Result<()> {
+    // CLI acquisition is at most six seconds, allow a bounded ten-second
+    // window. One-second clock lead tolerance is fail-closed on larger drift.
+    const MAX_AGE_100NS:u64=100_000_000;
+    const MAX_FUTURE_100NS:u64=10_000_000;
+    let issued=if valid_ai_writer_id(epoch)&&epoch.ends_with("e1") {
+        u64::from_str_radix(&epoch[..16],16).ok()
+    }else {None};
+    if now_filetime==0||targets.is_empty()||
+       !issued.is_some_and(|at|at!=0 &&
+           at<=now_filetime.saturating_add(MAX_FUTURE_100NS) &&
+           now_filetime<=at.saturating_add(MAX_AGE_100NS) &&
+           targets.iter().all(|(_,pid,birth)|
+               *pid!=0&&*birth!=0&&*birth<=at)) {
+        return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+            "AI transaction predates original game or is stale"));
+    }
+    Ok(())
+}
+
 #[cfg(feature="mc02-native-input")]
 pub(crate) fn validate_ai_lease_slots(slots:&[u32],owner_id:&str)->io::Result<()> {
     if !valid_ai_writer_id(owner_id)||slots.is_empty()||slots.len()>5||
@@ -1634,6 +1673,68 @@ mod tests {
             r#"{"operation":"CloseOne","slot":2}"#
         ), Ok(SessionRequest::CloseOne {slot:2})));
     }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn temporal_epoch_fences_relaunched_child_before_native_acquire() {
+        // Pure contract fixture: 100-ns Windows FILETIME witness. Does not
+        // create any game process, IPC server, or input channel.
+        let at=134_000_000_000_000_000u64;
+        let token=|issued:u64|format!("{issued:016x}{}e1","a".repeat(14));
+        let old=token(at);
+        let fresh=token(at+2_000_000);
+        let four=vec![
+            (2,202,at-10_000_000),(3,203,at-10_000_000),
+            (4,204,at-10_000_000),(5,205,at-10_000_000),
+        ];
+        let mut five=vec![(1,201,at-10_000_000)];
+        five.extend(four.iter().copied());
+        assert!(validate_ai_acquire_epoch(&old,at+1_000_000,&four).is_ok());
+        assert!(validate_ai_acquire_epoch(&old,at+1_000_000,&five).is_ok());
+
+        // One slot replaced after the old MCP request was minted.
+        // Atomic multi-slot acquisition must fail for BOTH 4-AI and 5-AI.
+        let replaced_four=vec![
+            (2,902,at+1_000_000),(3,203,at-10_000_000),
+            (4,204,at-10_000_000),(5,205,at-10_000_000),
+        ];
+        let mut replaced_five=vec![(1,201,at-10_000_000)];
+        replaced_five.extend(replaced_four.iter().copied());
+        assert!(validate_ai_acquire_epoch(&old,at+2_300_000,
+            &replaced_four).is_err());
+        assert!(validate_ai_acquire_epoch(&old,at+2_300_000,
+            &replaced_five).is_err());
+        assert!(validate_ai_acquire_epoch(&fresh,at+2_300_000,
+            &replaced_four).is_ok());
+        assert!(validate_ai_acquire_epoch(&fresh,at+2_300_000,
+            &replaced_five).is_ok());
+
+        // The original retained lease book still fences stale input and
+        // release requests by exact owner, epoch, pid and process birth.
+        let owner="b".repeat(32);
+        let mut book=AiLeaseBook::default();
+        book.acquire(&four,&owner,&old,1000,false).unwrap();
+        book.forget_slot(2);
+        assert!(book.require(2,&owner,&old,902,at+1_000_000,1001).is_err());
+        book.acquire(&replaced_four,&owner,&fresh,1002,false).unwrap();
+        assert!(book.require(2,&owner,&old,902,at+1_000_000,1003).is_err());
+        assert!(book.require(2,&owner,&fresh,902,at+1_000_000,1003).is_ok());
+        assert!(book.release(&[(2,902,at+1_000_000)],&owner,&old,1004).is_err());
+
+        // Disabled, malformed, stale and far-future epochs fail closed.
+        for invalid in [
+            "1".repeat(32),
+            "A".repeat(32),
+            format!("{:016x}{}e2",at,"a".repeat(14)),
+            token(at-120_000_000),
+            token(at+20_000_000),
+        ] {
+            assert!(validate_ai_acquire_epoch(&invalid,at+1_000_000,
+                &four).is_err());
+        }
+        assert!(validate_ai_acquire_epoch(&fresh,at+2_300_000,&[]).is_err());
+    }
+
     #[cfg(feature="mc02-native-input")]
     #[test]
     fn fenced_writer_conflict_is_atomic_and_process_bound() {

@@ -13,6 +13,7 @@ use virtual_clients_core::InspectionBudget;
 use crate::engine::native_clients_session::{
     AgentControlMode,AiInputFrame,AiLeaseBook,
     validate_ai_input_group,validate_ai_lease_slots,
+    validate_ai_acquire_epoch,current_ai_filetime,
 };
 
 #[cfg(feature="mc02-native-input")]
@@ -322,8 +323,12 @@ impl Sessions {
             }
             targets.push(target);
         }
-        // All slot/mode/identity checks completed; no partial writer claim
-        // even when a later selected client is incompatible.
+        // All slot/mode/identity checks completed. The transaction
+        // epoch must postdate EVERY original child birth; a delayed
+        // acquisition from before one slot was relaunched cannot bind
+        // that replacement, even if its prior lease was forgotten.
+        // No partial mutation or game write occurs on refusal.
+        validate_ai_acquire_epoch(epoch,current_ai_filetime()?,&targets)?;
         self.ai_leases.acquire(&targets,owner,epoch,
             unsafe{GetTickCount64()},neutral_only)
     }

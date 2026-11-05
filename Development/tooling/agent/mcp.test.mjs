@@ -4,14 +4,14 @@ import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
-  sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget} from './mcp.mjs';
+  sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
 const leaseAck=async(_exe,operation,slots,
     {writerId,mode,leaseEpoch,neutralOnly}={})=>{
   assert.match(writerId,/^[a-f0-9]{32}$/);
-  assert.match(leaseEpoch,/^[a-f0-9]{32}$/);
+  assert.match(leaseEpoch,/^[a-f0-9]{30}e1$/);
   assert.equal(['human-plus-four-ai','five-ai'].includes(mode),true);
   assert.equal(typeof neutralOnly,'boolean');
   return {schema:1,slots,status:operation==='acquire'?
@@ -3795,7 +3795,7 @@ test('every 4/5-AI input transaction carries one fresh native fencing epoch',asy
       aiLease:async(_exe,operation,selected,{writerId,mode:requested,
           leaseEpoch,neutralOnly})=>{
         assert.match(writerId,/^[a-f0-9]{32}$/);
-        assert.match(leaseEpoch,/^[a-f0-9]{32}$/);
+        assert.match(leaseEpoch,/^[a-f0-9]{30}e1$/);
         assert.equal(requested,mode);
         if(operation==='acquire'){
           assert.deepEqual(selected,slots);
@@ -3948,9 +3948,30 @@ test('operator stop isolates a native release failure after all neutral ACKs',as
   h.shutdown();
 });
 
+
+test('lease epochs encode a bounded FILETIME creation witness with fresh entropy',()=>{
+  const at=2000000000000,nonce=Buffer.alloc(7,0xa5);
+  const token=makeAiLeaseEpoch(at,nonce);
+  assert.match(token,/^[a-f0-9]{30}e1$/);
+  assert.equal(token.length,32);
+  assert.equal(BigInt('0x'+token.slice(0,16)),
+    (BigInt(at)+11644473600000n)*10000n);
+  assert.equal(token.slice(16,30),'a5'.repeat(7));
+  assert.equal(makeAiLeaseEpoch(at,Buffer.alloc(7,0x5a)).slice(0,16),
+    token.slice(0,16));
+  assert.notEqual(makeAiLeaseEpoch(at,Buffer.alloc(7,0x5a)),token);
+  assert.notEqual(makeAiLeaseEpoch(at+1,nonce),token);
+  for(const invalid of [
+    [NaN,nonce],[-1,nonce],[Infinity,nonce],
+    [at,Buffer.alloc(6)],[at,'not-entropy']
+  ]) {
+    assert.throws(()=>makeAiLeaseEpoch(...invalid),/AI_LEASE_EPOCH_REQUIRED/);
+  }
+});
+
 test('native lease adapter refuses missing/stale fencing epoch before CLI spawn',async()=>{
   const executable=path.resolve('lazy-tester.exe');
-  for(const leaseEpoch of [undefined,'WRONG_EPOCH','A'.repeat(32)]){
+  for(const leaseEpoch of [undefined,'WRONG_EPOCH','A'.repeat(32),'1'.repeat(32)]){
     await assert.rejects(()=>sendExperimentalAiWriterLeaseNative(
       executable,'acquire',[2],{
         writerId:'a'.repeat(32),mode:'human-plus-four-ai',
