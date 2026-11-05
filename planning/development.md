@@ -10,6 +10,26 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P36 native epoch denial vs uncertain IPC (5 November 2026,
+  SOURCE_ONLY):** Native `ai_lease_acquire` validates the
+  transaction's issue FILETIME against every retained game birth
+  before touching `AiLeaseBook`, but CLI previously converted its
+  exact stale/pre-birth denial to generic `NATIVE_REFUSED`. MCP
+  consequently quarantined selected clients as if an acquire
+  might have succeeded. The existing same-image `agent_cli.rs`
+  now exposes bounded `NATIVE_WRITER_EPOCH_STALE` only for
+  that exact pre-mutation error, including the existing authenticated
+  IPC `SessionReply` conversion to `ErrorKind::Other`; the original
+  MCP lease refusal classifier recognizes this as definitely
+  denied. Uncertain IPC results, missing receipts and other
+  refusals remain quarantined; unaffected peers outside an
+  ambiguous cohort remain available only for a new explicit
+  action. Denied neutral-recovery acquire does not clear
+  existing holds. Pure Rust/Node fixtures AUTHORED_NOT_EXECUTED.
+  No native IPC schema, new controller, retry, CI, source test,
+  Windows/Minecraft process or package change.
+  See [agent P36](../Development/tooling/agent/README.md).
+
 - **P35 late IPC result provenance (5 November 2026,
   SOURCE_ONLY):** The existing Rust native transport already binds
   one worker and one response receiver to each request, preserving

@@ -46,6 +46,17 @@ fn native_error(error: io::Error) -> &'static str {
     if error.to_string()=="AI writer mode conflicts with original game channel" {
         return "NATIVE_WRITER_MODE_MISMATCH";
     }
+    // The original actor rejects an expired or pre-birth acquire epoch
+    // BEFORE touching its AiLeaseBook. The authenticated SessionReply
+    // carries this error as a string, then native_clients_session::request
+    // converts that exact refusal to io::ErrorKind::Other. Also admit the
+    // direct PermissionDenied form; never promote BrokenPipe, timeout,
+    // malformed response or any unrelated refusal into definite denial.
+    if matches!(error.kind(),io::ErrorKind::Other|
+        io::ErrorKind::PermissionDenied) &&
+       error.to_string()=="AI transaction predates original game or is stale" {
+        return "NATIVE_WRITER_EPOCH_STALE";
+    }
     // Fixed, allowlisted native writer-conflict status. Other controller
     // errors are never forwarded raw into the MCP model response.
     if matches!(error.to_string().as_str(),
@@ -819,6 +830,21 @@ mod tests {
         assert_eq!(native_error(Error::other(
             "AI writer mode conflicts with original game channel")),
             "NATIVE_WRITER_MODE_MISMATCH");
+        assert_eq!(native_error(Error::new(ErrorKind::PermissionDenied,
+            "AI transaction predates original game or is stale")),
+            "NATIVE_WRITER_EPOCH_STALE");
+        assert_eq!(native_error(Error::other(
+            "AI transaction predates original game or is stale")),
+            "NATIVE_WRITER_EPOCH_STALE",
+            "an authenticated SessionReply maps error strings to ErrorKind::Other");
+        assert_eq!(native_error(Error::new(ErrorKind::BrokenPipe,
+            "AI transaction predates original game or is stale")),
+            "OUTCOME_UNCERTAIN",
+            "lost IPC result must never impersonate no-write epoch denial");
+        assert_eq!(native_error(Error::new(ErrorKind::PermissionDenied,
+            "Some other native admission refused")),
+            "NATIVE_REFUSED",
+            "unknown refusal is not the proved pre-mutation epoch contract");
         assert_eq!(native_error(Error::other("Unknown private controller detail")),
             "NATIVE_UNAVAILABLE");
         assert_eq!(native_error(Error::new(ErrorKind::BrokenPipe,

@@ -647,6 +647,10 @@ function definitelyDeniedWriterLease(error) {
   return [
     'Native request refused: NATIVE_WRITER_BUSY',
     'Native request refused: NATIVE_WRITER_MODE_MISMATCH',
+    // Rust ai_lease_acquire validates temporal epoch and ALL original
+    // process births before any AiLeaseBook mutation. This fixed exact
+    // refusal therefore cannot have dispatched or acquired a writer.
+    'Native request refused: NATIVE_WRITER_EPOCH_STALE',
   ].includes(error?.message);
 }
 // A newly acquired lease has a fresh nonce even when the same MCP

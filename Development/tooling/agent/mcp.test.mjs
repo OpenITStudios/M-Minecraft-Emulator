@@ -3754,6 +3754,114 @@ test('source-only MCP lease request forwards cohort mode and refuses a channel l
 });
 
 
+
+test('P36 proven no-write stale acquire does not quarantine healthy 4/5-AI peers',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]],
+  ]){
+    const fixture=teamVisualFixture(mode);
+    const calls=[],neutral=[],sent=[];
+    let refusal='none';
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      aiLease:async(exe,operation,selected,opts)=>{
+        calls.push([operation,...selected]);
+        if(operation==='acquire'&&!opts.neutralOnly&&refusal!=='none'){
+          throw new Error(refusal==='stale'?
+            'Native request refused: NATIVE_WRITER_EPOCH_STALE':
+            'Native request refused: OUTCOME_UNCERTAIN');
+        }
+        return leaseAck(exe,operation,selected,opts);
+      },
+      aiInput:async(_exe,frame)=>{
+        neutral.push(frame.slot);
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+      aiMultiBatch:async(_exe,batches)=>{
+        const selected=batches.map(batch=>batch.slot);
+        sent.push(selected);
+        return {schema:1,slots:selected,
+          status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+          gameplayObserved:false};
+      },
+    });
+    await handler.callTool('stop_experimental_multi_client_actions',{slots});
+    calls.length=0;neutral.length=0;
+    const first=slots.slice(0,2);
+    refusal='stale';
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:first.map(aiMove),
+    }),/NATIVE_WRITER_EPOCH_STALE/);
+    assert.deepEqual(calls,[['acquire',...first]],
+      'pre-birth/expired epoch is refused before any native lease mutation');
+    assert.deepEqual(neutral,[]);
+    assert.deepEqual(sent,[]);
+    const afterStale=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(afterStale.coordination.blockedSlots,[]);
+    assert.deepEqual(afterStale.coordination.pendingReconnectSlots,[]);
+    assert.deepEqual(afterStale.coordination.readySlots,slots);
+    // In contrast, the original IPC request may have executed before
+    // its result was lost. Only the selected action cohort is uncertain.
+    const selected=slots.slice(1,3);
+    refusal='ambiguous';
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:selected.map(aiMove),
+    }),/OUTCOME_UNCERTAIN/);
+    assert.deepEqual(sent,[]);
+    assert.deepEqual(neutral,[]);
+    const blocked=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(blocked.coordination.blockedSlots,selected);
+    const healthy=slots.filter(slot=>!selected.includes(slot));
+    assert.deepEqual(blocked.coordination.readySlots,healthy);
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:[aiMove(selected[0])],
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    refusal='none';
+    const fresh=await handler.callTool('run_experimental_multi_client_actions',{
+      actions:healthy.map(aiMove),
+    });
+    assert.deepEqual(fresh.slots,healthy,
+      'healthy clients proceed only by a new explicitly selected action');
+    assert.deepEqual(sent,[healthy]);
+    const still=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(still.coordination.blockedSlots,selected,
+      'a healthy action never clears the uncertain original cohort');
+    handler.shutdown();
+  }
+});
+
+test('P36 stale recovery acquire cannot clear existing reconnect holds',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]]
+  ]) {
+    const selected=[slots[0]],calls=[];
+    const handler=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      aiLease:async(_exe,operation,target,opts)=>{
+        calls.push([operation,...target]);
+        assert.equal(opts.neutralOnly,true);
+        throw Error('Native request refused: NATIVE_WRITER_EPOCH_STALE');
+      },
+      aiInput:async()=>{throw Error('NO_NEUTRAL_WITHOUT_LEASE');},
+      aiMultiBatch:async()=>{throw Error('NO_GAMEPLAY_WITHOUT_LEASE');},
+    });
+    await assert.rejects(()=>handler.callTool('stop_experimental_multi_client_actions',{
+      slots:selected,
+    }),/NATIVE_WRITER_EPOCH_STALE/);
+    assert.deepEqual(calls,[['acquire',...selected]]);
+    const state=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(state.coordination.blockedSlots,slots);
+    assert.deepEqual(state.coordination.pendingReconnectSlots,slots);
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:selected.map(aiMove),
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    handler.shutdown();
+  }
+});
+
 test('malformed native acquisition ACK is uncertain, never treated as a definitive writer refusal',async()=>{
   const fixture=teamVisualFixture();
   let malformed=true,neutralWrites=0,actionsSent=0;

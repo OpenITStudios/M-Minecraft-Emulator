@@ -147,6 +147,39 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P36 — Definitive pre-mutation epoch refusal versus uncertain IPC
+
+The retained Rust `ai_lease_acquire` checks the temporal lease epoch
+against the selected original process births **before** calling
+`AiLeaseBook.acquire`. If the epoch is stale or predates a relaunched
+child, that exact `PermissionDenied` cannot have acquired a writer
+or dispatched input. Previously the CLI projected this proven
+no-write refusal as generic `NATIVE_REFUSED`, which MCP deliberately
+treated as uncertain and quarantined otherwise healthy selected
+clients even though no native lease mutation occurred.
+
+The same native CLI now maps **only** the exact original pre-admission
+error message to `NATIVE_WRITER_EPOCH_STALE`, accepting either the direct
+Rust `PermissionDenied` or the `ErrorKind::Other` form produced when
+the authenticated `SessionReply` converts its error string through
+`native_clients_session::request`. The
+existing MCP acquire-denial classifier accepts that fixed code along
+with known native writer conflicts and launch-mode mismatches.
+An ambiguous/missing IPC result (`OUTCOME_UNCERTAIN`), timeout,
+broken pipe, generic refusal or malformed receipt **does not**
+qualify for definitive denial and still quarantines the entire
+selected action cohort. Other clients outside the attempted cohort
+remain independent, while a rejected startup neutral-recovery
+acquire never clears any pre-existing reconnect hold.
+
+The private CLI response uses the same existing allowlisted code
+field; no new controller, wire schema, game channel, release
+shortcut, automatic retry or status database was introduced.
+Source-authored Rust/Node fixtures cover the exact-code versus
+transport-uncertain distinction in both 4-AI and 5-AI modes,
+continued explicit healthy-peer input, and refusal to clear
+startup holds without neutral/release ACKs. All are
+AUTHORED_NOT_EXECUTED; no Windows/Minecraft acceptance is implied.
 ## P32 — MCP disconnect fences late input (source-only)
 
 The existing optional MCP stdio handler previously aborted a running
