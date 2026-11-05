@@ -802,29 +802,33 @@ impl AiLeaseBook {
             *pid==0||*birth==0 ||
             self.legacy_until_ms[(*slot-1) as usize]>now ||
             self.claims[(*slot-1) as usize].as_ref().is_some_and(|held|
-                held.until_ms>now && (
+                // Expiry retires WRITE permission, not the record of an
+                // unconfirmed active input. Even the same writer must use
+                // a NEW recovery-only epoch and native neutral ACK before
+                // it may acquire a normal action lease on this slot.
+                (!held.neutral && !neutral_only) ||
+                (held.until_ms>now && (
                     held.owner_id!=owner || held.pid!=*pid ||
                     held.birth!=*birth ||
-                    // Normal action acquisition may replace only an
-                    // already-neutral prior claim from the SAME writer.
-                    // An explicit neutral-only recovery can supersede a
-                    // prior unconfirmed ACTIVE claim from the same
-                    // writer, thereby fencing out its delayed CLI packets.
-                    (held.lease_epoch!=epoch && !neutral_only && !held.neutral) ||
                     // A recovery-only epoch cannot become an active
                     // writer with the very same transaction identifier.
                     (held.lease_epoch==epoch && held.neutral_only &&
                      !neutral_only)
-                ))
+                )))
         }) {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied,
                 "AI writer lease conflict; existing game input preserved"));
         }
         for &(slot,pid,birth) in targets {
             let index=(slot-1) as usize;
-            let neutral=self.claims[index].as_ref().is_none_or(|held|
-                held.until_ms<=now || held.owner_id!=owner ||
-                held.pid!=pid || held.birth!=birth || held.neutral);
+            // An expired claim is NEVER evidence of native neutral
+            // delivery. Every recovery-only acquisition starts
+            // non-neutral, even for an unclaimed slot, until a fresh
+            // exact-owner neutral write has actually succeeded.
+            // A normal claim can inherit only prior confirmed neutral
+            // state; pending active input always requires recovery.
+            let neutral=!neutral_only &&
+                self.claims[index].as_ref().is_none_or(|held|held.neutral);
             self.claims[index]=Some(AiWriterClaim {
                 owner_id:owner.into(),lease_epoch:epoch.into(),pid,birth,
                 until_ms:now.saturating_add(AI_WRITER_LEASE_MS),
@@ -883,7 +887,8 @@ impl AiLeaseBook {
     }
     pub(crate) fn legacy_allowed(&self,slot:u32,now:u64)->io::Result<()> {
         if !(1..=5).contains(&slot)||now==0 ||
-           self.claims[(slot-1) as usize].as_ref().is_some_and(|c|c.until_ms>now) {
+           self.claims[(slot-1) as usize].as_ref().is_some_and(|c|
+               c.until_ms>now || !c.neutral) {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied,
                 "An AI slot is held by a different native writer"));
         }
@@ -1901,6 +1906,14 @@ mod tests {
         assert!(book.begin_write(2,&a,&e2,102,1002,1023,false).is_err());
         book.begin_write(2,&a,&e2,102,1002,1024,true).unwrap();
         book.wrote(2,&a,&e2,102,1002,1025,true).unwrap();
+        // Recovery-only never assumes the other three are neutral just
+        // because they were neutral on a previous epoch. Each gets an
+        // explicit native neutral ACK before the group can be released.
+        assert!(book.release(&four,&a,&e2,1025).is_err());
+        for &(slot,pid,birth) in &four[1..] {
+            book.begin_write(slot,&a,&e2,pid,birth,1025,true).unwrap();
+            book.wrote(slot,&a,&e2,pid,birth,1025,true).unwrap();
+        }
         assert!(book.release(&four,&a,&e2,1026).is_ok());
         assert!(book.acquire(&five,&b,&e1,1030,false).is_ok());
         assert!(book.require(1,&b,&e1,101,1001,1031).is_ok());
@@ -1917,6 +1930,89 @@ mod tests {
             1033+AI_WRITER_LEASE_MS).is_err());
         assert!(book.acquire(&[(2,999,9002)],&a,&e1,
             1034+AI_WRITER_LEASE_MS,false).is_ok());
+    }
+
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn expired_active_writer_requires_exact_native_neutral_recovery_in_four_five_modes() {
+        // Pure retained native lease-book fixture; no Windows game process,
+        // input mapping, client CLI or Minecraft is created or executed.
+        let first="a".repeat(32);
+        let second="b".repeat(32);
+        let e1="1".repeat(32);
+        let e2="2".repeat(32);
+        let e3="3".repeat(32);
+        let four=vec![(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
+        let mut five=vec![(1,201,2201)];
+        five.extend(four.iter().copied());
+        for cohort in [&four,&five] {
+            let mut book=AiLeaseBook::default();
+            book.acquire(cohort,&first,&e1,1000,false).unwrap();
+            // Exercise the REAL legacy MC02 collision in both cohort
+            // shapes, not merely the second element of the slot list.
+            let &(slot,pid,birth)=cohort.iter()
+                .find(|(slot,_,_)|*slot==2).unwrap();
+            book.begin_write(slot,&first,&e1,pid,birth,1010,false).unwrap();
+            // The first input may have reached the game. There is no
+            // matching native neutral ACK, not even after 10s expiry.
+            let expired=1010+AI_WRITER_LEASE_MS+2;
+            assert!(book.require(slot,&first,&e1,pid,birth,expired).is_err());
+            assert!(book.acquire(cohort,&second,&e2,expired,false).is_err(),
+                "a single unconfirmed slot denies the whole 4/5 cohort");
+            assert!(book.acquire(&[(slot,pid,birth)],&first,&e2,expired,false).is_err(),
+                "same MCP writer cannot convert expiry into neutral proof");
+            assert!(book.acquire(&[(slot,pid,birth)],&second,&e2,expired,false).is_err());
+            assert!(book.legacy_allowed(slot,expired).is_err(),
+                "expired active MC02 claim may not unlock legacy input");
+            let healthy=cohort.iter().copied()
+                .filter(|(s,_,_)|*s!=slot).collect::<Vec<_>>();
+            assert!(book.acquire(&healthy,&second,&e2,expired,false).is_ok(),
+                "other original clients may be claimed independently");
+            assert!(book.release(&healthy,&second,&e2,expired+1).is_ok(),
+                "only prior neutral-ACKed normal claims may release");
+
+            book.acquire(&[(slot,pid,birth)],&second,&e2,expired,true).unwrap();
+            assert!(book.require(slot,&first,&e1,pid,birth,expired+1).is_err(),
+                "old epoch is fenced after neutral-only takeover");
+            assert!(book.release(&[(slot,pid,birth)],&second,&e2,expired+1).is_err(),
+                "expiry and recovery acquire are not a neutral ACK");
+            assert!(book.begin_write(slot,&second,&e2,pid,birth,expired+1,false).is_err(),
+                "recovery-only writer may never send active input");
+            book.begin_write(slot,&second,&e2,pid,birth,expired+2,true).unwrap();
+            assert!(book.release(&[(slot,pid,birth)],&second,&e2,expired+3).is_err(),
+                "a possibly published neutral write still needs its ACK");
+            book.wrote(slot,&second,&e2,pid,birth,expired+3,true).unwrap();
+            book.release(&[(slot,pid,birth)],&second,&e2,expired+4).unwrap();
+            assert!(book.acquire(&[(slot,pid,birth)],&second,&e3,expired+5,false).is_ok(),
+                "new action may start only after verified native neutral and release");
+        }
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn recovery_only_new_claim_never_starts_preconfirmed_neutral() {
+        let writer="b".repeat(32);
+        let epoch="2".repeat(32);
+        let target=[(3,303,3303)];
+        let mut book=AiLeaseBook::default();
+        book.acquire(&target,&writer,&epoch,1000,true).unwrap();
+        assert!(book.release(&target,&writer,&epoch,1001).is_err(),
+            "a first-time recovery must obtain its own native neutral ACK");
+        book.begin_write(3,&writer,&epoch,303,3303,1002,true).unwrap();
+        assert!(book.release(&target,&writer,&epoch,1003).is_err());
+        book.wrote(3,&writer,&epoch,303,3303,1003,true).unwrap();
+        book.release(&target,&writer,&epoch,1004).unwrap();
+
+        // Only a confirmed original process exit can forget the stale
+        // claim without writing to a possibly replaced game process.
+        let mut exited=AiLeaseBook::default();
+        exited.acquire(&target,&writer,&epoch,2000,false).unwrap();
+        exited.begin_write(3,&writer,&epoch,303,3303,2001,false).unwrap();
+        exited.forget_slot(3);
+        assert!(exited.acquire(&[(3,909,9909)],&writer,
+            &"3".repeat(32),2002,false).is_ok());
+        assert!(exited.require(3,&writer,&epoch,909,9909,2003).is_err());
     }
 
     #[cfg(feature="mc02-native-input")]

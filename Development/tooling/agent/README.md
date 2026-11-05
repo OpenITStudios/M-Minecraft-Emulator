@@ -147,6 +147,48 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P37 — Expired writer lease never proves neutral input (SOURCE_ONLY)
+
+A source audit of the retained Rust `AiLeaseBook` found that its
+original normal acquisition logic treated an expired 10-second
+writer claim as freely replaceable and initialized the new
+`neutral` bit from elapsed time. An input that was possibly
+published but never received a native neutral ACK could therefore
+be replaced by a *normal active* writer without the operator's
+explicit neutral-recovery action. The separate legacy MC02
+admission also ignored the active/non-neutral bit after expiry.
+
+The original **single native lease book** now separates the
+authority to **write** (which expires normally) from evidence of
+**native neutral acknowledgement** (which never follows from time).
+An expired claim whose last write was not ACKed neutral blocks
+normal active acquisition for that slot, including for the
+same writer. The recovery-only acquisition is still permitted
+after the old claim's expiry, or for the same current writer
+under the existing ownership rules. Its new claim always
+starts `neutral=false`; the original controller must complete
+a **fresh exact-PID/birth/epoch neutral write** before releasing
+the claim. A normal claim with existing confirmed neutral state
+can still be replaced after expiry, and independent healthy slots
+are unaffected. Confirmed original process reap is still the
+only path that clears a dead child's claim without writing into
+an adopted replacement. The legacy MC02 input gate also refuses
+expired **non-neutral** AI claims until that recovery completes.
+
+This is a bounded native IPC **ACK**, not a claim that Minecraft
+consumed key-up or that a game/window is playable. The expiry
+limit still fences delayed input through `require()`.
+No CLI schema, MCP owner, UI, driver, autonomous loop, alternate
+controller, profile files, installer or feature enablement changed.
+New pure Rust negative fixtures cover four- and five-AI atomic
+refusal, healthy peers, cross-writer and same-writer expiry,
+recovery-only admission, stale epoch denial, missing neutral
+ACK, successful neutral/release and confirmed process reap.
+Previous fixtures relying on implicit neutral state now model
+explicit neutral ACK for each recovered slot.
+Fixtures AUTHORED_NOT_EXECUTED; Windows, source suites and Minecraft
+acceptance NOT_VERIFIED.
+
 ## P36 — Definitive pre-mutation epoch refusal versus uncertain IPC
 
 The retained Rust `ai_lease_acquire` checks the temporal lease epoch

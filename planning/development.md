@@ -10,6 +10,26 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P37 expiry-is-not-neutral native writer fence (5 November 2026,
+  SOURCE_ONLY):** The existing Rust `AiLeaseBook.acquire` treated
+  a writer's 10-second lease expiry as neutral state and could
+  accept a new active claim despite prior possibly published
+  input without native neutral ACK. `legacy_allowed` similarly
+  ignored expired non-neutral claims. The original controller now
+  refuses normal acquisition of every non-neutral original claim
+  regardless of expiry, while retaining recovery-only takeover
+  under its existing writer/epoch/identity rules. Every
+  recovery-only claim begins non-neutral and requires a fresh
+  exact-owner neutral write and ACK before release. Healthy slots,
+  already-neutral claims, and confirmed process reap keep
+  their existing independent paths. Affected pre-existing
+  recovery fixture now models ACKs for all selected slots;
+  new pure Rust 4/5-client, legacy, neutral and reap regressions
+  are AUTHORED_NOT_EXECUTED. No source tests, Windows/Minecraft
+  run, alternate controller, native wire migration, package or CI.
+  See [agent P37](../Development/tooling/agent/README.md).
+
+
 - **P36 native epoch denial vs uncertain IPC (5 November 2026,
   SOURCE_ONLY):** Native `ai_lease_acquire` validates the
   transaction's issue FILETIME against every retained game birth
