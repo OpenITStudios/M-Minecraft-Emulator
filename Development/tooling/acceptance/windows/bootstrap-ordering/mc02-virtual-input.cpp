@@ -465,6 +465,20 @@ void rawMouse(RawBatch& batch,UINT& count,USHORT buttons,LONG dx=0,LONG dy=0) {
     e.data.mouse.lLastX=dx;
     e.data.mouse.lLastY=dy;
 }
+// If a once-active packet becomes zero AFTER the physical queue drain,
+// only re-plan RELEASE records that were previously copied as DOWN.
+// A new active packet, another thread or no held state is not permission
+// to replay stale presses, cursor movement, or a different game window.
+constexpr bool rawCanReplanRelease(std::uint64_t previous,
+    std::uint64_t current,bool originalGameThread,unsigned held) noexcept {
+    return previous!=0 && current==0 && originalGameThread && held!=0;
+}
+static_assert(rawCanReplanRelease(1,0,true,1));
+static_assert(!rawCanReplanRelease(1,2,true,1));
+static_assert(!rawCanReplanRelease(0,0,true,1));
+static_assert(!rawCanReplanRelease(1,0,false,1));
+static_assert(!rawCanReplanRelease(1,0,true,0));
+
 struct RawPlan {
     RawBatch events{};
     UINT count=0;
@@ -574,6 +588,17 @@ RawPlan nextRawPlan(std::uint64_t word) {
     plan.coherent=true;
     return plan;
 }
+// A caller may have room for just ONE RAWINPUT structure. Consume only
+// that prefix; never move rawHeldMask/cursors past records not copied.
+constexpr UINT rawCopiedRecordCount(UINT planned,UINT capacityBytes) noexcept {
+    const UINT available=capacityBytes/static_cast<UINT>(sizeof(RAWINPUT));
+    return planned<available?planned:available;
+}
+static_assert(rawCopiedRecordCount(8,sizeof(RAWINPUT))==1);
+static_assert(rawCopiedRecordCount(8,sizeof(RAWINPUT)-1)==0);
+static_assert(rawCopiedRecordCount(0,sizeof(RAWINPUT))==0);
+static_assert(rawCopiedRecordCount(8,2*sizeof(RAWINPUT))==2);
+
 // GetRawInputBuffer accepts partial batches: the caller may provide room
 // for one RAWINPUT even when the current virtual plan has many transitions.
 // Advance ONLY the state represented by successfully copied records.
@@ -665,7 +690,7 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     if (rawBufferBusy.test_and_set(std::memory_order_acquire)) {
         *size=0;SetLastError(previous);return 0;
     }
-    const auto plan=gameThread?nextRawPlan(word):RawPlan{};
+    auto plan=gameThread?nextRawPlan(word):RawPlan{};
     if (!data) {
         // Win32 size query never consumes the action. The next call
         // with a real buffer must still see the same queued transitions.
@@ -683,6 +708,19 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
         SetLastError(physicalFailure);
         return UINT(-1);
     }
+    // The bounded real-queue drain may outlast a live virtual packet.
+    // If its newest read is ZERO, the previous plan's presses/camera
+    // must be discarded. However, already-delivered DOWNs still need
+    // key-up/mouse-up records. Build a fresh release-only plan on THIS
+    // poll, with a new even-revision check, without touching an
+    // unverified game thread or unconsumed release cursor.
+    const auto afterDrain=currentPacket();
+    if (rawCanReplanRelease(word,afterDrain,gameThread,rawHeldMask)) {
+        word=0;
+        plan=nextRawPlan(0);
+    }
+    // All other changes (including a NEW active packet) still refuse
+    // this old plan. Never copy stale down/camera actions to the game.
     // A command may expire while the genuine raw queue is being drained.
     // Never commit synthetic mouse/key actions after the deadline or
     // after MC01 has lost real Windows foreground.
@@ -708,8 +746,7 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
         SetLastError(ERROR_INSUFFICIENT_BUFFER);
         return UINT(-1);
     }
-    const UINT available=capacity/blockBytes;
-    const UINT delivered=plan.count<available?plan.count:available;
+    const UINT delivered=rawCopiedRecordCount(plan.count,capacity);
     const UINT bytes=delivered*blockBytes;
     if (bytes) std::memcpy(data,plan.events.data(),bytes);
     *size=bytes;

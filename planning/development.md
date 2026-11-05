@@ -10,6 +10,26 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P40 Raw Input same-poll release after physical drain (5 November 2026,
+  SOURCE_ONLY):** The original C++ GetRawInputBuffer consumer built
+  its synthetic plan before draining the physical Raw Input queue;
+  if an active packet expired during the drain, it refused both
+  stale DOWNs and already-owed UPs, requiring an additional
+  game poll for the latter. The existing original hook now
+  permits a release-only replan on the SAME validated game-thread
+  poll when a previously active word becomes zero AND actual
+  rawHeldMask records exist. It still refuses newer active input,
+  changed/odd revisions, failed real-queue drains, unknown HWNDs,
+  and physical input fallback. One-record buffers continue to
+  advance only the prefix actually copied, with compile-time
+  static_assert negative fixtures for release replan admission
+  and 1-record/too-small capacities. ABI v4, Rust controller,
+  opt-in feature defaults, MCP/CLI, installer, profiles and
+  GitHub Actions unchanged. Fixtures AUTHORED_NOT_EXECUTED,
+  Windows/Minecraft key-up/gameplay NOT_VERIFIED.
+  See [agent P40](../Development/tooling/agent/README.md).
+
+
 - **P39 optional C++ Raw Input TTL expiry recheck (5 November 2026,
   SOURCE_ONLY):** the existing reader checked the native 500-ms
   expiry before a real Windows foreground query, then only checked

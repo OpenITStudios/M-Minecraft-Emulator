@@ -147,6 +147,54 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P40 — Same-poll deferred Raw Input release after queue drain (SOURCE_ONLY)
+
+The optional original C++ Raw Input consumer already maintains
+`rawHeldMask` for each DOWN **actually copied** to the game's
+GetRawInputBuffer output, and advances press/cursor state only
+for copied events. Microsoft documents that GetRawInputBuffer
+may return partial batches when a caller's buffer cannot hold
+all raw events; the existing reader supports a one-RAWINPUT buffer
+and refuses failed physical queue drains rather than exposing
+the real user's keyboard/mouse events.
+
+A remaining source-level gap: the original reader builds its
+synthetic plan **before** draining the physical Raw Input queue.
+If the active 500-ms virtual packet expires or is neutralized during
+that bounded drain, the existing final currentPacket mismatch
+refuses the whole plan. That correctly prevents stale DOWNs
+but also defers pending **UP** records that are already owed
+for DOWNs copied on an earlier poll, even though the current
+game thread is already polling.
+
+The same existing C++ reader now permits exactly one bounded
+re-plan during that poll **only if** the previous word was live,
+the current word is zero, the owner window thread is still the
+validated game thread, and `rawHeldMask` contains previously
+delivered DOWNs. The new `nextRawPlan(0)` contains releases
+only, and must pass the existing stable even shared-memory
+revision, exact window identity, currentPacket=0, and native
+buffer-size checks before copying records. A replacement nonzero
+packet is NOT replayed or re-planned as input. If the physical
+drain fails, the read is refused **before re-planning**, leaving
+all release/press/cursor records unchanged for a later poll.
+The original release-first ordering and one-record prefix
+consumption remain in place; the helper returns the exact
+number of records fitting the caller's byte buffer.
+
+C++ compile-time negative source fixtures cover zero-to-zero,
+active-to-new-active, wrong game thread, empty held state,
+one-record capacity, insufficient one-record capacity and
+zero-plan reads. AUTHORED_NOT_EXECUTED: no C++ compilation,
+test runner, Windows calls, or Minecraft Education polling
+occurred. This cannot deliver key-up to a paused game until
+the game resumes GetRawInputBuffer polling, nor verify key-up
+consumption, sign-in, or gameplay.
+
+No new OS input, GetRawInputData/WM_INPUT hook, controller,
+96-byte ABI, TTL policy, native lease change, CLI/MCP service,
+feature activation, installer/profile mutation or CI.
+
 ## P39 — Raw Input expiry recheck after Windows foreground calls (SOURCE_ONLY)
 
 The existing optional C++ `GetRawInputBuffer` reader maintains
