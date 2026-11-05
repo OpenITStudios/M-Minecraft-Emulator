@@ -80,6 +80,27 @@ input/foreground fallback is exported. A zero-based element index is
 valid in Cua's documented token contract. Tests are authored but not
 executed; no new Windows game input capability.
 
+## P60 — Snapshot provenance and strict route refusal (SOURCE_ONLY)
+
+The existing Cua tree projector now matches the provider's `snapshot_id`
+against **every** returned `element_token` and zero-based index;
+repeated indices cannot become action candidates. The only exported
+indicator is `snapshotProvenance: TOKEN_INDEX_MATCH_AT_READ | UNVERIFIED`;
+neither tokens nor snapshot IDs leave MCP. Missing/mismatched provenance
+refuses P59 candidacy while preserving read-only UIA inspection.
+
+The pinned upstream Windows `click` is NOT Invoke-only: it can route
+element actions to `PostMessage` or injection, or other UIA patterns.
+Its foreground shield documents a WPF handler limitation. Every
+assessment therefore reports `backgroundRoute: BLOCKED_NOT_INVOKE_ONLY`,
+`targetPostcondition: NOT_DECLARED` and
+`focusIsolation: NOT_VERIFIED`, even for a read-time token match.
+No dispatch, live token reservation, new daemon, foreground fallback or
+implicit retry was added. Future execution requires a no-fallback
+Invoke-only transport, target-owned postcondition, native identity fences
+and separately authorized Windows no-focus proof. Fixture cases were
+authored, NOT_EXECUTED.
+
 ## Efficient visual observation
 
 Use `start_visual_observation`, `get_multi_client_visual_state`,

@@ -139,6 +139,36 @@ of background behavior. Source-only negative fixtures authored,
 NOT_EXECUTED. The Cua `InvokePattern` result alone cannot guarantee
 the application will not activate itself.
 
+**P60 source-only gate (6 November 2026):** Cua's
+`get_window_state` publishes per-row tokens and snapshot identifiers;
+a newer snapshot can retire prior tokens. The current read-only
+projector checks exact `sXXXXXXXX:index` correspondence and uniqueness
+for *all* returned rows. It exports only `snapshotProvenance`, never
+the snapshot or token. P59 candidacy refuses missing/mismatched/duplicate
+provenance. This is a check **at observation time**, not a lifetime
+reservation: other daemon callers may immediately invalidate it.
+
+**Confirmed source blocker:** pinned Windows `click` is not
+Invoke-only: Chromium/Electron element clicks can use
+`PostMessage`; other cases try Toggle/Selection/Expand or coordinate
+injection when Invoke is unavailable or fails. The upstream WPF caveat
+in `fg_bypass.rs` explicitly documents self-activation despite its
+XAML/Chromium shield. Strict no-focus behavior remains unproven.
+Evidence (exact upstream revision):
+https://github.com/trycua/cua/blob/044f528265234d255f0792d4929b434b5e9adf8e/libs/cua-driver/rust/crates/cua-driver-core/src/element_token.rs
+https://github.com/trycua/cua/blob/044f528265234d255f0792d4929b434b5e9adf8e/libs/cua-driver/rust/crates/platform-windows/src/tools/get_window_state.rs
+https://github.com/trycua/cua/blob/044f528265234d255f0792d4929b434b5e9adf8e/libs/cua-driver/rust/crates/platform-windows/src/tools/click.rs
+https://github.com/trycua/cua/blob/044f528265234d255f0792d4929b434b5e9adf8e/libs/cua-driver/rust/crates/platform-windows/src/uia/fg_bypass.rs
+
+**No execution route admitted in P60.** Future mutation requires
+a no-fallback Invoke-only primitive that refuses alternate dispatch
+*before* acting, pre/post native PID/HWND/birth/session validation,
+app-specific target-owned postcondition, and verified user focus/z-order
+isolation. Neither generic UIA churn, screenshot hash nor tool ACK is
+sufficient. Uncertain timeouts must not cause automatic replay.
+Minecraft gameplay remains separately unverified. All tests authored
+NOT_EXECUTED; no Windows/Codex/Minecraft activity.
+
 **P58 source-only implementation:** `inspect_client_ui({slot})`
 uses the existing configured Cua Driver `get_window_state`
 CLI with `include_screenshot:false` and up to 64 structured

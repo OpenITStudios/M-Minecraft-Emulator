@@ -82,11 +82,36 @@ test('Cua semantic projection strips raw values, titles and action tokens',()=>{
 test('Cua zero-based UIA element indices are valid and not action tokens',()=>{
   const projected=projectCuaSemanticWindow({
     pid:42,window_id:1234,elements_complete:true,
+    snapshot_id:'s00000001',
     elements:[{element_index:0,role:'Button',label:'Play',
       actions:['invoke'],enabled:true,element_token:'s00000001:0'}],
   },{pid:42,windowId:1234});
   assert.equal(projected.elements[0].index,0);
+  assert.equal(projected.snapshotProvenance,'TOKEN_INDEX_MATCH_AT_READ');
   assert.equal(JSON.stringify(projected).includes('s00000001'),false);
+});
+
+test('P60 snapshot provenance refuses missing, mismatched and duplicate tokens',()=>{
+  const base={pid:42,window_id:1234,elements_complete:true,
+    snapshot_id:'s0000000a',elements:[{
+      element_index:0,element_token:'s0000000a:0',
+      role:'Button',label:'Play',actions:['invoke'],enabled:true,
+    }]};
+  const inspect=raw=>projectCuaSemanticWindow(raw,{pid:42,windowId:1234});
+  assert.equal(inspect(base).snapshotProvenance,'TOKEN_INDEX_MATCH_AT_READ');
+  for(const raw of [
+    {...base,snapshot_id:undefined},
+    {...base,snapshot_id:'snapshot-10'},
+    {...base,elements:[{...base.elements[0],element_token:undefined}]},
+    {...base,elements:[{...base.elements[0],element_token:'s00000009:0'}]},
+    {...base,elements:[{...base.elements[0],element_token:'s0000000a:1'}]},
+    {...base,elements:[...base.elements,{...base.elements[0]}]},
+  ]) {
+    const read=inspect(raw);
+    assert.equal(read.snapshotProvenance,'UNVERIFIED');
+    assert.equal(read.actionPermitted,false);
+    assert.equal(JSON.stringify(read).includes('s0000000a'),false);
+  }
 });
 
 test('strict background UIA assessor never dispatches and refuses uncertainty',()=>{
@@ -95,6 +120,7 @@ test('strict background UIA assessor never dispatches and refuses uncertainty',(
   const inspection={
     schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
     slot:2,identity,actionPermitted:false,screenshotCaptured:false,
+    snapshotProvenance:'TOKEN_INDEX_MATCH_AT_READ',
     status:'UIA_ELEMENTS_READ_UNVERIFIED',elementsComplete:true,
     elements:[{index:0,role:'Button',label:'Play',
       enabled:true,actions:['invoke']}],
@@ -107,6 +133,10 @@ test('strict background UIA assessor never dispatches and refuses uncertainty',(
   assert.equal(candidate.foregroundFallback,false);
   assert.equal(candidate.windowActivated,false);
   assert.equal(candidate.backgroundEffect,'NOT_VERIFIED');
+  assert.equal(candidate.backgroundRoute,'BLOCKED_NOT_INVOKE_ONLY');
+  assert.equal(candidate.targetPostcondition,'NOT_DECLARED');
+  assert.equal(candidate.focusIsolation,'NOT_VERIFIED');
+  assert.equal(candidate.tokenExported,false);
   assert.equal(candidate.target.createdFileTime,identity.createdFileTime);
   assert.equal(JSON.stringify(candidate).includes('element_token'),false);
 
@@ -114,6 +144,10 @@ test('strict background UIA assessor never dispatches and refuses uncertainty',(
     changed,{elementIndex,action:'invoke'}).reason;
   assert.equal(reason({...inspection,elementsComplete:false}),
     'UIA_INCOMPLETE_OR_DEGRADED');
+  assert.equal(reason({...inspection,snapshotProvenance:'UNVERIFIED'}),
+    'UIA_SNAPSHOT_TOKEN_PROVENANCE_UNVERIFIED');
+  assert.equal(reason({...inspection,snapshotProvenance:undefined}),
+    'UIA_SNAPSHOT_TOKEN_PROVENANCE_UNVERIFIED');
   assert.equal(reason({...inspection,status:'UIA_PARTIAL_UNVERIFIED'}),
     'UIA_INCOMPLETE_OR_DEGRADED');
   assert.equal(reason({...inspection,elements:[...inspection.elements,

@@ -724,6 +724,7 @@ test('background UI action assessment reuses fresh native-fenced UIA only',async
       schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
       status:'UIA_ELEMENTS_READ_UNVERIFIED',
       elementsComplete:true,actionPermitted:false,
+      snapshotProvenance:'TOKEN_INDEX_MATCH_AT_READ',
       screenshotCaptured:false,gameplayInput:'NOT_VERIFIED',
       elements:[{index:0,role:'Button',label:'Play',
         enabled:true,actions:['invoke']}],

@@ -32,9 +32,10 @@ NOT_VERIFIED.
   background; first read-only semantic UIA via existing Cua Driver,
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
-- **Last source stages:** P58 added `inspect_client_ui`; P59 fixes
-  zero-based UIA indices and adds read-only
-  `assess_client_background_action`. Both are AUTHORED_NOT_EXECUTED.
+- **Last source stages:** P58 `inspect_client_ui`, P59 read-only
+  `assess_client_background_action`, P60 snapshot/token-index
+  consistency and blocked non-Invoke-only route. All are
+  AUTHORED_NOT_EXECUTED; no Windows action was enabled.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -78,6 +79,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P60 | Check Cua snapshot/token/index at read; refuse unbound candidates; expose blocked non-Invoke-only delivery | Authored negative fixtures, NOT_EXECUTED |
 | P59 | Fix valid Cua UIA element index 0; add read-only strict-background Invoke assessment using fresh native-fenced UIA, without input/fallback | Authored negative fixtures, NOT_EXECUTED |
 | P58 | MCP semantic UIA read via existing configured Cua Driver; 64-node tree-only result fenced by native pre/post identity | Authored fixtures, NOT_EXECUTED |
 | P57 | Stopped WGC slot retains status counters only; releases source-owned child/decoder/PNG references without affecting next worker | Authored late-callback/restart fixture, NOT_EXECUTED |
@@ -159,15 +161,14 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**P60 next scope: prove a safe action route before enabling any
-Computer Use mutation.** At a freshly pinned `Local` HEAD inspect
-Cua Driver's exact snapshot-token lifetime, strict
-`delivery_mode:"background"` semantics and post-action verifier
-against our original native PID/HWND/birth/session fences.
-Assess refusal cases for focus-stealing UIA handlers, missing or
-occluded targets, ambiguous rows, stale snapshots and interrupted
-actions. Keep any further change disabled/read-only unless source
-evidence justifies an explicit authorized action and independent
-target-owned postcondition. Never silently escalate to foreground.
-No localtest, Windows/Codex/Minecraft, CI, build, install or game
-input under current permission.
+**P61: investigate a no-fallback Invoke-only, no-user-interruption
+route without enabling dispatch.** Pin fresh `Local` HEAD; check
+whether pinned/current Cua Driver exposes or can safely support an
+exact-window Invoke-only primitive that refuses fallback before acting.
+Define one minimal app-specific, target-owned readback under exact native
+PID/HWND/birth/session fences. Source-review refusal for WPF focus risk,
+Chromium/Electron fallback, stale tokens, changed HWND and uncertain
+timeouts. Do not add a second controller, global input, daemon or retry.
+Any actual action additionally needs operator approval plus real Windows
+no-focus proof. Minecraft gameplay remains separate/NOT_VERIFIED.
+No source test, local PC, build, CI, install or game execution.

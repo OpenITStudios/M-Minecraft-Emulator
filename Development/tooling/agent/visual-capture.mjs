@@ -126,20 +126,31 @@ export function projectCuaSemanticWindow(result,target) {
       enabled:typeof row.enabled==='boolean'?row.enabled:null,
       actions};
   });
+  // Exact provider token/index consistency at observation time only.
+  // Another Cua daemon client may invalidate the snapshot immediately.
+  // Never return the snapshot id or element tokens to MCP clients.
+  const indices=new Set();
+  const snapshotProvenance=
+    typeof result.snapshot_id==='string' &&
+    /^s[0-9a-f]{8}$/.test(result.snapshot_id) &&
+    result.elements.every(row=>{
+      if(indices.has(row.element_index))return false;
+      indices.add(row.element_index);
+      return row.element_token===`${result.snapshot_id}:${row.element_index}`;
+    }) ? 'TOKEN_INDEX_MATCH_AT_READ' : 'UNVERIFIED';
   const partial=result.elements_complete!==true ||
     result.truncated===true || result.degraded===true;
   return {schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
     status:elements.length===0?'UIA_EMPTY_OR_UNAVAILABLE':
       partial?'UIA_PARTIAL_UNVERIFIED':'UIA_ELEMENTS_READ_UNVERIFIED',
     elementsComplete:!partial,
-    elements,
+    snapshotProvenance,elements,
     screenshotCaptured:false,actionPermitted:false,
     gameplayInput:'NOT_VERIFIED'};
 }
-// P59: this is an assessment of a UIA-advertised operation, NOT an
-// actuation grant. No action token, foreground route or input execution
-// exists here. A semantic Invoke may itself bring a target forward, so
-// its no-interruption behavior remains UNKNOWN without Windows evidence.
+// P59-P60: read-only candidacy, never a grant. A matching token may
+// already be stale; Cua click can fall back to PostMessage/injection,
+// and some UIA handlers can self-activate. No execution is authorized.
 export function assessCuaStrictBackgroundAction(inspection,{
   elementIndex,action,
 }={}) {
@@ -153,7 +164,9 @@ export function assessCuaStrictBackgroundAction(inspection,{
     actionDispatched:false,actionPermitted:false,
     foregroundFallback:false,windowActivated:false,
     screenshotCaptured:false,backgroundEffect:'NOT_VERIFIED',
-    gameInput:'NOT_VERIFIED',
+    backgroundRoute:'BLOCKED_NOT_INVOKE_ONLY',
+    targetPostcondition:'NOT_DECLARED',focusIsolation:'NOT_VERIFIED',
+    tokenExported:false,gameInput:'NOT_VERIFIED',
   };
   const refuse=reason=>({...result,reason});
   if(inspection?.status==='BACKGROUND_UNAVAILABLE') {
@@ -181,6 +194,9 @@ export function assessCuaStrictBackgroundAction(inspection,{
      inspection.elementsComplete!==true) {
     return refuse('UIA_INCOMPLETE_OR_DEGRADED');
   }
+  if(inspection.snapshotProvenance!=='TOKEN_INDEX_MATCH_AT_READ') {
+    return refuse('UIA_SNAPSHOT_TOKEN_PROVENANCE_UNVERIFIED');
+  }
   // A malformed or repeated source index must never become authority for
   // whichever element happens to be first in an untrusted projection.
   const matches=inspection.elements.filter(e=>e?.index===elementIndex);
@@ -198,7 +214,7 @@ export function assessCuaStrictBackgroundAction(inspection,{
       windowId:identity.windowId,sessionId:identity.sessionId,
       createdFileTime:identity.createdFileTime},
     element:{index:elementIndex,role:'Button',label:element.label},
-    next:'NO_DISPATCH_UNTIL_SEPARATELY_AUTHORIZED_AND_VERIFIABLE'};
+    next:'REQUIRE_INVOKE_ONLY_ROUTE_NO_FOCUS_PROOF_AND_TARGET_POSTCONDITION'};
 }
 
 export async function inspectCuaWindowElements(cuaExecutable,target,{
