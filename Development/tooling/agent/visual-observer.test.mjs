@@ -1,10 +1,17 @@
 // Source authored only. Operator has not authorized running Node tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createVisualObserver,summarizeTeamVisualState,
+import {MAX_PNG_BYTES} from './visual-capture.mjs';
+import {createVisualObserver,OBSERVATION_LIMITS,summarizeTeamVisualState,
   verifyTeamObservationBasis,evaluateTeamActionFeedback,
   summarizeTeamCoordination,projectF3VisualReview,
   reviewVisibleXYZFromFrame} from './visual-observer.mjs';
+
+test('both window capture providers fit the bounded observer base64 envelope',()=>{
+  assert.equal(MAX_PNG_BYTES,3*1024*1024);
+  assert.equal(OBSERVATION_LIMITS.maximumEncodedFrameChars,
+    4*Math.ceil(MAX_PNG_BYTES/3));
+});
 
 function clockFixture() {
   let now=1000;

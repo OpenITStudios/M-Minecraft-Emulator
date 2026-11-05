@@ -10,7 +10,7 @@ import {promisify} from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const PNG_SIGNATURE = Buffer.from([137,80,78,71,13,10,26,10]);
-const MAX_BYTES = 6 * 1024 * 1024; // Bound the MCP image response.
+export const MAX_PNG_BYTES = 3 * 1024 * 1024; // Fits the observer's 4 MiB base64 budget.
 const MAX_DIMENSION = 1536;
 const REQUESTED_LONG_EDGE = 1280;
 const CAPTURE_TIMEOUT_MS = 20_000;
@@ -24,7 +24,7 @@ export function validateCuaExecutable(value) {
 }
 
 export function inspectPng(bytes) {
-  if (!Buffer.isBuffer(bytes) || bytes.length < 33 || bytes.length > MAX_BYTES ||
+  if (!Buffer.isBuffer(bytes) || bytes.length < 33 || bytes.length > MAX_PNG_BYTES ||
       !bytes.subarray(0,8).equals(PNG_SIGNATURE) ||
       bytes.readUInt32BE(8)!==13 ||
       bytes.toString('ascii',12,16)!=='IHDR') {
@@ -80,14 +80,14 @@ export async function captureCuaWindow(cuaExecutable,target) {
     }
     const stat=await lstat(screenshotPath);
     if (!stat.isFile() || stat.isSymbolicLink() ||
-        stat.size<33 || stat.size>MAX_BYTES) {
+        stat.size<33 || stat.size>MAX_PNG_BYTES) {
       throw new Error('Cua frame file is absent, linked, or too large');
     }
     const handle=await open(screenshotPath,'r');
     let bytes;
     try {
       const current=await handle.stat();
-      if (!current.isFile() || current.size<33 || current.size>MAX_BYTES) {
+      if (!current.isFile() || current.size<33 || current.size>MAX_PNG_BYTES) {
         throw new Error('Cua frame file changed while opening');
       }
       bytes=await handle.readFile();

@@ -6,10 +6,10 @@ import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {lstat} from 'node:fs/promises';
 import path from 'node:path';
-import {inspectPng} from './visual-capture.mjs';
+import {inspectPng,MAX_PNG_BYTES} from './visual-capture.mjs';
 
 const MAGIC='LTG1', HEADER=28;
-const MAX_FRAME=3*1024*1024;
+const MAX_FRAME=MAX_PNG_BYTES;
 const MAX_PENDING=2*MAX_FRAME+HEADER*2;
 const MAX_AGE_MS=3500;
 const NO_FRAME_TIMEOUT_MS=8000;

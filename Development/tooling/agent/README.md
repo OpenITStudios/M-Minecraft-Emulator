@@ -147,6 +147,20 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P45 — One PNG admission budget for visual observation (SOURCE_ONLY)
+
+The existing CUA capture now refuses PNGs over **3 MiB** at file stat and
+PNG inspection, before reading a large buffer into a base64 MCP response.
+The existing WGC packet reader uses that same exported budget (rather than a
+second independent literal); the existing observer's **4 MiB base64** limit
+is exactly sufficient for a 3 MiB PNG. This preserves lossless PNG and the
+current 1280-pixel requested CUA long edge without a second resize, re-encode,
+image processor, worker, runtime dependency or fallback. A CUA screenshot
+previously between 3 and 6 MiB is now explicitly refused, including one-shot
+capture; no automatic lower-quality alternative is invented. Source-authored
+boundary fixtures are **AUTHORED_NOT_EXECUTED**. Windows capture and actual
+MCP payload savings are **NOT_VERIFIED**.
+
 ## P43 — Bounded rising-edge counts for rapid key and mouse transitions (SOURCE_ONLY)
 
 The original per-process Rust shared-input writer stores eight

@@ -10,6 +10,17 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P45 lossless PNG admission alignment (5 November 2026, SOURCE_ONLY):**
+  CUA capture and WGC reader now share the original capture module's 3 MiB
+  PNG budget, exactly matching the existing observer's 4 MiB encoded cap.
+  A CUA image above 3 MiB is refused before base64 work instead of being
+  admitted and then rejected by visual observation. No new compressor,
+  provider, runtime, repeated resize or source-test execution. Authored
+  tests cover size rejection and cross-owner limits, NOT_EXECUTED.
+  Single-shot CUA captures previously accepted up to 6 MiB are now limited
+  to 3 MiB; actual Windows image and processing costs remain NOT_VERIFIED.
+
+
 - **P44 original Rust/C++ input contract review routing (5 November 2026,
   SOURCE_ONLY):** An exact-HEAD audit found the pinned shared-memory
   ABI v4 aligned across all 15 Rust/C++ field offsets and 96 bytes,

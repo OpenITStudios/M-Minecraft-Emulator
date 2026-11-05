@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {inspectPng,validateCuaExecutable,buildCuaWindowQuery} from './visual-capture.mjs';
+import {inspectPng,validateCuaExecutable,buildCuaWindowQuery,MAX_PNG_BYTES} from './visual-capture.mjs';
 
 const png1x1=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6YQAAAAASUVORK5CYII=',
@@ -38,5 +38,8 @@ test('PNG observation validates signature, dimensions and bounded source',()=>{
   const altered=Buffer.from(png1x1);
   altered.writeUInt32BE(99999,16);
   assert.throws(()=>inspectPng(altered),/dimensions/);
-  assert.throws(()=>inspectPng(Buffer.alloc(6*1024*1024+1)));
+  assert.throws(()=>inspectPng(Buffer.alloc(MAX_PNG_BYTES+1)));
+  const looksLikePng=Buffer.alloc(MAX_PNG_BYTES+1);
+  png1x1.copy(looksLikePng); // A PNG signature cannot bypass the raw-size bound.
+  assert.throws(()=>inspectPng(looksLikePng),/bounded PNG/);
 });
