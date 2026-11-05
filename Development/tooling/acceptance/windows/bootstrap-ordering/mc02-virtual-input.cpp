@@ -53,12 +53,14 @@ static_assert(
     offsetof(SharedInput,pressCounts)==88 ,
     "SharedInput v4 offsets must match the Rust native writer");
 const SharedInput* view=nullptr;
-// An observed stale/invalid active revision may NEVER become live again
-// merely because focus or HWND visibility returns before its 500-ms TTL.
-// Only another independently admitted native publication increments the
-// controller-owned 64-bit revision. Keep this game-process-local watermark,
-// not a shared ABI field or a second controller/lease registry.
-std::atomic<std::uint64_t> rejectedThroughRevision{0};
+// A rejected controller publication can contain unread rising-edge
+// counters and accumulated relative look. A later HEARTBEAT can increment
+// the revision while retaining that SAME cursor epoch and backlog.
+// Reject the entire contaminated epoch, not just one packet revision:
+// only an original controller ReleaseAll/expiry followed by a genuinely
+// new epoch can admit active input again. This is a process-local safety
+// floor, not an ABI field, independent driver, or additional lease owner.
+std::atomic<std::uint64_t> rejectedThroughEpoch{0};
 std::atomic<bool> isolated{false}; // latched after first valid AI command
 std::atomic<bool> cursorInitialized{false};
 std::atomic<LONG> virtualX{0},virtualY{0};
@@ -170,13 +172,19 @@ static_assert(activePacketAdmitted(true,true,true));
 static_assert(!activePacketAdmitted(false,true,true));
 static_assert(!activePacketAdmitted(true,false,true));
 static_assert(!activePacketAdmitted(true,true,false));
-constexpr bool freshNativePublication(std::uint64_t revision,
-                                      std::uint64_t rejectedThrough) noexcept {
-    return revision!=0 && revision>rejectedThrough;
+// Different packet revisions in one shared-memory epoch retain the SAME
+// cumulative mouse and button history. A rejected key-down at revision 2
+// must not reappear as a "new" short click in a look-only revision 4.
+// The original Rust writer advances cursorEpoch on ReleaseAll/expiry,
+// giving a clean re-admission boundary without any new IPC contract.
+constexpr bool freshNativeInputEpoch(std::uint64_t epoch,
+                                     std::uint64_t rejectedThrough) noexcept {
+    return epoch!=0 && epoch>rejectedThrough;
 }
-static_assert(freshNativePublication(4,2));
-static_assert(!freshNativePublication(4,4));
-static_assert(!freshNativePublication(4,6));
+static_assert(freshNativeInputEpoch(2,1));  // new independent epoch
+static_assert(!freshNativeInputEpoch(1,1)); // heartbeat in revoked epoch
+static_assert(!freshNativeInputEpoch(1,2)); // older epoch
+static_assert(!freshNativeInputEpoch(0,0)); // uninitialized channel
 // A coherent, nonzero native packet means this original AI process has
 // entered its isolated-input epoch, EVEN when the packet is rejected by
 // deadline, focus, or root-window admission. A rejected first command
@@ -194,17 +202,18 @@ static_assert(!observedCommittedActivePacket(0,2,2)); // neutral
 static_assert(!observedCommittedActivePacket(1,2,4)); // changed
 static_assert(!observedCommittedActivePacket(1,3,3)); // mid-write
 static_assert(!observedCommittedActivePacket(1,0,0)); // uninitialized
-// Multiple Minecraft polling threads may reject different revisions at
-// once. A late rejection of an OLD revision must not overwrite an earlier
-// rejection of a NEWER one. C++17 has no atomic fetch_max; use bounded
-// compare-exchange on this single process-local 64-bit watermark.
-void rejectActiveRevisionIfCurrent(std::uint64_t revision) {
-    if (!view || !revision ||
-        view->cursorRevision.load(std::memory_order_seq_cst)!=revision) return;
-    auto previous=rejectedThroughRevision.load(std::memory_order_seq_cst);
-    while (previous<revision &&
-           !rejectedThroughRevision.compare_exchange_weak(
-               previous,revision,std::memory_order_seq_cst,
+// Multiple original game threads can observe failures concurrently.
+// Never let a late rejection of an older epoch decrease the fence.
+// Record only a coherent publisher snapshot: an in-flight writer is not
+// evidence that the next packet/epoch itself should be rejected.
+void rejectActiveEpochIfCurrent(std::uint64_t revision,std::uint64_t epoch) {
+    if (!view || !revision || !epoch ||
+        view->cursorRevision.load(std::memory_order_seq_cst)!=revision ||
+        view->cursorEpoch.load(std::memory_order_seq_cst)!=epoch) return;
+    auto previous=rejectedThroughEpoch.load(std::memory_order_seq_cst);
+    while (previous<epoch &&
+           !rejectedThroughEpoch.compare_exchange_weak(
+               previous,epoch,std::memory_order_seq_cst,
                std::memory_order_seq_cst)) {}
 }
 
@@ -219,6 +228,7 @@ std::uint64_t currentPacket() {
     if (!revision || (revision&1)) return 0;
     const auto word=view->packet.load(std::memory_order_seq_cst);
     const auto hostRaw=view->humanWindow.load(std::memory_order_seq_cst);
+    const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
     // The first coherent ACTIVE publication latches physical-input
     // isolation before *any* deadline/focus/HWND refusal. Previously a
     // rejected initial command returned zero without setting isolated,
@@ -228,14 +238,16 @@ std::uint64_t currentPacket() {
     if (observedCommittedActivePacket(word,revision,
             view->cursorRevision.load(std::memory_order_seq_cst)))
         isolated.store(true,std::memory_order_release);
-    // An expired packet might look live again after the 32-bit uptime
-    // counter wraps. Once observed expired, revoke THIS revision for the
-    // lifetime of this game process; a fresh native publication can advance.
+    // A revision-only fence would admit the next heartbeat in the same
+    // epoch, potentially replaying presses/look that were rejected earlier.
+    // Deny the full epoch until the controller publishes a fresh one.
     if (!word) return 0;
-    if (!freshNativePublication(revision,
-         rejectedThroughRevision.load(std::memory_order_seq_cst))) return 0;
+    if (view->cursorRevision.load(std::memory_order_seq_cst)!=revision)
+        return 0;
+    if (!freshNativeInputEpoch(epoch,
+         rejectedThroughEpoch.load(std::memory_order_seq_cst))) return 0;
     if (!packetLiveAt(word,GetTickCount()) || !originalForeground) {
-        rejectActiveRevisionIfCurrent(revision);
+        rejectActiveEpochIfCurrent(revision,epoch);
         return 0;
     }
     // Only the genuine Win32 foreground is authoritative for the hybrid
@@ -243,24 +255,24 @@ std::uint64_t currentPacket() {
     const HWND host=hostRaw?reinterpret_cast<HWND>(
         static_cast<ULONG_PTR>(hostRaw)):nullptr;
     if (host && originalForeground()!=host) {
-        rejectActiveRevisionIfCurrent(revision);
+        rejectActiveEpochIfCurrent(revision,epoch);
         return 0;
     }
     // Check the exact root AFTER focus, and recheck focus AFTER potentially
     // delayed Win32 HWND/class lookups. Loss of either condition rejects
-    // this publication permanently; do not silently resume a stale held
-    // key/camera delta when the original window returns.
+    // the entire accumulated input epoch. A later same-epoch heartbeat
+    // cannot replay pending key/button/cursor deltas on focus restoration.
     const bool originalRoot=ownedGameWindow()!=nullptr;
     const bool sameRevision=
         view->cursorRevision.load(std::memory_order_seq_cst)==revision;
     const bool stillLive=packetLiveAt(word,GetTickCount());
     const bool humanFocusIntact=!host || originalForeground()==host;
     if ((!originalRoot || !stillLive || !humanFocusIntact) && sameRevision)
-        rejectActiveRevisionIfCurrent(revision);
+        rejectActiveEpochIfCurrent(revision,epoch);
     if (!activePacketAdmitted(originalRoot&&humanFocusIntact,
                               sameRevision,stillLive) ||
-        !freshNativePublication(revision,
-         rejectedThroughRevision.load(std::memory_order_seq_cst))) return 0;
+        !freshNativeInputEpoch(epoch,
+         rejectedThroughEpoch.load(std::memory_order_seq_cst))) return 0;
     return word;
 }
 // A background game may skip its Win32 input polling loop after comparing

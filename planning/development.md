@@ -35,15 +35,14 @@ NOT_VERIFIED.
 - **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
   blocked; P65 synthetic counter; P66-P68 native 4/5-client
   attempted-slot, neutral-failure and MCP recovery integrity.
-  P69 gates the native reader on the exact OGLES root HWND; subsequent
-  source hardening permanently rejects an observed invalid active
-  publication until a NEW controller write. The current correction
-  latches game-local isolation on the first **coherent active packet**
-  even if later deadline/focus/HWND checks reject it; this prevents a
-  fallthrough to physical keyboard/Raw Input after focus restoration.
-  Neutral-only startup recovery and zero-word pending key-up/mouse-up
-  remain unchanged. C++ assertions AUTHORED_NOT_EXECUTED; no runtime
-  execution or new backend.
+  P69 gates the native reader on its owned OGLES root HWND. Subsequent
+  corrections latch physical-input isolation on first coherent active
+  publication, and now reject the **entire cursor epoch** after observed
+  deadline/focus/HWND failure. Merely incrementing a packet revision
+  within the rejected epoch cannot replay stale press counters or
+  accumulated look. The existing Rust writer owns the ReleaseAll/expiry
+  epoch boundary; no ABI, controller or default product build changed.
+  C++ assertions AUTHORED_NOT_EXECUTED; no runtime execution.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -87,6 +86,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Raw Input epoch fence | Reject whole cumulative press/look epoch after active source deadline/focus/HWND refusal; same-epoch heartbeats cannot replay rejected input. New Rust-owned epoch after neutral/expiry admits fresh input | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
 | Input isolation fail-closed | The existing C++ consumer now latches physical-input isolation after observing a coherent first active packet, even when its focus/HWND/TTL admission refuses it; neutral-only recovery does not latch | Compile-time negative assertions AUTHORED_NOT_EXECUTED; feature still compile-OFF |
 | P69 follow-up | Game-local C++ read path revokes an observed invalid active revision until a fresh controller write; rechecks human focus after HWND verification; zero-word key-up/mouse-up path unchanged | C++ static regression assertions AUTHORED_NOT_EXECUTED; compile-OFF |
 | P69 | C++ virtual key/cursor packet admission now verifies current exact owned, visible OGLES root HWND at read-time; rejects replacement/hidden roots without input fallback | Compile-time negative assertions AUTHORED_NOT_EXECUTED; experiment remains OFF |
@@ -210,15 +210,15 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Continue source-only integration of the existing 4/5-client game
-input consumer**, specifically the buffered Raw Input prefix-copy and
-neutral transition: verify only the originally pinned OGLES game
-thread can receive pending key-up/mouse-up, even when a first active
-packet was refused, then check that partial-prefix read cursors never
-consume unreturned records. Correct only an observed source defect
-using the existing C++ reader and Rust channel. No new controllers,
-drivers, speculative milestones, external input injection, Cua
-foreground fallback or package promotion. Strict Cua remains
-`BACKGROUND_UNAVAILABLE`; experimental native input stays
-compile-OFF, all authored fixtures NOT_EXECUTED and Windows/
-Minecraft gameplay NOT_VERIFIED until separate operator permission.
+**Source-only audit of buffered Raw Input on the ORIGINAL 4/5-client
+input consumer after the epoch fence.** Pin fresh `Local` HEAD; trace
+one-record `GetRawInputBuffer` reads, key-up/mouse-up pending from a
+previously delivered DOWN, and one camera-only packet after an
+invalidated epoch. Preserve zero-word release for the same original
+OGLES game thread; no physical-queue fallback, stale press/delta or
+cross-client reattachment. Fix only an actual source defect in the
+existing C++/Rust owner and add bounded authored negative fixtures.
+Do not create a second writer, driver, daemon or speculative
+milestone ledger. Cua strict Invoke remains `BACKGROUND_UNAVAILABLE`.
+Node/Rust/C++ execution, builds, CI, packaging, installed Windows,
+Minecraft and five-client acceptance remain NOT_EXECUTED/NOT_VERIFIED.
