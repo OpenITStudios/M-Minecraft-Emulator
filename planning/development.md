@@ -33,17 +33,14 @@ NOT_VERIFIED.
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
 - **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
-  blocked; P65 synthetic counter; P66-P68 native 4/5-client
-  attempted-slot, neutral-failure and MCP recovery integrity.
-  P69 gates the native reader on the OGLES root HWND; later hardening
-  latches physical-input isolation on the first coherent active packet
-  and rejects the entire cursor epoch after deadline/focus/HWND failure.
-  The latest source correction revalidates the **original OGLES HWND
-  and caller game-thread ownership** before and after copying a buffered
-  Raw Input prefix, so observed HWND reuse cannot transfer pending
-  key-up/mouse-up records to a replacement game thread. Hidden-window
-  release-only behavior remains intact. No ABI/controller/release change;
-  C++ assertions AUTHORED_NOT_EXECUTED.
+  blocked; P65 synthetic counter; P66-P68 native 4/5-client cohort
+  cleanup and MCP recovery; P69+ C++ OGLES root, rejected-epoch,
+  input-isolation and buffered Raw Input thread integrity.
+  Latest source hardening checks the SAME live word+64-bit native
+  publication revision before returning virtual keyboard masks or
+  committing async press counters / cursor look; rejected late reads
+  do not consume key edges. Rust controller and v4 ABI unchanged.
+  C++ assertions AUTHORED_NOT_EXECUTED; no source tests/build/game.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -87,6 +84,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Win32 virtual polling final-read gate | Preserve publication revision with initial virtual input; recheck full target/focus/TTL before returning keyboard masks, committing async press counts, or consuming camera delta; scrub GetKeyboardState on late neutral | C++ negative constexpr fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input pinned-thread revalidation | Same original OGLES HWND and game-thread owner are checked before and after provisional prefix copy; on observed replacement the copied records are scrubbed and read cursors stay unchanged; release-only still permits hidden original root | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input epoch fence | Reject whole cumulative press/look epoch after active source deadline/focus/HWND refusal; same-epoch heartbeats cannot replay rejected input. New Rust-owned epoch after neutral/expiry admits fresh input | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
 | Input isolation fail-closed | The existing C++ consumer now latches physical-input isolation after observing a coherent first active packet, even when its focus/HWND/TTL admission refuses it; neutral-only recovery does not latch | Compile-time negative assertions AUTHORED_NOT_EXECUTED; feature still compile-OFF |
@@ -212,16 +210,16 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only review of Win32 virtual key/cursor return-time
-invalidation.** On a freshly pinned `Local`, trace the existing
-`currentPacket` / `virtualPressEdge` / `observedAsync` /
-`observedKey` / `observedKeyboard` consumer and the original Rust
-ReleaseAll transaction. An already-read key mask must not be
-published after a newer neutral/epoch revocation without a final
-same-publication check; ensure that a late failed poll never consumes
-newer press counts. Repair only a demonstrated defect in the same
-C++ reader with bounded authored negative fixtures. Preserve the
-original buffered Raw Input owner-thread and zero-word release,
-existing native Rust controller and ABI v4. Cua strict background
-action remains `BACKGROUND_UNAVAILABLE`; 4/5-client input is still
-compile-OFF, tests/builds/CI/Windows/Minecraft NOT_EXECUTED.
+**Source-only review of the original Win32 input-consumer
+publication/epoch contract after the latest keyboard final-read gate.**
+Re-pin `Local`; inspect `currentPacket`, the C++ rejected-epoch
+watermark, the Rust writer's 96-byte ABI v4 and the original buffered
+Raw Input one-record release path for a demonstrable remaining
+cross-thread fault. Correct only a proven owner-local defect with
+bounded authored negative fixtures; avoid unnecessary layers or
+speculative performance claims. No second driver, controller, network
+agent, input dispatcher, normal package change or Cua foreground
+fallback. Strict Cua Invoke is `BACKGROUND_UNAVAILABLE` and
+experimental native input remains compile-OFF. Node/Rust/C++ tests,
+builds, CI, Windows, Minecraft and five-client acceptance remain
+NOT_EXECUTED/NOT_VERIFIED pending separate operator permission.

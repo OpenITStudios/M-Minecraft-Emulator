@@ -217,7 +217,7 @@ void rejectActiveEpochIfCurrent(std::uint64_t revision,std::uint64_t epoch) {
                std::memory_order_seq_cst)) {}
 }
 
-std::uint64_t currentPacket() {
+std::uint64_t currentPacket(std::uint64_t* admittedRevision=nullptr) {
     if (!view) return 0;
     // Rust publishes packet, host HWND and input state inside one ABI-v4
     // odd/even cursorRevision transaction. Sampling packet separately
@@ -273,7 +273,32 @@ std::uint64_t currentPacket() {
                               sameRevision,stillLive) ||
         !freshNativeInputEpoch(epoch,
          rejectedThroughEpoch.load(std::memory_order_seq_cst))) return 0;
+    if (admittedRevision) *admittedRevision=revision;
     return word;
+}
+// A controller ReleaseAll or later active packet can publish AFTER the
+// first currentPacket read but BEFORE a Win32 hook returns its result.
+// Both the word and its 64-bit even publication revision must still
+// match, with fresh native focus/OGLES/expiry/epoch admission. Equal
+// key masks in successive native packets never justify stale return.
+constexpr bool sameActivePublication(std::uint64_t initialWord,
+    std::uint64_t finalWord,std::uint64_t initialRevision,
+    std::uint64_t finalRevision) noexcept {
+    return initialWord!=0 && initialWord==finalWord &&
+        initialRevision!=0 && !(initialRevision&1) &&
+        initialRevision==finalRevision;
+}
+static_assert(sameActivePublication(1,1,2,2));
+static_assert(!sameActivePublication(1,0,2,4)); // neutral
+static_assert(!sameActivePublication(1,1,2,4)); // identical word, newer revision
+static_assert(!sameActivePublication(1,2,2,2)); // different word
+static_assert(!sameActivePublication(1,1,3,3)); // incomplete publication
+static_assert(!sameActivePublication(0,0,2,2)); // neutral is not active
+bool sameLiveActivePublication(std::uint64_t word,std::uint64_t revision) {
+    if (!word || !revision) return false;
+    std::uint64_t latestRevision=0;
+    const auto latest=currentPacket(&latestRevision);
+    return sameActivePublication(word,latest,revision,latestRevision);
 }
 // A background game may skip its Win32 input polling loop after comparing
 // GetForegroundWindow/GetActiveWindow/GetFocus to its own game HWND.
@@ -385,89 +410,111 @@ bool virtualDown(int key,std::uint64_t word) {
 // alone cannot report a short click followed by a release between polls.
 // The original Win32 low bit is unreliable across callers, but this
 // optional MC02-only read cursor is independent from MC01 hardware.
-// Read under the existing writer's revision and reject torn snapshots.
-bool virtualPressEdge(unsigned keyMask,std::uint64_t word) {
-    if (!view || !packetLiveAt(word,GetTickCount()) || !keyMask ||
-        asyncReadBusy.test_and_set(std::memory_order_acquire)) return false;
-    bool pressed=false;
-    const auto revision=view->cursorRevision.load(std::memory_order_seq_cst);
-    if (revision!=0 && !(revision&1)) {
-        const auto counts=view->pressCounts.load(std::memory_order_seq_cst);
-        const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
-        const auto packet=view->packet.load(std::memory_order_seq_cst);
-        if (packet==word &&
-            view->cursorRevision.load(std::memory_order_seq_cst)==revision &&
-            packetLiveAt(word,GetTickCount())) {
-            if (epoch!=seenPressEpoch) {
-                seenPressEpoch=epoch;
-                seenPressCounts=0; // discard expired previous-epoch clicks
-            }
-            unsigned shift=0;
-            for (unsigned bits=keyMask;bits>1;bits>>=1) shift+=8;
-            const std::uint64_t mask=0xffull<<shift;
-            if ((seenPressCounts&mask)!=(counts&mask)) {
-                seenPressCounts=(seenPressCounts&~mask)|(counts&mask);
-                pressed=true;
-            }
+// Read only a tentative edge snapshot under the existing per-process
+// async-key cursor lock. Commit counts AFTER verifying the same complete
+// native publication at return time; a revoked/neutral packet must not
+// consume a press which the game never received from this polling call.
+SHORT virtualAsyncKeyResult(int key,std::uint64_t word,
+                            std::uint64_t revision) {
+    if (!word || !revision) return 0;
+    const unsigned keyMask=maskFor(key);
+    bool cursorHeld=false,coherent=false;
+    std::uint64_t counts=0,epoch=0;
+    if (keyMask && !asyncReadBusy.test_and_set(std::memory_order_acquire)) {
+        cursorHeld=true;
+        const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
+        if (before==revision) {
+            counts=view->pressCounts.load(std::memory_order_seq_cst);
+            epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
+            coherent=view->packet.load(std::memory_order_seq_cst)==word &&
+                view->cursorRevision.load(std::memory_order_seq_cst)==revision;
         }
     }
-    asyncReadBusy.clear(std::memory_order_release);
-    return pressed;
+    // Revalidation must follow the potentially delayed shared-state and
+    // window reads. No per-key state is consumed if it fails.
+    const bool admitted=sameLiveActivePublication(word,revision);
+    bool pressed=false;
+    if (admitted && coherent && cursorHeld) {
+        if (epoch!=seenPressEpoch) {
+            seenPressEpoch=epoch;
+            seenPressCounts=0;
+        }
+        unsigned shift=0;
+        for (unsigned bits=keyMask;bits>1;bits>>=1) shift+=8;
+        const std::uint64_t mask=0xffull<<shift;
+        if ((seenPressCounts&mask)!=(counts&mask)) {
+            seenPressCounts=(seenPressCounts&~mask)|(counts&mask);
+            pressed=true;
+        }
+    }
+    if (cursorHeld) asyncReadBusy.clear(std::memory_order_release);
+    if (!admitted) return 0;
+    return static_cast<SHORT>(
+        (virtualDown(key,word)?0x8000u:0u) | (pressed?1u:0u));
 }
 SHORT WINAPI observedAsync(int key) {
     const DWORD previous=GetLastError();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
     if (!virtualMode(word)) {
         SetLastError(previous); return originalAsync(key);
     }
-    // virtualMode can query Windows after the initial packet sample.
-    const auto live=packetLiveAt(word,GetTickCount())?word:0;
-    const unsigned keyMask=maskFor(key);
-    const bool held=virtualDown(key,live);
-    const bool newlyPressed=virtualPressEdge(keyMask,live);
-    const SHORT result=static_cast<SHORT>(
-        (held ? 0x8000u : 0u) | (newlyPressed ? 1u : 0u));
-    if (live && result) noteVirtualKeys(keyMask);
+    const SHORT result=virtualAsyncKeyResult(key,word,revision);
+    if (result) noteVirtualKeys(maskFor(key));
     SetLastError(previous);
     return result;
 }
 SHORT WINAPI observedKey(int key) {
     const DWORD previous=GetLastError();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
     if (!virtualMode(word)) {
         SetLastError(previous); return originalKey(key);
     }
-    const auto live=packetLiveAt(word,GetTickCount())?word:0;
-    const SHORT result=virtualDown(key,live)?static_cast<SHORT>(0x8000):0;
-    if (live && result) noteVirtualKeys(maskFor(key));
+    const bool admitted=sameLiveActivePublication(word,revision);
+    const SHORT result=admitted && virtualDown(key,word)?
+        static_cast<SHORT>(0x8000):0;
+    if (result) noteVirtualKeys(maskFor(key));
     SetLastError(previous);
     return result;
 }
 BOOL WINAPI observedKeyboard(PBYTE state) {
     const DWORD previous=GetLastError();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
     if (!virtualMode(word) || !state) {
         SetLastError(previous); return originalKeyboard(state);
     }
-    const auto live=packetLiveAt(word,GetTickCount())?word:0;
+    // Populate into caller-owned memory, then retract every virtual key
+    // if the controller published ReleaseAll/replacement while filling.
+    // This hook must never forward the physical human keyboard once
+    // its original AI channel was isolated.
     std::memset(state,0,256);
     for (int key : {'W','S','A','D',VK_SPACE,VK_SHIFT,VK_LBUTTON,VK_RBUTTON}) {
-        if (virtualDown(key,live)) state[key]=0x80;
+        if (virtualDown(key,word)) state[key]=0x80;
     }
-    if (virtualDown(VK_SHIFT,live)) state[VK_LSHIFT]=state[VK_RSHIFT]=0x80;
-    if (live) noteVirtualKeys(static_cast<unsigned>(live)&0xffu);
+    if (virtualDown(VK_SHIFT,word)) state[VK_LSHIFT]=state[VK_RSHIFT]=0x80;
+    if (!sameLiveActivePublication(word,revision)) {
+        std::memset(state,0,256);
+    } else {
+        noteVirtualKeys(static_cast<unsigned>(word)&0xffu);
+    }
     SetLastError(previous);
     return TRUE;
 }
 #if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
-void applyPendingCursor() {
-    if (!view || cursorReadBusy.test_and_set(std::memory_order_acquire)) return;
+void applyPendingCursor(std::uint64_t word,std::uint64_t revision) {
+    if (!view || !word || !revision ||
+        cursorReadBusy.test_and_set(std::memory_order_acquire)) return;
     const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
-    if (before!=0 && !(before&1) && before!=seenRevision) {
+    if (before==revision && before!=seenRevision) {
         const auto x=view->cursorX.load(std::memory_order_seq_cst);
         const auto y=view->cursorY.load(std::memory_order_seq_cst);
         const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
-        if (view->cursorRevision.load(std::memory_order_seq_cst)==before) {
+        // Reject accumulated look after a late native neutral or an
+        // invalidated source epoch, even when this hook originally saw
+        // a live packet. Only a confirmed same-publication delta advances.
+        if (sameLiveActivePublication(word,revision)) {
             // Same epoch: take the difference in cumulative totals, even
             // when multiple fresh commands arrived before one game poll.
             // New epoch: the previous, expired cursor backlog is dropped.
@@ -489,16 +536,15 @@ void applyPendingCursor() {
 #endif
 BOOL WINAPI observedCursor(LPPOINT point) {
     const DWORD previous=GetLastError();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
     if (!virtualMode(word) || !point) {
         SetLastError(previous); return originalCursor(point);
     }
-    // Do not consume an expired command. The next fresh native command
-    // opens a new epoch, so stale look deltas cannot be replayed.
     // In the separate Raw-buffer mode, camera deltas are published ONLY
     // through GetRawInputBuffer; GetCursorPos retains menu cursor state.
 #if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
-    if (packetLiveAt(word,GetTickCount())) applyPendingCursor();
+    if (word) applyPendingCursor(word,revision);
 #endif
     point->x=virtualX.load(std::memory_order_acquire);
     point->y=virtualY.load(std::memory_order_acquire);
