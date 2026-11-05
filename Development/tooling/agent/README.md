@@ -147,6 +147,19 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P50 — Avoid redundant UTF-8 decoding on Skills Probe checkpoint reads (SOURCE_ONLY)
+
+The original evidence reader decoded the entire bounded 256 KiB file tail
+to UTF-8 even on QA-only preparation/checkpoint reads, which only inspect
+the last-byte newline, stable file cursor and separately decoded appended
+Probe bytes. It now reads the final newline directly from the original
+buffer byte (`0x0A`) and creates the historical UTF-8 string only for
+normal analytics queries. This preserves incomplete-tail behavior, file
+identity checks, anchor hashing and unchanged `probeEvents` parsing.
+No new cache, parser, buffer, persistent state, API, dependency or test
+runner. Authored fixtures cover complete and incomplete QA-only endings,
+NOT_EXECUTED. Real I/O/CPU savings remain NOT_MEASURED.
+
 ## P49 — Bound team event parsing to the returned evidence suffix (SOURCE_ONLY)
 
 The original `readGameEvidence` scanned and parsed every line in up to

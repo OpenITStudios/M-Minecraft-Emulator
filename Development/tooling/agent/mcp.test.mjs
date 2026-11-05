@@ -1035,6 +1035,7 @@ test('Probe QA cursor accepts only appended complete lines from same capture',as
     assert.equal(prepared.captureCursor.kind,'STABLE_CAPTURE_CURSOR_V1');
     assert.deepEqual(prepared.probeEvents,[]);
     assert.deepEqual(prepared.events,[]); // QA never parses unrelated records
+    assert.equal(prepared.incompleteTrailingLineIgnored,false);
 
     const waiting=await readGameEvidence(root,2,20,{
       probeCheckpoint:prepared.captureCursor});
@@ -1046,6 +1047,7 @@ test('Probe QA cursor accepts only appended complete lines from same capture',as
     const partial=await readGameEvidence(root,2,20,{
       probeCheckpoint:prepared.captureCursor});
     assert.deepEqual(partial.probeEvents.map(x=>x.kind),['start','result']);
+    assert.equal(partial.incompleteTrailingLineIgnored,false);
 
     await appendFile(filename,
       row('RESULT','id=P02 result=fail build=dev detail=new','2026-11-02T08:01:02Z')+
@@ -1065,6 +1067,23 @@ test('Probe QA cursor accepts only appended complete lines from same capture',as
       probeCheckpoint:prepared.captureCursor});
     assert.equal(replaced.status,'CAPTURE_FILE_UNSTABLE');
     assert.equal(replaced.reason,'PROBE_CAPTURE_REPLACED');
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
+test('QA-only checkpoint reports partial UTF-8 tail directly from file bytes',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-qa-byte-tail-'));
+  const filename=path.join(root,'MC02.log');
+  try {
+    await writeFile(filename,
+      '2026-11-02T08:00:00Z warn capture initialized\nunfinished '+String.fromCharCode(0xe9));
+    const partial=await readGameEvidence(root,2,20,{probeOnly:true});
+    assert.equal(partial.incompleteTrailingLineIgnored,true);
+    assert.deepEqual(partial.events,[]);
+    assert.deepEqual(partial.probeEvents,[]);
+    await appendFile(filename,'\n');
+    const full=await readGameEvidence(root,2,20,{probeOnly:true});
+    assert.equal(full.incompleteTrailingLineIgnored,false);
+    assert.deepEqual(full.events,[]);
   } finally {await rm(root,{recursive:true,force:true});}
 });
 

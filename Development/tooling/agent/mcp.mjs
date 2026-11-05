@@ -955,9 +955,12 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
       }
       // Do not parse unrelated [ANALYTICS]/[GAME_RESULTS] for QA-only calls.
       const qaOnly=probeOnly||probeCheckpoint!==null;
-      const data=buffer.toString('utf8');
+      // A complete UTF-8 line ends in the literal newline byte 0x0A.
+      // QA-only reads need the byte-accurate cursor, not a second 256 KiB
+      // decode of historical text before the appended Probe markers.
       const incompleteTrailingLineIgnored=
-        data.length>0 && !data.endsWith('\n');
+        buffer.length>0 && buffer[buffer.length-1]!==10;
+      const data=qaOnly?'':buffer.toString('utf8');
       // Only the LAST 20 valid team records can reach the MCP. Avoid
       // splitting/parsing every old log line just to discard it afterwards.
       // Preserve complete-line, partial-tail and truncated-prefix rules.
