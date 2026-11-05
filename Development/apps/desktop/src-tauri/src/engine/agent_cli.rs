@@ -57,6 +57,14 @@ fn native_error(error: io::Error) -> &'static str {
        error.to_string()=="AI transaction predates original game or is stale" {
         return "NATIVE_WRITER_EPOCH_STALE";
     }
+    // This precise actor error means at least one best-effort neutral
+    // write was not acknowledged after a partially failed time group.
+    // IPC SessionReply maps the original InvalidData error to Other.
+    // Do not classify a broken response channel as this known error.
+    if matches!(error.kind(),io::ErrorKind::Other|io::ErrorKind::InvalidData) &&
+       error.to_string()=="AI group neutral release unconfirmed" {
+        return "AI_RELEASE_UNCONFIRMED";
+    }
     // Fixed, allowlisted native writer-conflict status. Other controller
     // errors are never forwarded raw into the MCP model response.
     if matches!(error.to_string().as_str(),
@@ -884,6 +892,13 @@ mod tests {
             "NATIVE_UNAVAILABLE");
         assert_eq!(native_error(Error::new(ErrorKind::BrokenPipe,
             "original IPC worker result missing")),"OUTCOME_UNCERTAIN");
+        assert_eq!(native_error(Error::other(
+            "AI group neutral release unconfirmed")),"AI_RELEASE_UNCONFIRMED");
+        assert_eq!(native_error(Error::new(ErrorKind::InvalidData,
+            "AI group neutral release unconfirmed")),"AI_RELEASE_UNCONFIRMED");
+        assert_eq!(native_error(Error::new(ErrorKind::BrokenPipe,
+            "AI group neutral release unconfirmed")),"OUTCOME_UNCERTAIN",
+            "lost IPC cannot masquerade as a confirmed actor error");
         assert_eq!(native_error(Error::new(ErrorKind::TimedOut,
             "original worker still running")),"OUTCOME_UNCERTAIN");
     }

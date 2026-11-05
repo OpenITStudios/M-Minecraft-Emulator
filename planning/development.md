@@ -33,12 +33,12 @@ NOT_VERIFIED.
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
 - **Last source stages:** P58-P64 read-only UIA and externally blocked
-  Cua Invoke-only; P65 added manual-only synthetic WinForms counter
-  source. P66 corrects the existing compile-OFF multi-client batch
-  CLI: only groups reaching IPC are marked possibly touched for
-  emergency neutral cleanup; pre-dispatch deadline misses no longer
-  touch unrelated slots. Source fixtures AUTHORED_NOT_EXECUTED,
-  no Windows/game execution or new backend.
+  Cua Invoke-only; P65 manual-only synthetic counter; P66 native CLI
+  tracks only IPC-attempted groups. P67 fixes the original native
+  actor's partial-group cleanup reporting: all possibly written slots
+  receive an independent neutral attempt, and failed neutral ACKs
+  override the original group error as AI_RELEASE_UNCONFIRMED.
+  Source fixtures AUTHORED_NOT_EXECUTED, no Windows/game execution.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -82,6 +82,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P67 | Controller partial-group failure no longer hides failed neutral writes; every attempted slot still gets one best-effort release, and CLI preserves exact AI_RELEASE_UNCONFIRMED status | Rust negative fixtures authored, NOT_EXECUTED; compile-OFF |
 | P66 | Native multi-client batch records possibly touched slots only after final per-group deadline gate, just before IPC; retains uncertain per-group cleanup | Rust negative fixture authored, NOT_EXECUTED; experiment remains compile-OFF |
 | P65 | Added opt-in UIA counter mode to existing synthetic Windows fixture, exposing an independent read-only 0->1 state oracle without action dispatch | AUTHORED_NOT_EXECUTED; no package/controller/runtime change |
 | P64 | Upstream exact-source admission review: no no-fallback Invoke-only tool, native birth/session dispatch fence or Minecraft postcondition | BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE; no files outside docs/handoff |
@@ -170,14 +171,15 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**P67 — source-only review of original native group failure and
-cleanup contracts.** Pin fresh `Local` HEAD and check the original
-retained session controller's partial-group write/release path against
-the compile-OFF CLI cohort cleanup. Correct only a demonstrable
-wrong-owner issue with bounded negative fixtures, rather than adding
-another input route. The P64 external Cua
-`BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE` remains unchanged;
-`assess_client_background_action` still refuses. P65's synthetic
-counter stays manual-only and untested. No Node/Rust tests,
-CI/build/package/install, Windows/Codex/Minecraft execution or
-personal game/profile data access until separately approved.
+**P68 — review existing MCP multi-client cleanup and recovery results
+against P67's exact native neutral-failure status.** Pin fresh
+`Local` HEAD. Trace the normal batch, partial-group failure, CLI
+independent neutral, and MCP per-slot quarantine; correct only a
+demonstrable loss of failure provenance, stale-lease fencing, or
+wrong-slot recovery. Reuse the retained controller and bounded
+source-only negative fixtures; no duplicate input dispatcher,
+daemon or status ledger. Strict Cua Invoke remains
+`BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE`, and
+`assess_client_background_action` continues to refuse.
+No source tests, CI/builds, packages, installs, Windows/Codex/
+Minecraft gameplay or account/world access without new approval.

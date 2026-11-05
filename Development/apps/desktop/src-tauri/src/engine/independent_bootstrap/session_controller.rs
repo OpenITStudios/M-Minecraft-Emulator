@@ -23,6 +23,21 @@ fn ai_writer_mode_matches(slot:u32,requested:AgentControlMode,
     (requested!=AgentControlMode::HumanPlusFourAi || slot!=1)
 }
 
+// After partial-group failure, attempt a neutral release on EVERY slot
+// which may have reached native I/O. A failed release must not suppress
+// the remaining attempts or be hidden behind the original group error.
+// Unattempted slots must never be touched by this controller cleanup.
+#[cfg(feature="mc02-native-input")]
+fn release_attempted_ai_group(
+    attempted:&[u32], mut neutral:impl FnMut(u32)->io::Result<()>,
+)->bool {
+    let mut all_confirmed=true;
+    for &slot in attempted {
+        if neutral(slot).is_err() {all_confirmed=false;}
+    }
+    all_confirmed
+}
+
 struct Sessions {
     stores: Vec<Option<SlotStorage>>,
     running: Vec<Option<StartedEducationObservation<1>>>,
@@ -416,14 +431,21 @@ impl Sessions {
             }
         }
         if let Some(error)=failure {
-            // Best effort on EVERY possibly written slot of THIS group.
-            // The calling CLI separately releases every group it attempted
-            // across the whole sequence, including previously held peers.
-            // Release has no human-focus requirement and never terminates
-            // any game; each native channel retains its own TTL fallback.
-            for slot in attempted {
-                let _=self.ai_leased_input(
-                    slot,0,0,0,1,unsafe{GetTickCount64()},owner,epoch);
+            // Best effort on EVERY possibly written slot of THIS group;
+            // continue if one exact original channel cannot be neutralized.
+            // Unattempted slots are not written by this actor cleanup.
+            // The CLI separately releases earlier groups and MCP retains
+            // uncertain cohorts until explicit recovery. Neither a failed
+            // release nor a native TTL is proof of physical Minecraft key-up.
+            let released=release_attempted_ai_group(&attempted,|slot|
+                self.ai_leased_input(
+                    slot,0,0,0,1,unsafe{GetTickCount64()},owner,epoch)
+            );
+            if !released {
+                // Prior error may describe an ordinary deadline/target
+                // failure. An unconfirmed neutral is the stronger safety
+                // outcome and must never be silently discarded.
+                return Err(invalid("AI group neutral release unconfirmed"));
             }
             return Err(error);
         }
@@ -1680,6 +1702,33 @@ mod tests {
             Mode::HumanPlusFourAi));
         assert!(!ai_writer_mode_matches(6,Mode::FiveAi,Mode::FiveAi));
     }
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn partial_ai_group_failure_attempts_all_original_neutral_releases() {
+        // Pure fixture: never opens native IPC, Windows or game processes.
+        let mut visited=Vec::new();
+        let confirmed=release_attempted_ai_group(&[2,3,4],|slot|{
+            visited.push(slot);
+            if slot==3 {
+                Err(std::io::Error::other("Synthetic neutral refused"))
+            }else{Ok(())}
+        });
+        assert!(!confirmed,"one unconfirmed neutral must be surfaced");
+        assert_eq!(visited,[2,3,4],
+            "later original channels must still receive their own cleanup");
+        assert!(!visited.contains(&5),
+            "a not-yet-dispatched slot must not be touched");
+
+        let mut successful=Vec::new();
+        assert!(release_attempted_ai_group(&[2,4],|slot|{
+            successful.push(slot);Ok(())
+        }));
+        assert_eq!(successful,[2,4]);
+        assert!(release_attempted_ai_group(&[],|_|{
+            panic!("no IPC was attempted, so there is nothing to release")
+        }));
+    }
+
     #[test]
     fn close_replies_do_not_trigger_unrelated_journal_reap() {
         // Pure routing assertions; do not launch a game or touch profile data.
