@@ -2,7 +2,8 @@
 // Not part of CI, normal app start, package steps or any automatic workflow.
 // Source shape / pinned Bedrock sample is NOT Minecraft Education runtime proof.
 import {createHash} from 'node:crypto';
-import {lstat,readFile,readdir} from 'node:fs/promises';
+import {lstat,open,readdir} from 'node:fs/promises';
+import {constants} from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
@@ -12,6 +13,7 @@ const MAX_SOURCE_BYTES=16384;
 const SOURCE_FILE_NAMES=['README.md','manifest.json','ui'];
 const UI_FILE_NAMES=['hud_screen.json'];
 const LABEL='LT: XYZ notes in app';
+const DESCRIPTION='Opt-in Education JSON UI layout candidate; adds one visibility-bound sibling after vanilla XYZ. No gameplay, Save, or telemetry.';
 const ID='d1de865d-59c8-4f1e-a4f7-832a169fa150';
 const MODULE_ID='c65a874c-bbbf-4e53-af2e-197332ccbb21';
 
@@ -27,13 +29,50 @@ function requireContract(ok,message) {
 }
 function same(x,y){return JSON.stringify(x)===JSON.stringify(y);}
 
+// JSON.parse silently accepts duplicate property names. Two consumers may
+// disagree which duplicate wins, so reject them before treating a manifest,
+// HUD patch or upstream JSONC fixture as a reviewed source structure.
+// This scanner only finds object keys; JSON.parse still checks full syntax.
+export function parseStrictHudJson(source) {
+  requireContract(typeof source==='string'&&source.length<500000,
+    'invalid bounded JSON input');
+  const stack=[];
+  let quoted=false,escaped=false,start=0;
+  for(let i=0;i<source.length;i++){
+    const char=source[i];
+    if(quoted){
+      if(escaped){escaped=false;continue;}
+      if(char==='\\'){escaped=true;continue;}
+      if(char!=='"')continue;
+      quoted=false;
+      let next=i+1;
+      while(next<source.length&&/\s/u.test(source[next]))next++;
+      const frame=stack.at(-1);
+      if(source[next]===':'&&frame?.type==='object'){
+        let key;
+        try{key=JSON.parse(source.slice(start,i+1));}
+        catch{throw new TypeError('HUD_SOURCE_REFUSED: invalid JSON property name');}
+        requireContract(!frame.keys.has(key),'duplicate JSON object key');
+        frame.keys.add(key);
+      }
+      continue;
+    }
+    if(char==='"'){quoted=true;start=i;continue;}
+    if(char==='{'){stack.push({type:'object',keys:new Set()});continue;}
+    if(char==='['){stack.push({type:'array'});continue;}
+    if(char==='}'||char===']')stack.pop();
+  }
+  try{return JSON.parse(source);}
+  catch{throw new TypeError('HUD_SOURCE_REFUSED: JSON input is malformed');}
+}
+
 export function validateHudSource(manifest,hud) {
   requireContract(exactly(manifest,['format_version','header','modules','metadata'])&&
     manifest.format_version===2,'manifest must be a version-2 resources-only schema');
   const h=manifest.header;
   requireContract(exactly(h,['name','description','uuid','version','min_engine_version','pack_scope'])&&
     h.name==='Lazy Tester - Native Coordinates HUD (Experimental)'&&
-    typeof h.description==='string'&&h.description.length<=240&&
+    h.description===DESCRIPTION&&
     h.uuid===ID&&h.pack_scope==='world'&&
     same(h.version,[0,3,0])&&same(h.min_engine_version,[1,26,30]),
     'manifest must be versioned v0.3.0 and restricted to one world');
@@ -131,8 +170,7 @@ function parseVanillaJsonc(text) {
     while(j<characters.length&&/\s/u.test(characters[j]))j++;
     if(characters[j]===']'||characters[j]==='}')characters[i]=' ';
   }
-  try{return JSON.parse(characters.join(''));}
-  catch{throw new TypeError('HUD_SOURCE_REFUSED: Bedrock JSONC cannot be parsed safely');}
+  return parseStrictHudJson(characters.join(''));
 }
 
 /**
@@ -209,16 +247,46 @@ export function validatePinnedVanillaSample(raw) {
   });
 }
 
-async function ordinaryFile(url,maxBytes=MAX_SOURCE_BYTES) {
-  const st=await lstat(url);
-  requireContract(st.isFile()&&!st.isSymbolicLink()&&st.nlink===1&&
-    st.size>0&&st.size<=maxBytes,'invalid or unsafe source file');
-  const value=await readFile(url);
-  const after=await lstat(url);
-  requireContract(st.dev===after.dev&&st.ino===after.ino&&
-    st.size===after.size&&st.mtimeMs===after.mtimeMs,
-    'source changed during read');
-  return value;
+// Windows can report a different st_dev for lstat(path) vs fstat(handle)
+// on the SAME file. Omit only that incomparable field for a path/handle pair;
+// path-to-path and POSIX comparisons still require matching devices.
+export function sameSourceFile(a,b,{openedHandle=false,platform=process.platform}={}) {
+  const sameDevice=(openedHandle&&platform==='win32')||a.dev===b.dev;
+  return a.isFile()&&b.isFile()&&!a.isSymbolicLink()&&!b.isSymbolicLink()&&
+    a.nlink===1n&&b.nlink===1n&&sameDevice&&
+    a.ino===b.ino&&a.ino!==0n&&
+    a.size===b.size&&a.mtimeNs===b.mtimeNs&&a.ctimeNs===b.ctimeNs;
+}
+// Read bounded bytes from the *opened handle*, not a fresh path after lstat.
+// O_NOFOLLOW is used where supported; on Windows, the pre/post path and
+// handle identities must still agree. This is not a cross-process lock.
+export async function ordinaryFile(url,maxBytes=MAX_SOURCE_BYTES) {
+  const before=await lstat(url,{bigint:true});
+  requireContract(before.isFile()&&!before.isSymbolicLink()&&before.nlink===1n&&
+    before.ino!==0n&&before.size>0n&&before.size<=BigInt(maxBytes),
+    'invalid or unsafe source file');
+  const noFollow=typeof constants.O_NOFOLLOW==='number'?constants.O_NOFOLLOW:0;
+  const file=await open(url,constants.O_RDONLY|noFollow);
+  try{
+    const opened=await file.stat({bigint:true});
+    requireContract(sameSourceFile(before,opened,{openedHandle:true}),
+      'source identity changed before read');
+    const size=Number(opened.size),bytes=Buffer.alloc(size);
+    let cursor=0;
+    while(cursor<size){
+      const {bytesRead}=await file.read(bytes,cursor,size-cursor,cursor);
+      requireContract(bytesRead>0,'source ended during read');
+      cursor+=bytesRead;
+    }
+    const tail=await file.read(Buffer.alloc(1),0,1,size);
+    requireContract(tail.bytesRead===0,'source grew during read');
+    const [afterHandle,afterName]=await Promise.all([
+      file.stat({bigint:true}),lstat(url,{bigint:true}),
+    ]);
+    requireContract(sameSourceFile(before,afterHandle,{openedHandle:true})&&
+      sameSourceFile(before,afterName),'source changed during read');
+    return bytes;
+  }finally{await file.close();}
 }
 async function ordinaryDir(url) {
   const st=await lstat(url);
@@ -240,9 +308,10 @@ export async function reviewHudPrototype(samplePath=null) {
   ]);
   let manifest,hud;
   try {
-    manifest=JSON.parse(manifestBytes.toString('utf8'));
-    hud=JSON.parse(hudBytes.toString('utf8'));
-  }catch {
+    manifest=parseStrictHudJson(manifestBytes.toString('utf8'));
+    hud=parseStrictHudJson(hudBytes.toString('utf8'));
+  }catch(error) {
+    if(error instanceof TypeError&&error.message.startsWith('HUD_SOURCE_REFUSED:'))throw error;
     throw new TypeError('HUD_SOURCE_REFUSED: JSON input is malformed');
   }
   const verdict=validateHudSource(manifest,hud);

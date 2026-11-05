@@ -2,8 +2,10 @@
 // These checks cannot prove Education 26.33 loads or renders a JSON UI patch.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile} from 'node:fs/promises';
-import {validateHudSource,validatePinnedVanillaSample,inspectVanillaHudStructure} from './check-education-native-hud-source.mjs';
+import {readFile,mkdtemp,writeFile,rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {validateHudSource,validatePinnedVanillaSample,inspectVanillaHudStructure,parseStrictHudJson,ordinaryFile,sameSourceFile} from './check-education-native-hud-source.mjs';
 
 const rp = new URL('./education-native-hud-prototype/', import.meta.url);
 const read = async name => JSON.parse(await readFile(new URL(name, rp), 'utf8'));
@@ -15,6 +17,7 @@ test('prototype remains resource-only, with no new Script API or dependencies', 
   assert.equal(m.header.name, 'Lazy Tester - Native Coordinates HUD (Experimental)');
   assert.deepEqual(m.header.version, [0,3,0]);
   assert.equal(m.header.pack_scope,'world');
+  assert.equal(m.header.description,'Opt-in Education JSON UI layout candidate; adds one visibility-bound sibling after vanilla XYZ. No gameplay, Save, or telemetry.');
   assert.deepEqual(m.header.min_engine_version, [1,26,30]);
   assert.equal(m.modules.length, 1);
   assert.deepEqual(m.modules[0].version, [0,3,0]);
@@ -176,6 +179,57 @@ test('JSONC structure refuses missing/duplicated/nonadjacent coordinate instance
   ]) {
     assert.throws(()=>inspectVanillaHudStructure(source),/HUD_SOURCE_REFUSED/);
   }
+});
+
+
+test('preflight rejects duplicated property names even when JSON.parse keeps the safe last value',async()=>{
+  const manifest=await readFile(new URL('manifest.json',rp),'utf8');
+  const original=JSON.parse(manifest);
+  const duplicated=manifest.replace('"header": {',
+    '"header": {"pack_scope": "any"},\n  "header": {');
+  assert.deepEqual(JSON.parse(duplicated),original);
+  assert.throws(()=>parseStrictHudJson(duplicated),/HUD_SOURCE_REFUSED: duplicate JSON object key/);
+  const hud=await readFile(new URL('ui/hud_screen.json',rp),'utf8');
+  const repeated=hud.replace('"namespace": "hud",',
+    '"namespace": "fake",\n  "namespace": "hud",');
+  assert.deepEqual(JSON.parse(repeated),JSON.parse(hud));
+  assert.throws(()=>parseStrictHudJson(repeated),/duplicate JSON object key/);
+  assert.throws(()=>parseStrictHudJson(String.raw`{"name":1,"\u006eame":2}`),/duplicate JSON object key/);
+  const changedDescription=structuredClone(original);
+  changedDescription.header.description='Verified Minecraft Education production HUD';
+  assert.throws(()=>validateHudSource(changedDescription,JSON.parse(hud)),/HUD_SOURCE_REFUSED/);
+});
+
+test('JSONC structure diagnostic refuses duplicate structural keys after comments are stripped',()=>{
+  const duplicate=syntheticBedrockJsonc.replace(
+    '"orientation": "vertical",',
+    '"orientation": "horizontal",\n          "orientation": "vertical",');
+  assert.throws(()=>inspectVanillaHudStructure(duplicate),/duplicate JSON object key/);
+});
+
+test('Windows path/fstat device ids can differ without accepting replacement identities',()=>{
+  const stat=dev=>({
+    isFile:()=>true,isSymbolicLink:()=>false,
+    nlink:1n,dev:BigInt(dev),ino:42n,size:15n,mtimeNs:100n,ctimeNs:101n
+  });
+  const named=stat(0),opened=stat(34123);
+  assert.equal(sameSourceFile(named,opened,{openedHandle:true,platform:'win32'}),true);
+  assert.equal(sameSourceFile(named,opened,{openedHandle:false,platform:'win32'}),false);
+  assert.equal(sameSourceFile(named,opened,{openedHandle:true,platform:'linux'}),false);
+  assert.equal(sameSourceFile(named,{...opened,ino:43n},{openedHandle:true,platform:'win32'}),false);
+  assert.equal(sameSourceFile(named,{...opened,mtimeNs:101n},{openedHandle:true,platform:'win32'}),false);
+  assert.equal(sameSourceFile(named,{...opened,nlink:2n},{openedHandle:true,platform:'win32'}),false);
+});
+
+test('read-only preflight uses a bounded ordinary file handle',async()=>{
+  const directory=await mkdtemp(join(tmpdir(),'lazy-hud-source-'));
+  const sample=join(directory,'fixed.json');
+  try{
+    const input=Buffer.from('{"scope":"local"}\n');
+    await writeFile(sample,input);
+    assert.deepEqual(await ordinaryFile(sample,1024),input);
+    await assert.rejects(ordinaryFile(sample,4),/HUD_SOURCE_REFUSED: invalid or unsafe source file/);
+  }finally{await rm(directory,{recursive:true,force:true});}
 });
 
 test('synthetic JSONC structure never substitutes for the official Mojang blob SHA',()=>{

@@ -75,8 +75,8 @@ Another world RP modifying `hud_screen.json` may silently override/conflict.
 ## Read-only source preflight — authored, NOT_EXECUTED
 
 The companion `Development/tooling/agent/check-education-native-hud-source.mjs`
-reads only this folder and rejects unexpected source files, symlinks,
-oversized files, version drift, `pack_scope` other than `world`,
+reads only this folder through bounded file handles and rejects unexpected source files, symlinks,
+oversized/changed files, duplicated JSON keys, description/version drift, `pack_scope` other than `world`,
 non-resource modules, UI changes outside the reviewed sibling and
 fake buttons/game hooks. It does **not** build a .mcpack, download assets,
 open Minecraft, install a pack, access a world or claim gameplay support.

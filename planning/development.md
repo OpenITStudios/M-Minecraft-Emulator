@@ -10,6 +10,20 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P25 HUD preflight admission hardening (5 November 2026,
+  SOURCE_ONLY):** An evidence-grounded code audit found that the
+  manually invoked checker used Node `JSON.parse` (which retains the last
+  of duplicate object keys) and path-based `lstat/readFile/lstat` reads.
+  The same preflight owner now rejects duplicate keys in manifest/HUD
+  JSON and normalized reference JSONC, pins a bounded read-only file
+  handle with Windows-aware identity and stability checks, and locks the reviewed
+  experimental manifest description. The Resource Pack contents remain
+  v0.3.0/world-only and unchanged. New negative fixtures are
+  AUTHORED_NOT_EXECUTED. No Harness²/DeepSeek/REA runtime, build,
+  installation, CI, local source test, Minecraft process, or game
+  acceptance was executed. See [HUD P25](../docs/system/education-native-coordinate-hud.md).
+
+
 - **P24 evidence-grounded developer review (5 November 2026, SOURCE_ONLY):**
   Existing `DEV.cmd`/`Development/tooling/developer/controller.mjs` now
   admits a read-only `review` operation with exact Local SHA, bounded safe

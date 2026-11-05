@@ -225,6 +225,39 @@ extension point. Preserve the manual desktop Saved Locations route,
 and stop on unsupported native HUD controls rather than bypassing
 Minecraft's UI restrictions. <https://wiki.bedrock.dev/json-ui/json-ui-intro>
 
+## P25 — Evidence-grounded preflight review (5 November 2026)
+
+This is a **source-only** Propose–Probe–Compose investigation of the
+existing v0.3 prototype, not execution of Harness², DeepSeek Harness or REA.
+
+- **Observed source boundary:** Node `JSON.parse` silently collapses
+  duplicate property keys. The earlier checker validated only the resulting
+  manifest/HUD objects and could therefore accept bytes that another JSON
+  consumer might interpret differently. Both pack JSON and normalized
+  Mojang JSONC now reject duplicate keys at every object depth, including
+  escaped spellings of the same key, before shape validation.
+- **Observed source boundary:** the previous `lstat → readFile(path) →
+  lstat` sequence opened an unpinned pathname after checking it. The
+  revised read opens one read-only file handle, compares path and handle
+  identity/size/mtime/ctime before and after, uses `O_NOFOLLOW` where
+  supported, reads at most the admitted size and rejects growth. This
+  reduces replacement/race and resource-bound risk but **does not**
+  authenticate a malicious filesystem or create a cross-process lock.
+  Windows can expose different `dev` values for a pathname and its opened
+  handle; only that comparison omits device equality. Path-to-path
+  comparisons and identity/timestamp checks remain mandatory.
+- **Review integrity:** the manifest's public description is now fixed
+  to the explicitly experimental, non-gameplay statement. A different
+  compatibility claim is not admitted as equivalent source.
+
+The resource pack `manifest.json` and `ui/hud_screen.json` are
+**unchanged**. No new dependency, package, installer, game authority,
+network access, source test or AI runtime is introduced. Authored
+negative fixtures cover duplicate keys, aliasing, overstated
+description and bounded ordinary-file reads. They are
+**AUTHORED_NOT_EXECUTED**, and the current exact-HEAD parser, Windows
+filesystem, Education 26.33 rendering and gameplay remain unexecuted.
+
 ## References
 
 - Mojang vanilla Bedrock HUD sample:
