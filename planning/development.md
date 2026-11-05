@@ -83,8 +83,10 @@ There is no second testing engine, daemon, or implicit execution.
   observer or dependency graph is justified.
 - **E03 COMPLETE:** compact handoff here, all prior long-form decisions in
   historical archive. Do not recreate a second active status ledger.
-- **E04 NEXT:** document a narrow future measurement baseline using existing
-  inspection and performance owners; do not invent a new telemetry service.
+- **E04 COMPLETE (source):** the existing efficient-local-testing runbook
+  now defines an exact-SHA, no-new-collector comparison for PNG payloads,
+  frame freshness, native IPC, CPU/RAM/GPU/FPS and source iteration. The
+  measurements remain UNMEASURED/NOT_EXECUTED until separately authorized.
 
 ## Proof ceiling and unresolved gates
 
@@ -107,9 +109,11 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-Complete E04 **source-only**: specify a short, measurable, exact-SHA
-capture/IPC/CPU/RAM/FPS baseline using existing report surfaces in
-`docs/validation/efficient-local-testing.md`. Do not implement a new
-metric collector or execute the tests. Then STOP further speculative
-optimizations until a concrete source issue or separately authorized
-measured result justifies one.
+**STOP speculative efficiency feature work.** At the next concrete
+source-level issue, pin `Local` HEAD and inspect the existing owner/callers
+before implementing the smallest safe correction. When the operator
+separately authorizes Codex/Windows testing, use the **existing**
+[efficiency evidence baseline](../docs/validation/efficient-local-testing.md#efficiency-evidence-baseline--deferred-no-new-collector)
+for actual measurements before proposing any scheduler, capture, IPC or
+runtime redesign. Do not request local tests, launch Minecraft or enable
+CI under the current source-only authorization.

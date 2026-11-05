@@ -134,6 +134,46 @@ and experimental AI are **not** part of the initial 13-case smoke.
 Full regression still uses
 [the existing comprehensive master](lazy-tester-test-master.md).
 
+## Efficiency evidence baseline — deferred, no new collector
+
+**Source-only specification; NOT_EXECUTED.** Record one exact `Local` commit,
+tool versions, Windows/Education versions, selected game slots, capture
+provider, sample duration and identical gameplay workload. These are
+measurement fields, **not claimed results or success thresholds**.
+Use the current `DEV.cmd`, MCP read-only observation, private run receipts
+and existing acceptance/PresentMon tools when a compatible Windows/Codex
+environment and separate operator permission are available. No new agent,
+telemetry daemon, CI, screenshot recorder or installer is needed.
+
+| Dimension | Existing observation/measurement route | What to compare |
+| --- | --- | --- |
+| Source iteration | Existing `source.quick` receipt and registered `benchmark.frontend`/`benchmark.rust` tasks | Measured wall time and first failed stage for the exact same toolchain and SHA, not inferred compile gains |
+| Visual payload | One requested CUA/WGC PNG and existing `inspectPng` size, dimensions and SHA-256; MCP `read_visual_observation` only upon demand | Source PNG bytes, accepted/refused oversize, frame deliveries and their total bounded base64 bytes; never claim token counts from bytes |
+| Frame freshness and contention | Existing observer `frameAgeMs`, `successfulSamples`, `repeatedPngBytes`, `duplicateGpuReads`, `skippedBusy` and `captureErrors` | Same 30-second window: sample age, useful frames delivered, busy skips and stale/invalid frames per slot |
+| Native actions | Existing bounded MCP/native transport receipts and per-client neutral/release/reconciliation statuses | Aborted/uncertain/rejected transactions and actual acknowledged neutral release; an ACK alone does not prove a Minecraft action |
+| Windows CPU/RAM/GPU/FPS | Existing manual native performance acceptance, sanitized per-process Windows resource samples, and PresentMon report where available | Real per-process CPU, private bytes/working set, GPU load and frame-time percentile; use `UNKNOWN` for any unmeasured dimension |
+
+**Comparison method (future, only after explicit approval):** keep lossless
+capture settings and target workload identical, record a baseline and a
+candidate by their separate exact SHAs, sample the existing default
+30-second visual observation period, and use independent runs instead of
+reusing stale screenshots. Start with the smallest proven client scenario;
+do not escalate to five concurrent licensed clients until the existing
+two-client, ownership and experimental authorization gates pass.
+The existing 400–5000 ms visual interval limits and 3.5-second freshness
+refusal remain safety boundaries, not performance targets to relax.
+
+**Evidence and stopping rules:** store only sanitized numeric aggregates
+and existing bounded receipts under ignored private `workspace/` when
+authorized. Never commit raw PNG, image base64, Microsoft credentials,
+world files, account names, process-identity raw values or private logs.
+`PASS` requires actual execution in the matching context. A source-only
+change can eliminate a known redundant hash or align size contracts, but
+cannot claim lower CPU, latency, memory usage, token cost or higher FPS.
+A candidate that weakens native identity/lease/neutral guarantees is
+rejected regardless of performance. If no measurable problem is shown,
+**make no new optimization or abstraction**.
+
 ## Evidence policy — short, honest, reusable
 
 Record one session report privately under ignored `workspace/`, using the
