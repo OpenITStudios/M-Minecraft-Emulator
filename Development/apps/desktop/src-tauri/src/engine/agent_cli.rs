@@ -295,6 +295,17 @@ fn multi_ai_group_end(pulses:&[MultiAiPulse],first:usize)->usize {
     next
 }
 
+// Record a possibly touched channel only at the IPC dispatch boundary.
+// A group that missed its final deadline has NOT reached IPC and must
+// not trigger synthetic neutral writes to previously untouched slots.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn record_multi_ai_group_attempt(
+    group:&[MultiAiPulse],attempted:&mut std::collections::BTreeSet<u32>
+) {
+    attempted.extend(group.iter().map(|pulse|pulse.slot));
+}
+
 #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
 fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
@@ -359,18 +370,18 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
             if unsafe{GetTickCount64()}>latest {
                 return Err("AI_SEQUENCE_DEADLINE");
             }
-            let frames=group.iter().map(|pulse| {
-                // The entire group is possibly touched once the request
-                // enters IPC, even if acknowledgement is uncertain. Record
-                // before dispatch for independent best-effort ReleaseAll.
-                attempted.insert(pulse.slot);
-                AiInputFrame {
-                    slot:pulse.slot,keys:pulse.keys,dx:pulse.dx,
-                    dy:pulse.dy,ttl_ms:pulse.ttl_ms,
-                }
+            let frames=group.iter().map(|pulse|AiInputFrame {
+                slot:pulse.slot,keys:pulse.keys,dx:pulse.dx,
+                dy:pulse.dy,ttl_ms:pulse.ttl_ms,
             }).collect::<Vec<_>>();
             let issued_at_ms=unsafe{GetTickCount64()};
             if issued_at_ms>latest {return Err("AI_SEQUENCE_DEADLINE");}
+            // The entire group becomes possibly touched only once we
+            // actually enter the native request. A missed pre-IPC deadline
+            // cannot require neutral writes for that never-issued group.
+            // Still mark EVERY member just before dispatch: a lost IPC ACK
+            // can follow partial group delivery and must release all of them.
+            record_multi_ai_group_attempt(group,&mut attempted);
             // The original session actor still verifies every owned process
             // and channel. A group is NOT an atomic or simultaneous Windows
             // input broadcast; it only removes redundant IPC round trips.
@@ -818,6 +829,30 @@ mod tests {
                 assert!(group.iter().all(|f|f.at_ms==group[0].at_ms));
             }
         }
+    }
+
+    #[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+    #[test]
+    fn never_dispatched_ai_group_is_not_added_to_cleanup_cohort() {
+        use std::collections::BTreeSet;
+        let frame=|slot,at_ms|MultiAiPulse {
+            slot,at_ms,keys:1,dx:0,dy:0,ttl_ms:350,
+        };
+        let first=[frame(2,0),frame(3,0)];
+        let later=[frame(4,160),frame(5,160)];
+        let mut attempted=BTreeSet::new();
+        // A deadline missed before native request never calls the
+        // attempt recorder. Previously even that group was added.
+        assert!(attempted.is_empty());
+        record_multi_ai_group_attempt(&first,&mut attempted);
+        assert_eq!(attempted.iter().copied().collect::<Vec<_>>(),[2,3]);
+        // No call for the late second group; only earlier possibly
+        // published originals remain eligible for best-effort neutral.
+        assert!(!attempted.contains(&4)&&!attempted.contains(&5));
+        record_multi_ai_group_attempt(&later,&mut attempted);
+        assert_eq!(attempted.iter().copied().collect::<Vec<_>>(),
+            [2,3,4,5]);
     }
 
     #[cfg(feature="mc02-native-input")]

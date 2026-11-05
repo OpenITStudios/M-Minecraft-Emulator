@@ -32,13 +32,13 @@ NOT_VERIFIED.
   background; first read-only semantic UIA via existing Cua Driver,
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
-- **Last source stages:** P58-P61 read-only UIA inspection/candidacy,
-  P62-P63 upstream Invoke-only design, P64 upstream
-  **BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE** remains intact. P65 adds
-  manual-only synthetic WinForms counter source in the already
-  existing workspace fixture to enable future app-owned UIA outcome
-  review; it does not launch, test, install or enable input.
-  All P58-P65 fixtures AUTHORED_NOT_EXECUTED.
+- **Last source stages:** P58-P64 read-only UIA and externally blocked
+  Cua Invoke-only; P65 added manual-only synthetic WinForms counter
+  source. P66 corrects the existing compile-OFF multi-client batch
+  CLI: only groups reaching IPC are marked possibly touched for
+  emergency neutral cleanup; pre-dispatch deadline misses no longer
+  touch unrelated slots. Source fixtures AUTHORED_NOT_EXECUTED,
+  no Windows/game execution or new backend.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -82,6 +82,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P66 | Native multi-client batch records possibly touched slots only after final per-group deadline gate, just before IPC; retains uncertain per-group cleanup | Rust negative fixture authored, NOT_EXECUTED; experiment remains compile-OFF |
 | P65 | Added opt-in UIA counter mode to existing synthetic Windows fixture, exposing an independent read-only 0->1 state oracle without action dispatch | AUTHORED_NOT_EXECUTED; no package/controller/runtime change |
 | P64 | Upstream exact-source admission review: no no-fallback Invoke-only tool, native birth/session dispatch fence or Minecraft postcondition | BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE; no files outside docs/handoff |
 | P63 | Exact-source upstream Rust contract and negative fixture matrix; refuse malformed assessment intent before native/UIA reads | Source-authored fixtures NOT_EXECUTED; no input/backend enabled |
@@ -169,16 +170,14 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**P66 — resume independent source-only engineering, not the blocked
-Cua dispatch track.** At a freshly pinned `Local` HEAD, review the
-existing multi-client native input timeline and retained-controller
-consumers for one objectively demonstrated safety/correctness gap.
-Correct only the first wrong owner with bounded negative fixtures;
-do not create a second input backend or expand speculative code.
-P64 remains `BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE` and
-`assess_client_background_action` must still refuse. The P65
-`--uia-counter` fixture is manual-only, never auto-launched,
-packaged or accepted as Windows proof until separately authorized
-source tests and real target observations. Continue GitHub-only
-source work; no local tests, Windows, Minecraft, CI, build, install,
-private profiles/worlds or release actions.
+**P67 — source-only review of original native group failure and
+cleanup contracts.** Pin fresh `Local` HEAD and check the original
+retained session controller's partial-group write/release path against
+the compile-OFF CLI cohort cleanup. Correct only a demonstrable
+wrong-owner issue with bounded negative fixtures, rather than adding
+another input route. The P64 external Cua
+`BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE` remains unchanged;
+`assess_client_background_action` still refuses. P65's synthetic
+counter stays manual-only and untested. No Node/Rust tests,
+CI/build/package/install, Windows/Codex/Minecraft execution or
+personal game/profile data access until separately approved.
