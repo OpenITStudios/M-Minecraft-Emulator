@@ -36,11 +36,13 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native 4/5-client cohort
   cleanup and MCP recovery; P69+ C++ OGLES root, rejected-epoch,
   input-isolation and buffered Raw Input thread integrity.
-  Latest source hardening checks the SAME live word+64-bit native
-  publication revision before returning virtual keyboard masks or
-  committing async press counters / cursor look; rejected late reads
-  do not consume key edges. Rust controller and v4 ABI unchanged.
-  C++ assertions AUTHORED_NOT_EXECUTED; no source tests/build/game.
+  Latest source hardening adds a lightweight last native-publication
+  fence after keyboard diagnostics: virtual async key press cursors
+  roll back if neutral/replacement wins; KeyState and KeyboardState
+  zero a stale held mask. Full native target/focus verification still
+  happens via currentPacket, while the final recheck uses only v4
+  atomics and uptime rather than another Win32 HWND lookup.
+  Rust controller and ABI unchanged; C++ assertions AUTHORED_NOT_EXECUTED.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -84,6 +86,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Win32 last native-write fence | Additional lightweight v4 publication check after keyboard diagnostics; rollback tentative async press cursor on lost native publication, zero held KeyState and scrub KeyboardState | C++ constexpr negatives authored NOT_EXECUTED; compile-OFF |
 | Win32 virtual polling final-read gate | Preserve publication revision with initial virtual input; recheck full target/focus/TTL before returning keyboard masks, committing async press counts, or consuming camera delta; scrub GetKeyboardState on late neutral | C++ negative constexpr fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input pinned-thread revalidation | Same original OGLES HWND and game-thread owner are checked before and after provisional prefix copy; on observed replacement the copied records are scrubbed and read cursors stay unchanged; release-only still permits hidden original root | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input epoch fence | Reject whole cumulative press/look epoch after active source deadline/focus/HWND refusal; same-epoch heartbeats cannot replay rejected input. New Rust-owned epoch after neutral/expiry admits fresh input | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -210,16 +213,14 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only review of the original Win32 input-consumer
-publication/epoch contract after the latest keyboard final-read gate.**
-Re-pin `Local`; inspect `currentPacket`, the C++ rejected-epoch
-watermark, the Rust writer's 96-byte ABI v4 and the original buffered
-Raw Input one-record release path for a demonstrable remaining
-cross-thread fault. Correct only a proven owner-local defect with
-bounded authored negative fixtures; avoid unnecessary layers or
-speculative performance claims. No second driver, controller, network
-agent, input dispatcher, normal package change or Cua foreground
-fallback. Strict Cua Invoke is `BACKGROUND_UNAVAILABLE` and
-experimental native input remains compile-OFF. Node/Rust/C++ tests,
-builds, CI, Windows, Minecraft and five-client acceptance remain
-NOT_EXECUTED/NOT_VERIFIED pending separate operator permission.
+**Review the original per-process virtual cursor return-time contract**
+for a demonstrable stale-camera state after a concurrent native
+ReleaseAll. Pin fresh `Local`, inspect the existing C++ cursor/Raw
+Input consumers against the retained Rust v4 writer and the latest
+native-publication fence. Correct only an owner-local bug with bounded
+source-only negative fixtures; preserve human MC01 physical input,
+zero-word pending key-up/mouse-up, exact PID/birth/HWND/session, no
+new controller, driver or game action route. Strict Cua Invoke remains
+`BACKGROUND_UNAVAILABLE`. Native input remains compile-OFF; no
+Node/Rust/C++ test, build, CI, Windows or Minecraft execution without
+separate operator approval.

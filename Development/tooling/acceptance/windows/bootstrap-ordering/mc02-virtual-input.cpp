@@ -300,6 +300,35 @@ bool sameLiveActivePublication(std::uint64_t word,std::uint64_t revision) {
     const auto latest=currentPacket(&latestRevision);
     return sameActivePublication(word,latest,revision,latestRevision);
 }
+// Lightweight LAST fence after a potential DebugString/keyboard-array
+// delay. The first and second currentPacket calls already verified real
+// focus and the exact OGLES root; this final check only ensures that
+// the original Rust writer has not started or finished a replacement,
+// ReleaseAll, epoch change or expiry since those full Win32 checks.
+// Do not pay for another HWND/class/foreground lookup on every key poll.
+constexpr bool nativePublicationStillCurrent(bool sameRevision,
+    bool sameWord,bool epochAllowed,bool live) noexcept {
+    return sameRevision && sameWord && epochAllowed && live;
+}
+static_assert(nativePublicationStillCurrent(true,true,true,true));
+static_assert(!nativePublicationStillCurrent(false,true,true,true));
+static_assert(!nativePublicationStillCurrent(true,false,true,true));
+static_assert(!nativePublicationStillCurrent(true,true,false,true));
+static_assert(!nativePublicationStillCurrent(true,true,true,false));
+bool sameNativePublicationAtReturn(std::uint64_t word,
+                                   std::uint64_t revision) {
+    if (!view || !word || !revision) return false;
+    const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
+    if (before!=revision) return false;
+    const auto packet=view->packet.load(std::memory_order_seq_cst);
+    const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
+    const bool safe=nativePublicationStillCurrent(
+        before==revision,packet==word,
+        freshNativeInputEpoch(epoch,
+            rejectedThroughEpoch.load(std::memory_order_seq_cst)),
+        packetLiveAt(word,GetTickCount()));
+    return safe && view->cursorRevision.load(std::memory_order_seq_cst)==revision;
+}
 // A background game may skip its Win32 input polling loop after comparing
 // GetForegroundWindow/GetActiveWindow/GetFocus to its own game HWND.
 // Resolve only the pinned MC02 OGLES root in THIS opted-in child.
@@ -433,6 +462,10 @@ SHORT virtualAsyncKeyResult(int key,std::uint64_t word,
     // Revalidation must follow the potentially delayed shared-state and
     // window reads. No per-key state is consumed if it fails.
     const bool admitted=sameLiveActivePublication(word,revision);
+    // These two variables are only mutated under asyncReadBusy.
+    // Restore them if a native neutral/replacement arrives during the
+    // optional one-shot diagnostic before this call can return a key.
+    const auto priorEpoch=seenPressEpoch,priorCounts=seenPressCounts;
     bool pressed=false;
     if (admitted && coherent && cursorHeld) {
         if (epoch!=seenPressEpoch) {
@@ -447,10 +480,17 @@ SHORT virtualAsyncKeyResult(int key,std::uint64_t word,
             pressed=true;
         }
     }
+    const SHORT result=admitted?static_cast<SHORT>(
+        (virtualDown(key,word)?0x8000u:0u) | (pressed?1u:0u)):0;
+    if (result) noteVirtualKeys(keyMask);
+    const bool finalAdmitted=admitted && (!result ||
+        sameNativePublicationAtReturn(word,revision));
+    if (!finalAdmitted && cursorHeld) {
+        seenPressEpoch=priorEpoch;
+        seenPressCounts=priorCounts;
+    }
     if (cursorHeld) asyncReadBusy.clear(std::memory_order_release);
-    if (!admitted) return 0;
-    return static_cast<SHORT>(
-        (virtualDown(key,word)?0x8000u:0u) | (pressed?1u:0u));
+    return finalAdmitted?result:0;
 }
 SHORT WINAPI observedAsync(int key) {
     const DWORD previous=GetLastError();
@@ -460,7 +500,6 @@ SHORT WINAPI observedAsync(int key) {
         SetLastError(previous); return originalAsync(key);
     }
     const SHORT result=virtualAsyncKeyResult(key,word,revision);
-    if (result) noteVirtualKeys(maskFor(key));
     SetLastError(previous);
     return result;
 }
@@ -472,9 +511,14 @@ SHORT WINAPI observedKey(int key) {
         SetLastError(previous); return originalKey(key);
     }
     const bool admitted=sameLiveActivePublication(word,revision);
-    const SHORT result=admitted && virtualDown(key,word)?
+    SHORT result=admitted && virtualDown(key,word)?
         static_cast<SHORT>(0x8000):0;
-    if (result) noteVirtualKeys(maskFor(key));
+    if (result) {
+        noteVirtualKeys(maskFor(key));
+        // Diagnostic hooks can delay this thread. Never return a held
+        // button from a packet the original native actor has neutralized.
+        if (!sameNativePublicationAtReturn(word,revision)) result=0;
+    }
     SetLastError(previous);
     return result;
 }
@@ -498,10 +542,14 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
         std::memset(state,0,256);
     } else {
         noteVirtualKeys(static_cast<unsigned>(word)&0xffu);
+        // Revoke even an already-populated 256-byte virtual keyboard
+        // array if ReleaseAll/replacement began while the diagnostic ran.
+        if (!sameNativePublicationAtReturn(word,revision))
+            std::memset(state,0,256);
     }
     SetLastError(previous);
     return TRUE;
-}
+
 #if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
 void applyPendingCursor(std::uint64_t word,std::uint64_t revision) {
     if (!view || !word || !revision ||
