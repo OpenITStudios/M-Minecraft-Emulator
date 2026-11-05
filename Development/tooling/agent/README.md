@@ -71,6 +71,9 @@ identical (PID, birth, Windows session and root HWND) across reads.
   bytes, and rechecked after assembly. Native producer FPS follows
   the requested observer interval within 1–5 FPS; no worker is
   automatically installed or packaged.
+- Identical WGC PNG byte hashes and dimensions reuse the previous
+  on-demand base64 representation, while worker sequence/timestamp and
+  native identity/freshness are always checked independently.
 - The observer uses one short-lived per-slot cache, bounded freshness
   and sampling intervals, adaptive backoff for identical PNG bytes,
   and metadata-only group summaries. Replayed worker sequences are

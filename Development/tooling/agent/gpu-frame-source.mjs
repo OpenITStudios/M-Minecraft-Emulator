@@ -177,7 +177,17 @@ export function createGpuFrameSource({
       try {
         const decoder=createGpuPacketDecoder(frame=>{
           if (!state.active) return;
-          state.latest=frame; // replace: retain at most ONE complete PNG
+          // A new worker sequence can carry the EXACT same PNG bytes.
+          // Reuse the last encoded representation when it already exists,
+          // without re-encoding or retaining a second raw PNG buffer.
+          const prior=state.latest;
+          if(typeof prior?.imageBase64==='string' &&
+             prior.sha256===frame.sha256 &&
+             prior.width===frame.width && prior.height===frame.height) {
+            frame.imageBase64=prior.imageBase64;
+            frame.bytes=null;
+          }
+          state.latest=frame; // still replace sequence/time with new receipt
           state.lastFrameAt=clock();
           state.frames++;
           state.status='FRAME_FROM_NATIVE_WGC_NOT_GAMEPLAY_VERIFIED';

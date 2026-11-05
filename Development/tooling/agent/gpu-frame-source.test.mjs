@@ -119,6 +119,35 @@ test('one capture worker preserves only latest frame and stops without game cont
   source.shutdown();
 });
 
+test('identical new WGC frame retains base64 without losing sequence and time',async()=>{
+  const pipe=new EventEmitter();
+  const child=new EventEmitter();child.stdout=pipe;
+  child.kill=()=>true;
+  let now=100000;
+  const source=createGpuFrameSource({
+    executable:path.resolve('lazy-tester-gpu-capture.exe'),
+    platform:'win32',clock:()=>now,
+    statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+    spawnProcess:()=>child,
+    schedule:()=>({unref(){}}),cancel:()=>{},
+  });
+  const target={pid:42,windowId:123,
+    createdFileTime:'134000000000000001',sessionId:1};
+  try {
+    await source.start(2,target);
+    pipe.emit('data',packet(1,100000));
+    const first=source.latest(2,target);
+    assert.equal(first.imageBase64,png.toString('base64'));
+    now=100001;
+    pipe.emit('data',packet(2,100001));
+    const second=source.latest(2,target);
+    assert.equal(second.workerSequence,2);
+    assert.equal(second.capturedAtMs,100001);
+    assert.equal(second.imageBase64,first.imageBase64);
+    assert.equal(source.status(2).frames,2);
+  } finally {source.shutdown();}
+});
+
 test('worker never attributes a cached old-client PNG to a replacement',async()=>{
   const target={pid:42,windowId:123,
     createdFileTime:'134000000000000001',sessionId:1};
