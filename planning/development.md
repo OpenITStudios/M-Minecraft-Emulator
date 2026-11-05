@@ -10,6 +10,23 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P30 per-slot lease release after neutral ACK (5 November 2026,
+  SOURCE_ONLY):** the Rust original controller admits group
+  `AiLeaseRelease` atomically. MCP's previous grouped release after
+  independent per-slot neutral ACKs could be rejected if one
+  child exited/replaced between those steps, leaving healthy peer
+  leases unconfirmed. `mcp.mjs` now preserves atomic acquisition but
+  performs one serialized exact-slot native lease release after its
+  own neutral ACK; only independently confirmed releases clear
+  their MCP recovery holds. Ambiguous/missing slots remain
+  quarantined and no old input is replayed. Source-authored
+  fixtures cover post-neutral exit races in 4/5-AI modes, partial
+  explicit stop, peer continuation and epoch fencing.
+  AUTHORED_NOT_EXECUTED; no UI, Rust wire change, game, build,
+  test suite, CI, installer or external agent runtime.
+  See [MCP P30](../Development/tooling/agent/README.md).
+
+
 - **P29 experimental MC02/multi-AI writer fence (5 November 2026,
   SOURCE_ONLY):** A targeted cross-owner audit found that the legacy
   native MC02 input route updated its 500-ms `AiLeaseBook` compatibility

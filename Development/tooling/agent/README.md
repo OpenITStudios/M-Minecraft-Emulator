@@ -147,6 +147,32 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P30 — Per-slot release after a native neutral ACK (SOURCE_ONLY)
+
+The original Rust controller validates `AiLeaseRelease` atomically for
+the supplied group. Previously, MCP issued individual neutral writes,
+then released all ACKed slots in one native group. A child could exit
+or change PID/birth between its neutral ACK and group release. That
+would reject the whole release even when peer channels were neutral.
+
+MCP now **retains atomic group acquisition**, independent exact-slot
+neutral writes, and then attempts one **serialized, non-retried**
+exact-owner/epoch lease release for every acknowledged slot. Only
+slots with their own confirmed release ACK clear their recovery hold.
+One child refusing a release does not prevent release attempts for
+the others. A failed/ambiguous release remains uncertain and is
+never redirected to a different process. Uncertain action delivery
+still quarantines its original full action cohort; healthy peers are
+eligible only for a separately explicit next action.
+
+Authored Node fixtures cover both hybrid (4-AI) and full (5-AI)
+modes, departure after neutral ACK, partial explicit operator stop,
+quarantine, peer continuation and fresh fencing epochs.
+**AUTHORED_NOT_EXECUTED:** no source tests, Windows, Minecraft,
+additional controller, plugin runtime, CI or installer were run.
+The native wire schema, compiled feature defaults, and original
+resource-pack and profile data remain unchanged.
+
 ## Shared MC02 legacy → multi-AI lease fence (source-only P29)
 
 The original Rust `AiLeaseBook` arbitrates both the historical MC02-only

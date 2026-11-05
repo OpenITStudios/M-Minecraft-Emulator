@@ -3376,7 +3376,7 @@ test('failed neutral on one AI releases all independently ACKed peer leases',asy
     assert.deepEqual(attempts,slots); // all attempted, even after MC03 error
     const healthy=slots.filter(slot=>slot!==failing);
     assert.deepEqual(leaseCalls,[
-      ['acquire',...slots],['release',...healthy],
+      ['acquire',...slots],...healthy.map(slot=>['release',slot]),
     ]);
     const state=await handler.callTool('get_multi_client_visual_state',{});
     assert.deepEqual(state.coordination.pendingReconnectSlots,[]);
@@ -3558,7 +3558,8 @@ test('operator stop accepts unsorted slots but native lease receives one canonic
     aiLease:async(_exe,operation,slots,{writerId})=>{
       assert.match(writerId,/^[a-f0-9]{32}$/);
       calls.push([operation,...slots]);
-      assert.deepEqual(slots,[2,3,5]);
+      if(operation==='acquire')assert.deepEqual(slots,[2,3,5]);
+      else assert.equal(slots.length,1);
       return {schema:1,slots,status:operation==='acquire'?
         'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
         gameplayObserved:false};
@@ -3576,7 +3577,7 @@ test('operator stop accepts unsorted slots but native lease receives one canonic
   assert.deepEqual(stopped.slots,[2,3,5]);
   assert.deepEqual(calls,[
     ['acquire',2,3,5],['neutral',2],['neutral',3],['neutral',5],
-    ['release',2,3,5],
+    ['release',2],['release',3],['release',5],
   ]);
   handler.shutdown();
 });
@@ -3718,7 +3719,7 @@ test('one stopped AI during completed batch does not strand leases of neutral-AC
     assert.deepEqual(neutralWrites,slots);
     assert.deepEqual(actionBatches,[slots]);
     assert.deepEqual(leaseCalls,[
-      ['acquire',...slots],['release',...healthy],
+      ['acquire',...slots],...healthy.map(slot=>['release',slot]),
     ]);
     const status=await handler.callTool('get_multi_client_visual_state',{slots});
     assert.deepEqual(status.coordination.blockedSlots,[failedSlot]);
@@ -3733,8 +3734,8 @@ test('one stopped AI during completed batch does not strand leases of neutral-AC
     });
     assert.deepEqual(next.slots,healthy);
     assert.deepEqual(actionBatches,[slots,healthy]);
-    assert.deepEqual(leaseCalls.slice(-2),[
-      ['acquire',...healthy],['release',...healthy],
+    assert.deepEqual(leaseCalls.slice(-1-healthy.length),[
+      ['acquire',...healthy],...healthy.map(slot=>['release',slot]),
     ]);
     assert.equal(next.gameplayObserved,false);
     handler.shutdown();
@@ -3770,7 +3771,7 @@ test('uncertain action delivery still quarantines whole cohort even if peer leas
     actions:slots.map(aiMove),
   }),/AI_RELEASE_UNCONFIRMED/);
   assert.deepEqual(leaseCalls,[
-    ['acquire',...slots],['release',2,4,5],
+    ['acquire',...slots],['release',2],['release',4],['release',5],
   ]);
   const held=await handler.callTool('get_multi_client_visual_state',{});
   assert.deepEqual(held.coordination.blockedSlots,slots);
@@ -3796,12 +3797,13 @@ test('every 4/5-AI input transaction carries one fresh native fencing epoch',asy
         assert.match(writerId,/^[a-f0-9]{32}$/);
         assert.match(leaseEpoch,/^[a-f0-9]{32}$/);
         assert.equal(requested,mode);
-        assert.deepEqual(selected,slots);
         if(operation==='acquire'){
+          assert.deepEqual(selected,slots);
           assert.equal(held.size,0);
           used.push([leaseEpoch,neutralOnly]);
           selected.forEach(slot=>held.set(slot,{writerId,leaseEpoch,neutralOnly}));
         } else {
+          assert.equal(selected.length,1,'release must isolate original slot');
           selected.forEach(slot=>{
             assert.equal(held.get(slot)?.leaseEpoch,leaseEpoch);
             held.delete(slot);
@@ -3842,6 +3844,108 @@ test('every 4/5-AI input transaction carries one fresh native fencing epoch',asy
     assert.equal(held.size,0);
     handler.shutdown();
   }
+});
+
+
+test('departed client AFTER neutral ACK cannot strand healthy peers on lease release',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]],
+  ]) {
+    const failed=slots[1],claims=new Map(),calls=[];
+    let departed=false,neutralCount=0,actions=0;
+    const h=createHandler({...config(mode),experimentalMultiClientInputEnabled:true},{
+      aiLease:async(_exe,op,selected,{writerId,leaseEpoch})=>{
+        calls.push([op,...selected]);
+        if(op==='acquire') {
+          for(const slot of selected) {
+            assert.equal(claims.has(slot),false);
+            claims.set(slot,{writerId,leaseEpoch});
+          }
+        }else {
+          assert.equal(selected.length,1,'one original owner per release');
+          const slot=selected[0];
+          if(departed&&slot===failed)throw Error('ORIGINAL_CHILD_GONE_AFTER_NEUTRAL');
+          assert.equal(claims.get(slot)?.leaseEpoch,leaseEpoch);
+          claims.delete(slot);
+        }
+        return {schema:1,slots:selected,status:op==='acquire'?
+          'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+          gameplayObserved:false};
+      },
+      aiInput:async(_exe,frame)=>{
+        neutralCount++;
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+      aiMultiBatch:async(_exe,batches)=>{
+        actions++;
+        return {schema:1,slots:batches.map(x=>x.slot),
+          status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+          gameplayObserved:false};
+      },
+    });
+    await h.callTool('stop_experimental_multi_client_actions',{slots});
+    assert.equal(claims.size,0);
+    neutralCount=0;calls.length=0;departed=true;
+    await assert.rejects(()=>h.callTool('run_experimental_multi_client_actions',{
+      actions:slots.map(aiMove),
+    }),/AI_WRITER_LEASE_RELEASE_UNCONFIRMED/);
+    assert.equal(actions,1);
+    assert.equal(neutralCount,slots.length);
+    assert.deepEqual(calls,[
+      ['acquire',...slots],...slots.map(slot=>['release',slot]),
+    ],'no slot is skipped/retried when one child exits before release');
+    assert.deepEqual([...claims.keys()],[failed]);
+    const state=await h.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(state.coordination.blockedSlots,[failed]);
+    assert.deepEqual(state.coordination.readySlots,
+      slots.filter(slot=>slot!==failed));
+    await assert.rejects(()=>h.callTool('run_experimental_multi_client_actions',{
+      actions:[aiMove(failed)],
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    assert.equal(actions,1,'uncertain client is never replayed');
+    const healthy=slots.filter(slot=>slot!==failed);
+    await h.callTool('run_experimental_multi_client_actions',{
+      actions:healthy.map(aiMove),
+    });
+    assert.equal(actions,2,'healthy peers require an explicit new action');
+    assert.deepEqual([...claims.keys()],[failed],
+      'other clients cannot implicitly rehabilitate the departed slot');
+    h.shutdown();
+  }
+});
+
+test('operator stop isolates a native release failure after all neutral ACKs',async()=>{
+  const slots=[2,3,4,5],attempts=[],released=[];
+  let failure=false;
+  const h=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    aiLease:async(_exe,op,selected)=>{
+      if(op==='release') {
+        assert.equal(selected.length,1);
+        attempts.push(selected[0]);
+        if(failure&&selected[0]===3)throw Error('AMBIGUOUS_RELEASE_RESULT');
+        released.push(selected[0]);
+      }
+      return {schema:1,slots:selected,status:op==='acquire'?
+        'AI_NATIVE_WRITER_LEASE_ACQUIRED':'AI_NATIVE_WRITER_LEASE_RELEASED',
+        gameplayObserved:false};
+    },
+    aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+      gameplayObserved:false}),
+  });
+  await h.callTool('stop_experimental_multi_client_actions',{slots});
+  attempts.length=0;released.length=0;failure=true;
+  await assert.rejects(()=>h.callTool('stop_experimental_multi_client_actions',{
+    slots,
+  }),/AI_WRITER_LEASE_RELEASE_UNCONFIRMED/);
+  assert.deepEqual(attempts,slots,'one attempted release per original slot');
+  assert.deepEqual(released,[2,4,5]);
+  const status=await h.callTool('get_multi_client_visual_state',{slots});
+  assert.deepEqual(status.coordination.blockedSlots,[3]);
+  assert.deepEqual(status.coordination.readySlots,[2,4,5]);
+  h.shutdown();
 });
 
 test('native lease adapter refuses missing/stale fencing epoch before CLI spawn',async()=>{

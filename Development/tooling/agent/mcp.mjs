@@ -1504,6 +1504,23 @@ export function createHandler(config,{
     }
     return {acknowledged,unconfirmed};
   }
+  // An exited/replaced game may invalidate a lease AFTER a neutral ACK.
+  // The native actor rejects a group release atomically. One attempted
+  // release per confirmed-neutral slot prevents an unrelated client from
+  // blocking its healthy peers. Never retry an uncertain release or
+  // substitute another PID/birth/epoch.
+  async function releaseAcknowledgedAiLeases(slots,leaseEpoch) {
+    const released=[],unconfirmed=[];
+    for(const slot of slots) {
+      try {
+        await changeAiLease('release',[slot],leaseEpoch);
+        released.push(slot);
+      } catch {
+        unconfirmed.push(slot);
+      }
+    }
+    return {released,unconfirmed};
+  }
   function clearReconciledAiSlots(slots) {
     // Only original-channel neutral ACK + matching writer lease release
     // may clear the local MCP hold; no group-wide optimistic clearance.
@@ -2429,14 +2446,17 @@ export function createHandler(config,{
         // Only clients with an actual native neutral ACK may relinquish
         // this MCP's writer claim. A departed MC03 must not hold MC02,
         // MC04 or MC05 hostage after their independent neutral ACKs.
-        if(neutral.acknowledged.length) {
-          await changeAiLease('release',neutral.acknowledged,leaseEpoch);
-          released=neutral.acknowledged;
-          clearReconciledAiSlots(released);
-        }
-        if(neutral.unconfirmed.length) {
-          markAiUncertain(neutral.unconfirmed);
-          throw new Error('AI_RELEASE_UNCONFIRMED');
+        const release=await releaseAcknowledgedAiLeases(
+          neutral.acknowledged,leaseEpoch);
+        released=release.released;
+        // Only independently acknowledged lease releases clear this
+        // MCP's hold; a dead child does not block healthy peers.
+        if(release.unconfirmed.length)markAiUncertain(release.unconfirmed);
+        clearReconciledAiSlots(released);
+        if(neutral.unconfirmed.length)markAiUncertain(neutral.unconfirmed);
+        if(neutral.unconfirmed.length)throw new Error('AI_RELEASE_UNCONFIRMED');
+        if(release.unconfirmed.length) {
+          throw new Error('AI_WRITER_LEASE_RELEASE_UNCONFIRMED');
         }
         return {schema:1,slots,status:'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED',
           writerLease:'NATIVE_RELEASED_AFTER_NEUTRAL_ACK',
@@ -2619,17 +2639,13 @@ export function createHandler(config,{
             {acknowledged:schedule.slots,unconfirmed:[]};
           neutralUnconfirmed=neutral.unconfirmed;
           if(neutralUnconfirmed.length)markAiUncertain(neutralUnconfirmed);
-          if(neutral.acknowledged.length) {
-            try {
-              // Release only independently ACKed source channels.
-              // A dead client retains its own lease/TTL fallback, while
-              // unaffected peers are not held until ten-second expiry.
-              await changeAiLease('release',neutral.acknowledged,leaseEpoch);
-              released=neutral.acknowledged;
-            } catch {
-              markAiUncertain(neutral.acknowledged);
-            }
-          }
+          // Each selected native child can disappear between its
+          // neutral ACK and the final release. Do not send a grouped
+          // release which lets one departed slot strand all peers.
+          const release=await releaseAcknowledgedAiLeases(
+            neutral.acknowledged,leaseEpoch);
+          released=release.released;
+          if(release.unconfirmed.length)markAiUncertain(release.unconfirmed);
         }
         if(leaseAttempted&&!leaseHeld&&!leaseDefinitelyDenied) {
           // Native acquire ACK was ambiguous. Never assume release or
