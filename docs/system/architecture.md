@@ -114,6 +114,38 @@ boundary contract, **not** a duplicate module inventory or task queue.
 8. Runtime and developer build caches are distinct from accounts, worlds
    and installer-preservation data. No unscoped cleanup is authorized.
 
+## Pending worker uncertainty and Settings inspection (P34)
+
+The original native session client retains a timed-out IPC worker
+instead of replaying its request. Subsequent operations first check
+that the original pending worker has settled. An unresolved worker
+still blocks additional work, and the result of a late worker is
+not returned as if it belonged to a later caller.
+
+The prior uncertainty gate admitted both `Inspect` and
+`InspectSettings` as read-only operations, but also allowed **either**
+successful reply to clear `Controller.uncertain`. The desktop can
+request `InspectSettings` simply by displaying or refreshing its
+Settings page. A settings response is not a sufficient basis for
+reconciling the outcome of a lost launch, close, or AI lease response.
+
+The gate now permits both reads without mutation, but only a fresh,
+successful **session `Inspect`** may clear the transport's uncertain
+state after the old worker has settled. The old worker's late
+completion is consumed without replay and explicitly retains the
+uncertainty until that new session inspection. An unsuccessful
+session Inspect, Settings refresh, or disconnected pending worker
+never turns an unknown mutation into an accepted result. A session
+snapshot is a current observation, not a proof that the original
+mutation succeeded; native input lease/epoch and per-client recovery
+checks still independently control input authority.
+
+No new IPC field, controller, retry, polling task, lifecycle command,
+UI action or release step is introduced. The existing read-only
+Settings path remains usable during uncertainty. A pure Rust
+admission fixture is **AUTHORED_NOT_EXECUTED**; native Windows IPC,
+Minecraft Education and five-client acceptance remain NOT_VERIFIED.
+
 ## Confirmed native IPC reply versus handshake acknowledgement (P33)
 
 The authenticated retained controller writes a bounded, typed response

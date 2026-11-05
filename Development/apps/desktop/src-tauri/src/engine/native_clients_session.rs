@@ -991,6 +991,16 @@ fn admit_controller(
     }
 }
 
+// An automatic Settings read can return a valid settings snapshot without
+// reconciling the result of a timed-out launch, CloseOne, or native input.
+// Only the original session Inspect route is allowed to clear the transport
+// uncertainty gate, and only when its fresh reply succeeds. This remains
+// read-only inspection, not an assertion that an older mutation succeeded.
+#[cfg(windows)]
+fn can_reconcile_pending_transport(request:&SessionRequest)->bool {
+    matches!(request,SessionRequest::Inspect)
+}
+
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     match &request {
@@ -1111,6 +1121,9 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         }
     }
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
+    // Both reads remain available while a previous mutation is uncertain;
+    // only a complete session Inspect may reconcile that uncertainty.
+    let reconciling = can_reconcile_pending_transport(&request);
     #[cfg(feature="mc02-native-input")]
     let neutral_mc02_release = matches!(request,
         SessionRequest::Mc02Input {keys:0,dx:0,dy:0,..} |
@@ -1127,8 +1140,12 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
                 ))
             }
             _ => {
+                // The old response is not the reply to THIS new request.
+                // Even a completed late success cannot be replayed or
+                // silently used to clear the previous unknown outcome.
                 let pending = owner.pending.take().unwrap();
                 let _ = pending.worker.join();
+                owner.uncertain = true;
             }
         }
     }
@@ -1162,7 +1179,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             let _ = pending.worker.join();
             match result {
                 Ok(reply) => {
-                    if inspecting && reply.is_ok() {
+                    if reconciling && reply.is_ok() {
                         owner.uncertain = false;
                     }
                     reply.map_err(io::Error::other)
@@ -1572,6 +1589,33 @@ mod tests {
         report.display_hint="ATTENTION".into();
         assert!(!report.valid_ingress(),
             "Incomplete results may not carry completed Probe counts");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pending_timeout_reconciliation_requires_fresh_session_inspect_not_settings() {
+        // Pure admission policy fixture: no controller, pipe, Windows
+        // game window or source test executor is started by this code.
+        assert!(can_reconcile_pending_transport(&SessionRequest::Inspect));
+        assert!(!can_reconcile_pending_transport(&SessionRequest::InspectSettings));
+        assert!(!can_reconcile_pending_transport(&SessionRequest::InspectStorage));
+        assert!(!can_reconcile_pending_transport(&SessionRequest::CloseOne{slot:2}));
+        assert!(!can_reconcile_pending_transport(&SessionRequest::CloseAll));
+        #[cfg(feature="mc02-native-input")]
+        {
+            let owner="a".repeat(32);
+            let epoch="b".repeat(30)+"e1";
+            assert!(!can_reconcile_pending_transport(
+                &SessionRequest::AiLeaseRelease {
+                    slots:vec![2],owner_id:owner.clone(),lease_epoch:epoch.clone(),
+                }));
+            assert!(!can_reconcile_pending_transport(
+                &SessionRequest::AiLeaseAcquire {
+                    slots:vec![2],owner_id:owner,
+                    lease_epoch:epoch,mode:AgentControlMode::HumanPlusFourAi,
+                    neutral_only:true,
+                }));
+        }
     }
 
     #[cfg(windows)]

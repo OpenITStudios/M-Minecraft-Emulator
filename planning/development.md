@@ -10,6 +10,24 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P34 pending-worker reconciliation admission (5 November 2026,
+  SOURCE_ONLY):** Native `request()` retained a timed-out worker
+  and blocked another mutation while it was pending, but
+  `InspectSettings` also cleared `Controller.uncertain` on an
+  ordinary successful Settings read. The desktop can issue that
+  operation merely from its Settings page, without a session
+  reconciliation. The existing native IPC owner now distinguishes
+  read-only admission from reconciliation: `InspectSettings` stays
+  available but only a successful fresh `Inspect` can clear the
+  uncertainty gate after a prior pending worker settles. The late
+  worker's result is never replayed or counted as a new reply, and
+  remains explicitly uncertain until session inspection. Source
+  Rust fixtures are AUTHORED_NOT_EXECUTED. No retry, new owner,
+  IPC schema changes, source tests, CI, Windows/Minecraft process,
+  package or external harness were executed.
+  See [architecture P34](../docs/system/architecture.md).
+
+
 - **P33 authenticated IPC reply/ACK separation (5 November 2026,
   SOURCE_ONLY):** the original named-pipe client previously used
   a fallible final `ack` write after it had already received a
