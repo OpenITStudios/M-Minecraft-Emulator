@@ -448,9 +448,14 @@ SHORT virtualAsyncKeyResult(int key,std::uint64_t word,
     if (!word || !revision) return 0;
     const unsigned keyMask=maskFor(key);
     bool cursorHeld=false,coherent=false;
-    std::uint64_t counts=0,epoch=0;
+    std::uint64_t counts=0,epoch=0,priorEpoch=0,priorCounts=0;
     if (keyMask && !asyncReadBusy.test_and_set(std::memory_order_acquire)) {
         cursorHeld=true;
+        // Both the cursor snapshot and the later tentative commit/rollback
+        // belong to this same original asyncReadBusy critical section.
+        // Never read non-atomic seenPress* if another key poll owns it.
+        priorEpoch=seenPressEpoch;
+        priorCounts=seenPressCounts;
         const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
         if (before==revision) {
             counts=view->pressCounts.load(std::memory_order_seq_cst);
@@ -462,10 +467,8 @@ SHORT virtualAsyncKeyResult(int key,std::uint64_t word,
     // Revalidation must follow the potentially delayed shared-state and
     // window reads. No per-key state is consumed if it fails.
     const bool admitted=sameLiveActivePublication(word,revision);
-    // These two variables are only mutated under asyncReadBusy.
-    // Restore them if a native neutral/replacement arrives during the
-    // optional one-shot diagnostic before this call can return a key.
-    const auto priorEpoch=seenPressEpoch,priorCounts=seenPressCounts;
+    // Restore the locked snapshot if a native neutral/replacement
+    // arrives during the optional one-shot diagnostic.
     bool pressed=false;
     if (admitted && coherent && cursorHeld) {
         if (epoch!=seenPressEpoch) {
