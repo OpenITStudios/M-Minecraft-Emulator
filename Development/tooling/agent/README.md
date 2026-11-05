@@ -147,6 +147,23 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P49 — Bound team event parsing to the returned evidence suffix (SOURCE_ONLY)
+
+The original `readGameEvidence` scanned and parsed every line in up to
+256 KiB of a stable per-slot capture, even though MCP exposure was limited
+to the newest 20 validated `[ANALYTICS]`/`[GAME_RESULTS]` events. The
+same existing file reader now scans complete lines **backward**, stops at
+the requested bounded valid-record count, then restores chronological
+order. It still discards an incomplete final line and a partial leading
+line from tail reads; the original file identity, stable-size/mtime,
+checkpoint anchor and QA-only `probeEvents` logic are unchanged.
+A zero/negative/noninteger record limit is refused instead of allowing a
+surprising unbounded suffix. No new cache, watcher, parser engine, schema,
+dependency or game command. Regression fixtures cover 40 interleaved
+valid records, unrelated/malformed lines, incomplete tail, cap and invalid
+limits; all are AUTHORED_NOT_EXECUTED. Actual Windows disk/CPU savings and
+gameplay provenance remain NOT_MEASURED/NOT_VERIFIED.
+
 ## P48 — WGC frame rate follows actual observer demand (SOURCE_ONLY)
 
 The MCP worker admission previously launched WGC at a fixed 5 FPS even

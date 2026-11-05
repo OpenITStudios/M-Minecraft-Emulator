@@ -880,6 +880,12 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
   lstatFile=lstat,openFile=open,probeCheckpoint=null,probeOnly=false,
 }={}) {
   slotOf(slot);
+  // The public read-only helper may be called outside the MCP allowlist.
+  // A zero/negative/noninteger cap must not accidentally return the whole tail.
+  if(!Number.isSafeInteger(maxRecords)||maxRecords<1) {
+    throw new TypeError('Evidence record limit must be a positive integer');
+  }
+  const recordLimit=Math.min(maxRecords,EVIDENCE_LIMIT);
   if (!directory) return {slot,status:'NOT_CONFIGURED',events:[],attribution:'UNVERIFIED'};
   const file=path.join(directory,'MC0'+slot+'.log');
   let observedPath=false;
@@ -950,12 +956,24 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
       // Do not parse unrelated [ANALYTICS]/[GAME_RESULTS] for QA-only calls.
       const qaOnly=probeOnly||probeCheckpoint!==null;
       const data=buffer.toString('utf8');
-      const entries=qaOnly?[]:data.split(/\r?\n/);
-      if (start>0) entries.shift(); // Offset may cut through first line.
       const incompleteTrailingLineIgnored=
         data.length>0 && !data.endsWith('\n');
-      if (incompleteTrailingLineIgnored) entries.pop();
-      const records=entries.map(parseCapturedLine).filter(Boolean);
+      // Only the LAST 20 valid team records can reach the MCP. Avoid
+      // splitting/parsing every old log line just to discard it afterwards.
+      // Preserve complete-line, partial-tail and truncated-prefix rules.
+      const records=[];
+      if(!qaOnly) {
+        let end=incompleteTrailingLineIgnored?data.lastIndexOf('\n'):data.length;
+        while(end>0 && records.length<recordLimit) {
+          const newline=data.lastIndexOf('\n',end-1);
+          if(start>0 && newline<0) break; // Discard partial leading line.
+          const line=data.slice(newline+1,end).replace(/\r$/,'');
+          const event=parseCapturedLine(line);
+          if(event) records.push(event);
+          end=newline;
+        }
+        records.reverse(); // Oldest-to-newest, identical to earlier slicing.
+      }
       // Exact stable-file checkpoint. File timestamps cannot establish that
       // a Probe result belongs to the run prepared by this MCP process.
       const fileIdentity=createHash('sha256')
@@ -1013,7 +1031,7 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
         }
       }
       return {slot,status:'CAPTURE_FILE_PRESENT',
-        events:records.slice(-Math.min(maxRecords,EVIDENCE_LIMIT)),
+        events:records,
         captureCursor,probeEvents,
         attribution:'OPERATOR_NAMED_UNVERIFIED',
         truncated:pinned.size>BigInt(EVIDENCE_TAIL_BYTES),

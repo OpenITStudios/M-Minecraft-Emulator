@@ -990,6 +990,35 @@ test('evidence reads only complete marked lines from assigned profile',async()=>
   } finally {await rm(root,{recursive:true,force:true});}
 });
 
+test('bounded evidence tail reads newest valid records without unbounded outputs',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-agent-tail-'));
+  try {
+    const lines=[];
+    for(let index=0;index<40;index++) {
+      const at=new Date(Date.UTC(2026,9,30,12,0,index)).toISOString();
+      lines.push(at+' log unrelated line');
+      lines.push(at+' log [ANALYTICS]'+JSON.stringify({
+        schema:1,type:'stage_attempt',index,
+      }));
+    }
+    // A malformed marker and an unfinished final line must not displace
+    // earlier valid records from the requested chronological suffix.
+    lines.push('2026-10-30T12:00:59.000Z log [ANALYTICS]{broken');
+    await writeFile(path.join(root,'MC02.log'),
+      lines.join('\n')+'\n2026-10-30T12:01:00.000Z log [ANALYTICS]{"type":');
+    const recent=await readGameEvidence(root,2,3);
+    assert.deepEqual(recent.events.map(event=>event.data.index),[37,38,39]);
+    assert.equal(recent.incompleteTrailingLineIgnored,true);
+    const capped=await readGameEvidence(root,2,100);
+    assert.deepEqual(capped.events.map(event=>event.data.index),
+      Array.from({length:20},(_,i)=>20+i));
+    for(const invalid of [0,-1,NaN,1.5]) {
+      await assert.rejects(()=>readGameEvidence(root,2,invalid),
+        /positive integer/);
+    }
+  } finally {await rm(root,{recursive:true,force:true});}
+});
+
 test('Probe QA cursor accepts only appended complete lines from same capture',async()=>{
   const root=await mkdtemp(path.join(tmpdir(),'lazy-probe-cursor-'));
   const filename=path.join(root,'MC02.log');
