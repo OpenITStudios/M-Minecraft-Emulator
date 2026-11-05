@@ -9,6 +9,21 @@ at `d1fbd9e12e48b92ada5f5ef13b6b7d3c10c604a6`, with older material in
 [2 November history](history/source-handoff-through-2026-11-02.md).
 Archived "Next" statements are not current authorization.
 
+## Primary product goal — operator reset 5 November 2026
+
+**Build Codex Computer Use for Windows with a strict background/no-user-
+interruption contract, modeled after the Mac experience.** Codex should
+inspect and control specifically authorized windows without stealing the
+operator's mouse, keyboard, focus or z-order. Minecraft Education five-client
+management remains a key target, but its native game-input backend is
+experimental and still not accepted. Cua Driver's existing Windows
+background UI Automation is the first integration candidate; screenshots
+are an on-demand fallback, **not** the foundation of gameplay input.
+Read the [evidence-based parity design](../docs/system/windows-background-computer-use.md)
+before continuing. REA was not executed; public macOS/Windows source
+and independent RE reports were reviewed. All runtime behavior remains
+NOT_VERIFIED.
+
 ## Product and owners
 
 - **Product:** Lazy Tester, one Windows desktop manager for up to five
@@ -121,11 +136,13 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**STOP speculative efficiency feature work.** At the next concrete
-source-level issue, pin `Local` HEAD and inspect the existing owner/callers
-before implementing the smallest safe correction. When the operator
-separately authorizes Codex/Windows testing, use the **existing**
-[efficiency evidence baseline](../docs/validation/efficient-local-testing.md#efficiency-evidence-baseline--deferred-no-new-collector)
-for actual measurements before proposing any scheduler, capture, IPC or
-runtime redesign. Do not request local tests, launch Minecraft or enable
-CI under the current source-only authorization.
+**Source-only Codex Windows Computer Use parity, not another PNG or
+runtime optimization.** Pin `Local` HEAD, compare the installed *source*
+Cua Driver call/response contract and the existing
+`Development/tooling/agent/visual-capture.mjs` + `mcp.mjs` owners.
+Design the **smallest scoped semantic UIA read-only bridge** with exact
+native PID/HWND/birth/session and strict `BACKGROUND_UNAVAILABLE` refusal.
+Do not dispatch new input or add another controller until evidence
+supports an independently reviewed action. REA requires an authorized
+binary, unavailable in this GitHub-only session. No local tests, CI,
+Windows/Codex/Minecraft execution, installer or binary acquisition.
