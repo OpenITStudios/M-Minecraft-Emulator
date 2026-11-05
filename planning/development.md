@@ -42,6 +42,7 @@ Archived "Next" statements are not current authorization.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P53 | MCP README compacted; all technical stage notes preserved in historical source snapshot | Read-only doc consolidation, NOT_EXECUTED |
 | P52 | MCP image response reuses observer's 4 MiB base64 boundary rather than stale 8 MiB allowance | Authored boundary fixture, NOT_EXECUTED |
 | P51 | WGC native encoder reuses one PNG output allocation per worker and writes its 28-byte header on the stack | Authored Windows-only Rust fixture, NOT_EXECUTED |
 | P50 | QA-only Skills Probe reads skip unnecessary full-tail UTF-8 conversion; newline determined directly from existing bytes | Authored regression, NOT_EXECUTED |
@@ -55,7 +56,8 @@ Archived "Next" statements are not current authorization.
 | P22–P28 | World-scoped HUD prototype and bounded developer source-review routing | Source only; HUD merge NOT_VERIFIED |
 
 Details, earlier phases, experiments and negative fixtures:
-[historical P1–P46 handoff](history/source-handoff-through-2026-11-05.md).
+[historical P1–P46 handoff](history/source-handoff-through-2026-11-05.md) and
+[complete archived MCP source reference](history/mcp-agent-source-reference-through-2026-11-05.md).
 Canonical live source owners:
 [implementation map](../docs/system/implementation-map.md) ·
 [architecture](../docs/system/architecture.md) ·

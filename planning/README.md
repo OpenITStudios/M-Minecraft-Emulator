@@ -17,6 +17,11 @@ deleting any decisions or historical proof:
 [Probe and native source handoff through 2 November 2026](history/source-handoff-through-2026-11-02.md).
 It is **reference only**, not a parallel current work queue.
 
+Full source-only MCP notes through 5 November were archived verbatim to keep the
+[active MCP README](../Development/tooling/agent/README.md) concise:
+[MCP source reference through 5 November](history/mcp-agent-source-reference-through-2026-11-05.md).
+These are historical reference notes, not an active second status tracker.
+
 Historical source records (not execution instructions):
 
 - [AI-input development through 1 November 2026](history/ai-input-source-handoff-through-2026-11-01.md)
