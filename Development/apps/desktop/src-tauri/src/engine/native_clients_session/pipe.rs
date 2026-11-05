@@ -462,6 +462,15 @@ impl Endpoint {
     }
 }
 
+// The complete response was read and its authenticated native peer is
+// still alive before this helper is called. The final ACK only closes the
+// pipe handshake; its failure does NOT undo the already-received reply.
+// Missing, malformed, or unverified replies still fail in exchange() first.
+fn acknowledge_confirmed_reply(writer:&mut impl Write,reply:SessionReply)->SessionReply {
+    let _=writer.write_all(b"ack\n");
+    reply
+}
+
 pub(crate) fn exchange(
     endpoint: &Endpoint,
     mut pipe: File,
@@ -478,10 +487,12 @@ pub(crate) fn exchange(
             "Controller exited during the request; outcome uncertain",
         ));
     }
-    let reply = serde_json::from_str(&text).map_err(io::Error::other)?;
-    // Acknowledgement lets the server disconnect without discarding unread response bytes.
-    pipe.write_all(b"ack\n")?;
-    Ok(reply)
+    let reply:SessionReply = serde_json::from_str(&text).map_err(io::Error::other)?;
+    // The reply has already been fully read, structurally parsed and
+    // bound to a live authenticated original controller. ACK loss must
+    // not turn a confirmed native result into an ambiguous failure.
+    // Unverified/missing/malformed replies still refuse above.
+    Ok(acknowledge_confirmed_reply(&mut pipe,reply))
 }
 
 pub(crate) struct Envelope {
@@ -774,6 +785,36 @@ mod tests {
             (0, 0),
             "The client must not create another server instance"
         );
+    }
+
+    #[test]
+    fn confirmed_native_reply_survives_ack_write_failure_without_replay() {
+        // Pure transport completion fixture. No controller, pipe or
+        // Minecraft process is created by this test definition.
+        struct BrokenAck;
+        impl Write for BrokenAck {
+            fn write(&mut self,_bytes:&[u8])->io::Result<usize> {
+                Err(io::Error::new(io::ErrorKind::BrokenPipe,
+                    "acknowledgement transport unavailable"))
+            }
+            fn flush(&mut self)->io::Result<()> {Ok(())}
+        }
+        let mut good=Vec::<u8>::new();
+        let reply=acknowledge_confirmed_reply(
+            &mut good,Ok(SessionSnapshot::stopped()));
+        assert_eq!(good.as_slice(),b"ack\n");
+        assert_eq!(reply.unwrap().profiles.len(),5);
+        let mut broken=BrokenAck;
+        let confirmed=acknowledge_confirmed_reply(
+            &mut broken,Ok(SessionSnapshot::stopped()));
+        assert_eq!(confirmed.unwrap().profiles.len(),5,
+            "a fully received success must not become uncertain on ACK loss");
+        let refused=acknowledge_confirmed_reply(
+            &mut broken,Err("Native operation refused".into()));
+        assert_eq!(refused.unwrap_err(),"Native operation refused",
+            "an explicit native refusal must retain its original status");
+        assert!(serde_json::from_str::<SessionReply>("bad partial reply").is_err(),
+            "missing/malformed response is never accepted as a result");
     }
 
     #[test]

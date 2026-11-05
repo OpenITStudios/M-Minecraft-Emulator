@@ -10,6 +10,22 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P33 authenticated IPC reply/ACK separation (5 November 2026,
+  SOURCE_ONLY):** the original named-pipe client previously used
+  a fallible final `ack` write after it had already received a
+  complete `SessionReply` from an authenticated live controller.
+  That last handshake failure could convert a confirmed native
+  result into transport uncertainty, inviting a duplicate manual
+  mutation. `native_clients_session/pipe.rs` now preserves a fully
+  received and parsed native reply when **only** the final ACK
+  write fails. Truncated/malformed replies, disconnected/untrusted
+  peers, unresolved workers and true timeouts remain fail-closed;
+  no automatic retries, new IPC fields or controller are added.
+  One pure Rust regression fixture is AUTHORED_NOT_EXECUTED.
+  No Node/Rust suite, Windows/Minecraft runtime, build, package or
+  CI was run. See [architecture P33](../docs/system/architecture.md).
+
+
 - **P32 MCP disconnection input-fence (5 November 2026, SOURCE_ONLY):**
   The existing MCP handler could continue an awaited active action
   after `shutdown()` returned from native lease acquire, or continue

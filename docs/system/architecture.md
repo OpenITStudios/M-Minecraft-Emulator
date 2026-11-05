@@ -114,6 +114,30 @@ boundary contract, **not** a duplicate module inventory or task queue.
 8. Runtime and developer build caches are distinct from accounts, worlds
    and installer-preservation data. No unscoped cleanup is authorized.
 
+## Confirmed native IPC reply versus handshake acknowledgement (P33)
+
+The authenticated retained controller writes a bounded, typed response
+before the client sends the final `ack` message used to close the
+local named-pipe exchange. Previously, a failure **only** while
+writing this final client ACK caused the client to report a transport
+failure even after it had received a complete response from the
+verified, still-live controller. This could make a completed
+native mutation appear ambiguous and encourage an unsafe manual retry.
+
+The existing `native_clients_session/pipe.rs` now preserves the
+fully received `SessionReply` when the *trailing ACK alone* fails.
+The ACK remains best-effort cleanup after a verified peer and complete
+parse, not a second commit or gameplay acceptance. This never turns
+a truncated/unparseable response, exited/unverified peer, pending
+45-second worker, or lost request into success: those continue to
+report uncertainty, retain existing state/handles and require
+operator inspection instead of automatic replay. No second
+controller, retry queue, request ID, public IPC schema, lifecycle
+mutation or identity bypass was added. A pure Rust fixture covers
+ACK success, ACK write failure on an already-confirmed success,
+an explicit native rejection, and malformed response exclusion.
+AUTHORED_NOT_EXECUTED; Windows/IPC/game execution not verified.
+
 ## Native AI input and Windows-session boundary
 
 The existing native controller's named-pipe admission binds the same Windows
