@@ -367,6 +367,11 @@ impl Sessions {
         }
         let now=unsafe{GetTickCount64()};
         self.ai_leases.legacy_allowed(slot,now)?;
+        // A failed native send can have published an active or neutral
+        // packet already. Fence out another 4/5-AI writer BEFORE the
+        // potential write; only a confirmed neutral ACK may clear the
+        // legacy channel's possible 500-ms hold early.
+        self.ai_leases.legacy_begin_write(slot,now);
         self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)?;
         self.ai_leases.legacy_wrote(slot,unsafe{GetTickCount64()},
             keys==0&&dx==0&&dy==0);

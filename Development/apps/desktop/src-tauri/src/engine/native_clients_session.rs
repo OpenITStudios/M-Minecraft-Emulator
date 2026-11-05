@@ -850,6 +850,14 @@ impl AiLeaseBook {
         }
         Ok(())
     }
+    // The legacy MC02 native call can fail AFTER publishing a packet.
+    // Mark that slot possibly active BEFORE entering native I/O so a
+    // concurrent/following 4/5-AI lease cannot adopt it while the input
+    // channel's bounded (<=500ms) TTL may still be alive. The retained
+    // session actor calls legacy_allowed first and serializes both steps.
+    pub(crate) fn legacy_begin_write(&mut self,slot:u32,now:u64) {
+        self.legacy_until_ms[(slot-1) as usize]=now.saturating_add(500);
+    }
     pub(crate) fn legacy_wrote(&mut self,slot:u32,now:u64,neutral:bool) {
         self.claims[(slot-1) as usize]=None;
         self.legacy_until_ms[(slot-1) as usize]=
@@ -1730,6 +1738,49 @@ mod tests {
         book.release(&[(2,202,2002)],&a,&e2,1508).unwrap();
         book.legacy_wrote(2,1509,true);
         assert!(book.acquire(&[(2,202,2002)],&a,&e1,1510,false).is_ok());
+    }
+
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn interrupted_legacy_mc02_send_fences_multi_writer_until_ttl_or_neutral_ack() {
+        // Pure lease-book simulation: legacy MC02 packet may already be
+        // published when the native API reports an error. No game process,
+        // Windows channel, MCP, or test runner is started by this fixture.
+        let a="a".repeat(32);
+        let e="1".repeat(32);
+        let four=vec![(2,102,1002),(3,103,1003),(4,104,1004),(5,105,1005)];
+        let five=vec![(1,101,1001),(2,102,1002),
+                      (3,103,1003),(4,104,1004),(5,105,1005)];
+        let mut book=AiLeaseBook::default();
+        // legacy_allowed() admitted the exact original hybrid MC02 slot.
+        book.legacy_allowed(2,1000).unwrap();
+        book.legacy_begin_write(2,1000);
+        // No legacy_wrote(): simulate a native failure after possible publish.
+        // The all-slot claim is atomic; it never captures healthy peers.
+        assert!(book.acquire(&four,&a,&e,1001,false).is_err());
+        assert!(book.acquire(&five,&a,&e,1002,false).is_err());
+        assert!(book.require(3,&a,&e,103,1003,1002).is_err());
+        // Other selected slots can still be acquired/released separately.
+        book.acquire(&[(3,103,1003)],&a,&e,1003,false).unwrap();
+        book.release(&[(3,103,1003)],&a,&e,1004).unwrap();
+        assert!(book.acquire(&four,&a,&e,1499,false).is_err());
+        assert!(book.acquire(&four,&a,&e,1500,false).is_ok());
+
+        // Explicit successful neutral input is the ONLY early clearance.
+        let mut recovered=AiLeaseBook::default();
+        recovered.legacy_allowed(2,2000).unwrap();
+        recovered.legacy_begin_write(2,2000);
+        assert!(recovered.acquire(&five,&a,&e,2001,false).is_err());
+        recovered.legacy_wrote(2,2002,true);
+        assert!(recovered.acquire(&five,&a,&e,2003,false).is_ok());
+
+        // A failed neutral write must retain the potential activity fence.
+        let mut uncertain=AiLeaseBook::default();
+        uncertain.legacy_begin_write(2,3000);
+        assert!(uncertain.acquire(&four,&a,&e,3001,false).is_err());
+        uncertain.forget_slot(2); // Only native confirmed process reap.
+        assert!(uncertain.acquire(&four,&a,&e,3002,false).is_ok());
     }
 
     #[cfg(feature="mc02-native-input")]

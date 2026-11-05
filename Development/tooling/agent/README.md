@@ -147,6 +147,27 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## Shared MC02 legacy → multi-AI lease fence (source-only P29)
+
+The original Rust `AiLeaseBook` arbitrates both the historical MC02-only
+input pilot and later feature-gated 4/5-client AI writers. The legacy
+`Mc02Input` call previously set its short compatibility hold only
+*after* a successful native write. Since a native I/O error can arrive
+after a shared packet was already published, a later multi-client
+writer could otherwise acquire MC02 before the original channel's
+maximum 500-ms input TTL expired.
+
+The same retained native actor now marks **MC02 possibly active before**
+calling the existing `mc02_input` operation. Failure retains the
+bounded compatibility fence. A subsequent successful exact-owner
+neutral write clears it; confirmed process reap uses the existing
+`forget_slot` path. The other slots remain independent. This is
+source-only protection, not an assertion that Minecraft accepted input,
+or that legacy and modern writers should run together. Both opt-in
+native features stay compile-OFF and unavailable in normal builds.
+A focused Rust fixture is AUTHORED_NOT_EXECUTED; no Node, Rust, Windows,
+gameplay, CI, or external agent was run.
+
 ## Optional input/capture integration (not authorized to execute yet)
 
 - Desktop Rust `multi-client-native-input` alias `mc02-native-input`

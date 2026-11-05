@@ -10,6 +10,23 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P29 experimental MC02/multi-AI writer fence (5 November 2026,
+  SOURCE_ONLY):** A targeted cross-owner audit found that the legacy
+  native MC02 input route updated its 500-ms `AiLeaseBook` compatibility
+  hold only after a successful shared-channel write. Since native I/O
+  can fail after publishing, an immediate new 4/5-AI lease could
+  otherwise claim MC02 before that channel TTL expired. The original
+  session actor now records a possibly active MC02 legacy write BEFORE
+  native input, retains the bounded hold on uncertain error, and clears
+  early only upon an acknowledged neutral write; confirmed process reap
+  still uses the existing `forget_slot`. One focused Rust regression
+  fixture covers 4/5-slot atomic refusal, independent healthy peers,
+  TTL expiry, successful neutral and process-reap behavior.
+  AUTHORED_NOT_EXECUTED; no native feature activation, second
+  controller, source tests, CI, package, Windows or Minecraft runtime.
+  See [agent integration owner](../Development/tooling/agent/README.md).
+
+
 - **P28 cross-module quality review (5 November 2026, SOURCE_ONLY):**
   The existing `DEV.cmd review` now projects three narrowly scoped,
   deterministic source-boundary review obligations for MCP/native input,
