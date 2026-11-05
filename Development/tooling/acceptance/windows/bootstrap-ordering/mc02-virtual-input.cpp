@@ -730,6 +730,27 @@ static_assert(!rawFinalCopyAllowed(true,true,1,1,3,3));
 static_assert(!rawFinalCopyAllowed(true,false,1,1,2,2));
 static_assert(!rawFinalCopyAllowed(false,true,1,1,2,2));
 
+// A numeric HWND can be destroyed and reused while the genuine physical
+// queue is being drained, or between provisional copy and final readback.
+// The initial gameThread check alone is insufficient: revalidate the
+// SAME owned OGLES root AND the current caller thread before accepting
+// either a DOWN record or a pending key-up/mouse-up record. Only ReleaseAll
+// may use the original root while hidden; it never admits a new active DOWN.
+constexpr bool rawSameOriginalGameThread(bool sameHwnd,bool sameThread) noexcept {
+    return sameHwnd && sameThread;
+}
+static_assert(rawSameOriginalGameThread(true,true));
+static_assert(!rawSameOriginalGameThread(true,false)); // HWND reused on another thread
+static_assert(!rawSameOriginalGameThread(false,true)); // replacement root, same thread
+static_assert(!rawSameOriginalGameThread(false,false));
+bool rawOriginalThreadStillOwns(HWND original,bool releaseOnly) {
+    if (!original) return false;
+    const HWND current=ownedGameWindow(releaseOnly);
+    return current && rawSameOriginalGameThread(
+        current==original,
+        GetWindowThreadProcessId(current,nullptr)==GetCurrentThreadId());
+}
+
 // GetRawInputBuffer accepts partial batches: the caller may provide room
 // for one RAWINPUT even when the current virtual plan has many transitions.
 // Advance ONLY the state represented by successfully copied records.
@@ -866,8 +887,13 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     // The last revision read follows currentPacket(), so a native
     // ReleaseAll or replacement write begun during the final sample
     // also cannot authorize copying stale DOWN/camera events.
+    // Even if Windows recycled the SAME numeric handle into a different
+    // OGLES thread, that replacement must never inherit this old thread's
+    // pending key-up/mouse-up or virtual cursor movement. Zero-record polls
+    // have no synthetic effect and need no extra Win32 lookup.
     const bool sameWindow=plan.coherent &&
-        (plan.count==0 || ownedGameWindow(word==0)==window);
+        (plan.count==0 || (gameThread &&
+            rawOriginalThreadStillOwns(window,word==0)));
     const auto latestWord=sameWindow?currentPacket():0;
     const auto latestRevision=sameWindow?
         view->cursorRevision.load(std::memory_order_seq_cst):0;
@@ -899,9 +925,15 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
         // cursors. A failed post-copy check withdraws the entire prefix.
         std::memcpy(data,plan.events.data(),bytes);
         const auto postCopyWord=currentPacket();
+        // An HWND/thread ownership change after the first check can
+        // occur during memcpy. Scrub the copied prefix and leave all raw
+        // cursors untouched unless this very same original game thread
+        // still owns the pinned root at post-copy admission.
+        const bool postCopySameWindow=
+            rawOriginalThreadStillOwns(window,word==0);
         const auto postCopyRevision=
             view->cursorRevision.load(std::memory_order_seq_cst);
-        if (!rawFinalCopyAllowed(plan.coherent,sameWindow,
+        if (!rawFinalCopyAllowed(plan.coherent,postCopySameWindow,
                 word,postCopyWord,plan.revision,postCopyRevision)) {
             // The output caller observes no synthetic records (return
             // count 0). Scrub the provisional bytes and NEVER advance

@@ -35,14 +35,15 @@ NOT_VERIFIED.
 - **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
   blocked; P65 synthetic counter; P66-P68 native 4/5-client
   attempted-slot, neutral-failure and MCP recovery integrity.
-  P69 gates the native reader on its owned OGLES root HWND. Subsequent
-  corrections latch physical-input isolation on first coherent active
-  publication, and now reject the **entire cursor epoch** after observed
-  deadline/focus/HWND failure. Merely incrementing a packet revision
-  within the rejected epoch cannot replay stale press counters or
-  accumulated look. The existing Rust writer owns the ReleaseAll/expiry
-  epoch boundary; no ABI, controller or default product build changed.
-  C++ assertions AUTHORED_NOT_EXECUTED; no runtime execution.
+  P69 gates the native reader on the OGLES root HWND; later hardening
+  latches physical-input isolation on the first coherent active packet
+  and rejects the entire cursor epoch after deadline/focus/HWND failure.
+  The latest source correction revalidates the **original OGLES HWND
+  and caller game-thread ownership** before and after copying a buffered
+  Raw Input prefix, so observed HWND reuse cannot transfer pending
+  key-up/mouse-up records to a replacement game thread. Hidden-window
+  release-only behavior remains intact. No ABI/controller/release change;
+  C++ assertions AUTHORED_NOT_EXECUTED.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -86,6 +87,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Raw Input pinned-thread revalidation | Same original OGLES HWND and game-thread owner are checked before and after provisional prefix copy; on observed replacement the copied records are scrubbed and read cursors stay unchanged; release-only still permits hidden original root | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input epoch fence | Reject whole cumulative press/look epoch after active source deadline/focus/HWND refusal; same-epoch heartbeats cannot replay rejected input. New Rust-owned epoch after neutral/expiry admits fresh input | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
 | Input isolation fail-closed | The existing C++ consumer now latches physical-input isolation after observing a coherent first active packet, even when its focus/HWND/TTL admission refuses it; neutral-only recovery does not latch | Compile-time negative assertions AUTHORED_NOT_EXECUTED; feature still compile-OFF |
 | P69 follow-up | Game-local C++ read path revokes an observed invalid active revision until a fresh controller write; rechecks human focus after HWND verification; zero-word key-up/mouse-up path unchanged | C++ static regression assertions AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -210,15 +212,16 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only audit of buffered Raw Input on the ORIGINAL 4/5-client
-input consumer after the epoch fence.** Pin fresh `Local` HEAD; trace
-one-record `GetRawInputBuffer` reads, key-up/mouse-up pending from a
-previously delivered DOWN, and one camera-only packet after an
-invalidated epoch. Preserve zero-word release for the same original
-OGLES game thread; no physical-queue fallback, stale press/delta or
-cross-client reattachment. Fix only an actual source defect in the
-existing C++/Rust owner and add bounded authored negative fixtures.
-Do not create a second writer, driver, daemon or speculative
-milestone ledger. Cua strict Invoke remains `BACKGROUND_UNAVAILABLE`.
-Node/Rust/C++ execution, builds, CI, packaging, installed Windows,
-Minecraft and five-client acceptance remain NOT_EXECUTED/NOT_VERIFIED.
+**Source-only review of Win32 virtual key/cursor return-time
+invalidation.** On a freshly pinned `Local`, trace the existing
+`currentPacket` / `virtualPressEdge` / `observedAsync` /
+`observedKey` / `observedKeyboard` consumer and the original Rust
+ReleaseAll transaction. An already-read key mask must not be
+published after a newer neutral/epoch revocation without a final
+same-publication check; ensure that a late failed poll never consumes
+newer press counts. Repair only a demonstrated defect in the same
+C++ reader with bounded authored negative fixtures. Preserve the
+original buffered Raw Input owner-thread and zero-word release,
+existing native Rust controller and ABI v4. Cua strict background
+action remains `BACKGROUND_UNAVAILABLE`; 4/5-client input is still
+compile-OFF, tests/builds/CI/Windows/Minecraft NOT_EXECUTED.
