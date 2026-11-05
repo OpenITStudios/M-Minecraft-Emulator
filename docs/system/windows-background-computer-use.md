@@ -236,6 +236,90 @@ information. No new action tool, token export, native controller
 change, Cua binary install, test execution or Minecraft input.
 Source fixtures were authored; not executed.
 
+**P62 architecture decision — reuse Cua upstream, no local driver fork
+(6 November 2026; REMOTE_GITHUB only).** The minimal owner of a
+potential strict Invoke action is Cua Driver's Windows tool registry
+(`platform-windows/src/tools/impl_.rs`) and its existing
+`ToolState.snapshots` / `cua-driver-core/src/snapshot_store.rs`.
+These already handle daemon-owned snapshots, a retained UIA element
+and PID/HWND window-ownership admission. The native session controller
+in Lazy Tester continues to own MC slot/birth/session identity; its
+MCP bridge remains the ONE stdio entrypoint. The existing Cua
+`get_window_state` read is not an action reservation.
+
+**Selected upstream design, not present in any installed binary:**
+a narrowly-scoped `invoke_element_strict` *candidate* in Cua's
+original registry (NOT a new Windows controller and NOT a new
+`click` alias). Its eventual API must accept one exact PID,
+root HWND, expected process birth FILETIME/session, and a
+provider-internal snapshot-bound element selector. No name-only
+target, bare row number, arbitrary client-supplied token, desktop
+scope, numeric coordinate, modifier, repeated click, or model-supplied
+fallback. The Cua operation itself must:
+1. Refuse when its tool capability, app-class focus isolation or
+   app-specific outcome contract is unavailable. In this revision
+   **all app classes remain unverified and non-executable**.
+2. Check expected process birth/session and original top-level
+   HWND ownership using OS-observed evidence at the native boundary
+   (not merely PID/HWND from a caller). Reconcile against the
+   original controller both before and after the bounded call.
+   Retain/resnapshot a uniquely identified, enabled UIA Button in
+   that same operation; refuse stale/replaced/ambiguous UIA rows.
+   A retained COM pointer alone does NOT prove live window identity
+   and pre/post checks cannot eliminate every race.
+3. On the actual execution path allow *only*
+   `IUIAutomationInvokePattern::Invoke` once; refuse unavailable
+   pattern/unsupported host without running `PostMessage`,
+   `SendInput`, pen/touch, Toggle/Selection/Expand, menu
+   activation, cursor overlay animation or focus/z-order
+   shims. No `fg_bypass` window-disable guard may be presumed
+   zero-disturbance without separate evidence.
+4. Return separate machine-readable distinctions:
+   `BACKGROUND_UNAVAILABLE` before any dispatch,
+   `OUTCOME_UNKNOWN_NO_RETRY` if dispatched/possibly dispatched
+   with missing ACK, timeout, lost identity or untrusted readback,
+   and `TARGET_POSTCONDITION_VERIFIED` only when a previously
+   declared, independent app-owned state change is confirmed.
+   The UIA Invoke COM return and Cua action `effect`/route
+   are **transport evidence only**, not task success.
+5. Require Windows evidence of no real cursor movement, keyboard
+   interception, window restacking or **transient** foreground
+   change for the specific target class. A simple before/after
+   foreground check misses brief focus theft. Unknown WPF, XAML,
+   Electron/Chromium and Minecraft UIA providers remain refused
+   until each relevant route is demonstrated safe.
+
+**Postcondition reuse decision:** Cua already exposes
+`verify_state` with bounded, stable window/element predicates via
+`cua-driver-core/src/expectation.rs`; reuse that where its
+readback is truly a declared application-owned outcome and matched
+to the exact native target. Its `satisfied` status alone **does
+not certify Minecraft gameplay**, app-internal state or
+nondisturbance. The current Minecraft target has no reviewed
+task-specific state oracle, so its strict action route remains
+`BACKGROUND_UNAVAILABLE`. If an app has no trusted typed oracle,
+do not invent one from UI label disappearance, screenshot hashes
+or a generic snapshot diff.
+
+**Compatibility / no-overdevelopment decision:** do not vendor Cua,
+add a second daemon, change the current MCP tool list, introduce
+an unpublished feature flag that appears to work, or invoke
+`click` / `invoke_menu` as a substitute. Prefer a source-reviewed
+upstream extension or maintainer-supported tool followed by an
+exact version/capability pin; only then consider a disabled-by-default
+MCP adapter in the existing owner. An undocumented local fork,
+a not-yet-released Rust tool or an arbitrary `cua-driver.exe`
+path is **not** an installed capability. Upstream feasibility,
+Windows focus isolation and exact postcondition are
+NOT_VERIFIED/NOT_EXECUTED.
+
+Specific Cua source evidence at
+`290552c6374da181314e26d69156198f7d48c0df`:
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/platform-windows/src/tools/impl_.rs
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/cua-driver-core/src/snapshot_store.rs
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/cua-driver-core/src/expectation.rs
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/docs/action-result-contract.md
+
 **P58 source-only implementation:** `inspect_client_ui({slot})`
 uses the existing configured Cua Driver `get_window_state`
 CLI with `include_screenshot:false` and up to 64 structured

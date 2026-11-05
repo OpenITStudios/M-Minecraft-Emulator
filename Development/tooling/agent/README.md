@@ -136,6 +136,25 @@ before dispatch. Any uncertain timeout after attempted action must
 be quarantined without replay. Source fixtures AUTHORED_NOT_EXECUTED;
 Windows nondisturbance NOT_VERIFIED.
 
+## P62 — Driver integration decision (SOURCE_ONLY)
+
+No existing Cua Windows `click`/`invoke_menu` call meets the
+strict no-fallback, no-focus contract; `get_window_state` tokens
+are not an atomic action lease. If implemented later, a
+**maintainer-supported Cua upstream `invoke_element_strict`**
+must reuse its original Windows tool registry, snapshot cache and
+window ownership checks, adding exact process-birth/session fences,
+one UIA Invoke transport with no alternative and independent
+application-owned readback. Reuse Cua `verify_state` only for
+reviewed typed target predicates, **never** as generic Minecraft
+gameplay confirmation. Focus/no-interruption requires separate
+Windows evidence, including transient activation checks; upstream
+`fg_bypass` is not such proof. In this revision no compatible
+provider or Minecraft postcondition is available. The existing MCP
+assessor remains `BACKGROUND_UNAVAILABLE`; no action, dependency,
+fork, daemon, test or release changes. Detailed owner/boundary
+decision is recorded in the existing Windows parity design.
+
 ## Efficient visual observation
 
 Use `start_visual_observation`, `get_multi_client_visual_state`,

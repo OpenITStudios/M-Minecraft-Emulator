@@ -34,9 +34,11 @@ NOT_VERIFIED.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
 - **Last source stages:** P58 `inspect_client_ui`, P59/P60 read-only
   `assess_client_background_action` with snapshot provenance,
-  P61 explicit refusal even for an Invoke-advertising Button:
-  no upstream Invoke-only transport or verified target-owned
-  postcondition. All AUTHORED_NOT_EXECUTED; no Windows action enabled.
+  P61 refusal for Invoke-advertising Buttons, P62 driver-integration
+  decision: upstream Cua's existing registry/snapshot/verification
+  owners only; no supported Invoke-only transport or Minecraft
+  target-owned oracle. P58-P61 fixtures AUTHORED_NOT_EXECUTED,
+  P62 design review SOURCE_ONLY; no Windows action enabled.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -80,6 +82,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P62 | Selected minimal upstream Cua registry/snapshot extension boundary; existing verify_state is conditional readback only; no safe provider exists yet | REMOTE_GITHUB design/source review; no code/tests executed |
 | P61 | Audit pinned/newer Cua paths; explicitly refuse even advertised Invoke candidates without no-fallback transport and app-owned readback | Authored negative fixtures, NOT_EXECUTED |
 | P60 | Check Cua snapshot/token/index at read; refuse unbound candidates; expose blocked non-Invoke-only delivery | Authored negative fixtures, NOT_EXECUTED |
 | P59 | Fix valid Cua UIA element index 0; add read-only strict-background Invoke assessment using fresh native-fenced UIA, without input/fallback | Authored negative fixtures, NOT_EXECUTED |
@@ -163,16 +166,17 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**P62: source-only design decision for a genuinely no-fallback,
-single-operation Invoke-only transport at the Cua boundary.** At fresh
-`Local` HEAD, review the minimal compatible upstream extension
-surface (`trycua/cua`), including strict no-fallback route,
-snapshot ownership, window/app-class focus isolation, bounded
-target-owned postcondition and refusal/uncertainty contract. Decide
-whether an upstream-provided primitive can be used without forking
-or adding a second native controller. If no independently supported
-route exists, preserve `BACKGROUND_UNAVAILABLE`; do NOT repackage
-generic `click` as safe or build speculative input backends.
-Only source/fixtures/docs within GitHub; no Node tests, local PC,
-CI, build, install, Windows/Codex/Minecraft actions. Separately
-authorize any eventual mutable runtime.
+**P63 — prepare a source-only upstream-compatible strict Invoke
+extension proposal, without wiring product input.** Use the pinned
+Cua Windows registry, snapshot resolver and UIA code to specify the
+minimum Rust contract and negative fixtures for a single-operation
+Invoke-only transport (no fallback, exact native birth/HWND/session
+revalidation and uncertain outcome), plus one explicitly chosen
+app-owned postcondition. This proposal is **not** permission to
+fork/install/execute Cua or to modify a third-party repository.
+Only promote to an actual adapter if a maintainer-supported
+upstream implementation and target-class focus safety have credible
+evidence; otherwise preserve `BACKGROUND_UNAVAILABLE`.
+No local Node tests, Windows/Codex/Minecraft runs, CI, builds,
+packages, login or user data access. Minecraft gameplay acceptance
+remains NOT_VERIFIED.
