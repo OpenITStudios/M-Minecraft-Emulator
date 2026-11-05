@@ -2218,6 +2218,19 @@ export function createHandler(config,{
       if (!gpuSource) {
         return visualObserver.start(slots,{intervalMs,durationMs});
       }
+      // Refuse invalid cadence before any native inspection or GPU spawn;
+      // the observer's own bounds still validate all provider modes.
+      if (!Number.isInteger(intervalMs) ||
+          intervalMs<OBSERVATION_LIMITS.minimumIntervalMs ||
+          intervalMs>OBSERVATION_LIMITS.maximumIntervalMs ||
+          !Number.isInteger(durationMs) ||
+          durationMs<OBSERVATION_LIMITS.minimumDurationMs ||
+          durationMs>OBSERVATION_LIMITS.maximumDurationMs) {
+        throw new TypeError('Visual observation timing is outside bounded range');
+      }
+      // The WGC producer needs spare frames, not a fixed 5 FPS for a slow
+      // on-demand reader. Keep up to 2x observer cadence, never above old 5.
+      const fps=Math.min(5,Math.max(1,Math.ceil(2000/intervalMs)));
       if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const startup={slots:[...slots],cancelled:false};
@@ -2232,7 +2245,7 @@ export function createHandler(config,{
           const target=validateNativeWindowTarget(
             await native(config.executable,'target',slot),slot);
           if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
-          await gpuSource.start(slot,target,{durationMs,fps:5});
+          await gpuSource.start(slot,target,{durationMs,fps});
           started.push(slot);
           if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
         }

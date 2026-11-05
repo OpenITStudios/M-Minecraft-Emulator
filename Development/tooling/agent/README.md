@@ -147,6 +147,25 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P48 — WGC frame rate follows actual observer demand (SOURCE_ONLY)
+
+The MCP worker admission previously launched WGC at a fixed 5 FPS even
+when the local observer only read one frame every 500–5000 ms. The same
+existing `start_visual_observation` route now derives producer FPS
+from the already bounded requested observer interval: at most **2×**
+its sampling rate, never more than the old **5 FPS** and never less
+than the native supported **1 FPS**. The default 500-ms WGC observer
+starts at 4 FPS; 400-ms high-frequency requests keep 5 FPS; slower
+1250-ms and 5000-ms requests start at 2 and 1 FPS respectively.
+This prevents avoidable PNG encoding, stdout transfer and downstream
+decoding in the source design. A fresh valid frame, native identity and
+source-age checks remain mandatory; FPS changes do not relax them.
+Invalid timing is now refused **before** opening any native WGC worker.
+No timer, dynamic config, provider, input feature or new controller.
+Fixtures are AUTHORED_NOT_EXECUTED; Windows frame freshness/performance
+remain NOT_MEASURED. A slower producer can add capture latency and
+must be checked during future authorized runtime acceptance.
+
 ## P47 — Linear bounded WGC frame assembly and one-time base64 (SOURCE_ONLY)
 
 The original WGC decoder used `Buffer.concat` for every stdout chunk,
