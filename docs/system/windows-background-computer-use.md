@@ -422,6 +422,61 @@ No local Rust test, CI, installed binary, Cua process, operator
 input, or Windows gameplay is exercised. The real product retains
 `BACKGROUND_UNAVAILABLE` until an upstream-supported implementation,
 native focus evidence, and an application-specific oracle exist.
+**P64 source-only upstream admission review (6 November 2026): BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE.**
+Cua upstream HEAD `a59783a45f1c9ec55cb33acb58f1bb7b54497c73`
+was checked against the P63 source pin
+`81f3e1bbc0d113c1a33a71b4150fb6ece6a5e9cd`.
+The upstream compare shows one intervening commit changing only
+Hyprland packaging and an Omarchy Dockerfile; the Windows
+registry, click/invoke_menu/set_value, snapshot store, verification
+contract and foreground-bypass implementation remained unchanged.
+The exact Windows registry/tool source contains no published
+`invoke_element_strict` (or equivalent no-fallback action).
+Evidence:
+https://github.com/trycua/cua/blob/a59783a45f1c9ec55cb33acb58f1bb7b54497c73/libs/cua-driver/rust/crates/platform-windows/src/tools/impl_.rs
+https://github.com/trycua/cua/blob/a59783a45f1c9ec55cb33acb58f1bb7b54497c73/libs/cua-driver/rust/crates/platform-windows/src/tools/click.rs
+https://github.com/trycua/cua/blob/a59783a45f1c9ec55cb33acb58f1bb7b54497c73/libs/cua-driver/rust/crates/platform-windows/src/tools/invoke_menu.rs
+https://github.com/trycua/cua/blob/a59783a45f1c9ec55cb33acb58f1bb7b54497c73/libs/cua-driver/rust/crates/platform-windows/src/uia/fg_bypass.rs
+https://github.com/trycua/cua/compare/81f3e1bbc0d113c1a33a71b4150fb6ece6a5e9cd...a59783a45f1c9ec55cb33acb58f1bb7b54497c73
+
+**Assessment against P63 (not executed):**
+- **Transport FAIL:** no dedicated single-Invoke tool; existing `click`
+  may dispatch `PostMessage`, other UIA patterns or injection.
+  `invoke_menu` explicitly activates foreground.
+- **Identity FAIL:** driver validates HWND owner PID and retained snapshot,
+  but does not currently expose the required atomic PID/birth/OS-session/
+  HWND + hosted-app-child verification at the COM dispatch boundary.
+- **Nondisturbance UNKNOWN:** UIA providers may steal focus;
+  documented WPF bypass limitation persists. No authorized Windows
+  observation of transient focus, cursor, keyboard or z-order changes.
+- **Outcome oracle MISSING:** P63's Win32 counter is a proposed future
+  fixture, **not a delivered or executed application**. No independently
+  reviewed Minecraft Education target-owned postcondition exists.
+  Cua `verify_state` alone cannot establish gameplay effect.
+- **Installed capability UNKNOWN:** an upstream source HEAD is not a
+  reviewed `cua-driver.exe`, release version or verified installed
+  interface; no Cua runtime was launched.
+
+**Decision:** continue to return `BACKGROUND_UNAVAILABLE` /
+`CUA_INVOKE_ONLY_ROUTE_NOT_AVAILABLE` from the existing read-only
+`assess_client_background_action`, even for
+`semanticCandidate:true`. No MCP tool, driver fork, daemon,
+`click` adapter, retry, native controller modification or unsafe
+foreground fallback is justified. P63's source proposal is the
+single design input if an upstream contribution is separately
+authorized; do not copy it into a second active backlog.
+
+**External dependency to unblock:** obtain a maintainer-supported
+upstream Invoke-only primitive with verifiable no-fallback transport
+and exact native fences, then separately verify its binary version,
+target-class nondisturbance and app-owned postcondition on authorized
+Windows. Alternatively, explicit operator authorization is needed
+before proposing/writing to `trycua/cua`; such authorization is not
+present here. No source tests, Windows, Codex or Minecraft executed.
+This P64 review closes the current bounded source-only action
+admission work; further stages should be evidence-triggered rather
+than repetitive source-status commits.
+
 **P58 source-only implementation:** `inspect_client_ui({slot})`
 uses the existing configured Cua Driver `get_window_state`
 CLI with `include_screenshot:false` and up to 64 structured
