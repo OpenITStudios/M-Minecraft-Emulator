@@ -10,6 +10,26 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P43 8-bit per-key rising-edge rollover refusal (5 November 2026,
+  SOURCE_ONLY):** The retained v4 shared-memory packet packs eight
+  8-bit press counters. The original optional C++ reader compares
+  these bytes, so 256 unpolled rising edges in one live epoch
+  could wrap to an earlier observed value and look unchanged.
+  The original Rust Channel now uses one checked all-or-nothing
+  next-counter computation BEFORE shared-memory or sequence
+  publication. Overflow of any field rejects the whole new
+  input packet rather than resetting an epoch with undelivered
+  button/camera events. Explicit neutral input, 500-ms packet
+  expiry, per-slot lease quarantine and healthy peers retain
+  their existing source contracts. Rust fixtures cover max
+  255, wrap refusal and independent eight-button bounds;
+  C++ consumer documents intentional coalescing, not
+  precise replay. AUTHORED_NOT_EXECUTED. No ABI v4,
+  IPC/controller, new input hook, profile, installer, CI,
+  Windows/Minecraft execution or feature activation.
+  See [agent P43](../Development/tooling/agent/README.md).
+
+
 - **P42 post-copy Raw Input state commit (5 November 2026,
   SOURCE_ONLY):** The optional P41 C++ Raw Input reader still had
   a narrow interval between its final packet/revision check

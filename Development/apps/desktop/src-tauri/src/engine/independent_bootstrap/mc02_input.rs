@@ -8,6 +8,27 @@ use crate::engine::native_clients_session::AgentControlMode;
 use std::sync::atomic::{AtomicI64, AtomicU64, AtomicU8, Ordering};
 use windows_sys::Win32::System::SystemInformation::GetTickCount64;
 
+// The ABI v4 pressCounts packs EIGHT 8-bit rising-edge counters. Both
+// Win32 asynchronous key polling and the buffered Raw Input reader compare
+// byte fields for inequality, so a 256th increment within one live cursor
+// epoch would silently wrap to the previously observed value.
+// Refuse the ENTIRE new packet before publishing any shared-memory state
+// rather than reset the epoch (which could discard other pending presses).
+// This may coalesce earlier presses but never misreports a wrap as no edge.
+fn checked_rising_press_counts(previous:u64,rising:u8)->Option<u64> {
+    let mut counts=previous;
+    for index in 0u32..8 {
+        if rising & (1u8<<index)!=0 {
+            let shift=index*8;
+            let prior=((counts>>shift)&0xff) as u8;
+            let next=prior.checked_add(1)?;
+            counts=(counts & !(0xffu64<<shift)) |
+                ((next as u64)<<shift);
+        }
+    }
+    Some(counts)
+}
+
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
 const VERSION: u32 = 4;
@@ -241,10 +262,8 @@ impl Channel {
             return Err(invalid("MC02 active input predates newer active input"));
         }
         let expires=(now as u32).wrapping_add(ttl_ms);
-        let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);
-        let word=((expires as u64)<<32) | ((dy as i8 as u8 as u64)<<24)
-             | ((dx as i8 as u8 as u64)<<16)
-             | ((sequence as u64)<<8) | keys as u64;
+        // Do not advance the command sequence before the shared-state
+        // edge counters have passed their all-or-nothing overflow gate.
         // The authenticated native controller is the ONLY writer. A fresh
         // input packet may overwrite the held button state, but it must NOT
         // erase cursor deltas that MC02 has not polled yet. Cursor totals
@@ -265,21 +284,25 @@ impl Channel {
         // GetAsyncKeyState bit 0 signals a press since its last read.
         // A last-writer-wins key mask loses short press/release sequences
         // when MC02 reads more slowly than the native command producer.
-        // Keep per-action (8-bit) rising-edge counts within the same
-        // live epoch. Reset at expiry to reject long-stale clicks.
+        // Keep per-action rising edges in 8-bit independent fields.
+        // The reader compares current and previously consumed byte
+        // values; wrap from 255->0 would alias zero even after 256
+        // presses without a game poll. Never manufacture a new epoch
+        // while old buttons/camera might still be pending. Fail closed
+        // before any shared state or command sequence changes.
         let previous_keys=if new_epoch {0u8} else {old as u8};
         let rising=(keys as u8) & !previous_keys;
-        let mut counts=if new_epoch {0u64} else {
+        let prior_counts=if new_epoch {0u64} else {
             input.press_counts.load(Ordering::SeqCst)
         };
-        for index in 0u32..8 {
-            if rising & (1u8 << index) != 0 {
-                let shift=index*8;
-                let previous=(counts >> shift) & 0xff;
-                let current=(previous+1) & 0xff;
-                counts=(counts & !(0xffu64 << shift)) | (current << shift);
-            }
-        }
+        let Some(counts)=checked_rising_press_counts(prior_counts,rising) else {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid("MC02 press edge count exhausted until input epoch reset"));
+        };
+        let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);
+        let word=((expires as u64)<<32) | ((dy as i8 as u8 as u64)<<24)
+             | ((dx as i8 as u8 as u64)<<16)
+             | ((sequence as u64)<<8) | keys as u64;
         // Odd revision = in-flight transaction. Publish keys/expiry BEFORE
         // returning to even; MC02 only accepts matching even snapshots.
         input.cursor_revision.fetch_add(1,Ordering::SeqCst);
@@ -302,5 +325,42 @@ impl Channel {
         self.last_active_issued_at_ms.fetch_max(issued_at_ms,Ordering::SeqCst);
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod rising_edge_counter_tests {
+    use super::checked_rising_press_counts;
+
+    #[test]
+    fn per_key_counter_rejects_wrap_before_any_partial_publish() {
+        let mut counts=0u64;
+        for _ in 0..254 {
+            counts=checked_rising_press_counts(counts,1).unwrap();
+        }
+        assert_eq!(counts,254);
+        assert_eq!(checked_rising_press_counts(counts,1),Some(255));
+        let max=checked_rising_press_counts(counts,1).unwrap();
+        assert_eq!(checked_rising_press_counts(max,1),None,
+            "256th rising edge must not alias the old zero value");
+        assert_eq!(checked_rising_press_counts(max,0),Some(max),
+            "no new edge leaves an exhausted field unchanged");
+        assert_eq!(checked_rising_press_counts(0,1),Some(1),
+            "only a genuine new input epoch restarts the counter");
+    }
+
+    #[test]
+    fn multiple_buttons_cannot_publish_partially_on_one_overflow() {
+        let first_at_limit=255u64 | (7u64<<8) | (41u64<<16);
+        assert_eq!(checked_rising_press_counts(first_at_limit,0b0000_0010),
+            Some(255u64 | (8u64<<8) | (41u64<<16)));
+        assert_eq!(checked_rising_press_counts(first_at_limit,0b0000_0001),None);
+        assert_eq!(checked_rising_press_counts(first_at_limit,0b0000_0011),None,
+            "a later bit cannot be incremented when another bit must fail");
+        // All eight independent fields work, including attack and use.
+        assert_eq!(checked_rising_press_counts(0,0xff),
+            Some(0x0101_0101_0101_0101));
+        assert_eq!(checked_rising_press_counts(u64::MAX,0xff),None);
+        assert_eq!(checked_rising_press_counts(u64::MAX,0),Some(u64::MAX));
     }
 }

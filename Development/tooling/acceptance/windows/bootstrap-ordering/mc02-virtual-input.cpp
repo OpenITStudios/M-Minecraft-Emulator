@@ -80,9 +80,14 @@ std::atomic_flag cursorReadBusy=ATOMIC_FLAG_INIT;
 std::uint64_t seenRevision=0,seenEpoch=0;
 std::int64_t seenX=0,seenY=0;
 #endif
-// Per-process read cursor for 8 key/mouse rising-edge counters. Separate
-// nonblocking guard from cursor movement: async key and camera reads may
-// run on different Minecraft threads without sharing a blocking lock.
+// Per-process read cursor for 8 key/mouse rising-edge counters. The
+// original Rust Channel now rejects the 256th rise of ANY 8-bit field
+// in one live cursor epoch BEFORE publishing a new packet. Byte-value
+// equality here and in RawPlan therefore cannot alias a wrapped 0 after
+// 256 new presses. Several presses before one poll STILL coalesce; this
+// does not certify how many game clicks or attacks occurred.
+// Separate nonblocking guard from cursor movement: async key and camera
+// reads may run on different Minecraft threads without sharing a lock.
 std::atomic_flag asyncReadBusy=ATOMIC_FLAG_INIT;
 std::uint64_t seenPressEpoch=0,seenPressCounts=0;
 using KeyCall=SHORT (WINAPI*)(int);

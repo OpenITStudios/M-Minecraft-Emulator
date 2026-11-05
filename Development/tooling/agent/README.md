@@ -147,6 +147,46 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P43 — Bounded rising-edge counts for rapid key and mouse transitions (SOURCE_ONLY)
+
+The original per-process Rust shared-input writer stores eight
+independent, **8-bit** rising-edge counters inside the unchanged
+96-byte ABI v4. The opted-in C++ Win32 and buffered Raw Input
+consumers compare the newest counter byte with their last observed
+byte. This coalesces rapid repeat presses when the game has not
+polled, but previously a 256th press in the SAME live cursor epoch
+silently wrapped the byte to its former value (for example 0),
+making those changes indistinguishable from no press.
+
+The retained original Rust channel now calculates **all eight
+next counter fields before publishing** any packet, epoch,
+cursor position or new sequence value. If a rising edge would
+overflow its 8-bit field, the entire write returns an explicit
+failure without changing mapped input state. Other fields cannot
+publish a partial update. The old active packet can expire under
+the existing <=500-ms deadline, and the retained P37/P38 neutral
+recovery remains available. A fresh native epoch after expiry
+or explicit ReleaseAll resets the ABI counters through the
+existing writer logic; the fix never invents an epoch merely
+to avoid an overflow, since that could drop unconsumed edges.
+
+The C++ consumer remains byte-comparison based and continues
+to coalesce rapid repeats into at most one reported press per
+poll: we do **not** claim accurate multi-click playback while
+the game is not polling. The reader's pending key-up ledger,
+release-first ordering, one-record buffer support and P39–P42
+packet/revision validation are unchanged. Pure Rust regression
+fixtures cover 254->255, refusal of 255->0, an untouched
+unrelated field, all eight fields including mouse buttons,
+and all-or-nothing failure for a multi-button rise.
+The fixtures are AUTHORED_NOT_EXECUTED; no Rust/C++ build,
+Windows native input, Minecraft Education sign-in or gameplay
+has been executed.
+
+No ABI or IPC schema change, new hook/controller, replay queue,
+profile/account/world modification, feature flag activation,
+installer migration or GitHub Actions workflow was introduced.
+
 ## P42 — Post-copy Raw Input state commit on partial reads (SOURCE_ONLY)
 
 After P41 the original optional C++ Raw Input consumer validates the
