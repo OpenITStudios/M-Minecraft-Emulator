@@ -149,6 +149,22 @@ static_assert(packetLiveAt(RolloverSample,0xfffffffEu));
 static_assert(!packetLiveAt(RolloverSample,4u));
 static_assert(!packetLiveAt(0,0u));
 
+// The controller verifies its exact original child and root HWND when
+// publishing a packet. The game window can nevertheless be destroyed,
+// hidden or replaced before an opted-in Win32 key/cursor poll. A current
+// time and revision alone must never authorize the old packet.
+// Reuse the existing same-process OGLES-root validator, without caching
+// a HWND across separate polls or admitting a different window.
+HWND ownedGameWindow(bool permitHiddenForRelease=false);
+constexpr bool activePacketAdmitted(bool originalRoot,bool sameRevision,
+                                   bool stillLive) noexcept {
+    return originalRoot && sameRevision && stillLive;
+}
+static_assert(activePacketAdmitted(true,true,true));
+static_assert(!activePacketAdmitted(false,true,true));
+static_assert(!activePacketAdmitted(true,false,true));
+static_assert(!activePacketAdmitted(true,true,false));
+
 std::uint64_t currentPacket() {
     if (!view) return 0;
     // Rust publishes packet, host HWND and input state inside one ABI-v4
@@ -173,13 +189,18 @@ std::uint64_t currentPacket() {
             static_cast<ULONG_PTR>(hostRaw));
         if (originalForeground()!=host) return 0;
     }
-    // Recheck AFTER the focus query. If the retained controller
-    // changed packet/window while we looked up physical foreground,
-    // discard the whole observation; retry only on a later game poll.
-    // The genuine foreground query may finish AFTER expiry while the
-    // shared revision remains unchanged. Reject that expired packet.
-    if (view->cursorRevision.load(std::memory_order_seq_cst)!=revision ||
-        !packetLiveAt(word,GetTickCount())) return 0;
+    // KeyState/AsyncKeyState/KeyboardState and cursor hooks previously
+    // skipped the exact AI root check used by focus and buffered Raw Input.
+    // A live packet from an old HWND must not drive a newly replaced or
+    // hidden game window, even though PID/birth and the input lease match.
+    // Perform Win32 identity calls ONLY for an active packet, then sample
+    // the same publication revision again to reject concurrent updates.
+    // This performs no OS input and cannot raise/activate any window.
+    const bool originalRoot=ownedGameWindow()!=nullptr;
+    const bool sameRevision=
+        view->cursorRevision.load(std::memory_order_seq_cst)==revision;
+    if (!activePacketAdmitted(originalRoot,sameRevision,
+                             packetLiveAt(word,GetTickCount()))) return 0;
     return word;
 }
 // A background game may skip its Win32 input polling loop after comparing
@@ -190,7 +211,7 @@ std::uint64_t currentPacket() {
 // resolve a hidden/minimized window solely to complete pending key-up
 // and mouse-button UP records when currentPacket()==0. This never
 // activates that window, changes focus or routes physical MC01 input.
-HWND ownedGameWindow(bool permitHiddenForRelease=false) {
+HWND ownedGameWindow(bool permitHiddenForRelease) {
     if (!view) return nullptr;
     const auto raw=view->aiWindow.load(std::memory_order_seq_cst);
     if (!raw) return nullptr;

@@ -33,13 +33,13 @@ NOT_VERIFIED.
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
 - **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
-  blocked; P65 manual-only synthetic counter; P66 native CLI tracks
-  IPC-attempted groups; P67 actor reports failed group neutral release.
-  P68 reviews the existing MCP cleanup and adds exact actor-error
-  propagation + whole-cohort quarantine/explicit-recovery fixtures for
-  both 4-AI and 5-AI modes. No production MCP change is warranted by
-  reviewed source. All fixtures AUTHORED_NOT_EXECUTED; no Windows/game
-  execution.
+  blocked; P65 synthetic counter; P66-P68 native 4/5-client
+  attempted-slot, neutral-failure and MCP recovery integrity.
+  **P69 closes a native reader gap:** Win32 keyboard/cursor hooks
+  now reuse the exact OGLES-root HWND check already used by focus
+  and buffered Raw Input before accepting a still-live AI packet.
+  C++ negative static assertions AUTHORED_NOT_EXECUTED, no Windows/game
+  execution or new backend.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -83,6 +83,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P69 | C++ virtual key/cursor packet admission now verifies current exact owned, visible OGLES root HWND at read-time; rejects replacement/hidden roots without input fallback | Compile-time negative assertions AUTHORED_NOT_EXECUTED; experiment remains OFF |
 | P68 | Reviewed P67 actor -> CLI -> MCP failure path; added 4/5-AI regression for allowlisted AI_RELEASE_UNCONFIRMED, independent neutrals, quarantine, no replay and explicit recovery | Authored Node fixture NOT_EXECUTED; existing production MCP path unchanged |
 | P67 | Controller partial-group failure no longer hides failed neutral writes; every attempted slot still gets one best-effort release, and CLI preserves exact AI_RELEASE_UNCONFIRMED status | Rust negative fixtures authored, NOT_EXECUTED; compile-OFF |
 | P66 | Native multi-client batch records possibly touched slots only after final per-group deadline gate, just before IPC; retains uncertain per-group cleanup | Rust negative fixture authored, NOT_EXECUTED; experiment remains compile-OFF |
@@ -176,9 +177,9 @@ No source-only review may mark these runtime gates PASS.
 This is a **dependency order, not authorization for runtime work or a
 second active backlog**. Develop only one source-proven issue at a time:
 
-1. **Current P68: error and recovery boundary** — P66/P67 native
-   attempted-slot/release corrections, then exact MCP propagation and
-   regression fixtures; no new transport.
+1. **Completed P66–P69: native input integrity** — source corrections
+   for attempted-slot/release safety, exact MCP error/quarantine and
+   per-poll live root HWND checks; no new transport.
 2. **Source hardening on demand** — audit the *original* 4/5-client
    controller, CLI scheduler and per-client consumer for real remaining
    identity, epoch, deadline, cross-slot or key-up defects. Change only
@@ -203,14 +204,15 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**P69 — source-only evaluate one remaining native group lifecycle
-invariant.** Re-pin `Local`; compare the controller's exact
-per-client lease epoch, release watermark and pending group timeout
-to the shared-memory writer and game-reader's fail-closed contracts.
-Change only a demonstrated error in the existing owner plus negative
-fixtures; if no concrete defect is found, STOP instead of adding
-features or status churn. Continue preserving
-`BACKGROUND_UNAVAILABLE` for Cua, compile-OFF native input,
-protected hybrid MC01, and unchanged profile/account/world data.
-No Node/Rust/C++ tests, builds, CI, installers, Windows/Codex/
-Minecraft activity or releases without separate authorization.
+**Source-only integrate and review the original buffered Raw Input
+release and game-thread admission path against the same current
+owned OGLES root invariant.** Pin fresh `Local` HEAD, compare
+`currentPacket`, `ownedGameWindow`, `observedRawBuffer` and
+the original Rust `Channel::release_all` / input expiry contracts.
+Correct only a demonstrated gap; do not create a new driver,
+independent controller or speculative milestone counter. Maintain
+existing zero-word pending key-up/mouse-up behavior even if the
+original window becomes hidden, and never release an unrelated HWND.
+Cua strict Invoke remains `BACKGROUND_UNAVAILABLE`.
+Native input is compile-OFF; Node/Rust/C++ tests, build, CI,
+install and Windows/Codex/Minecraft execution NOT_AUTHORIZED.
