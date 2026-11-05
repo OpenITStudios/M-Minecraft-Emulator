@@ -63,8 +63,10 @@ The selected original game window must remain independently
 identical (PID, birth, Windows session and root HWND) across reads.
 
 - Capture providers retain at most one relevant bounded PNG per slot;
-  CUA and native WGC share a **3 MiB lossless PNG** limit. The observer
-  and MCP image response use the same **4 MiB base64** ceiling.
+  CUA and native WGC share a **3 MiB lossless PNG** limit. CUA reads
+  exactly the admitted file length and refuses changed or incomplete
+  output, instead of unbounded `FileHandle.readFile()` after a size check.
+  The observer and MCP image response share a **4 MiB base64** ceiling.
   Oversize, expired, replaced or inconsistent frames fail closed.
 - WGC frames use the existing bounded `LTG1` protocol. Invalid
   timestamps are refused from the fixed header before allocating PNG

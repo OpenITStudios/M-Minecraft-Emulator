@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {inspectPng,validateCuaExecutable,buildCuaWindowQuery,MAX_PNG_BYTES} from './visual-capture.mjs';
+import {inspectPng,validateCuaExecutable,buildCuaWindowQuery,MAX_PNG_BYTES,readBoundedPng} from './visual-capture.mjs';
 
 const png1x1=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6YQAAAAASUVORK5CYII=',
@@ -27,6 +27,50 @@ test('Cua preview targets one exact window without modifying action snapshots',(
   assert.equal(query.scope,undefined);
   assert.throws(()=>buildCuaWindowQuery({pid:0,windowId:1234}));
   assert.throws(()=>buildCuaWindowQuery({pid:42,windowId:0}));
+});
+
+test('Cua reads only the stat-pinned number of PNG bytes with short reads',async()=>{
+  const stat={isFile:()=>true,size:BigInt(png1x1.length),
+    dev:1n,ino:2n,mtimeNs:100n,ctimeNs:100n};
+  let reads=0;
+  const handle={
+    stat:async()=>stat,
+    read:async(buffer,offset,length,position)=>{
+      reads++;
+      const count=Math.min(length,7);
+      png1x1.copy(buffer,offset,position,position+count);
+      return {bytesRead:count};
+    },
+  };
+  const bytes=await readBoundedPng(handle);
+  assert.deepEqual(bytes,png1x1);
+  assert.ok(reads>1);
+  assert.equal(inspectPng(bytes).width,1);
+});
+
+test('Cua rejects changed, oversized and truncated PNG files without output',async()=>{
+  const stat={isFile:()=>true,size:BigInt(png1x1.length),
+    dev:1n,ino:2n,mtimeNs:100n,ctimeNs:100n};
+  let stats=0;
+  const changed={
+    stat:async()=>++stats===1?stat:{...stat,mtimeNs:101n},
+    read:async(buffer,offset,length,position)=>{
+      const count=Math.min(length,png1x1.length-position);
+      png1x1.copy(buffer,offset,position,position+count);
+      return {bytesRead:count};
+    },
+  };
+  await assert.rejects(()=>readBoundedPng(changed),/changed/);
+  let readCalled=false;
+  const oversized={
+    stat:async()=>({...stat,size:BigInt(MAX_PNG_BYTES+1)}),
+    read:async()=>{readCalled=true;throw Error('must not read oversized file');},
+  };
+  await assert.rejects(()=>readBoundedPng(oversized),/budget/);
+  assert.equal(readCalled,false);
+  await assert.rejects(()=>readBoundedPng({
+    stat:async()=>stat,read:async()=>({bytesRead:0}),
+  }),/incomplete/);
 });
 
 test('PNG observation validates signature, dimensions and bounded source',()=>{

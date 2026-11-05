@@ -38,6 +38,38 @@ export function inspectPng(bytes) {
     sha256:createHash('sha256').update(bytes).digest('hex')};
 }
 
+// Read an already-existing screenshot with an explicit 3 MiB allocation
+// ceiling. FileHandle.readFile() would not make the size fixed by OUR
+// admission contract if the captured file changed after its initial stat.
+// Check the same opened file again after full positional reads.
+export async function readBoundedPng(handle) {
+  const before=await handle.stat({bigint:true});
+  if (!before.isFile() || before.size<33n ||
+      before.size>BigInt(MAX_PNG_BYTES)) {
+    throw new Error('Cua frame changed or exceeds the PNG budget');
+  }
+  const length=Number(before.size);
+  const bytes=Buffer.allocUnsafe(length);
+  let position=0;
+  while(position<length) {
+    const {bytesRead}=await handle.read(bytes,position,
+      length-position,position);
+    if (!Number.isSafeInteger(bytesRead) || bytesRead<1 ||
+        bytesRead>length-position) {
+      throw new Error('Cua frame incomplete during bounded read');
+    }
+    position+=bytesRead;
+  }
+  const after=await handle.stat({bigint:true});
+  if (!after.isFile() || after.dev!==before.dev ||
+      after.ino!==before.ino || after.size!==before.size ||
+      after.mtimeNs!==before.mtimeNs ||
+      after.ctimeNs!==before.ctimeNs) {
+    throw new Error('Cua frame changed during bounded read');
+  }
+  return bytes;
+}
+
 export function buildCuaWindowQuery(target) {
   if (!target || !Number.isSafeInteger(target.pid) || target.pid<1 ||
       !Number.isSafeInteger(target.windowId) || target.windowId<1) {
@@ -86,11 +118,7 @@ export async function captureCuaWindow(cuaExecutable,target) {
     const handle=await open(screenshotPath,'r');
     let bytes;
     try {
-      const current=await handle.stat();
-      if (!current.isFile() || current.size<33 || current.size>MAX_PNG_BYTES) {
-        throw new Error('Cua frame file changed while opening');
-      }
-      bytes=await handle.readFile();
+      bytes=await readBoundedPng(handle);
     } finally {await handle.close();}
     const details=inspectPng(bytes);
     return {
