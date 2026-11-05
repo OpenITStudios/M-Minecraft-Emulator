@@ -53,6 +53,12 @@ static_assert(
     offsetof(SharedInput,pressCounts)==88 ,
     "SharedInput v4 offsets must match the Rust native writer");
 const SharedInput* view=nullptr;
+// An observed stale/invalid active revision may NEVER become live again
+// merely because focus or HWND visibility returns before its 500-ms TTL.
+// Only another independently admitted native publication increments the
+// controller-owned 64-bit revision. Keep this game-process-local watermark,
+// not a shared ABI field or a second controller/lease registry.
+std::atomic<std::uint64_t> rejectedThroughRevision{0};
 std::atomic<bool> isolated{false}; // latched after first valid AI command
 std::atomic<bool> cursorInitialized{false};
 std::atomic<LONG> virtualX{0},virtualY{0};
@@ -164,6 +170,26 @@ static_assert(activePacketAdmitted(true,true,true));
 static_assert(!activePacketAdmitted(false,true,true));
 static_assert(!activePacketAdmitted(true,false,true));
 static_assert(!activePacketAdmitted(true,true,false));
+constexpr bool freshNativePublication(std::uint64_t revision,
+                                      std::uint64_t rejectedThrough) noexcept {
+    return revision!=0 && revision>rejectedThrough;
+}
+static_assert(freshNativePublication(4,2));
+static_assert(!freshNativePublication(4,4));
+static_assert(!freshNativePublication(4,6));
+// Multiple Minecraft polling threads may reject different revisions at
+// once. A late rejection of an OLD revision must not overwrite an earlier
+// rejection of a NEWER one. C++17 has no atomic fetch_max; use bounded
+// compare-exchange on this single process-local 64-bit watermark.
+void rejectActiveRevisionIfCurrent(std::uint64_t revision) {
+    if (!view || !revision ||
+        view->cursorRevision.load(std::memory_order_seq_cst)!=revision) return;
+    auto previous=rejectedThroughRevision.load(std::memory_order_seq_cst);
+    while (previous<revision &&
+           !rejectedThroughRevision.compare_exchange_weak(
+               previous,revision,std::memory_order_seq_cst,
+               std::memory_order_seq_cst)) {}
+}
 
 std::uint64_t currentPacket() {
     if (!view) return 0;
@@ -176,31 +202,39 @@ std::uint64_t currentPacket() {
     if (!revision || (revision&1)) return 0;
     const auto word=view->packet.load(std::memory_order_seq_cst);
     const auto hostRaw=view->humanWindow.load(std::memory_order_seq_cst);
-    const DWORD now=GetTickCount();
-    if (!packetLiveAt(word,now) || !originalForeground) return 0;
-    // Human focus is not merely checked when the controller writes.
-    // Use the real Win32 trampoline: a spoofed game-local focus read
-    // must never authorize background MC02 against physical MC01 input.
-    // A nonzero host HWND denotes hybrid and demands the real MC01
-    // foreground. Zero is reserved for an explicitly opted-in five-AI
-    // channel; no global foreground or physical input is synthesized.
-    if (hostRaw) {
-        const auto host=reinterpret_cast<HWND>(
-            static_cast<ULONG_PTR>(hostRaw));
-        if (originalForeground()!=host) return 0;
+    // An expired packet might look live again after the 32-bit uptime
+    // counter wraps. Once observed expired, revoke THIS revision for the
+    // lifetime of this game process; a fresh native publication can advance.
+    if (!word) return 0;
+    if (!freshNativePublication(revision,
+         rejectedThroughRevision.load(std::memory_order_seq_cst))) return 0;
+    if (!packetLiveAt(word,GetTickCount()) || !originalForeground) {
+        rejectActiveRevisionIfCurrent(revision);
+        return 0;
     }
-    // KeyState/AsyncKeyState/KeyboardState and cursor hooks previously
-    // skipped the exact AI root check used by focus and buffered Raw Input.
-    // A live packet from an old HWND must not drive a newly replaced or
-    // hidden game window, even though PID/birth and the input lease match.
-    // Perform Win32 identity calls ONLY for an active packet, then sample
-    // the same publication revision again to reject concurrent updates.
-    // This performs no OS input and cannot raise/activate any window.
+    // Only the genuine Win32 foreground is authoritative for the hybrid
+    // human MC01; five-AI has no artificial human foreground requirement.
+    const HWND host=hostRaw?reinterpret_cast<HWND>(
+        static_cast<ULONG_PTR>(hostRaw)):nullptr;
+    if (host && originalForeground()!=host) {
+        rejectActiveRevisionIfCurrent(revision);
+        return 0;
+    }
+    // Check the exact root AFTER focus, and recheck focus AFTER potentially
+    // delayed Win32 HWND/class lookups. Loss of either condition rejects
+    // this publication permanently; do not silently resume a stale held
+    // key/camera delta when the original window returns.
     const bool originalRoot=ownedGameWindow()!=nullptr;
     const bool sameRevision=
         view->cursorRevision.load(std::memory_order_seq_cst)==revision;
-    if (!activePacketAdmitted(originalRoot,sameRevision,
-                             packetLiveAt(word,GetTickCount()))) return 0;
+    const bool stillLive=packetLiveAt(word,GetTickCount());
+    const bool humanFocusIntact=!host || originalForeground()==host;
+    if ((!originalRoot || !stillLive || !humanFocusIntact) && sameRevision)
+        rejectActiveRevisionIfCurrent(revision);
+    if (!activePacketAdmitted(originalRoot&&humanFocusIntact,
+                              sameRevision,stillLive) ||
+        !freshNativePublication(revision,
+         rejectedThroughRevision.load(std::memory_order_seq_cst))) return 0;
     return word;
 }
 // A background game may skip its Win32 input polling loop after comparing
