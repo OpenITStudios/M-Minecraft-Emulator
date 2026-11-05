@@ -16,7 +16,7 @@ import {inputExecutionStatus} from './input-delivery.mjs';
 import {projectAgentActivity} from './activity-status.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
-import {captureCuaWindow,validateCuaExecutable} from './visual-capture.mjs';
+import {captureCuaWindow,inspectCuaWindowElements,validateCuaExecutable} from './visual-capture.mjs';
 import {validateDiagnosticsRoot,diagnosticsOverview,listDiagnosticIssues,
   getDiagnosticIssue,queryDiagnosticEvidence} from './diagnostics-local.mjs';
 import {validateTestingArchiveRoot,archiveTestingResult,
@@ -1089,6 +1089,7 @@ export const TOOL_LIST=[
     },required:['frameSequence','sourceFrameAtMs','identity','recognizedLine'],additionalProperties:false},
   },required:['slot'],additionalProperties:false}},
   {name:'stop_visual_observation',description:'Stop one or more bounded visual samplers and immediately drop their in-memory image caches.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}}},required:['slots'],additionalProperties:false}},
+  {name:'inspect_client_ui',description:'Read up to 64 UI Automation elements from ONE verified AI-owned Minecraft window via configured Cua Driver. No screenshot, game input, foreground actions, credentials, or action tokens. Incomplete/empty trees remain UNVERIFIED.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'observe_client',description:'Read-only screenshot of one AI-owned native Minecraft window via an explicitly configured Cua Driver daemon; rejects a replaced or stale window, never takes foreground or sends input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'get_computer_use_target',description:'Resolve one AI-owned native Minecraft PID/HWND for read-only Cua Driver window capture without switching Windows focus. Does NOT capture pixels or control game input.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'revalidate_computer_use_target',description:'Check a previously resolved exact PID/HWND/birth identity against current retained-controller observation. Never silently retarget another game.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},pid:{type:'integer',minimum:1},windowId:{type:'integer',minimum:1},createdFileTime:{type:'string',pattern:'^[0-9]{1,20}$'}},required:['slot','pid','windowId','createdFileTime'],additionalProperties:false}},
@@ -1265,7 +1266,7 @@ const EXPERIMENTAL_TEAM_FEEDBACK_TOOL={
 
 function capabilities(mode,experimental=false,multi=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
+  available:['start_visual_observation','read_visual_observation','get_multi_client_visual_state','stop_visual_observation','inspect_client_ui','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','inspect_profiles','launch_profile','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence',...(experimental?[EXPERIMENTAL_MC02_TOOL.name,...EXPERIMENTAL_MC02_SEQUENCE_TOOLS.map(t=>t.name)]:[]),
     ...(multi?[...EXPERIMENTAL_MULTI_CLIENT_TOOLS.map(t=>t.name),
       EXPERIMENTAL_OBSERVED_TEAM_TOOL.name,
       EXPERIMENTAL_TEAM_FEEDBACK_TOOL.name]:[])],
@@ -1319,6 +1320,7 @@ export function operatorNextTestingAction(result) {
 
 export function createHandler(config,{
   native=runNative,evidence=readGameEvidence,capture=captureCuaWindow,
+  inspectCua=inspectCuaWindowElements,
   mc02Input=sendExperimentalMc02Native,
   mc02Batch=sendExperimentalMc02BatchNative,
   aiInput=sendExperimentalAiNative,
@@ -2399,6 +2401,34 @@ export function createHandler(config,{
       return cancelStartup ? {...response,
         status:'STARTUP_CANCELLATION_REQUESTED',
         startOutcome:'UNCONFIRMED_UNTIL_START_REQUEST_SETTLES'} : response;
+    }
+    if (name==='inspect_client_ui') {
+      keysExactly(args,['slot']);
+      const slot=slotOf(args.slot);
+      protectedSlot(slot);
+      if(!config.cuaExecutable) {
+        return {schema:1,slot,status:'BACKGROUND_UNAVAILABLE',
+          reason:'CUA_UIA_NOT_CONFIGURED',
+          screenshotCaptured:false,actionPermitted:false,
+          gameplayInput:'NOT_VERIFIED'};
+      }
+      if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
+      // Use the existing one-native-read gate. This semantic read neither
+      // owns game lifecycle nor introduces a second input/visual scheduler.
+      visualReadBusy=true;
+      try {
+        const before=validateNativeWindowTarget(
+          await native(config.executable,'target',slot),slot);
+        const ui=await inspectCua(config.cuaExecutable,before);
+        const after=validateNativeWindowTarget(
+          await native(config.executable,'target',slot),slot);
+        requireOpen();
+        if(!sameNativeVisualTarget(after,before)) {
+          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+        }
+        return {...ui,slot,identity:{pid:after.pid,windowId:after.windowId,
+          createdFileTime:after.createdFileTime,sessionId:after.sessionId}};
+      } finally {visualReadBusy=false;}
     }
     if (name==='observe_client') {
       keysExactly(args,['slot']);

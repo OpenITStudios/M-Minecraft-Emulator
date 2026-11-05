@@ -115,11 +115,25 @@ https://github.com/trycua/cua/blob/main/libs/cua-driver/rust/Skills/cua-driver/W
 | `src-tauri/src/engine/agent_cli.rs` + `native_clients_session.rs` | Original authenticated process/session authority | Never replace native PID/HWND/birth/session, user-mode control or writer lease with third-party window names |
 | `mc02-virtual-input.cpp` and original per-client writer | Existing compile-OFF experimental Minecraft keyboard/cursor/Raw-buffer polling paths | Minecraft game input consumption remains NOT_VERIFIED; UIA may control menus but cannot be asserted to drive gameplay |
 
-**Only one smallest complete future change at a time:** inspect exact
-Cua Driver MCP/CLI tool input and result schemas; then add a
-source-only bounded, read-only semantic target inspection using the
-original native target and explicit Cua executable, with a fail-closed
-contract. A later, separately reviewed step may permit **only** explicit
+**P58 upstream source pin:** Cua Driver `trycua/cua` `main` at
+`044f528265234d255f0792d4929b434b5e9adf8e` (source reviewed
+on 5 November 2026). Exact Windows
+`get_window_state` and CLI `run_call` source were inspected:
+https://github.com/trycua/cua/blob/044f528265234d255f0792d4929b434b5e9adf8e/libs/cua-driver/rust/crates/platform-windows/src/tools/get_window_state.rs
+https://github.com/trycua/cua/blob/044f528265234d255f0792d4929b434b5e9adf8e/libs/cua-driver/rust/crates/cua-driver/src/cli.rs
+The source indicates `structuredContent` is printed as JSON and a
+tree-only call avoids PNG capture; **installed Cua binary compatibility
+remains NOT_VERIFIED**.
+
+**P58 source-only implementation:** `inspect_client_ui({slot})`
+uses the existing configured Cua Driver `get_window_state`
+CLI with `include_screenshot:false` and up to 64 structured
+UIA elements/depth 10. The original native controller verifies
+PID/HWND/birth/session **before and after** the read. Raw values, window
+titles, screenshot bytes, action tokens and untrusted diagnostics are
+not exported. Empty or incomplete trees remain unverified. This
+does not drive a window or game and Windows behavior is NOT_EXECUTED.
+A later, separately reviewed step may permit **only** explicit
 UIA/window actions with `delivery_mode:"background"`, exact
 snapshot/identity fencing and target-owned readback. Do not import the
 whole Cua runtime or introduce a generic session manager into Lazy

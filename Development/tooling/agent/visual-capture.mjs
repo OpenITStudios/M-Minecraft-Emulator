@@ -70,6 +70,97 @@ export async function readBoundedPng(handle) {
   return bytes;
 }
 
+// Source-only semantic inspection of ONE already-verified native window.
+// Never takes a screenshot, controls Windows input, or returns provider raw
+// value text, window titles, screenshot data or action-ready element tokens.
+const CUA_UIA_MAX_ELEMENTS=64;
+const CUA_UIA_MAX_DEPTH=10;
+const CUA_UIA_MAX_STDOUT_BYTES=64*1024;
+const CUA_UIA_LABEL_ROLES=new Set([
+  'Button','MenuItem','TabItem','CheckBox','RadioButton','Hyperlink',
+]);
+const CUA_UIA_ACTIONS=new Set([
+  'invoke','toggle','select','expand','collapse','set_value',
+]);
+export function buildCuaSemanticWindowQuery(target) {
+  // An unrelated window name is never sufficient authority; the caller
+  // pins the original controller's PID/HWND/birth/session before and after.
+  if (!target || !Number.isSafeInteger(target.pid) || target.pid<1 ||
+      !Number.isSafeInteger(target.windowId) || target.windowId<1) {
+    throw new TypeError('Native verified PID and HWND are required');
+  }
+  return {pid:target.pid,window_id:target.windowId,
+    include_accessibility_tree:true,include_screenshot:false,
+    tree_format:'elements',max_elements:CUA_UIA_MAX_ELEMENTS,
+    max_depth:CUA_UIA_MAX_DEPTH,timeout_ms:3000};
+}
+export function projectCuaSemanticWindow(result,target) {
+  const fail=()=>{throw new Error('CUA_UIA_READ_UNAVAILABLE');};
+  if (!result || Array.isArray(result) || typeof result!=='object' ||
+      result.pid!==target?.pid || result.window_id!==target?.windowId ||
+      !Array.isArray(result.elements) ||
+      result.elements.length>CUA_UIA_MAX_ELEMENTS ||
+      typeof result.elements_complete!=='boolean' ||
+      (result.degraded!==undefined && typeof result.degraded!=='boolean') ||
+      (result.truncated!==undefined && typeof result.truncated!=='boolean') ||
+      result.screenshot_png_b64!==undefined ||
+      result.screenshot_file_path!==undefined ||
+      result.screenshot_mime_type!==undefined) fail();
+  const elements=result.elements.map(row=>{
+    if (!row || Array.isArray(row) || typeof row!=='object' ||
+        !Number.isInteger(row.element_index) || row.element_index<1 ||
+        row.element_index>5000 ||
+        typeof row.role!=='string' || row.role.length>64 ||
+        (row.actions!==undefined &&
+          (!Array.isArray(row.actions) || row.actions.length>12 ||
+           row.actions.some(a=>typeof a!=='string' || a.length>40)))) fail();
+    const role=row.role.replace(/[^a-zA-Z0-9 ]/g,'').slice(0,40);
+    const actions=(row.actions??[]).filter(a=>CUA_UIA_ACTIONS.has(a));
+    // Cua may fall back to a field's *value* for its label; never
+    // expose an edit/document/value contents as the AI's button label.
+    const label=CUA_UIA_LABEL_ROLES.has(role) &&
+      typeof row.label==='string' && row.label!==row.value ?
+      row.label.replace(/[\x00-\x1f\x7f\u202a-\u202e]/g,' ')
+        .trim().slice(0,80):null;
+    return {index:row.element_index,role,label,
+      enabled:typeof row.enabled==='boolean'?row.enabled:null,
+      actions};
+  });
+  const partial=result.elements_complete!==true ||
+    result.truncated===true || result.degraded===true;
+  return {schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
+    status:elements.length===0?'UIA_EMPTY_OR_UNAVAILABLE':
+      partial?'UIA_PARTIAL_UNVERIFIED':'UIA_ELEMENTS_READ_UNVERIFIED',
+    elementsComplete:!partial,
+    elements,
+    screenshotCaptured:false,actionPermitted:false,
+    gameplayInput:'NOT_VERIFIED'};
+}
+export async function inspectCuaWindowElements(cuaExecutable,target,{
+  platform=process.platform,statFile=lstat,execute=execFileAsync,
+}={}) {
+  validateCuaExecutable(cuaExecutable);
+  if(platform!=='win32')throw new Error('CUA_UIA_WINDOWS_ONLY');
+  const query=buildCuaSemanticWindowQuery(target);
+  // Same existing daemon-backed, allowlisted Cua Driver executable. Never
+  // auto-start a daemon or use an arbitrary command/target supplied by Codex.
+  const imageStat=await statFile(cuaExecutable);
+  if(!imageStat.isFile() || imageStat.isSymbolicLink()) {
+    throw new Error('CUA_UIA_READ_UNAVAILABLE');
+  }
+  let output;
+  try {
+    output=await execute(cuaExecutable,
+      ['call','get_window_state',JSON.stringify(query)],
+      {shell:false,windowsHide:true,timeout:7000,
+        maxBuffer:CUA_UIA_MAX_STDOUT_BYTES});
+  } catch {throw new Error('CUA_UIA_READ_UNAVAILABLE');}
+  let structured;
+  try {structured=JSON.parse(output.stdout.trim());}
+  catch {throw new Error('CUA_UIA_READ_UNAVAILABLE');}
+  return projectCuaSemanticWindow(structured,target);
+}
+
 export function buildCuaWindowQuery(target) {
   if (!target || !Number.isSafeInteger(target.pid) || target.pid<1 ||
       !Number.isSafeInteger(target.windowId) || target.windowId<1) {

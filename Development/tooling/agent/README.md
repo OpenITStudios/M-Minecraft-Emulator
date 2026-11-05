@@ -52,6 +52,21 @@ must not be reset during development.
 - Do not publish status as verified native gameplay, world identification
   or five-client acceptance.
 
+## P58 — Read-only semantic Windows UIA inspection (SOURCE_ONLY)
+
+The existing MCP now advertises `inspect_client_ui({slot})` for one
+AI-owned native window, only when the configured Cua Driver is available.
+It brackets `get_window_state` with the original native controller's
+PID/HWND/birth/session verification, requests `include_screenshot:false`,
+and limits UIA to 64 nodes / depth 10. It returns small, allowlisted
+control roles, selected button/menu labels, enabled flags, and advertised
+pattern names. All edit/password values, window titles, snapshot action
+tokens, raw provider diagnostics and PNGs are excluded. Empty/degraded/
+truncated walks remain unverified. **This is observation, not input,
+not proof of Minecraft gameplay, and not verified on Windows.**
+The Cua daemon must already be running; the tool never starts it.
+No new controller, startup worker, CI or native game-control ability.
+
 ## Efficient visual observation
 
 Use `start_visual_observation`, `get_multi_client_visual_state`,

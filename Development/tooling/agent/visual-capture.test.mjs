@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {inspectPng,validateCuaExecutable,buildCuaWindowQuery,MAX_PNG_BYTES,readBoundedPng} from './visual-capture.mjs';
+import {inspectPng,validateCuaExecutable,buildCuaWindowQuery,MAX_PNG_BYTES,readBoundedPng,
+  buildCuaSemanticWindowQuery,projectCuaSemanticWindow,
+  inspectCuaWindowElements} from './visual-capture.mjs';
 
 const png1x1=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6YQAAAAASUVORK5CYII=',
@@ -27,6 +29,85 @@ test('Cua preview targets one exact window without modifying action snapshots',(
   assert.equal(query.scope,undefined);
   assert.throws(()=>buildCuaWindowQuery({pid:0,windowId:1234}));
   assert.throws(()=>buildCuaWindowQuery({pid:42,windowId:0}));
+});
+
+test('Cua semantic UIA query does not capture pixels or accept a caller HWND override',()=>{
+  const target={pid:42,windowId:1234};
+  const q=buildCuaSemanticWindowQuery(target);
+  assert.equal(q.pid,42);
+  assert.equal(q.window_id,1234);
+  assert.equal(q.include_screenshot,false);
+  assert.equal(q.include_accessibility_tree,true);
+  assert.equal(q.tree_format,'elements');
+  assert.equal(q.max_elements,64);
+  assert.equal(q.max_depth,10);
+  assert.equal(q.display_only,undefined);
+  assert.throws(()=>buildCuaSemanticWindowQuery({pid:0,windowId:1234}));
+});
+
+test('Cua semantic projection strips raw values, titles and action tokens',()=>{
+  const raw={pid:42,window_id:1234,elements_complete:true,
+    window_title:'PRIVATE WORLD NAME',
+    tree_markdown:'PRIVATE SECRET',
+    snapshot_id:'s0000000a',
+    elements:[
+      {element_index:1,role:'Button',label:'Play\nResume',enabled:true,
+        actions:['invoke'],element_token:'s0000000a:1',
+        value:'secret-value'},
+      {element_index:2,role:'Edit',label:'private password',
+        value:'private password',actions:['set_value']},
+    ]};
+  const result=projectCuaSemanticWindow(raw,{pid:42,windowId:1234});
+  assert.equal(result.status,'UIA_ELEMENTS_READ_UNVERIFIED');
+  assert.equal(result.elements[0].label,'Play Resume');
+  assert.equal(result.elements[1].label,null);
+  assert.equal(result.elements[1].role,'Edit');
+  assert.equal(result.actionPermitted,false);
+  assert.equal(result.screenshotCaptured,false);
+  assert.equal(JSON.stringify(result).includes('PRIVATE'),false);
+  assert.equal(JSON.stringify(result).includes('secret'),false);
+  assert.equal(JSON.stringify(result).includes('s0000000a'),false);
+  for(const bad of [
+    {...raw,pid:43}, {...raw,window_id:1235},
+    {...raw,screenshot_png_b64:'not a PNG'},
+    {...raw,elements:[...raw.elements,...Array(63).fill(raw.elements[0])]},
+  ]) assert.throws(()=>projectCuaSemanticWindow(bad,
+      {pid:42,windowId:1234}),/CUA_UIA_READ_UNAVAILABLE/);
+  assert.equal(projectCuaSemanticWindow({...raw,elements_complete:false},
+    {pid:42,windowId:1234}).status,'UIA_PARTIAL_UNVERIFIED');
+  assert.equal(projectCuaSemanticWindow({...raw,elements:[],degraded:true},
+    {pid:42,windowId:1234}).status,'UIA_EMPTY_OR_UNAVAILABLE');
+});
+
+test('Cua semantic CLI uses existing binary and bounded tree-only daemon call',async()=>{
+  const calls=[];
+  const target={pid:42,windowId:1234};
+  const result=await inspectCuaWindowElements(path.resolve('cua-driver.exe'),
+    target,{platform:'win32',
+      statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+      execute:async(exe,args,options)=>{
+        calls.push({exe,args,options});
+        return {stdout:JSON.stringify({
+          pid:42,window_id:1234,elements_complete:true,
+          elements:[{element_index:1,role:'Button',label:'Resume',
+            actions:['invoke'],enabled:true}],
+        })};
+      },
+    });
+  assert.equal(calls.length,1);
+  assert.deepEqual(calls[0].args.slice(0,2),
+    ['call','get_window_state']);
+  const q=JSON.parse(calls[0].args[2]);
+  assert.equal(q.include_screenshot,false);
+  assert.equal(q.max_elements,64);
+  assert.equal(calls[0].options.shell,false);
+  assert.equal(calls[0].options.maxBuffer,64*1024);
+  assert.equal(result.elements[0].label,'Resume');
+  await assert.rejects(()=>inspectCuaWindowElements(
+    path.resolve('cua-driver.exe'),target,{platform:'win32',
+      statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+      execute:async()=>({stdout:'NOT JSON'}),
+    }),/CUA_UIA_READ_UNAVAILABLE/);
 });
 
 test('Cua reads only the stat-pinned number of PNG bytes with short reads',async()=>{

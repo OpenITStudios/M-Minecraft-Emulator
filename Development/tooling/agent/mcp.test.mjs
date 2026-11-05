@@ -48,7 +48,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
     .description,/LEGACY COMPATIBILITY ONLY/);
   assert.match(listing.result.tools.find(x=>x.name==='read_probe_qa_result')
     .description,/LEGACY COMPATIBILITY ONLY/);
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','inspect_client_ui','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -653,6 +653,75 @@ test('observe_client emits a bounded MCP image only after exact identity recheck
     params:{name:'observe_client',arguments:{slot:2}}});
   assert.equal(rejected.result.isError,true);
   assert.equal(rejected.result.content.some(c=>c.type==='image'),false);
+});
+
+test('semantic MCP inspection is no-pixel, fenced and never reaches input',async()=>{
+  const calls=[];
+  let changed=false;
+  const target=slot=>({schema:1,ok:true,operation:'target',slot,
+    pid:400+slot,windowId:1200+slot+(changed?1:0),
+    createdFileTime:'134000000000000001',sessionId:1,
+    foreground:false,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+    gameplayInput:'NOT_VERIFIED'});
+  const cfg={...config(),cuaExecutable:path.resolve('cua-driver.exe')};
+  const handler=createHandler(cfg,{
+    native:async(_exe,op,slot)=>{calls.push(['native',op,slot]);return target(slot);},
+    inspectCua:async(_exe,pin)=>{
+      calls.push(['uia',pin.pid]);
+      return {schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
+        status:'UIA_ELEMENTS_READ_UNVERIFIED',elementsComplete:true,
+        elements:[{index:1,role:'Button',label:'Play',
+          enabled:true,actions:['invoke']}],
+        screenshotCaptured:false,actionPermitted:false,
+        gameplayInput:'NOT_VERIFIED'};
+    },
+    capture:async()=>{throw Error('Screenshot must not run');},
+    aiInput:async()=>{throw Error('Native game input must not run');},
+  });
+  await assert.rejects(()=>handler.callTool('inspect_client_ui',{slot:1}),
+    /human host/);
+  assert.equal(calls.length,0);
+  const first=await handler.handle({jsonrpc:'2.0',id:77,
+    method:'tools/call',params:{name:'inspect_client_ui',
+      arguments:{slot:2}}});
+  assert.equal(first.result.isError,false);
+  assert.equal(first.result.content.length,1);
+  const result=JSON.parse(first.result.content[0].text);
+  assert.equal(result.identity.windowId,1202);
+  assert.equal(result.screenshotCaptured,false);
+  assert.equal(result.actionPermitted,false);
+  assert.equal(result.elements[0].label,'Play');
+  assert.deepEqual(calls.map(c=>c[0]),['native','uia','native']);
+  handler.shutdown();
+
+  let n=0;
+  const replacement=createHandler(cfg,{
+    native:async(_exe,_op,slot)=>{
+      n++;
+      return {...target(slot),windowId:1202+(n===2?1:0)};
+    },
+    inspectCua:async()=>({schema:1,status:'UIA_ELEMENTS_READ_UNVERIFIED',
+      elements:[],actionPermitted:false}),
+  });
+  await assert.rejects(()=>replacement.callTool('inspect_client_ui',{slot:2}),
+    /STALE_OR_REPLACED/);
+  assert.equal(n,2);
+  replacement.shutdown();
+});
+
+test('semantic MCP inspection without Cua does not contact Windows',async()=>{
+  let contacted=0;
+  const handler=createHandler(config(),{
+    native:async()=>{contacted++;throw Error('Must not call native');},
+    inspectCua:async()=>{contacted++;throw Error('Must not call Cua');},
+  });
+  const out=await handler.callTool('inspect_client_ui',{slot:2});
+  assert.equal(out.status,'BACKGROUND_UNAVAILABLE');
+  assert.equal(out.reason,'CUA_UIA_NOT_CONFIGURED');
+  assert.equal(out.actionPermitted,false);
+  assert.equal(contacted,0);
+  handler.shutdown();
 });
 
 test('MCP local visual sampler returns only changed cached frames on demand',async()=>{

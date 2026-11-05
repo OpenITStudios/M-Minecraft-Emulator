@@ -57,6 +57,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P58 | MCP semantic UIA read via existing configured Cua Driver; 64-node tree-only result fenced by native pre/post identity | Authored fixtures, NOT_EXECUTED |
 | P57 | Stopped WGC slot retains status counters only; releases source-owned child/decoder/PNG references without affecting next worker | Authored late-callback/restart fixture, NOT_EXECUTED |
 | P56 | CUA screenshot reader bounds the exact bytes read and refuses changed/incomplete files after the initial stat | Authored short-read/negative fixtures, NOT_EXECUTED |
 | P55 | WGC provider reuses existing base64 when a new sequence contains identical PNG bytes and dimensions; retains fresh sequence/time | Authored fixture, NOT_EXECUTED |
@@ -136,13 +137,12 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**Source-only Codex Windows Computer Use parity, not another PNG or
-runtime optimization.** Pin `Local` HEAD, compare the installed *source*
-Cua Driver call/response contract and the existing
-`Development/tooling/agent/visual-capture.mjs` + `mcp.mjs` owners.
-Design the **smallest scoped semantic UIA read-only bridge** with exact
-native PID/HWND/birth/session and strict `BACKGROUND_UNAVAILABLE` refusal.
-Do not dispatch new input or add another controller until evidence
-supports an independently reviewed action. REA requires an authorized
-binary, unavailable in this GitHub-only session. No local tests, CI,
-Windows/Codex/Minecraft execution, installer or binary acquisition.
+**Source-only P59 candidate:** audit the P58 target/UIA-result
+contract against every current MCP consumer and design one bounded
+strict-background action admission/refusal policy. No action tool
+should be wired merely because an element advertises `invoke`; source
+inspection does not prove the installed Cua binary accepts that
+action without focus. Verify background-only eligibility and
+postcondition source authority before any write path. Do not
+execute localtest, CI, builds, binaries, Windows/Codex/Minecraft,
+install anything or change native session/input ownership.
