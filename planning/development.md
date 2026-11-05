@@ -10,6 +10,30 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P44 original Rust/C++ input contract review routing (5 November 2026,
+  SOURCE_ONLY):** An exact-HEAD audit found the pinned shared-memory
+  ABI v4 aligned across all 15 Rust/C++ field offsets and 96 bytes,
+  including the eight 8-bit rising-edge counters. Rust permits
+  up to 500-ms input packets, the current CLI batch uses 350 ms
+  and neutral writes use 1 ms. The existing P28 `DEV.cmd review`
+  however did NOT route the first source owner
+  `independent_bootstrap/mc02_input.rs` or the opted-in C++
+  `mc02-virtual-input.cpp` into a shared cross-owner review;
+  C++ changes were classified as ordinary developer tooling.
+  Existing `Development/tooling/developer/controller.mjs` now
+  includes one narrow `native-input-v4` seam across MCP/CLI
+  scheduling, retained Rust controller/writer and C++ consumer,
+  with exact original files to inspect and byte layout, TTL,
+  counter and deferred key-up review checks. The C++ source/header
+  receive a corresponding review area. Regression fixtures
+  AUTHORED_NOT_EXECUTED cover one-sided changes, full three-party
+  selection, HUD isolation and protected path refusal. This is a
+  deterministic read-only review request, not an ABI compiler or
+  gaming acceptance. No app/input/ABI payload, second controller,
+  CI, tests, Windows/Minecraft session, package or feature toggle.
+  See [review owner](../Development/tooling/developer/README.md).
+
+
 - **P43 8-bit per-key rising-edge rollover refusal (5 November 2026,
   SOURCE_ONLY):** The retained v4 shared-memory packet packs eight
   8-bit press counters. The original optional C++ reader compares

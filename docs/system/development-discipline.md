@@ -62,7 +62,13 @@ For native controller, MCP and desktop presentation changes, the existing
 seams. Each requires examining the other established owners even if they are
 absent from the selected diff: authenticated MCP/native input admission,
 native/Tauri/typed-UI session presentation, and the bounded MCP activity
-mirror. The entries are **review requests only**, not completed dependency
+mirror. A fourth narrowly scoped `native-input-v4` review follows the
+same MCP/CLI input author, the original Rust shared-memory writer and
+the optional C++ Raw Input reader. It requires manual source comparison
+of the complete 96-byte v4 ABI, eight 8-bit counters, input TTL/neutral
+timing, and P39–P43 pending-release guards whenever any one participating
+file changes. No C++ compiler, native runtime or automatic dependency
+analyser is invoked. The entries are **review requests only**, not completed dependency
 analysis or an assertion that unselected files are unchanged. A single changed
 critical source may trigger more than one seam; no second controller, automatic
 agent dispatch or new quality runner is introduced.

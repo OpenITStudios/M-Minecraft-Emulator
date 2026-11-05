@@ -58,6 +58,18 @@ remains `NOT_REVIEWED` and each seam reports
 `SOURCE_PATH_SELECTION_ONLY`/`NOT_EXECUTED`. There is **no automatic
 caller traversal**, runtime control, new source test executor, or PASS.
 
+For the **compile-OFF native input ABI v4** bridge, the same review
+also emits `native-input-v4` whenever a participating MCP scheduler/
+CLI file, original Rust session/writer, or optional C++ Raw Input
+consumer changes. It lists the exact unselected counterpart owners
+for 96-byte shared memory, 15 byte offsets, eight rising-edge
+counters, 500-ms TTL, 350-ms pulse, 1-ms neutral, and the
+P39–P43 expiry/deferred key-up/cursor paths. The C++ source and
+header are mapped to the `native-input-v4` area rather than
+generic developer tooling. The result is a **source review
+obligation**, not a dynamic ABI checker, compiler, executed
+negative test, native process or gameplay verification.
+
 The review emits three **NOT_EXECUTED** stages: Propose (alternatives), Probe
 (counterexamples/negative cases), Compose (select only source-supported change).
 It also exposes the existing recommended validation tasks as **recommendations

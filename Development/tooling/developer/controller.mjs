@@ -183,6 +183,15 @@ const QUALITY_AREAS=Object.freeze({
       'Do not reinterpret original Skills Probe/team results as verified map or Minecraft gameplay.'
     ]
   }),
+  'native-input-v4':Object.freeze({
+    owner:'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/mc02_input.rs (Rust 96-byte writer); Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.cpp (opt-in C++ reader)',
+    checks:[
+      'Compare the 15 Rust/C++ ABI v4 field offsets, 96-byte size, alignment and eight independent 8-bit press counters.',
+      'Trace exact original PID/birth/session/channel binding, 500-ms packet TTL, 350-ms scheduled frames and 1-ms native neutral writes.',
+      'Review expired packet refusal, P40-P42 pending UPs/partial buffer cursors and P43 counter overflow without manufacturing gameplay evidence.',
+      'Keep the original Rust controller and compile-OFF C++ consumer unchanged in authority; no new DLL hook or verified Minecraft acceptance.'
+    ]
+  }),
   'native-session':Object.freeze({
     owner:'Development/apps/desktop/src-tauri/src/engine/; Development/engine/runtime-core/',
     checks:[
@@ -228,6 +237,13 @@ function qualityArea(path) {
       path==='Development/tooling/agent/education-native-hud-prototype.source.test.mjs' ||
       path==='docs/system/education-native-coordinate-hud.md') return 'education-hud';
   if(path.startsWith('Development/tooling/agent/')) return 'agent-mcp';
+  // The C++ game-side input reader is a source ABI consumer, not just
+  // developer tooling. Its edits require review of the retained Rust
+  // shared-memory writer even when the writer was not in the diff.
+  if(path==='Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.cpp' ||
+      path==='Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.h') {
+    return 'native-input-v4';
+  }
   if(path.startsWith('Development/apps/desktop/src-tauri/') ||
       path.startsWith('Development/engine/runtime-core/')) return 'native-session';
   if(path.startsWith('Development/apps/desktop/src/') ||
@@ -360,6 +376,46 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
       'Trace only the explicitly published, bounded MCP activity projection through same-image native admission to the UI.',
       'Preserve native rejection of webview activity publication, stale ATTENTION semantics, fixed profile slots and validated Probe counts.',
       'The UI must say reported by local agent: no verified PC control, native game input, world attribution or map PASS.'
+    ]
+  }),
+  Object.freeze({
+    id:'native-input-v4',
+    parties:[
+      {id:'agent-scheduler',sourcePaths:[
+        'Development/tooling/agent/mcp.mjs',
+        'Development/tooling/agent/mcp.test.mjs',
+        'Development/tooling/agent/mc02-action-sequence.mjs',
+        'Development/tooling/agent/mc02-action-sequence.test.mjs',
+        'Development/tooling/agent/input-timeline.mjs',
+        'Development/tooling/agent/input-timeline.test.mjs',
+        'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs'
+      ],inspectFiles:[
+        'Development/tooling/agent/mcp.mjs',
+        'Development/tooling/agent/input-timeline.mjs',
+        'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs'
+      ]},
+      {id:'native-rust-writer',sourcePaths:[
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/mc02_input.rs'
+      ],inspectFiles:[
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/mc02_input.rs'
+      ]},
+      {id:'optin-cpp-reader',sourcePaths:[
+        'Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.cpp',
+        'Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.h'
+      ],inspectFiles:[
+        'Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.cpp',
+        'Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.h'
+      ]}
+    ],
+    checks:[
+      'Pin both 96-byte ABI v4 definitions: Rust and C++ must match all 15 field offsets, slot/PID/birth/session and 8x8-bit rising-edge counts.',
+      'Trace exact MCP/CLI to original Rust controller admission: input frames 350 ms, native maximum TTL 500 ms, neutral write 1 ms and epoch/owner fencing.',
+      'Inspect C++ GetTickCount expiry, original HWND/game-thread/foreground checks, Raw Input pending key-up/partial buffer, pre/post-copy revision gates and counter rollover refusal.',
+      'Never conflate source/static_assert fixtures with executed tests, real Windows Win32 polling, Minecraft key-up delivery or five-client acceptance; compile-OFF by default.'
     ]
   })
 ]);

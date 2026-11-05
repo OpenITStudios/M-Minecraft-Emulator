@@ -443,7 +443,7 @@ test('quality review rejects repeated paths rather than overcounting selected ch
 });
 
 
-test('cross-module review identifies all three concrete MCP/native/UI seams without claiming review ran',()=>{
+test('cross-module review identifies all four scoped source seams without claiming review ran',()=>{
   const paths=[
     'Development/tooling/agent/mcp.mjs',
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
@@ -452,10 +452,11 @@ test('cross-module review identifies all three concrete MCP/native/UI seams with
   const result=qualityReviewForPaths(paths,SHA);
   assert.equal(result.status,'REVIEW_REQUIRED');
   assert.deepEqual(result.crossModuleReviews.map(s=>s.id),[
-    'agent-input-lease','native-desktop-session','agent-activity-mirror'
+    'agent-input-lease','native-desktop-session','agent-activity-mirror',
+    'native-input-v4'
   ]);
   assert.deepEqual(result.crossModuleReviews.map(s=>s.status),
-    ['REVIEW_REQUIRED','REVIEW_REQUIRED','REVIEW_REQUIRED']);
+    ['REVIEW_REQUIRED','REVIEW_REQUIRED','REVIEW_REQUIRED','REVIEW_REQUIRED']);
   assert.ok(result.crossModuleReviews.every(s=>
     s.provenance==='SOURCE_PATH_SELECTION_ONLY'&&s.execution==='NOT_EXECUTED'&&
     s.reviewParties.every(p=>p.status==='NOT_REVIEWED')));
@@ -470,7 +471,7 @@ test('cross-module review identifies all three concrete MCP/native/UI seams with
 test('a single changed MCP source or activity fixture still requires reviewing unchanged source endpoints',()=>{
   const mcp=qualityReviewForPaths(['Development/tooling/agent/mcp.mjs'],SHA);
   assert.deepEqual(mcp.crossModuleReviews.map(s=>s.id),[
-    'agent-input-lease','agent-activity-mirror'
+    'agent-input-lease','agent-activity-mirror','native-input-v4'
   ]);
   assert.deepEqual(mcp.crossModuleReviews[0].counterpartsNotSelected,
     ['native-controller']);
@@ -499,6 +500,58 @@ test('desktop-only native or UI changes route to their exact consumer boundaries
     ['docs/system/education-native-coordinate-hud.md'],SHA).crossModuleReviews,[]);
   assert.deepEqual(qualityReviewForPaths(
     ['Development/tooling/agent/check-education-native-hud-source.mjs'],SHA).crossModuleReviews,[]);
+});
+
+
+test('P44 Rust/C++ ABI v4 consumer changes require bounded cross-owner input review',()=>{
+  const writer='Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/mc02_input.rs';
+  const controller='Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs';
+  const reader='Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.cpp';
+  const header='Development/tooling/acceptance/windows/bootstrap-ordering/mc02-virtual-input.h';
+  const scheduler='Development/tooling/agent/mcp.mjs';
+  const seamFrom=paths=>{
+    const review=qualityReviewForPaths(paths,SHA);
+    const seam=review.crossModuleReviews.find(s=>s.id==='native-input-v4');
+    assert.ok(seam,'the original Rust/C++ input ABI needs cross-owner review');
+    assert.equal(seam.status,'REVIEW_REQUIRED');
+    assert.equal(seam.provenance,'SOURCE_PATH_SELECTION_ONLY');
+    assert.equal(seam.execution,'NOT_EXECUTED');
+    assert.ok(seam.reviewParties.every(p=>p.status==='NOT_REVIEWED'));
+    assert.equal(review.proof,'STATIC_REVIEW_PLAN_ONLY');
+    assert.equal(review.evidence.minecraftRuntime,'NOT_EXECUTED');
+    return {review,seam};
+  };
+  for(const path of [writer,controller,reader,header,scheduler]){
+    const {review,seam}=seamFrom([path]);
+    assert.deepEqual(seam.selectedParties,[
+      path===scheduler?'agent-scheduler':
+        path===reader||path===header?'optin-cpp-reader':'native-rust-writer'
+    ],path);
+    assert.equal(seam.counterpartsNotSelected.length,2,path);
+    assert.deepEqual(review.recommendedValidationTaskIds,
+      path===writer||path===controller?['rust.validate']:['source.validate'],
+      'Rust-only changes retain their original scoped validation routing');
+    assert.ok(seam.checks.some(x=>x.includes('96-byte ABI v4')));
+  }
+  const {review, seam}=seamFrom([scheduler,writer,reader]);
+  assert.deepEqual(seam.selectedParties,[
+    'agent-scheduler','native-rust-writer','optin-cpp-reader'
+  ]);
+  assert.deepEqual(seam.counterpartsNotSelected,[]);
+  assert.deepEqual(seam.reviewParties[1].inspectFiles,[
+    'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+    controller,writer
+  ]);
+  assert.deepEqual(seam.reviewParties[2].inspectFiles,[reader,header]);
+  assert.ok(review.areas.some(area=>area.id==='native-input-v4'));
+  assert.equal(qualityReviewForPaths([reader],SHA).areas[0].id,'native-input-v4');
+  assert.equal(qualityReviewForPaths([header],SHA).areas[0].id,'native-input-v4');
+  assert.deepEqual(qualityReviewForPaths(
+    ['docs/system/education-native-coordinate-hud.md'],SHA).crossModuleReviews,[]);
+  assert.deepEqual(qualityReviewForPaths([],SHA).crossModuleReviews,[]);
+  const blocked=qualityReviewForPaths([reader,'Data/Profiles/private'],SHA);
+  assert.equal(blocked.status,'BLOCKED');
+  assert.deepEqual(blocked.crossModuleReviews,[]);
 });
 
 test('protected and duplicate review paths never expose or pass critical seam review',()=>{
