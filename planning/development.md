@@ -32,13 +32,14 @@ NOT_VERIFIED.
   background; first read-only semantic UIA via existing Cua Driver,
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
-- **Last source stages:** P58-P64 read-only UIA and externally blocked
-  Cua Invoke-only; P65 manual-only synthetic counter; P66 native CLI
-  tracks only IPC-attempted groups. P67 fixes the original native
-  actor's partial-group cleanup reporting: all possibly written slots
-  receive an independent neutral attempt, and failed neutral ACKs
-  override the original group error as AI_RELEASE_UNCONFIRMED.
-  Source fixtures AUTHORED_NOT_EXECUTED, no Windows/game execution.
+- **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
+  blocked; P65 manual-only synthetic counter; P66 native CLI tracks
+  IPC-attempted groups; P67 actor reports failed group neutral release.
+  P68 reviews the existing MCP cleanup and adds exact actor-error
+  propagation + whole-cohort quarantine/explicit-recovery fixtures for
+  both 4-AI and 5-AI modes. No production MCP change is warranted by
+  reviewed source. All fixtures AUTHORED_NOT_EXECUTED; no Windows/game
+  execution.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -82,6 +83,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P68 | Reviewed P67 actor -> CLI -> MCP failure path; added 4/5-AI regression for allowlisted AI_RELEASE_UNCONFIRMED, independent neutrals, quarantine, no replay and explicit recovery | Authored Node fixture NOT_EXECUTED; existing production MCP path unchanged |
 | P67 | Controller partial-group failure no longer hides failed neutral writes; every attempted slot still gets one best-effort release, and CLI preserves exact AI_RELEASE_UNCONFIRMED status | Rust negative fixtures authored, NOT_EXECUTED; compile-OFF |
 | P66 | Native multi-client batch records possibly touched slots only after final per-group deadline gate, just before IPC; retains uncertain per-group cleanup | Rust negative fixture authored, NOT_EXECUTED; experiment remains compile-OFF |
 | P65 | Added opt-in UIA counter mode to existing synthetic Windows fixture, exposing an independent read-only 0->1 state oracle without action dispatch | AUTHORED_NOT_EXECUTED; no package/controller/runtime change |
@@ -169,17 +171,46 @@ Minecraft, run local source tests, enable GitHub Actions, install experimental
 DLLs, touch credentials/worlds, dispatch game commands, or promote to `main`.
 No source-only review may mark these runtime gates PASS.
 
+## Efficient implementation sequence — current native-input track
+
+This is a **dependency order, not authorization for runtime work or a
+second active backlog**. Develop only one source-proven issue at a time:
+
+1. **Current P68: error and recovery boundary** — P66/P67 native
+   attempted-slot/release corrections, then exact MCP propagation and
+   regression fixtures; no new transport.
+2. **Source hardening on demand** — audit the *original* 4/5-client
+   controller, CLI scheduler and per-client consumer for real remaining
+   identity, epoch, deadline, cross-slot or key-up defects. Change only
+   the first wrong source owner and its direct fixtures. Do not add an
+   extra controller, dispatch abstraction or speculative stage count.
+3. **Verification preparation** — reuse the existing source-only Node,
+   Rust, C++ and manual synthetic UIA counter fixtures. Compare the
+   exact planned source SHA and negative cases before any separately
+   authorized execution; only actual runs count as test results.
+4. **Independent runtime acceptance (separate permission)** — after
+   explicit operator approval, validate original Windows input safety,
+   neutral/readback and human foreground, then Minecraft Education
+   actual motion and 4/5-client concurrency. ABI/IPC ACKs alone are not
+   game proof. The unrelated Cua strict Invoke-only dependency stays
+   `BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE` until upstream capability
+   and verified focus isolation exist.
+
+**Efficiency rule:** no extra framework, duplicate handoff, automatic
+CI, periodic speculative audit, feature activation or rewrite. If
+no source-verifiable correctness defect remains, stop source changes
+and preserve the actual execution gate as NOT_EXECUTED.
+
 ## Single next step
 
-**P68 — review existing MCP multi-client cleanup and recovery results
-against P67's exact native neutral-failure status.** Pin fresh
-`Local` HEAD. Trace the normal batch, partial-group failure, CLI
-independent neutral, and MCP per-slot quarantine; correct only a
-demonstrable loss of failure provenance, stale-lease fencing, or
-wrong-slot recovery. Reuse the retained controller and bounded
-source-only negative fixtures; no duplicate input dispatcher,
-daemon or status ledger. Strict Cua Invoke remains
-`BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE`, and
-`assess_client_background_action` continues to refuse.
-No source tests, CI/builds, packages, installs, Windows/Codex/
-Minecraft gameplay or account/world access without new approval.
+**P69 — source-only evaluate one remaining native group lifecycle
+invariant.** Re-pin `Local`; compare the controller's exact
+per-client lease epoch, release watermark and pending group timeout
+to the shared-memory writer and game-reader's fail-closed contracts.
+Change only a demonstrated error in the existing owner plus negative
+fixtures; if no concrete defect is found, STOP instead of adding
+features or status churn. Continue preserving
+`BACKGROUND_UNAVAILABLE` for Cua, compile-OFF native input,
+protected hybrid MC01, and unchanged profile/account/world data.
+No Node/Rust/C++ tests, builds, CI, installers, Windows/Codex/
+Minecraft activity or releases without separate authorization.

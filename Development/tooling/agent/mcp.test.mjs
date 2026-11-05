@@ -3354,6 +3354,91 @@ test('uncertain native batch blocks only touched AI slots until explicit neutral
   }
 });
 
+test('P68 native partial-group neutral failure survives MCP and quarantines exact cohort',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],
+    ['five-ai',[1,2,3,4,5]],
+  ]) {
+    const affected=slots.slice(0,2),healthy=slots.slice(2);
+    const fixture=teamVisualFixture(mode),batches=[],neutralWrites=[];
+    let nativeGroupFailed=false;
+    const handler=createHandler({
+      ...config(mode),experimentalMultiClientInputEnabled:true,
+    },{
+      visualObserverFactory:fixture.factory,
+      aiLease:leaseAck,
+      aiInput:async(_exe,frame)=>{
+        neutralWrites.push(frame.slot);
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+      aiMultiBatch:async(_exe,requested)=>{
+        batches.push(requested.map(batch=>batch.slot));
+        if(!nativeGroupFailed){
+          nativeGroupFailed=true;
+          // Exact P67 native controller -> same-image CLI result.
+          // The actor may have written part of the group even when
+          // MCP's own subsequent independent neutral ACKs all succeed.
+          throw new Error('Native request refused: AI_RELEASE_UNCONFIRMED');
+        }
+        return {schema:1,slots:requested.map(batch=>batch.slot),
+          status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+          gameplayObserved:false};
+      },
+    });
+    await handler.callTool('stop_experimental_multi_client_actions',{slots});
+    neutralWrites.length=0;
+
+    const wire=await handler.handle({jsonrpc:'2.0',id:68,
+      method:'tools/call',params:{
+        name:'run_experimental_multi_client_actions',
+        arguments:{actions:affected.map(aiMove)},
+      }});
+    assert.equal(wire.result.isError,true);
+    assert.equal(wire.result.content[0].text,
+      'Native request refused: AI_RELEASE_UNCONFIRMED',
+      'exact allowlisted actor status must survive MCP error projection');
+    assert.deepEqual(batches,[affected]);
+    assert.deepEqual(neutralWrites,affected,
+      'independent exact-owner neutral is still attempted after native error');
+
+    const held=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(held.coordination.blockedSlots,affected,
+      'a failed group is uncertain even after fresh neutral ACKs');
+    assert.deepEqual(held.coordination.readySlots,healthy);
+    await assert.rejects(()=>handler.callTool('run_experimental_multi_client_actions',{
+      actions:affected.map(aiMove),
+    }),/AI_INPUT_RECOVERY_REQUIRED/);
+    assert.equal(batches.length,1,'uncertain action must never be replayed');
+
+    // Healthy untouched clients only run on an entirely NEW action,
+    // never as a silent reduction of the previously failed cohort.
+    const independent=await handler.callTool('run_experimental_multi_client_actions',{
+      actions:healthy.map(aiMove),
+    });
+    assert.deepEqual(independent.slots,healthy);
+    assert.deepEqual(batches,[affected,healthy]);
+    assert.equal(independent.gameplayObserved,false);
+
+    // Native ack from the P67 group is not equivalent to operator
+    // recovery. Each quarantined slot needs its own explicit
+    // neutral-and-lease-release transaction.
+    const single=await handler.callTool('stop_experimental_multi_client_actions',{
+      slots:[affected[0]],
+    });
+    assert.equal(single.status,'NATIVE_NEUTRAL_WRITES_ACKNOWLEDGED');
+    const partial=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(partial.coordination.blockedSlots,[affected[1]]);
+    await handler.callTool('stop_experimental_multi_client_actions',{
+      slots:[affected[1]],
+    });
+    const cleared=await handler.callTool('get_multi_client_visual_state',{slots});
+    assert.deepEqual(cleared.coordination.blockedSlots,[]);
+    handler.shutdown();
+  }
+});
+
 test('revoked visual slot aborts the entire observed native sequence and latches recovery',async()=>{
   const fixture=teamVisualFixture();
   let announce;
