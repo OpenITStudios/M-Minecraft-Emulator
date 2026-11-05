@@ -133,14 +133,16 @@ mod windows_capture {
         Ok(elapsed.as_millis() as u64)
     }
 
-    fn write_frame(out: &mut impl Write,sequence: u32,pixels: &[u8],
-                   readback_at_ms:u64) -> io::Result<()> {
+    fn write_frame(out: &mut impl Write,png: &mut Vec<u8>,
+                   sequence: u32,pixels: &[u8],readback_at_ms:u64) -> io::Result<()> {
         if pixels.len()!=FRAME_WIDTH as usize*FRAME_HEIGHT as usize*4 {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                 "Unexpected GPU capture pixel format/size"));
         }
-        let mut png=Vec::new();
-        PngEncoder::new(&mut png)
+        // This worker retains one scratch output across all emitted frames.
+        // Clear its length without dropping the allocated PNG capacity.
+        png.clear();
+        PngEncoder::new(&mut *png)
             .write_image(pixels,FRAME_WIDTH,FRAME_HEIGHT,ExtendedColorType::Rgba8)
             .map_err(|_|io::Error::other("PNG encoding unavailable"))?;
         if png.len()>MAX_PNG_BYTES {
@@ -152,15 +154,16 @@ mod windows_capture {
         // This time is sampled BEFORE PNG encoding and stdout delay,
         // not after. The WGC frame may still represent older pixels;
         // it is not a proof of presentation or Minecraft gameplay.
-        let mut header=Vec::with_capacity(HEADER_BYTES);
-        header.extend_from_slice(HEADER);
-        header.extend_from_slice(&(png.len() as u32).to_be_bytes());
-        header.extend_from_slice(&FRAME_WIDTH.to_be_bytes());
-        header.extend_from_slice(&FRAME_HEIGHT.to_be_bytes());
-        header.extend_from_slice(&sequence.to_be_bytes());
-        header.extend_from_slice(&readback_at_ms.to_be_bytes());
+        // 28 fixed bytes: no heap allocation for the frame header.
+        let mut header=[0u8;HEADER_BYTES];
+        header[0..4].copy_from_slice(HEADER);
+        header[4..8].copy_from_slice(&(png.len() as u32).to_be_bytes());
+        header[8..12].copy_from_slice(&FRAME_WIDTH.to_be_bytes());
+        header[12..16].copy_from_slice(&FRAME_HEIGHT.to_be_bytes());
+        header[16..20].copy_from_slice(&sequence.to_be_bytes());
+        header[20..28].copy_from_slice(&readback_at_ms.to_be_bytes());
         out.write_all(&header)?;
-        out.write_all(&png)?;
+        out.write_all(png.as_slice())?;
         out.flush()?;
         Ok(())
     }
@@ -180,6 +183,7 @@ mod windows_capture {
         let emit_gap=Duration::from_millis((1000/target.fps) as u64);
         let mut last_emit:Option<Instant>=None;
         let mut sequence=0u32;
+        let mut png=Vec::new(); // Reuse one bounded output buffer per worker.
         let out=io::stdout();
         let mut out=out.lock();
         for candidate in session {
@@ -197,7 +201,7 @@ mod windows_capture {
             verify_target(&target,&pin)?; // do not publish after window reuse
             sequence=sequence.checked_add(1).ok_or_else(||
                 io::Error::other("Capture sequence exhausted"))?;
-            write_frame(&mut out,sequence,&fitted,readback_at_ms)?;
+            write_frame(&mut out,&mut png,sequence,&fitted,readback_at_ms)?;
             last_emit=Some(Instant::now());
         }
         // WGC's blocking iterator may not yield when a window stops rendering.
@@ -207,6 +211,35 @@ mod windows_capture {
 
     pub fn run() -> io::Result<()> {
         capture(read_args()?)
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn two_frames_reuse_png_scratch_and_preserve_lt_g1_wire_bytes() {
+            let pixels=vec![0u8;(FRAME_WIDTH*FRAME_HEIGHT*4) as usize];
+            let mut png=Vec::new();
+            let mut first=Vec::new();
+            write_frame(&mut first,&mut png,1,&pixels,12345).unwrap();
+            let first_len=u32::from_be_bytes(first[4..8].try_into().unwrap()) as usize;
+            assert_eq!(&first[0..4],&HEADER[..]);
+            assert_eq!(first.len(),HEADER_BYTES+first_len);
+            assert_eq!(&first[8..12],&FRAME_WIDTH.to_be_bytes());
+            assert_eq!(&first[12..16],&FRAME_HEIGHT.to_be_bytes());
+            assert_eq!(&first[16..20],&1u32.to_be_bytes());
+            assert_eq!(&first[20..28],&12345u64.to_be_bytes());
+            let first_capacity=png.capacity();
+
+            let mut second=Vec::new();
+            write_frame(&mut second,&mut png,2,&pixels,12346).unwrap();
+            assert_eq!(png.capacity(),first_capacity);
+            assert_eq!(&second[0..4],&HEADER[..]);
+            assert_eq!(&second[16..20],&2u32.to_be_bytes());
+            assert_eq!(&second[20..28],&12346u64.to_be_bytes());
+            assert_eq!(&first[HEADER_BYTES..],&second[HEADER_BYTES..]);
+        }
     }
 }
 

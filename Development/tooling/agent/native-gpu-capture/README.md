@@ -35,7 +35,9 @@ The capture session owns one WGC window item. No interactive picker,
 monitor capture, full-desktop capture or file recording.
 
 Frames are fitted with letterboxing to fixed 960×540 RGBA, encoded into
-PNG and emitted as a binary stdout protocol:
+PNG and emitted as a binary stdout protocol. The worker reuses one PNG output
+buffer for its lifetime and writes the 28-byte header from a fixed array,
+rather than allocating both on every frame (P51, source-only):
 
 ```text
 LTG1 | pngLength:u32be | width:u32be | height:u32be
