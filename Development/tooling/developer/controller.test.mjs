@@ -404,6 +404,44 @@ test('quality review preserves scoped documentation/no-change semantics',()=>{
   assert.deepEqual(qualityReviewForPaths([],SHA).stages,[]);
   assert.throws(()=>qualityReviewForPaths([], 'not-a-sha'),/exact source SHA/);
 });
+test('HUD review routes the checker, fixture, Resource Pack and HUD guide to one owner',()=>{
+  const artifacts=[
+    'Development/tooling/agent/check-education-native-hud-source.mjs',
+    'Development/tooling/agent/education-native-hud-prototype.source.test.mjs',
+    'Development/tooling/agent/education-native-hud-prototype/manifest.json',
+    'Development/tooling/agent/education-native-hud-prototype/ui/hud_screen.json',
+    'docs/system/education-native-coordinate-hud.md'
+  ];
+  for(const path of artifacts){
+    const result=qualityReviewForPaths([path],SHA);
+    assert.deepEqual(result.areas.map(area=>area.id),['education-hud'],path);
+    assert.equal(result.areas[0].status,'NOT_REVIEWED');
+    assert.equal(result.proof,'STATIC_REVIEW_PLAN_ONLY');
+    assert.equal(result.evidence.minecraftRuntime,'NOT_EXECUTED');
+    assert.deepEqual(result.recommendedValidationTaskIds,
+      path.startsWith('docs/')?['repository.validate']:['source.validate']);
+  }
+  const combined=qualityReviewForPaths(artifacts,SHA);
+  assert.equal(combined.areas.length,1);
+  assert.equal(combined.changedCount,5);
+  assert.deepEqual(combined.stages.map(s=>s.status),
+    ['NOT_EXECUTED','NOT_EXECUTED','NOT_EXECUTED']);
+  assert.ok(combined.areas[0].reviewChecks.some(check=>check.includes('negative fixtures')));
+  assert.match(combined.areas[0].canonicalOwner,/education-native-hud-prototype.source.test.mjs|HUD fixture/);
+  assert.deepEqual(combined.recommendedValidationTaskIds,['source.validate']);
+  assert.equal(qualityReviewForPaths(['Development/tooling/agent/mcp.mjs'],SHA).areas[0].id,'agent-mcp');
+  assert.equal(qualityReviewForPaths(['docs/system/architecture.md'],SHA).areas[0].id,'documentation');
+});
+
+test('quality review rejects repeated paths rather than overcounting selected change evidence',()=>{
+  const doc='docs/system/education-native-coordinate-hud.md';
+  const review=qualityReviewForPaths([doc,doc],SHA);
+  assert.equal(review.status,'BLOCKED');
+  assert.deepEqual(review.areas,[]);
+  assert.deepEqual(review.recommendedValidationTaskIds,[]);
+  assert.match(review.reason,/repeated/);
+});
+
 test('quality review fails closed for protected, absolute or path traversal inputs',()=>{
   for(const path of ['Data/world','workspace/private','App/launcher.exe',
     '../Data/private','a/../../Data','/etc/passwd','C:/Users/test/world',

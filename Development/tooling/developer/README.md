@@ -34,11 +34,18 @@ not a second agent harness or test runner. It uses the same exact Local source
 identity and changed-file selection as `plan`: pending edits, the latest
 commit on clean checkout, a verified ancestor `--base-sha`, or explicitly
 declared `--paths`. Caller-declared paths are marked **not Git-verified**.
-It refuses protected, absolute and traversal paths and cannot run commands,
+It refuses protected, repeated, absolute and traversal paths and cannot run commands,
 start agents, install REA, modify Minecraft, or mark any test PASS.
 
 `review` returns a bounded list of canonical owner areas and concrete risk
-checks, plus three **NOT_EXECUTED** stages: Propose (alternatives), Probe
+checks. The HUD source checker, its authored regression fixture, the optional
+Resource Pack files and the canonical HUD guide deliberately map to the same
+`education-hud` review area, even when only the test or guide changed.
+A docs-only HUD review still recommends the existing documentation validation
+task; a fixture/source change still recommends the existing source validation
+task. Neither recommendation means the task ran.
+
+The review emits three **NOT_EXECUTED** stages: Propose (alternatives), Probe
 (counterexamples/negative cases), Compose (select only source-supported change).
 It also exposes the existing recommended validation tasks as **recommendations
 only**. Harness² supplies the review pattern; DeepSeek Harness suggests

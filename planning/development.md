@@ -10,6 +10,20 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P27 HUD review routing integrity (5 November 2026, SOURCE_ONLY):**
+  The existing `DEV.cmd review` area selector previously treated the HUD
+  source test as generic agent-MCP work and the canonical HUD guide as
+  generic documentation. Both now route to `education-hud`, alongside
+  the HUD source checker and optional resource pack files. Its review
+  checks include the P25/P26 source invariants, negative fixture and
+  direct documentation companions. Duplicate selected paths are
+  rejected rather than counted as separate changes. Docs-only vs
+  source/fixture validation recommendations remain scoped and never
+  execute. Regression fixtures AUTHORED_NOT_EXECUTED; no new runner,
+  external agent, source tests, Windows/Minecraft, CI or installer.
+  See [developer controller](../Development/tooling/developer/README.md).
+
+
 - **P26 HUD vanilla label semantics (5 November 2026, SOURCE_ONLY):**
   Compared the pinned Mojang Bedrock HUD text control with the existing
   structure inspector. The check now validates that the original coordinate

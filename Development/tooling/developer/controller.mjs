@@ -166,10 +166,12 @@ export function planForPaths(paths,revision) {
 // binary investigator, gameplay agent, or grading/acceptance authority.
 const QUALITY_AREAS=Object.freeze({
   'education-hud':Object.freeze({
-    owner:'Development/tooling/agent/education-native-hud-prototype/; check-education-native-hud-source.mjs',
+    owner:'Development/tooling/agent/check-education-native-hud-source.mjs and education-native-hud-prototype/; review the existing HUD fixture and docs/system/education-native-coordinate-hud.md as direct companions',
     checks:[
       'Verify JSONC structural parent/child path and after-player_position sibling; never insert into auto-sized native image.',
+      'Review the pinned Bedrock coordinate label type/text, binding conditions, duplicate JSON keys, and source file-handle admission with the existing negative fixtures.',
       'Keep world-only manifest scope, original XYZ/Agent Pos/visibility bindings and no Script API or button action.',
+      'Inspect the existing HUD source fixture and HUD contract guide even when only one is in the selected diff; changed-path selection is not proof of test coverage.',
       'Keep Education 26.33 rendering, layout, team forms and pack interaction explicitly UNVERIFIED.'
     ]
   }),
@@ -222,7 +224,9 @@ const QUALITY_AREAS=Object.freeze({
 });
 function qualityArea(path) {
   if(path.startsWith('Development/tooling/agent/education-native-hud-prototype/') ||
-      path==='Development/tooling/agent/check-education-native-hud-source.mjs') return 'education-hud';
+      path==='Development/tooling/agent/check-education-native-hud-source.mjs' ||
+      path==='Development/tooling/agent/education-native-hud-prototype.source.test.mjs' ||
+      path==='docs/system/education-native-coordinate-hud.md') return 'education-hud';
   if(path.startsWith('Development/tooling/agent/')) return 'agent-mcp';
   if(path.startsWith('Development/apps/desktop/src-tauri/') ||
       path.startsWith('Development/engine/runtime-core/')) return 'native-session';
@@ -241,10 +245,12 @@ function safeReviewPath(path) {
 export function qualityReviewForPaths(paths,revision) {
   if(!SHA.test(revision??'')) throw Error('Quality review requires an exact source SHA');
   const validation=planForPaths(paths,revision);
-  if(validation.status==='BLOCKED' || paths.some(path=>!safeReviewPath(path))) {
+  if(validation.status==='BLOCKED' ||
+      paths.some(path=>!safeReviewPath(path)) ||
+      new Set(paths).size!==paths.length) {
     return {status:'BLOCKED',sourceSha:revision,changedCount:paths.length,
       areas:[],recommendedValidationTaskIds:[],stages:[],
-      reason:'Protected or unsafe paths cannot be admitted to quality review',
+      reason:'Protected, repeated or unsafe paths cannot be admitted to quality review',
       proof:'NOT_EXECUTED'};
   }
   const areas=[...new Set(paths.map(qualityArea))].sort().map(id=>({
