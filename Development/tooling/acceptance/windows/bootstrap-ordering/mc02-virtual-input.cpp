@@ -599,6 +599,16 @@ static_assert(rawCopiedRecordCount(8,sizeof(RAWINPUT)-1)==0);
 static_assert(rawCopiedRecordCount(0,sizeof(RAWINPUT))==0);
 static_assert(rawCopiedRecordCount(8,2*sizeof(RAWINPUT))==2);
 
+// Updating the game's per-key and cursor read cursors is justified only
+// by at least one completed output record. In particular, a zero-record
+// poll with a newly published epoch must not consume its future presses.
+constexpr bool rawMayAdvanceReadCursor(UINT copied) noexcept {
+    return copied!=0;
+}
+static_assert(!rawMayAdvanceReadCursor(0));
+static_assert(rawMayAdvanceReadCursor(1));
+static_assert(rawMayAdvanceReadCursor(2));
+
 // The final Raw Input admission is sampled only AFTER any potentially
 // delayed Win32 window-owner lookup. An expired/changed active word cannot
 // pass merely because the original snapshot revision was stable BEFORE
@@ -783,11 +793,32 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     }
     const UINT delivered=rawCopiedRecordCount(plan.count,capacity);
     const UINT bytes=delivered*blockBytes;
-    if (bytes) std::memcpy(data,plan.events.data(),bytes);
+    if (bytes) {
+        // A native ReleaseAll or replacement packet can arrive even
+        // BETWEEN the P41 final admission and this bounded memcpy.
+        // Copy first, then validate the *same* packet and even revision
+        // once more before reporting any records or committing read
+        // cursors. A failed post-copy check withdraws the entire prefix.
+        std::memcpy(data,plan.events.data(),bytes);
+        const auto postCopyWord=currentPacket();
+        const auto postCopyRevision=
+            view->cursorRevision.load(std::memory_order_seq_cst);
+        if (!rawFinalCopyAllowed(plan.coherent,sameWindow,
+                word,postCopyWord,plan.revision,postCopyRevision)) {
+            // The output caller observes no synthetic records (return
+            // count 0). Scrub the provisional bytes and NEVER advance
+            // rawHeldMask, press counters or camera read coordinates.
+            std::memset(data,0,bytes);
+            *size=0;
+            rawBufferBusy.clear(std::memory_order_release);
+            SetLastError(previous);return 0;
+        }
+    }
     *size=bytes;
-    // A command's epoch resets stale cursor/click counts, but does not
-    // erase key-down state already observed by the game's Raw Input reader.
-    if (rawSeenEpoch!=plan.epoch) {
+    // A newly observed epoch is not consumption: reset per-key and
+    // camera cursors ONLY when one or more records were copied and
+    // the post-copy source identity remained stable.
+    if (rawMayAdvanceReadCursor(delivered) && rawSeenEpoch!=plan.epoch) {
         rawSeenEpoch=plan.epoch;rawSeenCounts=0;
         rawSeenX=0;rawSeenY=0;
     }

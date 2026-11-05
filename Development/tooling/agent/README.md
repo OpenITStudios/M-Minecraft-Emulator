@@ -147,6 +147,48 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P42 — Post-copy Raw Input state commit on partial reads (SOURCE_ONLY)
+
+After P41 the original optional C++ Raw Input consumer validates the
+current word, original game window and even shared revision before
+copying a bounded event prefix to the game's GetRawInputBuffer output.
+However, the original retained Rust controller can publish a neutral
+ReleaseAll or another authorised packet **between that validation
+and the memcpy**. The old reader would still advance `rawHeldMask`,
+press counts and camera read cursors using the just-invalidated
+plan. A later one-record read could then miss a pending UP event
+or treat a newer packet's edge count as previously consumed.
+
+P42 retains one canonical reader and adds a **post-copy source
+check** for **nonempty** synthetic prefixes. Before reporting
+the copied count or advancing any game-facing read state,
+the original C++ hook rechecks the same `currentPacket()` and
+even shared revision using the P41 `rawFinalCopyAllowed`
+contract. If the source changes, the provisional output bytes
+are zeroed, the returned record count is zero, and neither
+`rawHeldMask` nor button/camera read cursors are advanced.
+The next actual game poll may regenerate pending releases
+from the still-retained state. This is a bounded fail-closed
+second sample, not an atomic cross-process lock or a promise
+that the game polls this API.
+
+An additional no-copy guard prevents even an empty plan
+from changing `rawSeenEpoch` and resetting its associated
+button/cursor counters. The one-record prefix limit, UP-before-
+DOWN ordering, P40 zero-word release replan, P41 window
+revalidation, physical Raw Input queue suppression and old
+96-byte controller-owned ABI are retained. Authored C++
+compile-time fixtures cover 0/1/multiple copied records;
+the existing P41 fixtures cover stable, changed and odd
+source revisions. **AUTHORED_NOT_EXECUTED**: no compile,
+runtime test, Windows process or Minecraft Education input.
+
+An acknowledged native shared-memory write or a copied
+Raw Input buffer record still does not prove Minecraft
+handled gameplay key-up. No new hook, fake event delivery,
+alternate controller, stored profile, installer, feature
+enablement or GitHub Actions has been introduced.
+
 ## P41 — Final Raw Input admission after window verification (SOURCE_ONLY)
 
 The optional C++ Raw Input reader from P40 verifies that an

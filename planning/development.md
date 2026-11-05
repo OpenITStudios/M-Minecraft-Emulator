@@ -10,6 +10,26 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P42 post-copy Raw Input state commit (5 November 2026,
+  SOURCE_ONLY):** The optional P41 C++ Raw Input reader still had
+  a narrow interval between its final packet/revision check
+  and event memcpy; a new native ReleaseAll/active packet could
+  invalidate the plan just as its prefix was copied. The
+  existing `observedRawBuffer` now rechecks the exact virtual
+  word/revision AFTER nonempty copy but BEFORE it returns a
+  count or consumes any button/mouse cursor state. If changed,
+  provisional output bytes are scrubbed, count=0 and pending
+  UP/DOWN records remain available to a subsequent game poll.
+  Empty plans no longer advance the raw epoch or reset counts.
+  P40 release-only replan, P41 window gate, one-record
+  capacities, source-only C++ constexpr negative fixtures
+  and the private 96-byte ABI stay intact. Fixtures
+  AUTHORED_NOT_EXECUTED. No new controller, code runner,
+  local tests, build, CI, Windows/Minecraft operation,
+  installer or feature activation. See
+  [agent P42](../Development/tooling/agent/README.md).
+
+
 - **P41 final Raw Input window/TTL commit gate (5 November 2026,
   SOURCE_ONLY):** The optional C++ `observedRawBuffer` previously
   sampled `currentPacket` and shared-memory revision BEFORE its
