@@ -32,10 +32,11 @@ NOT_VERIFIED.
   background; first read-only semantic UIA via existing Cua Driver,
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
-- **Last source stages:** P58 `inspect_client_ui`, P59 read-only
-  `assess_client_background_action`, P60 snapshot/token-index
-  consistency and blocked non-Invoke-only route. All are
-  AUTHORED_NOT_EXECUTED; no Windows action was enabled.
+- **Last source stages:** P58 `inspect_client_ui`, P59/P60 read-only
+  `assess_client_background_action` with snapshot provenance,
+  P61 explicit refusal even for an Invoke-advertising Button:
+  no upstream Invoke-only transport or verified target-owned
+  postcondition. All AUTHORED_NOT_EXECUTED; no Windows action enabled.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -79,6 +80,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P61 | Audit pinned/newer Cua paths; explicitly refuse even advertised Invoke candidates without no-fallback transport and app-owned readback | Authored negative fixtures, NOT_EXECUTED |
 | P60 | Check Cua snapshot/token/index at read; refuse unbound candidates; expose blocked non-Invoke-only delivery | Authored negative fixtures, NOT_EXECUTED |
 | P59 | Fix valid Cua UIA element index 0; add read-only strict-background Invoke assessment using fresh native-fenced UIA, without input/fallback | Authored negative fixtures, NOT_EXECUTED |
 | P58 | MCP semantic UIA read via existing configured Cua Driver; 64-node tree-only result fenced by native pre/post identity | Authored fixtures, NOT_EXECUTED |
@@ -161,14 +163,16 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**P61: investigate a no-fallback Invoke-only, no-user-interruption
-route without enabling dispatch.** Pin fresh `Local` HEAD; check
-whether pinned/current Cua Driver exposes or can safely support an
-exact-window Invoke-only primitive that refuses fallback before acting.
-Define one minimal app-specific, target-owned readback under exact native
-PID/HWND/birth/session fences. Source-review refusal for WPF focus risk,
-Chromium/Electron fallback, stale tokens, changed HWND and uncertain
-timeouts. Do not add a second controller, global input, daemon or retry.
-Any actual action additionally needs operator approval plus real Windows
-no-focus proof. Minecraft gameplay remains separate/NOT_VERIFIED.
-No source test, local PC, build, CI, install or game execution.
+**P62: source-only design decision for a genuinely no-fallback,
+single-operation Invoke-only transport at the Cua boundary.** At fresh
+`Local` HEAD, review the minimal compatible upstream extension
+surface (`trycua/cua`), including strict no-fallback route,
+snapshot ownership, window/app-class focus isolation, bounded
+target-owned postcondition and refusal/uncertainty contract. Decide
+whether an upstream-provided primitive can be used without forking
+or adding a second native controller. If no independently supported
+route exists, preserve `BACKGROUND_UNAVAILABLE`; do NOT repackage
+generic `click` as safe or build speculative input backends.
+Only source/fixtures/docs within GitHub; no Node tests, local PC,
+CI, build, install, Windows/Codex/Minecraft actions. Separately
+authorize any eventual mutable runtime.

@@ -148,9 +148,11 @@ export function projectCuaSemanticWindow(result,target) {
     screenshotCaptured:false,actionPermitted:false,
     gameplayInput:'NOT_VERIFIED'};
 }
-// P59-P60: read-only candidacy, never a grant. A matching token may
-// already be stale; Cua click can fall back to PostMessage/injection,
-// and some UIA handlers can self-activate. No execution is authorized.
+// P59-P61: read-only candidacy, NEVER action admission. Upstream Cua
+// click may dispatch PostMessage, alternate UIA patterns or injection;
+// invoke_menu deliberately fronts a window. No compatible Invoke-only
+// transport or app-owned postcondition exists in this MCP. Refuse even
+// a well-formed enabled Invoke button, instead of advertising readiness.
 export function assessCuaStrictBackgroundAction(inspection,{
   elementIndex,action,
 }={}) {
@@ -160,10 +162,11 @@ export function assessCuaStrictBackgroundAction(inspection,{
   }
   const result={
     schema:1,deliveryMode:'STRICT_BACKGROUND',status:'BACKGROUND_UNAVAILABLE',
-    reason:null,elementIndex,action,
+    reason:null,elementIndex,action,semanticCandidate:false,
     actionDispatched:false,actionPermitted:false,
-    foregroundFallback:false,windowActivated:false,
-    screenshotCaptured:false,backgroundEffect:'NOT_VERIFIED',
+    foregroundFallback:false,transportFallbackPermitted:false,
+    windowActivated:false,screenshotCaptured:false,
+    backgroundEffect:'NOT_VERIFIED',
     backgroundRoute:'BLOCKED_NOT_INVOKE_ONLY',
     targetPostcondition:'NOT_DECLARED',focusIsolation:'NOT_VERIFIED',
     tokenExported:false,gameInput:'NOT_VERIFIED',
@@ -208,13 +211,17 @@ export function assessCuaStrictBackgroundAction(inspection,{
      !element.actions.includes('invoke')) {
     return refuse('UIA_INVOKE_NOT_ADVERTISED_ON_ENABLED_BUTTON');
   }
-  return {...result,status:'SEMANTIC_CANDIDATE_NOT_EXECUTED',
-    reason:'UIA_INVOKE_ADVERTISED_BACKGROUND_UNPROVEN',
+  // A semantic UIA candidate is not an action route. The upstream
+  // generic click path is not Invoke-only, and an Invoke result itself
+  // does not prove focus isolation or an app-owned postcondition.
+  return {...result,status:'BACKGROUND_UNAVAILABLE',
+    reason:'CUA_INVOKE_ONLY_ROUTE_NOT_AVAILABLE',
+    semanticCandidate:true,
     target:{slot:inspection.slot,pid:identity.pid,
       windowId:identity.windowId,sessionId:identity.sessionId,
       createdFileTime:identity.createdFileTime},
     element:{index:elementIndex,role:'Button',label:element.label},
-    next:'REQUIRE_INVOKE_ONLY_ROUTE_NO_FOCUS_PROOF_AND_TARGET_POSTCONDITION'};
+    next:'REQUIRE_NO_FALLBACK_INVOKE_ROUTE_AND_APP_OWNED_READBACK'};
 }
 
 export async function inspectCuaWindowElements(cuaExecutable,target,{

@@ -71,9 +71,10 @@ No new controller, startup worker, CI or native game-control ability.
 
 The new read-only `assess_client_background_action({slot,elementIndex,action:"invoke"})`
 reuses P58's **fresh** PID/HWND/birth/session-fenced Cua UIA read. It
-returns either `BACKGROUND_UNAVAILABLE` with the reason or
+originally returned either `BACKGROUND_UNAVAILABLE` or
 `SEMANTIC_CANDIDATE_NOT_EXECUTED` for a uniquely identified, enabled
-`Button` advertising `invoke` in a complete tree. Cua UIA may still
+`Button` advertising `invoke` in a complete tree. P61 now returns
+`BACKGROUND_UNAVAILABLE` for **all** cases (details below). Cua UIA may still
 activate its target window when invoked; therefore candidacy is **not**
 proof of nondisturbance or permission to act. No action token or
 input/foreground fallback is exported. A zero-based element index is
@@ -100,6 +101,40 @@ implicit retry was added. Future execution requires a no-fallback
 Invoke-only transport, target-owned postcondition, native identity fences
 and separately authorized Windows no-focus proof. Fixture cases were
 authored, NOT_EXECUTED.
+
+## P61 — No-fallback Invoke-only admission stays blocked (SOURCE_ONLY)
+
+The pinned Cua Driver revision and the examined newer upstream
+`290552c6374da181314e26d69156198f7d48c0df` do **not** expose a
+no-fallback `InvokePattern.Invoke` tool through the inspected Windows
+`click`, `invoke_menu` or `set_value` paths. In particular,
+`invoke_menu` explicitly activates the foreground window. Neither an
+Invoke advertisement nor a driver `delivery_mode:"background"`
+guarantees no user-focus interruption. The Cua snapshot token is not
+a reserved action capability; a later read can invalidate it.
+
+As a fail-closed contract correction, the **existing**
+`assess_client_background_action` now returns
+`status: BACKGROUND_UNAVAILABLE` and
+`reason: CUA_INVOKE_ONLY_ROUTE_NOT_AVAILABLE` even for a complete,
+uniquely indexed, enabled Invoke Button. `semanticCandidate:true`
+is informational evidence only; it cannot be passed as a click
+authorization. `transportFallbackPermitted:false`,
+`actionPermitted:false` and `actionDispatched:false` remain explicit.
+No extra MCP tools, background loop, native controller changes or
+Windows side effects.
+
+**Future acceptance must be two independent checks, never inferred
+from transport success:** (1) exact-window, no-fallback Invoke-only
+transport with provider snapshot/token owned within one bounded action,
+native identity fenced before/after, no cursor/focus/z-order changes
+across the entire action; and (2) an application-owned, typed
+postcondition in the same exact target, read independently after
+dispatch (not a PNG hash, generic UIA tree change, window title or
+transport ACK). If either is missing, return BACKGROUND_UNAVAILABLE
+before dispatch. Any uncertain timeout after attempted action must
+be quarantined without replay. Source fixtures AUTHORED_NOT_EXECUTED;
+Windows nondisturbance NOT_VERIFIED.
 
 ## Efficient visual observation
 

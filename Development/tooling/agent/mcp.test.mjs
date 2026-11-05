@@ -737,9 +737,12 @@ test('background UI action assessment reuses fresh native-fenced UIA only',async
   assert.deepEqual(events,[]);
   const result=await h.callTool('assess_client_background_action',
     {slot:2,elementIndex:0,action:'invoke'});
-  assert.equal(result.status,'SEMANTIC_CANDIDATE_NOT_EXECUTED');
+  assert.equal(result.status,'BACKGROUND_UNAVAILABLE');
+  assert.equal(result.reason,'CUA_INVOKE_ONLY_ROUTE_NOT_AVAILABLE');
+  assert.equal(result.semanticCandidate,true);
   assert.equal(result.actionPermitted,false);
   assert.equal(result.foregroundFallback,false);
+  assert.equal(result.transportFallbackPermitted,false);
   assert.equal(result.backgroundEffect,'NOT_VERIFIED');
   assert.deepEqual(events,['native','uia','native']);
   const invalid=await h.handle({jsonrpc:'2.0',id:88,method:'tools/call',

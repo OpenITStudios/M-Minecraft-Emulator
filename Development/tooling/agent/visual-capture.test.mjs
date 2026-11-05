@@ -127,10 +127,13 @@ test('strict background UIA assessor never dispatches and refuses uncertainty',(
   };
   const candidate=assessCuaStrictBackgroundAction(inspection,
     {elementIndex:0,action:'invoke'});
-  assert.equal(candidate.status,'SEMANTIC_CANDIDATE_NOT_EXECUTED');
+  assert.equal(candidate.status,'BACKGROUND_UNAVAILABLE');
+  assert.equal(candidate.reason,'CUA_INVOKE_ONLY_ROUTE_NOT_AVAILABLE');
+  assert.equal(candidate.semanticCandidate,true);
   assert.equal(candidate.actionDispatched,false);
   assert.equal(candidate.actionPermitted,false);
   assert.equal(candidate.foregroundFallback,false);
+  assert.equal(candidate.transportFallbackPermitted,false);
   assert.equal(candidate.windowActivated,false);
   assert.equal(candidate.backgroundEffect,'NOT_VERIFIED');
   assert.equal(candidate.backgroundRoute,'BLOCKED_NOT_INVOKE_ONLY');
@@ -142,6 +145,12 @@ test('strict background UIA assessor never dispatches and refuses uncertainty',(
 
   const reason=(changed,elementIndex=0)=>assessCuaStrictBackgroundAction(
     changed,{elementIndex,action:'invoke'}).reason;
+  const absent=assessCuaStrictBackgroundAction(inspection,
+    {elementIndex:1,action:'invoke'});
+  assert.equal(absent.semanticCandidate,false);
+  assert.equal(absent.status,'BACKGROUND_UNAVAILABLE');
+  assert.equal(absent.actionDispatched,false);
+  assert.equal(absent.transportFallbackPermitted,false);
   assert.equal(reason({...inspection,elementsComplete:false}),
     'UIA_INCOMPLETE_OR_DEGRADED');
   assert.equal(reason({...inspection,snapshotProvenance:'UNVERIFIED'}),

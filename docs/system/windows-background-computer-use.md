@@ -132,8 +132,9 @@ accepts `element_index:0`. The existing P58 MCP
 `assess_client_background_action` tool performs a fresh version of
 that *same* native-fenced read, then refuses missing, ambiguous,
 degraded, disabled or non-Button/non-Invoke targets. A complete enabled
-Button with an `invoke` pattern is reported only as
-`SEMANTIC_CANDIDATE_NOT_EXECUTED`; there is no action token, input
+Button with an `invoke` pattern was originally reported as
+`SEMANTIC_CANDIDATE_NOT_EXECUTED` (now `BACKGROUND_UNAVAILABLE`
+under P61); there is no action token, input
 dispatch, focus or foreground escalation, UIA invocation, or proof
 of background behavior. Source-only negative fixtures authored,
 NOT_EXECUTED. The Cua `InvokePattern` result alone cannot guarantee
@@ -168,6 +169,72 @@ isolation. Neither generic UIA churn, screenshot hash nor tool ACK is
 sufficient. Uncertain timeouts must not cause automatic replay.
 Minecraft gameplay remains separately unverified. All tests authored
 NOT_EXECUTED; no Windows/Codex/Minecraft activity.
+
+**P61 source-only contract correction (6 November 2026):** The
+upstream Cua Driver `main` revision inspected at this stage,
+`290552c6374da181314e26d69156198f7d48c0df`, retains the
+relevant Windows `click`, `invoke_menu`, `set_value` and
+`fg_bypass` behavior from pinned P58/P60 source:
+- `click` is **not** an Invoke-only API: in element-token mode
+  it can select Chromium `PostMessage`, alternate UIA patterns
+  or targeted coordinate injection. `action:"invoke"` is not
+  a guarantee to bypass these fallbacks.
+- `invoke_menu` calls `force_foreground_assisted` and reports
+  foreground delivery. It must not be used under strict background.
+- `set_value` has separate Value/Range/Combo paths and UIA
+  handlers that may activate the window; it does not solve Invoke.
+- `fg_bypass` documents an unresolved WPF self-activation
+  class. Even a direct UIA Invoke transport would still require
+  per-application focus isolation evidence.
+
+Upstream source links for this exact review:
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/platform-windows/src/tools/click.rs
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/platform-windows/src/tools/invoke_menu.rs
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/platform-windows/src/tools/set_value.rs
+https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/platform-windows/src/uia/fg_bypass.rs
+
+**Implementable minimal transport contract (not implemented):**
+1. A future action must be **UIA Invoke-only or refused before
+   any other kind of dispatch**. Do not route this through Cua
+   generic `click` or `invoke_menu`; do not use desktop or
+   foreground scopes, `PostMessage`, `SendInput`, pointer,
+   fallback UIA patterns or silent retries. Require a semantically
+   supported, enabled target and explicit no-fallback behavior.
+2. Resolve the provider-owned UIA element and its snapshot **inside
+   one bounded Cua operation**, with exact PID/root HWND/birth/session
+   from the original native controller before dispatch and again
+   afterward. A token/index received by Codex in a prior tool
+   result is not valid authority. Serialize relevant reads/actions;
+   stale/replaced target must refuse rather than retarget.
+3. Verify focus/cursor/z-order unchanged across the complete
+   operation for the intended class of target; a pre/post check
+   alone can miss brief focus theft, so actual Windows continuous
+   disturbance observation is required for acceptance. Treat
+   WPF/Chromium/unknown app handlers as unsafe until evidence
+   supports them; no undocumented focus-restore workaround.
+4. Require a **target-owned typed postcondition** selected for the
+   exact application action before dispatch: a known state
+   transition exposed by the application or its independently
+   trusted status interface, not generic UIA label disappearance,
+   any screenshot/hash change, a tool ACK or click route field.
+   The current Minecraft UIA tree has **no verified app-owned
+   postcondition**. The future verifier must bind before/after
+   to the same controller identity and fail without a known
+   expected change.
+5. If an attempt may have been dispatched and then times out or
+   loses identity, report `OUTCOME_UNKNOWN_NO_RETRY`; never
+   claim no effect, replay automatically or target a new HWND.
+   If a gate fails before any dispatch, report
+   `BACKGROUND_UNAVAILABLE` with no attempted action.
+
+The existing MCP P59/P60 assessor is **not** an action route.
+To avoid suggesting otherwise, P61 changes its positive semantic
+result to `BACKGROUND_UNAVAILABLE` /
+`CUA_INVOKE_ONLY_ROUTE_NOT_AVAILABLE`; it retains
+`semanticCandidate:true` only as non-executable diagnostic
+information. No new action tool, token export, native controller
+change, Cua binary install, test execution or Minecraft input.
+Source fixtures were authored; not executed.
 
 **P58 source-only implementation:** `inspect_client_ui({slot})`
 uses the existing configured Cua Driver `get_window_state`
