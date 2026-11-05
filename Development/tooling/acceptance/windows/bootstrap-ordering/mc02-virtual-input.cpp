@@ -177,6 +177,23 @@ constexpr bool freshNativePublication(std::uint64_t revision,
 static_assert(freshNativePublication(4,2));
 static_assert(!freshNativePublication(4,4));
 static_assert(!freshNativePublication(4,6));
+// A coherent, nonzero native packet means this original AI process has
+// entered its isolated-input epoch, EVEN when the packet is rejected by
+// deadline, focus, or root-window admission. A rejected first command
+// must never let subsequent GetRawInputBuffer/KeyState reads fall back
+// to a human's physical input after the AI window regains foreground.
+// A neutral-only initial recovery write (packet=0) does not latch the
+// experimental input mode, so the original user-driven login remains usable.
+constexpr bool observedCommittedActivePacket(std::uint64_t word,
+    std::uint64_t initialRevision,std::uint64_t finalRevision) noexcept {
+    return word!=0 && initialRevision!=0 && !(initialRevision&1) &&
+        initialRevision==finalRevision;
+}
+static_assert(observedCommittedActivePacket(1,2,2));
+static_assert(!observedCommittedActivePacket(0,2,2)); // neutral
+static_assert(!observedCommittedActivePacket(1,2,4)); // changed
+static_assert(!observedCommittedActivePacket(1,3,3)); // mid-write
+static_assert(!observedCommittedActivePacket(1,0,0)); // uninitialized
 // Multiple Minecraft polling threads may reject different revisions at
 // once. A late rejection of an OLD revision must not overwrite an earlier
 // rejection of a NEWER one. C++17 has no atomic fetch_max; use bounded
@@ -202,6 +219,15 @@ std::uint64_t currentPacket() {
     if (!revision || (revision&1)) return 0;
     const auto word=view->packet.load(std::memory_order_seq_cst);
     const auto hostRaw=view->humanWindow.load(std::memory_order_seq_cst);
+    // The first coherent ACTIVE publication latches physical-input
+    // isolation before *any* deadline/focus/HWND refusal. Previously a
+    // rejected initial command returned zero without setting isolated,
+    // letting a later foreground AI game poll real keys/Raw Input.
+    // Do not latch for an incomplete writer transaction or neutral-only
+    // startup reconciliation.
+    if (observedCommittedActivePacket(word,revision,
+            view->cursorRevision.load(std::memory_order_seq_cst)))
+        isolated.store(true,std::memory_order_release);
     // An expired packet might look live again after the 32-bit uptime
     // counter wraps. Once observed expired, revoke THIS revision for the
     // lifetime of this game process; a fresh native publication can advance.

@@ -35,12 +35,14 @@ NOT_VERIFIED.
 - **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
   blocked; P65 synthetic counter; P66-P68 native 4/5-client
   attempted-slot, neutral-failure and MCP recovery integrity.
-  P69 gates the native reader on current OGLES root HWND; the latest
-  source correction prevents an *observed invalid active publication*
-  (stale deadline, lost hybrid MC01 foreground or invalid AI root)
-  from rearming on focus/window restoration without a NEW controller
-  write. Existing zero-word buffered Raw Input releases remain allowed.
-  All C++ regression assertions AUTHORED_NOT_EXECUTED; no Windows/game
+  P69 gates the native reader on the exact OGLES root HWND; subsequent
+  source hardening permanently rejects an observed invalid active
+  publication until a NEW controller write. The current correction
+  latches game-local isolation on the first **coherent active packet**
+  even if later deadline/focus/HWND checks reject it; this prevents a
+  fallthrough to physical keyboard/Raw Input after focus restoration.
+  Neutral-only startup recovery and zero-word pending key-up/mouse-up
+  remain unchanged. C++ assertions AUTHORED_NOT_EXECUTED; no runtime
   execution or new backend.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -85,6 +87,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Input isolation fail-closed | The existing C++ consumer now latches physical-input isolation after observing a coherent first active packet, even when its focus/HWND/TTL admission refuses it; neutral-only recovery does not latch | Compile-time negative assertions AUTHORED_NOT_EXECUTED; feature still compile-OFF |
 | P69 follow-up | Game-local C++ read path revokes an observed invalid active revision until a fresh controller write; rechecks human focus after HWND verification; zero-word key-up/mouse-up path unchanged | C++ static regression assertions AUTHORED_NOT_EXECUTED; compile-OFF |
 | P69 | C++ virtual key/cursor packet admission now verifies current exact owned, visible OGLES root HWND at read-time; rejects replacement/hidden roots without input fallback | Compile-time negative assertions AUTHORED_NOT_EXECUTED; experiment remains OFF |
 | P68 | Reviewed P67 actor -> CLI -> MCP failure path; added 4/5-AI regression for allowlisted AI_RELEASE_UNCONFIRMED, independent neutrals, quarantine, no replay and explicit recovery | Authored Node fixture NOT_EXECUTED; existing production MCP path unchanged |
@@ -207,16 +210,15 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Continue source-only integration of the existing 4/5-client native
-input consumer:** inspect the original buffered Raw Input `nextRawPlan`,
-`observedRawBuffer` and partially copied key-up/mouse-up state after
-an active publication is revoked. Verify that only the original
-game-thread OGLES window can receive release events; no replacement
-HWND, stale camera delta, duplicated down or physical keyboard
-fallback may be admitted. Correct a demonstrated cross-layer issue
-only, using existing source owners and bounded authored fixtures.
-No new input daemon, driver, status ledger, speculative stage count,
-Cua foreground fallback or release packaging. Cua Invoke-only remains
-`BACKGROUND_UNAVAILABLE`; all experimental game input remains
-compile-OFF, NOT_EXECUTED on Node/Rust/C++ and NOT_VERIFIED on Windows/
-Minecraft until separate operator approval.
+**Continue source-only integration of the existing 4/5-client game
+input consumer**, specifically the buffered Raw Input prefix-copy and
+neutral transition: verify only the originally pinned OGLES game
+thread can receive pending key-up/mouse-up, even when a first active
+packet was refused, then check that partial-prefix read cursors never
+consume unreturned records. Correct only an observed source defect
+using the existing C++ reader and Rust channel. No new controllers,
+drivers, speculative milestones, external input injection, Cua
+foreground fallback or package promotion. Strict Cua remains
+`BACKGROUND_UNAVAILABLE`; experimental native input stays
+compile-OFF, all authored fixtures NOT_EXECUTED and Windows/
+Minecraft gameplay NOT_VERIFIED until separate operator permission.
