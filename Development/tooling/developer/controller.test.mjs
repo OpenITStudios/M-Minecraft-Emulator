@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {dirname,resolve,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
-import {validatedRegistry,classifyPath,planForPaths,planForProfile,automaticChangeSet,legacyArgs,parseFlags,parseSmokeFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
+import {validatedRegistry,classifyPath,planForPaths,planForProfile,qualityReviewForPaths,automaticChangeSet,legacyArgs,parseFlags,parseSmokeFlags,isPinnedNodeProcess,classifyCompletion,runOwnedChild,withBuildLock} from './controller.mjs';
 
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const registry=JSON.parse(readFileSync(new URL('./tasks.json',import.meta.url),'utf8'));
@@ -376,6 +376,55 @@ test('JSON-mode developer child logs go to stderr and do not corrupt the one std
   assert.equal(JSON.parse(output.stdout.trim()).status,'COMMAND_SUCCEEDED');
   assert.match(output.stderr,/CHILD_DIAGNOSTIC/);
   assert.doesNotMatch(output.stdout,/CHILD_DIAGNOSTIC/);
+});
+
+test('quality review is deterministic, bounded and explicitly does not execute external harnesses',()=>{
+  const paths=[
+    'Development/tooling/agent/check-education-native-hud-source.mjs',
+    'Development/apps/desktop/src-tauri/src/engine/process_identity.rs'
+  ];
+  const review=qualityReviewForPaths(paths,SHA);
+  assert.equal(review.status,'REVIEW_REQUIRED');
+  assert.equal(review.sourceSha,SHA);
+  assert.deepEqual(review.areas.map(area=>area.id),['education-hud','native-session']);
+  assert.deepEqual(review.stages.map(stage=>stage.id),['PROPOSE','PROBE','COMPOSE']);
+  assert.ok(review.stages.every(stage=>stage.status==='NOT_EXECUTED'));
+  assert.ok(review.areas.every(area=>area.status==='NOT_REVIEWED'));
+  assert.deepEqual(review.recommendedValidationTaskIds,['source.validate']);
+  assert.match(review.externalIntegrations.rea,/NOT_RUN/);
+  assert.equal(review.evidence.minecraftRuntime,'NOT_EXECUTED');
+  assert.equal(review.proof,'STATIC_REVIEW_PLAN_ONLY');
+  assert.deepEqual(qualityReviewForPaths(paths,SHA),review);
+});
+test('quality review preserves scoped documentation/no-change semantics',()=>{
+  const docs=qualityReviewForPaths(['docs/system/development-discipline.md'],SHA);
+  assert.deepEqual(docs.areas.map(area=>area.id),['documentation']);
+  assert.deepEqual(docs.recommendedValidationTaskIds,['repository.validate']);
+  assert.equal(qualityReviewForPaths([],SHA).status,'NO_CHANGES');
+  assert.deepEqual(qualityReviewForPaths([],SHA).stages,[]);
+  assert.throws(()=>qualityReviewForPaths([], 'not-a-sha'),/exact source SHA/);
+});
+test('quality review fails closed for protected, absolute or path traversal inputs',()=>{
+  for(const path of ['Data/world','workspace/private','App/launcher.exe',
+    '../Data/private','a/../../Data','/etc/passwd','C:/Users/test/world',
+    'docs\\escape.md','-unsafe.md']) {
+    const review=qualityReviewForPaths([path],SHA);
+    assert.equal(review.status,'BLOCKED',path);
+    assert.deepEqual(review.areas,[],path);
+    assert.deepEqual(review.recommendedValidationTaskIds,[],path);
+  }
+});
+test('review CLI uses the existing read-only controller with strict argument admission',()=>{
+  assert.equal(parseFlags(['--json'],'review').json,true);
+  assert.deepEqual(parseFlags(['--paths','docs/README.md'],'review').paths,['docs/README.md']);
+  assert.equal(parseFlags(['--base-sha',SHA],'review').baseSha,SHA);
+  assert.throws(()=>parseFlags(['--profile','fast'],'review'),/Unexpected/);
+  assert.throws(()=>parseFlags(['--base-sha',SHA,'--paths','docs/a.md'],'review'),/cannot be combined/);
+  assert.throws(()=>parseFlags(['--paths','docs/a.md','--base-sha',SHA],'review'),/source paths only/);
+  assert.throws(()=>parseFlags(['--paths'],'review'),/source paths only/);
+  assert.throws(()=>parseFlags(['--json','--json'],'review'),/repeated/);
+  const launcher=readFileSync(resolve(root,'DEV.cmd'),'utf8');
+  assert.match(launcher,/if \/I "%~1"=="review" goto controller/);
 });
 
 test('default auto planning stays lightweight on changed files or the most recent commit',()=>{

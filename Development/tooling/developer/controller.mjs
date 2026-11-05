@@ -162,6 +162,121 @@ export function planForPaths(paths,revision) {
     taskIds:['source.validate'],reason:'Mixed, native, configuration or unknown source; use full verification. Native acceptance remains separate.'};
 }
 
+// Source-only quality review: a deterministic checklist, NOT an LLM runner,
+// binary investigator, gameplay agent, or grading/acceptance authority.
+const QUALITY_AREAS=Object.freeze({
+  'education-hud':Object.freeze({
+    owner:'Development/tooling/agent/education-native-hud-prototype/; check-education-native-hud-source.mjs',
+    checks:[
+      'Verify JSONC structural parent/child path and after-player_position sibling; never insert into auto-sized native image.',
+      'Keep world-only manifest scope, original XYZ/Agent Pos/visibility bindings and no Script API or button action.',
+      'Keep Education 26.33 rendering, layout, team forms and pack interaction explicitly UNVERIFIED.'
+    ]
+  }),
+  'agent-mcp':Object.freeze({
+    owner:'Development/tooling/agent/mcp.mjs and the existing specialized agent modules',
+    checks:[
+      'Preserve the single authenticated Rust controller, per-slot owner and default-disabled AI input.',
+      'Check native target PID/birth/session/HWND, frame delivery, stale cache and fail-closed writer lease paths.',
+      'Do not reinterpret original Skills Probe/team results as verified map or Minecraft gameplay.'
+    ]
+  }),
+  'native-session':Object.freeze({
+    owner:'Development/apps/desktop/src-tauri/src/engine/; Development/engine/runtime-core/',
+    checks:[
+      'Trace original native lifecycle/identity/IPC owner and all directly affected callers.',
+      'Check PID reuse, timeout, interrupted/unknown mutations, release ordering and per-profile preservation.',
+      'Refuse second game controller, authentication bypass or unsupported multi-session fallback.'
+    ]
+  }),
+  'desktop-ui':Object.freeze({
+    owner:'Development/apps/desktop/src/ and typed Tauri bridge',
+    checks:[
+      'Check selection, keyboard/mouse presentation and user-visible state against retained native facts.',
+      'Check empty/loading/error/replacement states without inventing game readiness or coordinates.',
+      'Preserve five fixed profile cards and existing native window/preview authority.'
+    ]
+  }),
+  'developer-tooling':Object.freeze({
+    owner:'DEV.cmd; Development/tooling/developer/ and repository checks',
+    checks:[
+      'Keep one allowlisted developer command owner, exact Local SHA and non-executable read-only planning.',
+      'Reject arbitrary shell/tool/plugin activation, CI, implicit approval and unscoped deletion.',
+      'Check affected consumer paths and authored positive/negative regressions; do not label them executed.'
+    ]
+  }),
+  'documentation':Object.freeze({
+    owner:'Existing canonical AGENTS, docs/system and planning/development.md',
+    checks:[
+      'Resolve references to current source and remove stale claims rather than duplicate policy or status owners.',
+      'Keep authored tests distinct from executed tests and historical evidence distinct from exact-HEAD proof.'
+    ]
+  }),
+  'cross-cutting':Object.freeze({
+    owner:'Resolve through docs/system/implementation-map.md before proposing any new component',
+    checks:[
+      'Treat unmatched source/configuration as full-scope review; identify canonical owner and consumers first.',
+      'Check source, dependency, package, data preservation and negative regression boundaries.'
+    ]
+  })
+});
+function qualityArea(path) {
+  if(path.startsWith('Development/tooling/agent/education-native-hud-prototype/') ||
+      path==='Development/tooling/agent/check-education-native-hud-source.mjs') return 'education-hud';
+  if(path.startsWith('Development/tooling/agent/')) return 'agent-mcp';
+  if(path.startsWith('Development/apps/desktop/src-tauri/') ||
+      path.startsWith('Development/engine/runtime-core/')) return 'native-session';
+  if(path.startsWith('Development/apps/desktop/src/') ||
+      path.startsWith('Development/apps/desktop/test/')) return 'desktop-ui';
+  if(path.startsWith('Development/tooling/') || path==='DEV.cmd') return 'developer-tooling';
+  if(classifyPath(path)==='docs') return 'documentation';
+  return 'cross-cutting';
+}
+function safeReviewPath(path) {
+  return typeof path==='string' && path.length>0 && path.length<=512 &&
+    !path.includes('\\') && !path.includes('\0') && !path.startsWith('-') &&
+    !isAbsolute(path) && !win32.isAbsolute(path) &&
+    posix.normalize(path)===path && path!=='..' && !path.startsWith('../');
+}
+export function qualityReviewForPaths(paths,revision) {
+  if(!SHA.test(revision??'')) throw Error('Quality review requires an exact source SHA');
+  const validation=planForPaths(paths,revision);
+  if(validation.status==='BLOCKED' || paths.some(path=>!safeReviewPath(path))) {
+    return {status:'BLOCKED',sourceSha:revision,changedCount:paths.length,
+      areas:[],recommendedValidationTaskIds:[],stages:[],
+      reason:'Protected or unsafe paths cannot be admitted to quality review',
+      proof:'NOT_EXECUTED'};
+  }
+  const areas=[...new Set(paths.map(qualityArea))].sort().map(id=>({
+    id,canonicalOwner:QUALITY_AREAS[id].owner,
+    reviewChecks:[...QUALITY_AREAS[id].checks],status:'NOT_REVIEWED'
+  }));
+  return {
+    status:paths.length?'REVIEW_REQUIRED':'NO_CHANGES',
+    sourceSha:revision,changedCount:paths.length,areas,
+    recommendedValidationTaskIds:[...validation.taskIds],
+    stages:paths.length?[
+      {id:'PROPOSE',status:'NOT_EXECUTED',
+        requirement:'Compare no-change, correction in the existing owner, reuse and a justified minimal extension. Cite exact current source for each candidate.'},
+      {id:'PROBE',status:'NOT_EXECUTED',
+        requirement:'Review each candidate against owner boundaries, negative cases, changed consumers, source provenance and missing runtime evidence. No synthetic PASS.'},
+      {id:'COMPOSE',status:'NOT_EXECUTED',
+        requirement:'Adopt only a supported, minimal source change; unresolved risk remains explicit and no agent automatically selects or commits a winner.'}
+    ]:[],
+    externalIntegrations:{
+      harness2:'METHODOLOGY_ONLY_NO_MODEL_RUN',
+      deepseekHarness:'ORCHESTRATION_PATTERN_ONLY_NO_AGENT_RUNTIME',
+      rea:'OPTIONAL_AUTHORIZED_ARTIFACT_INVESTIGATION_NOT_RUN'
+    },
+    evidence:{sourceReview:'NOT_REVIEWED',sourceTests:'NOT_EXECUTED',
+      targetWindows:'NOT_EXECUTED',minecraftRuntime:'NOT_EXECUTED',
+      fiveClientAcceptance:'NOT_EXECUTED'},
+    reason:paths.length?'Read-only plan; candidate analysis, testing and code changes require separate actual evidence.':
+      'No selected changes; nothing was reviewed or executed.',
+    proof:'STATIC_REVIEW_PLAN_ONLY'
+  };
+}
+
 export function legacyArgs(task) {
   if(!task || !Object.hasOwn(POLICY,task.command)) throw Error('Unregistered executor');
   if(task.command==='repository-structure') return {type:'node',args:[REPOSITORY_CHECK]};
@@ -232,7 +347,7 @@ export function classifyCompletion(before,after,exitCode,spawnError=false,interr
 }
 function report(operation,data) {return {schema:1,operation,...data};}
 function usage() {
-  return 'Usage: DEV.cmd inspect|catalog|plan [--json] [--profile fast|local-smoke|five-client|release|experimental] [--base-sha <ancestor-40-char-SHA>] [--paths <source paths>...]\n'+
+  return 'Usage: DEV.cmd inspect|catalog|plan|review [--json] [--profile fast|local-smoke|five-client|release|experimental] [--base-sha <ancestor-40-char-SHA>] [--paths <source paths>...]\n'+
     '       DEV.cmd run auto --expect-sha <40-char Local SHA> [--base-sha <ancestor-40-char-SHA>] [--json]\n'+
     '       DEV.cmd run <task-id> --expect-sha <40-char Local SHA> [--approve <task-id>] [--json]\n'+
     '       DEV.cmd smoke start --expect-sha <full-SHA> [--json]\n'+
@@ -256,12 +371,12 @@ export function parseFlags(tokens,operation) {
       if(!PLAN_PROFILES.has(profile)) throw Error('--profile requires fast, local-smoke, five-client, release or experimental');
       result.profile=profile;seen.add(token);continue;
     }
-    if((operation==='plan'||operation==='run') && token==='--base-sha' && !seen.has(token)) {
+    if((operation==='plan'||operation==='review'||operation==='run') && token==='--base-sha' && !seen.has(token)) {
       const base=rest[++i];
       if(!SHA.test(base??'')) throw Error('--base-sha requires one exact 40-character commit SHA');
       result.baseSha=base;seen.add(token);continue;
     }
-    if(operation==='plan' && token==='--paths' && !seen.has(token)) {
+    if((operation==='plan'||operation==='review') && token==='--paths' && !seen.has(token)) {
       result.paths=rest.slice(i+1);
       if(!result.paths.length || result.paths.some(path=>path.startsWith('--'))) throw Error('--paths requires source paths only');
       break;
@@ -453,7 +568,7 @@ async function runTask(task,parsed,source,selection=null) {
 }
 export async function main(argv=process.argv.slice(2)) {
   const [operation,...arguments_]=argv;
-  if(!['inspect','catalog','plan','run','smoke'].includes(operation)) {
+  if(!['inspect','catalog','plan','review','run','smoke'].includes(operation)) {
     console.error(usage());return 2;
   }
   if(operation==='smoke') {
@@ -529,6 +644,20 @@ export async function main(argv=process.argv.slice(2)) {
       ...(selection.baseSha ? {baseSha:selection.baseSha} : {}),
       sourceBranch:source.branch,proof:'STATIC_RECOMMENDATION_ONLY'}),parsed.json);
     return source.branch==='Local'&&planned.status!=='BLOCKED'?0:3;
+  }
+  if(operation==='review') {
+    if(source.branch!=='Local') return blocked(operation,'Review requires branch Local',parsed.json);
+    let selection;
+    try {selection=parsed.paths.length
+      ?{paths:parsed.paths,basis:'declared-paths'}:automaticChangeSet(parsed.baseSha);}
+    catch(error){return blocked(operation,error.message,parsed.json);}
+    const review=qualityReviewForPaths(selection.paths,source.sha);
+    emit(report(operation,{...review,basis:selection.basis,
+      inputTrust:selection.basis==='declared-paths'?'CALLER_DECLARATION_NOT_GIT_VERIFIED':
+        'LOCAL_GIT_METADATA_NOT_CONTENT_REVIEW',
+      ...(selection.baseSha?{baseSha:selection.baseSha}:{}),
+      sourceBranch:source.branch}),parsed.json);
+    return review.status==='BLOCKED'?3:0;
   }
   let requested=parsed.taskId;
   let autoSelection=null;

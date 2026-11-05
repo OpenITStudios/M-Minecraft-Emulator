@@ -22,6 +22,55 @@ Mandatory for repository/system development, adapted from the owner-first, minim
 7. **Verify proportionally:** use exact-tree/consumer checks and positive/negative regression cases first. Executed Node/Rust/Tauri tests require actual execution evidence. Package/Windows/game claims require corresponding environments. GitHub Actions remain disabled.
 8. **Stop with truth:** record the commit, changed owner, verified claim, proof ceiling and next necessary task in `planning/development.md` at a meaningful handoff. Do not continue cosmetic or speculative work after the requirement is met.
 
+## Evidence-grounded source improvement (Harness² / DeepSeek Harness / REA)
+
+Use the existing `DEV.cmd review --json` source-only route when a reviewed
+local developer toolchain is available; GitHub-only analysis follows the same
+policy directly without needing a local command. Review is a **plan**, not a
+grading result, live agent, verified compiler result, second test runner, or
+Minecraft controller.
+
+1. **Propose (Harness² pattern):** start with the exact Local SHA, first
+   canonical owner and its direct consumers. Compare *no change*, correction
+   of existing code, reuse, and only then a minimal new seam. Record at most
+   three materially different proposals; avoid speculative parallel work.
+2. **Probe:** challenge each proposal against real source invariants,
+   negative/rollback cases, permission/privacy bounds, changed dependencies,
+   and documented test coverage. Separate `OBSERVED_SOURCE` from
+   `INFERRED_RISK`; an authored test is `AUTHORED_NOT_EXECUTED`.
+   Failed or missing checks are never scored as PASS, and the reviewer must
+   not call a source-only plan a benchmark improvement.
+3. **Compose:** adopt the smallest supported solution *only after operator
+   authorization for changes*. A parallel agent may review another candidate,
+   but one original canonical owner integrates the final change. Preserve
+   unresolved/blocked evidence and exact SHA; commit one coherent batch.
+4. **Optional REA:** use only on developer-owned or explicitly authorized
+   artifacts when ordinary source review cannot answer a concrete question.
+   Pin target SHA/digest, tool/provider versions, evidence IDs, coverage,
+   limitations, and distinguish static observations from native runtime.
+   REA never gains Minecraft credentials, live game/process control, or
+   a place in the production launcher.
+5. **DeepSeek role model:** delegate *source analysis*, *architecture review*,
+   and *negative QA review* as bounded optional **developer-side** roles,
+   with tools least-privileged and no implicit execute/write powers. This
+   borrows its scoped capability design; no Cordis/plugin runtime is
+   bundled in Lazy Tester. MCP `mcp.mjs` and Rust session controller
+   retain their established owners.
+
+The `review` envelope contains area/risk prompts, selected validation task
+IDs, input provenance, and explicit `NOT_REVIEWED`/`NOT_EXECUTED` states.
+It deliberately cannot produce a winner, execute tests, install upstream
+projects, adopt REA output, or elevate QA. Existing `probe_qa` and
+`DEV.cmd plan` remain separate, canonical owners.
+
+Upstream *design references* (not dependencies, endorsements, or installed
+versions): [Google Harness²](https://github.com/google-research/harness2/tree/6868817518876de8fd170c6a8354daca273b6191)
+(Apache-2.0), [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness/tree/fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159)
+(MIT, developer preview), [REA](https://github.com/morluto/rea/tree/71f680d7c1aa7a45ba0325fe87b104744b0c105f)
+(MIT, authorized analysis only). Importing code or enabling an external
+runtime requires a separate compatibility, dependency, security and
+approval review. No CI/workflow is reintroduced.
+
 ## Repository completion preflight
 
 Before committing, answer:

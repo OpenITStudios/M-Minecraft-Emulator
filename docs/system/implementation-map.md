@@ -56,6 +56,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Native DXGI measured FPS HUD (same-process overlay) | `Development/tooling/acceptance/windows/bootstrap-ordering/dxgi-pacing.cpp`, `fps-hud.cpp`, `fps-hud-control.cpp` | Original one-per-process accepted Present/Present1 rate and worker lifetime, with a private in-process BootstrapHudSnapshot export; no direct Svelte or controller telemetry transport. Retired worker cannot report a valid live rate. See `docs/system/coordinate-inspector.md`. |
 | Native Windows installer and preservation | `Development/engine/distribution/lazy-tester-package.json` | `Development/apps/desktop/src-tauri/tauri.lazy-tester.conf.json` |
 | One developer command/validation entry | `DEV.cmd` | `Development/tooling/developer/controller.mjs`, `tasks.json`, `Development/tooling/windows-toolchain/dev.ps1` |
+| Source-only evidence-grounded quality review | `Development/tooling/developer/controller.mjs` (`DEV.cmd review`) | Existing changed-path classification, owner-first checks and [development discipline](development-discipline.md); no new runner, model agent, REA install or gameplay acceptance |
 | Developer artifact inventory and retention | `Development/tooling/storage/` | Current storage and package scripts; no generic deletion |
 | Source contracts and optional Windows evidence | `Development/tooling/repository/`, `Development/tooling/acceptance/windows/` | `docs/validation/README.md` |
 | Current work, blockers, proof ceiling and single next action | `planning/development.md` | Exact `Local` commits |

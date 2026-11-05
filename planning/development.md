@@ -10,6 +10,21 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P24 evidence-grounded developer review (5 November 2026, SOURCE_ONLY):**
+  Existing `DEV.cmd`/`Development/tooling/developer/controller.mjs` now
+  admits a read-only `review` operation with exact Local SHA, bounded safe
+  changed-path inputs, canonical owner/risk prompts, and NOT_EXECUTED
+  Propose–Probe–Compose stages inspired by Harness². DeepSeek Harness is
+  a developer-side scoped-role pattern; REA remains optional, external and
+  limited to authorized artifacts. No external dependency, Cordis runtime,
+  game controller, agent daemon, CI, installer, source test execution or
+  automatic acceptance was introduced. Unsafe/protected paths fail closed;
+  explicit `--paths` provenance is marked caller-declared rather than Git-
+  verified. CLI/contract regressions are AUTHORED_NOT_EXECUTED. This is
+  a review planner, not automated evaluation or multi-agent execution.
+  See [developer controller](../Development/tooling/developer/README.md)
+  and [development discipline](../docs/system/development-discipline.md).
+
 - **P23 Mojang coordinate HUD structural proof (5 November 2026,
   SOURCE_ONLY):** the previous opt-in checker only searched strings
   in a SHA-pinned Mojang Bedrock HUD. Its reported `chat_stack`

@@ -16,6 +16,7 @@ for the proof ceiling at the latest revision.
 | Goal | Entry point | Canonical details |
 | --- | --- | --- |
 | First efficient Windows test | `DEV.cmd localcheck`, then `DEV.cmd plan --profile local-smoke --json` after approved toolchain setup | [13-step local smoke](docs/validation/efficient-local-testing.md), [Windows first-run](docs/validation/local-pc-first-run.md) |
+| Read-only evidence-grounded source review | `DEV.cmd review --json` or `review --base-sha <ancestor-SHA> --json` when the pinned toolchain is approved | [Developer controller](Development/tooling/developer/README.md), [development discipline](docs/system/development-discipline.md); no agent/test execution |
 | Plan **all** tests and required evidence | 306 uniquely identified planned test cases, not yet executed | [Complete master](docs/validation/lazy-tester-test-master.md), [198 standard cases](docs/validation/lazy-tester-test-cases-standard.md), [108 MCP/AI/QA cases](docs/validation/lazy-tester-test-cases-experimental.md) |
 | Open an already prepared app | Root `Lazy Tester.exe` or compatibility `RUN.cmd` | [Desktop workspace](docs/product/unified-workspace.md) |
 | Save manually copied Minecraft coordinates | Play → Coordinates & Saves → paste XYZ, provide location/world labels, Save | [Native-first workflow](docs/system/coordinate-inspector.md#p19--native-first-manual-saved-locations-4-november-2026-source-only) |
@@ -102,6 +103,7 @@ DEV.cmd localcheck
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
+DEV.cmd review --json
 DEV.cmd plan --profile local-smoke --json
 DEV.cmd smoke start --expect-sha <exact-Local-HEAD-SHA>
 DEV.cmd check:quick

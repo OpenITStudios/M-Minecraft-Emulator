@@ -11,6 +11,9 @@ npm, Tauri, the native DLL, or the Lazy Tester runtime.
 DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
+DEV.cmd review --json
+DEV.cmd review --base-sha <40-char-ancestor-SHA> --json
+DEV.cmd review --json --paths Development/tooling/agent/check-education-native-hud-source.mjs
 DEV.cmd plan --profile local-smoke --json
 DEV.cmd smoke start --expect-sha <40-char-Local-SHA> --json
 DEV.cmd smoke record --run <smoke-run-id> --case LT-01 --result PASS --observed --expect-sha <40-char-Local-SHA> --json
@@ -24,6 +27,24 @@ DEV.cmd run frontend.validate --expect-sha <40-char-Local-SHA> --json
 DEV.cmd run auto --expect-sha <40-char-Local-SHA> --json
 DEV.cmd run auto --expect-sha <40-char-Local-SHA> --base-sha <40-char-ancestor-SHA> --json
 ```
+
+
+The read-only `review` operation is an evidence-grounded improvement plan,
+not a second agent harness or test runner. It uses the same exact Local source
+identity and changed-file selection as `plan`: pending edits, the latest
+commit on clean checkout, a verified ancestor `--base-sha`, or explicitly
+declared `--paths`. Caller-declared paths are marked **not Git-verified**.
+It refuses protected, absolute and traversal paths and cannot run commands,
+start agents, install REA, modify Minecraft, or mark any test PASS.
+
+`review` returns a bounded list of canonical owner areas and concrete risk
+checks, plus three **NOT_EXECUTED** stages: Propose (alternatives), Probe
+(counterexamples/negative cases), Compose (select only source-supported change).
+It also exposes the existing recommended validation tasks as **recommendations
+only**. Harness² supplies the review pattern; DeepSeek Harness suggests
+delegated reviewer roles; REA remains optional developer-side investigation
+of authorized artifact copies. No external library is installed or executed.
+See [development discipline](../../../docs/system/development-discipline.md).
 
 **Choose a profile explicitly for the first Windows session.** The default
 `plan` (equivalent to `--profile fast`) is only a changed-source recommendation,
@@ -125,7 +146,7 @@ A stale/unsafe/replaced lock **blocks** the next job; it is never taken over,
 silently removed, or used as permission to kill another process. A normal
 task failure releases only this controller's verified lock. A sudden process
 termination can leave a stale lock requiring separate manual inspection.
-Read-only tasks and `inspect/catalog/plan` do not acquire that lock.
+Read-only tasks and `inspect/catalog/plan/review` do not acquire that lock.
 
 A successful command is `COMMAND_SUCCEEDED`, **not**
 installed-app/Minecraft acceptance.
@@ -140,7 +161,7 @@ execution is implied.
 
 ## Ownership & safety
 
-- `controller.mjs`: read-only inspection/planning and guarded task execution.
+- `controller.mjs`: read-only inspection/planning/quality-review contracts and guarded task execution.
 - `tasks.json`: one canonical task catalog; command vocabulary is statically
   allowlisted in the controller, not dynamically executable strings.
 - `windows-toolchain/dev.ps1`: unchanged backend for installed toolchain,
