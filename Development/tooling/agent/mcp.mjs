@@ -36,7 +36,7 @@ import {readMapTestContractCached,mapContractSourceStatus,planMapTests,
 const execFileAsync = promisify(execFile);
 const REQUEST_LIMIT = 64 * 1024;
 const MAX_MCP_TEXT_BYTES = 128 * 1024;
-const MAX_MCP_IMAGE_CHARS = 8 * 1024 * 1024; // Cua's 6 MiB PNG base64 upper bound
+const MAX_MCP_IMAGE_CHARS = OBSERVATION_LIMITS.maximumEncodedFrameChars; // Canonical 3 MiB lossless PNG -> 4 MiB base64
 const EVIDENCE_TAIL_BYTES = 256 * 1024;
 const EVIDENCE_LIMIT = 20;
 const TEAM_CAPTURE_MAX_LINE_BYTES = 24 * 1024; // team analytics/results contract

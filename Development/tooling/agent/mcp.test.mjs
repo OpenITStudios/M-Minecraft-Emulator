@@ -2034,9 +2034,11 @@ test('MCP bounds serialized text and image output before responding',async()=>{
     cuaExecutable:path.resolve('cua-driver.exe')},{
     native:async(_exe,_operation,slot)=>target(slot),
     capture:async()=>({mimeType:'image/png',
-      imageBase64:'A'.repeat(8*1024*1024+1),width:800,height:600,
+      imageBase64:'A'.repeat(4*1024*1024+1),width:800,height:600,
       sha256:'a'.repeat(64)}),
   });
+  // A 3 MiB PNG fits 4 MiB base64; larger tool image text is rejected
+  // by the same limit already enforced for cached visual observations.
   const image=await imageHandler.handle({jsonrpc:'2.0',id:2,
     method:'tools/call',params:{name:'observe_client',arguments:{slot:2}}});
   assert.equal(image.result.isError,true);

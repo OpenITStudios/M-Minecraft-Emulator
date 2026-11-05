@@ -147,6 +147,20 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P52 — One consistent MCP/observer image payload limit (SOURCE_ONLY)
+
+The MCP response envelope still allowed **8 MiB** of base64 image text
+from the retired 6 MiB CUA limit, even though CUA/WGC source PNGs are
+now capped at **3 MiB** and the current observer already admits at most
+**4 MiB** of encoded text. The original MCP boundary now reuses
+`OBSERVATION_LIMITS.maximumEncodedFrameChars` instead of keeping a
+second outdated numeric limit. This refuses oversize one-shot provider
+results before the MCP image response is emitted, without changing
+lossless PNG, the native target checks, capture scheduling or image
+format. Existing oversized-response fixture was updated to the new
+4 MiB boundary, AUTHORED_NOT_EXECUTED. No measured token or memory
+reduction is claimed; no new tool, codec or dependency.
+
 ## P50 — Avoid redundant UTF-8 decoding on Skills Probe checkpoint reads (SOURCE_ONLY)
 
 The original evidence reader decoded the entire bounded 256 KiB file tail
