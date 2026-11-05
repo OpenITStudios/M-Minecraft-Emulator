@@ -10,6 +10,27 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P38 legacy packet TTL / neutral ACK isolation (5 November 2026,
+  SOURCE_ONLY):** The original 96-byte native MC02 input packet
+  expires within 500 ms, but the legacy `AiLeaseBook` held no
+  persistent record of an active or uncertain legacy write after
+  that timer elapsed. A modern 4/5-AI lease could therefore adopt
+  MC02 despite missing native neutral ACK, unlike P37's modern
+  writer claims. The retained Rust lease owner now marks
+  `legacy_neutral_pending` before legacy channel I/O, retains
+  the flag beyond TTL, and clears it only on exact native
+  neutral-write acknowledgement or confirmed process reap.
+  Modern group acquisition refuses unresolved legacy MC02
+  claims; unrelated client slots remain independent and the
+  old packet watermarks/TTL are preserved. Pure Rust fixtures
+  cover hybrid/full cohorts, failed writes, late neutral,
+  healthy peers and process reaping, AUTHORED_NOT_EXECUTED.
+  Shared-memory ABI v4, C++ reader, IPC protocol, opt-in
+  flags, profiles and CI remain unchanged; no source tests,
+  Windows or Minecraft were executed.
+  See [agent P38](../Development/tooling/agent/README.md).
+
+
 - **P37 expiry-is-not-neutral native writer fence (5 November 2026,
   SOURCE_ONLY):** The existing Rust `AiLeaseBook.acquire` treated
   a writer's 10-second lease expiry as neutral state and could

@@ -147,6 +147,46 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P38 — Legacy packet TTL versus native neutral acknowledgement (SOURCE_ONLY)
+
+The retained Rust shared-memory input channel restricts an accepted
+active MC02 packet to at most **500 ms**; the optional C++ Bedrock
+Win32 reader refuses an expired word and releases virtual keys when
+polled. That TTL controls the **input packet lifetime**, not whether
+Minecraft has actually consumed key-up, nor whether the original
+native controller has confirmed a neutral-state write.
+
+An original compatibility gap remained after P37: the modern
+`AiLeaseBook` retained unacknowledged non-neutral 4/5-client claims,
+but legacy MC02 writes only set `legacy_until_ms = now+500`.
+At expiry, a modern 4/5-AI writer could claim MC02 even if a legacy
+active packet had been published without any neutral ACK.
+
+The original **single native `AiLeaseBook`** now retains one bounded
+`legacy_neutral_pending` flag per original slot. A legacy input
+begins with **possibly active** before channel I/O; a successful
+active write keeps it pending. Only a confirmed native exact-process
+neutral write or confirmed original-process reap clears it. Expiry
+still stops polling and the original monotonic 500-ms watermark
+still rejects delayed packets, but expiry **never clears the
+neutral-confirmation obligation**. The modern atomic group-acquire
+refuses an unresolved legacy MC02 claim even after the 500-ms
+packet deadline; unrelated original client slots can be acquired
+and released independently. Legacy MC02 can still explicitly write
+a neutral packet on its existing authenticated channel.
+
+This is the **native transport ACK**, not proof of Minecraft Raw
+Input consumption, Win32 game input, or a completed gameplay action.
+No change to the 96-byte shared-memory ABI, client C++ reader,
+lease epochs, game lifecycle, default OFF feature flags, MCP
+contract, installer, profile state or GitHub Actions. Existing
+Rust fixtures that previously inferred safety at +500ms now
+require explicit neutral ACK; additional negative 4/5-client
+fixtures cover lost active/neutral outcomes, healthy peers and
+confirmed process reap. Regression fixtures are
+AUTHORED_NOT_EXECUTED; Windows/Minecraft and five-client
+acceptance remain NOT_VERIFIED.
+
 ## P37 — Expired writer lease never proves neutral input (SOURCE_ONLY)
 
 A source audit of the retained Rust `AiLeaseBook` found that its
