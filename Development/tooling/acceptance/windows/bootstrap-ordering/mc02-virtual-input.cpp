@@ -123,6 +123,27 @@ bool parseHandle(HANDLE& handle) {
     handle=reinterpret_cast<HANDLE>(static_cast<ULONG_PTR>(raw));
     return true;
 }
+// The original Rust v4 packet holds a 32-bit GetTickCount deadline.
+// Unsigned modular subtraction respects the 500-ms limit even when the
+// uptime counter wraps. This is read-time validity, NOT game consumption.
+constexpr bool packetLiveAt(std::uint64_t word,std::uint32_t now) noexcept {
+    if (!word) return false;
+    const auto until=static_cast<std::uint32_t>(word>>32);
+    const auto remaining=static_cast<std::uint32_t>(until-now);
+    return remaining>0 && remaining<=500;
+}
+// Compile-time negative fixtures; authored but NOT_EXECUTED.
+constexpr auto DeadlineSample=(std::uint64_t{501}<<32)|1u;
+static_assert(packetLiveAt(DeadlineSample,1u));     // 500 ms
+static_assert(packetLiveAt(DeadlineSample,500u));   // 1 ms
+static_assert(!packetLiveAt(DeadlineSample,501u));  // expired
+static_assert(!packetLiveAt(DeadlineSample,502u));  // past expiry
+static_assert(!packetLiveAt(DeadlineSample,0u));    // >500 ms
+constexpr auto RolloverSample=(std::uint64_t{3}<<32)|1u;
+static_assert(packetLiveAt(RolloverSample,0xfffffffEu));
+static_assert(!packetLiveAt(RolloverSample,4u));
+static_assert(!packetLiveAt(0,0u));
+
 std::uint64_t currentPacket() {
     if (!view) return 0;
     // Rust publishes packet, host HWND and input state inside one ABI-v4
@@ -135,9 +156,7 @@ std::uint64_t currentPacket() {
     const auto word=view->packet.load(std::memory_order_seq_cst);
     const auto hostRaw=view->humanWindow.load(std::memory_order_seq_cst);
     const DWORD now=GetTickCount();
-    const DWORD until=static_cast<DWORD>(word>>32);
-    const auto ahead=static_cast<LONG>(until-now);
-    if (!word || ahead<=0 || ahead>500 || !originalForeground) return 0;
+    if (!packetLiveAt(word,now) || !originalForeground) return 0;
     // Human focus is not merely checked when the controller writes.
     // Use the real Win32 trampoline: a spoofed game-local focus read
     // must never authorize background MC02 against physical MC01 input.
@@ -152,8 +171,10 @@ std::uint64_t currentPacket() {
     // Recheck AFTER the focus query. If the retained controller
     // changed packet/window while we looked up physical foreground,
     // discard the whole observation; retry only on a later game poll.
-    if (view->cursorRevision.load(std::memory_order_seq_cst)!=revision)
-        return 0;
+    // The genuine foreground query may finish AFTER expiry while the
+    // shared revision remains unchanged. Reject that expired packet.
+    if (view->cursorRevision.load(std::memory_order_seq_cst)!=revision ||
+        !packetLiveAt(word,GetTickCount())) return 0;
     return word;
 }
 // A background game may skip its Win32 input polling loop after comparing
@@ -186,9 +207,10 @@ HWND WINAPI observedForeground() {
     const HWND real=originalForeground();
     const auto word=currentPacket();
     const HWND owned=word ? ownedGameWindow() : nullptr;
-    if (owned) isolated.store(true,std::memory_order_release);
+    const bool liveOwned=owned && packetLiveAt(word,GetTickCount());
+    if (liveOwned) isolated.store(true,std::memory_order_release);
     SetLastError(previous);
-    return owned ? owned : real;
+    return liveOwned ? owned : real;
 }
 HWND WINAPI observedActive() {
     const DWORD previous=GetLastError();
@@ -198,7 +220,8 @@ HWND WINAPI observedActive() {
     // GetActiveWindow is scoped to the caller's thread, unlike the
     // process-wide GetForegroundWindow query.
     const bool ownThread=owned &&
-        GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId();
+        GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId() &&
+        packetLiveAt(word,GetTickCount());
     if (ownThread) isolated.store(true,std::memory_order_release);
     SetLastError(previous);
     return ownThread ? owned : real;
@@ -211,7 +234,8 @@ HWND WINAPI observedFocus() {
     // GetFocus is thread-local too. Never pretend that a worker thread
     // owns the Minecraft game window's message queue.
     const bool ownThread=owned &&
-        GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId();
+        GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId() &&
+        packetLiveAt(word,GetTickCount());
     if (ownThread) isolated.store(true,std::memory_order_release);
     SetLastError(previous);
     return ownThread ? owned : real;
@@ -265,7 +289,7 @@ bool virtualDown(int key,std::uint64_t word) {
 // optional MC02-only read cursor is independent from MC01 hardware.
 // Read under the existing writer's revision and reject torn snapshots.
 bool virtualPressEdge(unsigned keyMask,std::uint64_t word) {
-    if (!view || !word || !keyMask ||
+    if (!view || !packetLiveAt(word,GetTickCount()) || !keyMask ||
         asyncReadBusy.test_and_set(std::memory_order_acquire)) return false;
     bool pressed=false;
     const auto revision=view->cursorRevision.load(std::memory_order_seq_cst);
@@ -274,7 +298,8 @@ bool virtualPressEdge(unsigned keyMask,std::uint64_t word) {
         const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
         const auto packet=view->packet.load(std::memory_order_seq_cst);
         if (packet==word &&
-            view->cursorRevision.load(std::memory_order_seq_cst)==revision) {
+            view->cursorRevision.load(std::memory_order_seq_cst)==revision &&
+            packetLiveAt(word,GetTickCount())) {
             if (epoch!=seenPressEpoch) {
                 seenPressEpoch=epoch;
                 seenPressCounts=0; // discard expired previous-epoch clicks
@@ -297,12 +322,14 @@ SHORT WINAPI observedAsync(int key) {
     if (!virtualMode(word)) {
         SetLastError(previous); return originalAsync(key);
     }
+    // virtualMode can query Windows after the initial packet sample.
+    const auto live=packetLiveAt(word,GetTickCount())?word:0;
     const unsigned keyMask=maskFor(key);
-    const bool held=virtualDown(key,word);
-    const bool newlyPressed=virtualPressEdge(keyMask,word);
+    const bool held=virtualDown(key,live);
+    const bool newlyPressed=virtualPressEdge(keyMask,live);
     const SHORT result=static_cast<SHORT>(
         (held ? 0x8000u : 0u) | (newlyPressed ? 1u : 0u));
-    if (word && result) noteVirtualKeys(keyMask);
+    if (live && result) noteVirtualKeys(keyMask);
     SetLastError(previous);
     return result;
 }
@@ -312,8 +339,9 @@ SHORT WINAPI observedKey(int key) {
     if (!virtualMode(word)) {
         SetLastError(previous); return originalKey(key);
     }
-    const SHORT result=virtualDown(key,word)?static_cast<SHORT>(0x8000):0;
-    if (word && result) noteVirtualKeys(maskFor(key));
+    const auto live=packetLiveAt(word,GetTickCount())?word:0;
+    const SHORT result=virtualDown(key,live)?static_cast<SHORT>(0x8000):0;
+    if (live && result) noteVirtualKeys(maskFor(key));
     SetLastError(previous);
     return result;
 }
@@ -323,12 +351,13 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
     if (!virtualMode(word) || !state) {
         SetLastError(previous); return originalKeyboard(state);
     }
+    const auto live=packetLiveAt(word,GetTickCount())?word:0;
     std::memset(state,0,256);
     for (int key : {'W','S','A','D',VK_SPACE,VK_SHIFT,VK_LBUTTON,VK_RBUTTON}) {
-        if (virtualDown(key,word)) state[key]=0x80;
+        if (virtualDown(key,live)) state[key]=0x80;
     }
-    if (virtualDown(VK_SHIFT,word)) state[VK_LSHIFT]=state[VK_RSHIFT]=0x80;
-    if (word) noteVirtualKeys(static_cast<unsigned>(word)&0xffu);
+    if (virtualDown(VK_SHIFT,live)) state[VK_LSHIFT]=state[VK_RSHIFT]=0x80;
+    if (live) noteVirtualKeys(static_cast<unsigned>(live)&0xffu);
     SetLastError(previous);
     return TRUE;
 }
@@ -371,7 +400,7 @@ BOOL WINAPI observedCursor(LPPOINT point) {
     // In the separate Raw-buffer mode, camera deltas are published ONLY
     // through GetRawInputBuffer; GetCursorPos retains menu cursor state.
 #if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
-    if (word) applyPendingCursor();
+    if (packetLiveAt(word,GetTickCount())) applyPendingCursor();
 #endif
     point->x=virtualX.load(std::memory_order_acquire);
     point->y=virtualY.load(std::memory_order_acquire);
@@ -605,11 +634,15 @@ bool discardPhysicalRawInput(UINT headerBytes,DWORD& failure) {
 UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     if (!view) return originalRawBuffer(data,size,headerBytes);
     const DWORD previous=GetLastError();
-    const auto word=currentPacket();
+    auto word=currentPacket();
     if (!virtualMode(word)) {
         SetLastError(previous);
         return originalRawBuffer(data,size,headerBytes);
     }
+    // If the opted-in game resumed polling just as its input TTL
+    // expired, build the zero-word release plan NOW. Preserve the
+    // existing rawHeldMask and delayed key-up/mouse-up events.
+    if (!packetLiveAt(word,GetTickCount())) word=0;
     // Once this opted-in AI child is isolated, malformed buffer arguments
     // must never bypass the virtual reader and expose the physical queue
     // through the genuine GetRawInputBuffer. Refuse without touching caller

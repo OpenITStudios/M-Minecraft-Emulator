@@ -10,6 +10,24 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P39 optional C++ Raw Input TTL expiry recheck (5 November 2026,
+  SOURCE_ONLY):** the existing reader checked the native 500-ms
+  expiry before a real Windows foreground query, then only checked
+  the shared-memory revision. A delayed query could return a now
+  expired nonzero input packet. The original C++ owner now
+  rechecks the modular GetTickCount deadline after foreground
+  calls and at keyboard/focus/cursor hooks, while the Raw Input
+  consumer converts a late-expired word to zero before generating
+  its deferred release plan. The existing rawHeldMask, partial
+  records, game-thread identity, and physical Raw Input suppression
+  remain intact. Compile-time rollover/expiry static_assert
+  fixtures AUTHORED_NOT_EXECUTED. No new controller, ABI fields,
+  C++ feature opt-in, Rust writer, MCP, CI, source tests,
+  Windows/Minecraft run or installer. The game must actually poll
+  for any key-up to be returned; gameplay acceptance NOT_VERIFIED.
+  See [agent P39](../Development/tooling/agent/README.md).
+
+
 - **P38 legacy packet TTL / neutral ACK isolation (5 November 2026,
   SOURCE_ONLY):** The original 96-byte native MC02 input packet
   expires within 500 ms, but the legacy `AiLeaseBook` held no

@@ -147,6 +147,38 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P39 — Raw Input expiry recheck after Windows foreground calls (SOURCE_ONLY)
+
+The existing optional C++ `GetRawInputBuffer` reader maintains
+`rawHeldMask` and advances its per-button cursor only after records
+were copied to the caller. A game that stopped polling cannot be made
+to consume key-up/mouse-up merely by changing native shared memory.
+
+The source-level gap: `currentPacket()` checked the 500-ms lifetime
+before calling the real Windows foreground API, but subsequently
+checked only the ABI revision. A delayed foreground check could return
+an active packet that had already expired without any revision change.
+Other Win32 keyboard/focus/cursor hooks could also cross expiry after
+their own foreground queries.
+
+The existing C++ owner now checks a bounded unsigned modular
+GetTickCount deadline at the final read point. The Raw Input hook
+treats an active packet that expired during its foreground sampling
+as **zero** before composing the buffer plan. Previously delivered
+down events remain pending in `rawHeldMask` and can be returned as
+up events on that resumed poll; partial-buffer reads still advance
+cursors only for copied records. The existing game-window thread,
+exact v4 revision, physical-input suppression and verified HWND
+guards remain unchanged. Compile-time `static_assert` negative
+fixtures cover expiry at 0/1/500 ms, over-horizon, zero packet and
+32-bit tick-counter rollover. AUTHORED_NOT_EXECUTED.
+
+**Not proven:** a paused Minecraft client may never poll; Raw Input
+events are not injected by this change. Minecraft Education's actual
+GetRawInputBuffer usage and acceptance of any key-up/mouse-up remain
+NOT_VERIFIED. No v4 ABI, Rust controller, release protocol, MCP tool,
+installer, game profile, feature enablement or CI change occurred.
+
 ## P38 — Legacy packet TTL versus native neutral acknowledgement (SOURCE_ONLY)
 
 The retained Rust shared-memory input channel restricts an accepted
