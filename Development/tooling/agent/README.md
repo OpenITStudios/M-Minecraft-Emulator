@@ -147,6 +147,21 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P47 — Linear bounded WGC frame assembly and one-time base64 (SOURCE_ONLY)
+
+The original WGC decoder used `Buffer.concat` for every stdout chunk,
+repeatedly copying a partially received PNG. It now assembles the split
+28-byte header and one bounded payload directly, copying each received
+fragment once, without adding a worker, dependency or runtime provider.
+The original magic, 3 MiB PNG limit, sequence ordering, timestamp,
+PNG dimensions/hash and IEND guards remain. WGC `latest()` now encodes
+a given frame to base64 only on its first read, releasing that frame's
+raw bytes instead of retaining both representations. It still checks
+exact native target identity and freshness on every read. Split-header,
+split-payload, combined-packet and repeat-read source fixtures are
+AUTHORED_NOT_EXECUTED. CPU, RAM and actual Windows WGC throughput
+remain NOT_MEASURED.
+
 ## P46 — Reuse the inspected PNG digest on each WGC frame (SOURCE_ONLY)
 
 The WGC packet decoder previously called `inspectPng(bytes)`, which already

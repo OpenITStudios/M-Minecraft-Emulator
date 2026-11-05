@@ -38,42 +38,60 @@ export function validateGpuTarget(target) {
 // packet header has arrived. The owning worker separately checks HWND.
 export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
   if (typeof onFrame!=='function') throw new TypeError('A frame consumer is required');
-  let pending=Buffer.alloc(0),lastSequence=0;
+  // Assemble one bounded PNG without copying all previously received chunks.
+  const header=Buffer.alloc(HEADER);
+  let headerUsed=0,bytes=null,bytesUsed=0,fields=null,lastSequence=0;
   function push(chunk) {
-    if (!Buffer.isBuffer(chunk) || pending.length+chunk.length>MAX_PENDING) {
+    if (!Buffer.isBuffer(chunk) || chunk.length>MAX_PENDING) {
       throw new Error('GPU frame IPC exceeded its bounded buffer');
     }
-    pending=Buffer.concat([pending,chunk]);
-    while(pending.length>=HEADER) {
-      if (pending.toString('ascii',0,4)!==MAGIC) {
-        throw new Error('Unknown GPU frame protocol');
+    let offset=0;
+    while(offset<chunk.length) {
+      if(bytes===null) {
+        const count=Math.min(HEADER-headerUsed,chunk.length-offset);
+        chunk.copy(header,headerUsed,offset,offset+count);
+        offset+=count;
+        headerUsed+=count;
+        if(headerUsed<HEADER) break;
+        headerUsed=0;
+        if(header.toString('ascii',0,4)!==MAGIC) {
+          throw new Error('Unknown GPU frame protocol');
+        }
+        const length=header.readUInt32BE(4);
+        const width=header.readUInt32BE(8),height=header.readUInt32BE(12);
+        const sequence=header.readUInt32BE(16);
+        const epoch=header.readBigUInt64BE(20);
+        if(length<33 || length>MAX_FRAME ||
+           width<1 || height<1 || width>1536 || height>1536 ||
+           sequence<=lastSequence || sequence>1000000 ||
+           epoch>BigInt(Number.MAX_SAFE_INTEGER)) {
+          throw new Error('Invalid GPU frame sequence/size/time');
+        }
+        fields={width,height,sequence,capturedAtMs:Number(epoch)};
+        bytes=Buffer.allocUnsafe(length);
+        bytesUsed=0;
       }
-      const length=pending.readUInt32BE(4);
-      const width=pending.readUInt32BE(8),height=pending.readUInt32BE(12);
-      const sequence=pending.readUInt32BE(16);
-      const epoch=pending.readBigUInt64BE(20);
-      if (length<33 || length>MAX_FRAME ||
-          width<1 || height<1 || width>1536 || height>1536 ||
-          sequence<=lastSequence || sequence>1000000 ||
-          epoch>BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new Error('Invalid GPU frame sequence/size/time');
-      }
-      if (pending.length<HEADER+length) break;
-      const capturedAtMs=Number(epoch);
-      if (capturedAtMs>clock()+5000 || capturedAtMs<clock()-90000) {
+      const count=Math.min(bytes.length-bytesUsed,chunk.length-offset);
+      chunk.copy(bytes,bytesUsed,offset,offset+count);
+      offset+=count;
+      bytesUsed+=count;
+      if(bytesUsed<bytes.length) break;
+      const {width,height,sequence,capturedAtMs}=fields;
+      if(capturedAtMs>clock()+5000 || capturedAtMs<clock()-90000) {
         throw new Error('GPU frame timestamp outside capture lifecycle');
       }
-      const bytes=Buffer.from(pending.subarray(HEADER,HEADER+length));
       const image=inspectPng(bytes);
-      if (image.width!==width || image.height!==height ||
-          bytes.toString('ascii',bytes.length-8,bytes.length-4)!=='IEND') {
+      if(image.width!==width || image.height!==height ||
+         bytes.toString('ascii',bytes.length-8,bytes.length-4)!=='IEND') {
         throw new Error('GPU frame PNG and transport dimensions disagree');
       }
-      pending=pending.subarray(HEADER+length);
+      const frame={sequence,capturedAtMs,width,height,
+        sha256:image.sha256,bytes};
       lastSequence=sequence;
-      onFrame({sequence,capturedAtMs,width,height,
-        sha256:image.sha256,
-        bytes});
+      bytes=null;
+      bytesUsed=0;
+      fields=null;
+      onFrame(frame);
     }
   }
   return {push};
@@ -206,9 +224,15 @@ export function createGpuFrameSource({
         now-frame.capturedAtMs>MAX_AGE_MS) {
       throw new Error('GPU_FRAME_NOT_READY');
     }
+    // Encode once on first demand; release raw bytes and reuse the string.
+    // The target identity and source-age checks above still run on every read.
+    if(frame.bytes!==null) {
+      frame.imageBase64=frame.bytes.toString('base64');
+      frame.bytes=null;
+    }
     return {
       provider:'NATIVE_WGC_PERSISTENT',
-      mimeType:'image/png',imageBase64:frame.bytes.toString('base64'),
+      mimeType:'image/png',imageBase64:frame.imageBase64,
       width:frame.width,height:frame.height,sha256:frame.sha256,
       capturedAtMs:frame.capturedAtMs,
       workerSequence:frame.sequence,

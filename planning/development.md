@@ -3,7 +3,7 @@
 **Updated:** 5 November 2026. **Branch:** `Local` only; `main` is
 release-reserved and GitHub Actions CI remains disabled. This file owns
 the ONE active development handoff, proof ceiling, and next action.
-Always pin the actual `Local` HEAD. Historical detail from P1–P46 is
+Always pin the actual `Local` HEAD. Historical detail through P46 is
 [archived without deletion](history/source-handoff-through-2026-11-05.md)
 at `d1fbd9e12e48b92ada5f5ef13b6b7d3c10c604a6`, with older material in
 [2 November history](history/source-handoff-through-2026-11-02.md).
@@ -42,6 +42,7 @@ Archived "Next" statements are not current authorization.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P47 | WGC assembles PNG fragments with bounded linear copies, and encodes each requested frame once | Authored regression, NOT_EXECUTED |
 | P46 | WGC packet decoder reuses `inspectPng` SHA-256 instead of hashing the same PNG twice | Authored regression, NOT_EXECUTED |
 | P45 | CUA and WGC use one 3 MiB lossless PNG limit, matching observer 4 MiB base64 bound | Authored regression, NOT_EXECUTED; CUA >3 MiB now refused |
 | P44 | Existing developer review flags critical Rust/C++ shared-memory ABI v4 and MCP callers (96 bytes, 15 offsets, 8 rising-edge counters) | Read-only review request, NOT_EXECUTED |

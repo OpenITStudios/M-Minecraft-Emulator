@@ -34,6 +34,29 @@ test('stream accepts split transport chunks and preserves frame order',()=>{
   // inspectPng already owns the one full-buffer digest; no second hash path.
   assert.throws(()=>decoder.push(packet(2)),/sequence/);
 });
+test('split WGC headers, payloads and joined packets keep frame order',()=>{
+  const found=[];
+  const decoder=createGpuPacketDecoder(frame=>found.push(frame),{clock:()=>100000});
+  const first=packet(1),second=packet(2);
+  const combined=Buffer.concat([first,second]);
+  const cuts=[1,13,27,29,first.length-1,first.length+2,combined.length-1];
+  let offset=0;
+  for(const end of [...cuts,combined.length]) {
+    decoder.push(combined.subarray(offset,end));
+    offset=end;
+  }
+  assert.deepEqual(found.map(frame=>frame.sequence),[1,2]);
+  assert.deepEqual(found.map(frame=>frame.bytes),[png,png]);
+});
+
+test('two complete WGC frames in one stdout chunk preserve sequence checks',()=>{
+  const frames=[];
+  const decoder=createGpuPacketDecoder(frame=>frames.push(frame),{clock:()=>100000});
+  decoder.push(Buffer.concat([packet(1),packet(2)]));
+  assert.deepEqual(frames.map(frame=>frame.sequence),[1,2]);
+  assert.throws(()=>decoder.push(packet(2)),/sequence/);
+});
+
 test('bad frame length, unknown magic and stale timestamp are refused',()=>{
   const make=()=>createGpuPacketDecoder(()=>{}, {clock:()=>100000});
   assert.throws(()=>make().push(Buffer.from('NOT1'+Buffer.alloc(24).toString('binary'),'binary')),
@@ -64,7 +87,10 @@ test('one capture worker preserves only latest frame and stops without game cont
   pipe.emit('data',packet(1));
   pipe.emit('data',packet(2));
   assert.equal(source.status(2).frames,2);
-  assert.equal(source.latest(2,target).workerSequence,2);
+  const firstRead=source.latest(2,target);
+  assert.equal(firstRead.workerSequence,2);
+  assert.equal(firstRead.imageBase64,png.toString('base64'));
+  assert.equal(source.latest(2,target).imageBase64,firstRead.imageBase64);
   assert.throws(()=>source.latest(2),/Native-owned/);
   source.stop([2]);
   assert.equal(killed,1);
