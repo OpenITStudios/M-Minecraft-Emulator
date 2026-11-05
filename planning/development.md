@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-**Updated:** 5 November 2026. **Branch:** `Local` only; `main` is
+**Updated:** 6 November 2026. **Branch:** `Local` only; `main` is
 release-reserved and GitHub Actions CI remains disabled. This file owns
 the ONE active development handoff, proof ceiling, and next action.
 Always pin the actual `Local` HEAD. Historical detail through P46 is
@@ -23,6 +23,27 @@ Read the [evidence-based parity design](../docs/system/windows-background-comput
 before continuing. REA was not executed; public macOS/Windows source
 and independent RE reports were reviewed. All runtime behavior remains
 NOT_VERIFIED.
+
+## Cross-chat continuation — one canonical handoff
+
+- **Repository/branch:** `OpenITStudios/M-Minecraft-Emulator` /
+  `Local` only. Pin **actual current** HEAD, not a remembered SHA.
+- **Current track:** Codex Windows Computer Use, strict zero-disturbance
+  background; first read-only semantic UIA via existing Cua Driver,
+  then action admission and independently verified background delivery.
+  Keep Minecraft native game input separate and **NOT_VERIFIED**.
+- **Last source stages:** P58 added `inspect_client_ui`; P59 fixes
+  zero-based UIA indices and adds read-only
+  `assess_client_background_action`. Both are AUTHORED_NOT_EXECUTED.
+- **Evidence:** official and open-source macOS/Windows sources in
+  [Windows parity research](../docs/system/windows-background-computer-use.md);
+  upstream Cua Driver source pinned there. No REA binary session, no
+  Codex/Minecraft/Windows runtime proof.
+- **Continue:** read this file's **Single next step** and the named
+  source owners before changing code. Git commits preserve precise
+  history; never create another active roadmap/agent/controller.
+- **Permission boundary:** GitHub source-only; no localtest, build,
+  CI, installation, launch, game action, personal data or `main` write.
 
 ## Product and owners
 
@@ -57,6 +78,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P59 | Fix valid Cua UIA element index 0; add read-only strict-background Invoke assessment using fresh native-fenced UIA, without input/fallback | Authored negative fixtures, NOT_EXECUTED |
 | P58 | MCP semantic UIA read via existing configured Cua Driver; 64-node tree-only result fenced by native pre/post identity | Authored fixtures, NOT_EXECUTED |
 | P57 | Stopped WGC slot retains status counters only; releases source-owned child/decoder/PNG references without affecting next worker | Authored late-callback/restart fixture, NOT_EXECUTED |
 | P56 | CUA screenshot reader bounds the exact bytes read and refuses changed/incomplete files after the initial stat | Authored short-read/negative fixtures, NOT_EXECUTED |
@@ -137,12 +159,15 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**Source-only P59 candidate:** audit the P58 target/UIA-result
-contract against every current MCP consumer and design one bounded
-strict-background action admission/refusal policy. No action tool
-should be wired merely because an element advertises `invoke`; source
-inspection does not prove the installed Cua binary accepts that
-action without focus. Verify background-only eligibility and
-postcondition source authority before any write path. Do not
-execute localtest, CI, builds, binaries, Windows/Codex/Minecraft,
-install anything or change native session/input ownership.
+**P60 next scope: prove a safe action route before enabling any
+Computer Use mutation.** At a freshly pinned `Local` HEAD inspect
+Cua Driver's exact snapshot-token lifetime, strict
+`delivery_mode:"background"` semantics and post-action verifier
+against our original native PID/HWND/birth/session fences.
+Assess refusal cases for focus-stealing UIA handlers, missing or
+occluded targets, ambiguous rows, stale snapshots and interrupted
+actions. Keep any further change disabled/read-only unless source
+evidence justifies an explicit authorized action and independent
+target-owned postcondition. Never silently escalate to foreground.
+No localtest, Windows/Codex/Minecraft, CI, build, install or game
+input under current permission.

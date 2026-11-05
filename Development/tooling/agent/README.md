@@ -67,6 +67,19 @@ not proof of Minecraft gameplay, and not verified on Windows.**
 The Cua daemon must already be running; the tool never starts it.
 No new controller, startup worker, CI or native game-control ability.
 
+## P59 — Strict background action assessment (SOURCE_ONLY)
+
+The new read-only `assess_client_background_action({slot,elementIndex,action:"invoke"})`
+reuses P58's **fresh** PID/HWND/birth/session-fenced Cua UIA read. It
+returns either `BACKGROUND_UNAVAILABLE` with the reason or
+`SEMANTIC_CANDIDATE_NOT_EXECUTED` for a uniquely identified, enabled
+`Button` advertising `invoke` in a complete tree. Cua UIA may still
+activate its target window when invoked; therefore candidacy is **not**
+proof of nondisturbance or permission to act. No action token or
+input/foreground fallback is exported. A zero-based element index is
+valid in Cua's documented token contract. Tests are authored but not
+executed; no new Windows game input capability.
+
 ## Efficient visual observation
 
 Use `start_visual_observation`, `get_multi_client_visual_state`,

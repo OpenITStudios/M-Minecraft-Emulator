@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import {inspectPng,validateCuaExecutable,buildCuaWindowQuery,MAX_PNG_BYTES,readBoundedPng,
   buildCuaSemanticWindowQuery,projectCuaSemanticWindow,
-  inspectCuaWindowElements} from './visual-capture.mjs';
+  inspectCuaWindowElements,assessCuaStrictBackgroundAction} from './visual-capture.mjs';
 
 const png1x1=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6YQAAAAASUVORK5CYII=',
@@ -77,6 +77,62 @@ test('Cua semantic projection strips raw values, titles and action tokens',()=>{
     {pid:42,windowId:1234}).status,'UIA_PARTIAL_UNVERIFIED');
   assert.equal(projectCuaSemanticWindow({...raw,elements:[],degraded:true},
     {pid:42,windowId:1234}).status,'UIA_EMPTY_OR_UNAVAILABLE');
+});
+
+test('Cua zero-based UIA element indices are valid and not action tokens',()=>{
+  const projected=projectCuaSemanticWindow({
+    pid:42,window_id:1234,elements_complete:true,
+    elements:[{element_index:0,role:'Button',label:'Play',
+      actions:['invoke'],enabled:true,element_token:'s00000001:0'}],
+  },{pid:42,windowId:1234});
+  assert.equal(projected.elements[0].index,0);
+  assert.equal(JSON.stringify(projected).includes('s00000001'),false);
+});
+
+test('strict background UIA assessor never dispatches and refuses uncertainty',()=>{
+  const identity={pid:42,windowId:1234,sessionId:2,
+    createdFileTime:'134000000000000001'};
+  const inspection={
+    schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
+    slot:2,identity,actionPermitted:false,screenshotCaptured:false,
+    status:'UIA_ELEMENTS_READ_UNVERIFIED',elementsComplete:true,
+    elements:[{index:0,role:'Button',label:'Play',
+      enabled:true,actions:['invoke']}],
+  };
+  const candidate=assessCuaStrictBackgroundAction(inspection,
+    {elementIndex:0,action:'invoke'});
+  assert.equal(candidate.status,'SEMANTIC_CANDIDATE_NOT_EXECUTED');
+  assert.equal(candidate.actionDispatched,false);
+  assert.equal(candidate.actionPermitted,false);
+  assert.equal(candidate.foregroundFallback,false);
+  assert.equal(candidate.windowActivated,false);
+  assert.equal(candidate.backgroundEffect,'NOT_VERIFIED');
+  assert.equal(candidate.target.createdFileTime,identity.createdFileTime);
+  assert.equal(JSON.stringify(candidate).includes('element_token'),false);
+
+  const reason=(changed,elementIndex=0)=>assessCuaStrictBackgroundAction(
+    changed,{elementIndex,action:'invoke'}).reason;
+  assert.equal(reason({...inspection,elementsComplete:false}),
+    'UIA_INCOMPLETE_OR_DEGRADED');
+  assert.equal(reason({...inspection,status:'UIA_PARTIAL_UNVERIFIED'}),
+    'UIA_INCOMPLETE_OR_DEGRADED');
+  assert.equal(reason({...inspection,elements:[...inspection.elements,
+    {...inspection.elements[0]}]}),'UIA_ELEMENT_ABSENT_OR_AMBIGUOUS');
+  assert.equal(reason(inspection,1),'UIA_ELEMENT_ABSENT_OR_AMBIGUOUS');
+  assert.equal(reason({...inspection,elements:[{...inspection.elements[0],
+    enabled:false}]}),'UIA_INVOKE_NOT_ADVERTISED_ON_ENABLED_BUTTON');
+  assert.equal(reason({...inspection,elements:[{...inspection.elements[0],
+    role:'Edit',label:null,actions:['set_value']}]}),
+    'UIA_INVOKE_NOT_ADVERTISED_ON_ENABLED_BUTTON');
+  assert.equal(reason({...inspection,identity:null}),'NATIVE_TARGET_UNVERIFIED');
+  assert.equal(reason({...inspection,actionPermitted:true}),
+    'UNTRUSTED_UIA_INSPECTION');
+  assert.equal(reason({schema:1,status:'BACKGROUND_UNAVAILABLE'}),
+    'CUA_UIA_NOT_CONFIGURED');
+  assert.throws(()=>assessCuaStrictBackgroundAction(inspection,
+    {elementIndex:0,action:'set_value'}),/Only an indexed/);
+  assert.throws(()=>assessCuaStrictBackgroundAction(inspection,
+    {elementIndex:-1,action:'invoke'}),/Only an indexed/);
 });
 
 test('Cua semantic CLI uses existing binary and bounded tree-only daemon call',async()=>{

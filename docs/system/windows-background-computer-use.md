@@ -125,6 +125,20 @@ The source indicates `structuredContent` is printed as JSON and a
 tree-only call avoids PNG capture; **installed Cua binary compatibility
 remains NOT_VERIFIED**.
 
+**P59 source-only action admission:** Cua element token indices can be
+zero (source: `element_token.rs`), so the original UIA projection now
+accepts `element_index:0`. The existing P58 MCP
+`inspect_client_ui` remains the one UIA observation owner. The new
+`assess_client_background_action` tool performs a fresh version of
+that *same* native-fenced read, then refuses missing, ambiguous,
+degraded, disabled or non-Button/non-Invoke targets. A complete enabled
+Button with an `invoke` pattern is reported only as
+`SEMANTIC_CANDIDATE_NOT_EXECUTED`; there is no action token, input
+dispatch, focus or foreground escalation, UIA invocation, or proof
+of background behavior. Source-only negative fixtures authored,
+NOT_EXECUTED. The Cua `InvokePattern` result alone cannot guarantee
+the application will not activate itself.
+
 **P58 source-only implementation:** `inspect_client_ui({slot})`
 uses the existing configured Cua Driver `get_window_state`
 CLI with `include_screenshot:false` and up to 64 structured

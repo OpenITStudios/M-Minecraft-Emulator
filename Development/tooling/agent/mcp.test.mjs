@@ -48,7 +48,7 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
     .description,/LEGACY COMPATIBILITY ONLY/);
   assert.match(listing.result.tools.find(x=>x.name==='read_probe_qa_result')
     .description,/LEGACY COMPATIBILITY ONLY/);
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','inspect_client_ui','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','inspect_client_ui','assess_client_background_action','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -708,6 +708,90 @@ test('semantic MCP inspection is no-pixel, fenced and never reaches input',async
     /STALE_OR_REPLACED/);
   assert.equal(n,2);
   replacement.shutdown();
+});
+
+test('background UI action assessment reuses fresh native-fenced UIA only',async()=>{
+  const events=[];
+  const target=slot=>({schema:1,ok:true,operation:'target',slot,
+    pid:400+slot,windowId:1200+slot,
+    createdFileTime:'134000000000000001',sessionId:1,
+    foreground:false,visible:true,minimized:false,
+    verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'});
+  const cfg={...config(),cuaExecutable:path.resolve('cua-driver.exe')};
+  const h=createHandler(cfg,{
+    native:async(_exe,_operation,slot)=>{events.push('native');return target(slot);},
+    inspectCua:async()=>{events.push('uia');return {
+      schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
+      status:'UIA_ELEMENTS_READ_UNVERIFIED',
+      elementsComplete:true,actionPermitted:false,
+      screenshotCaptured:false,gameplayInput:'NOT_VERIFIED',
+      elements:[{index:0,role:'Button',label:'Play',
+        enabled:true,actions:['invoke']}],
+    };},
+    capture:async()=>{throw Error('No pixel capture');},
+    aiInput:async()=>{throw Error('No game input');},
+  });
+  await assert.rejects(()=>h.callTool('assess_client_background_action',{
+    slot:1,elementIndex:0,action:'invoke'}),/human host/);
+  assert.deepEqual(events,[]);
+  const result=await h.callTool('assess_client_background_action',
+    {slot:2,elementIndex:0,action:'invoke'});
+  assert.equal(result.status,'SEMANTIC_CANDIDATE_NOT_EXECUTED');
+  assert.equal(result.actionPermitted,false);
+  assert.equal(result.foregroundFallback,false);
+  assert.equal(result.backgroundEffect,'NOT_VERIFIED');
+  assert.deepEqual(events,['native','uia','native']);
+  const invalid=await h.handle({jsonrpc:'2.0',id:88,method:'tools/call',
+    params:{name:'assess_client_background_action',
+      arguments:{slot:2,elementIndex:0,action:'type_text'}}});
+  assert.equal(invalid.result.isError,true);
+  assert.deepEqual(events,['native','uia','native']);
+  h.shutdown();
+});
+
+test('action assessment cannot approve replaced native HWND or missing provider',async()=>{
+  const events=[];
+  let nativeCount=0;
+  const cfg={...config(),cuaExecutable:path.resolve('cua-driver.exe')};
+  const handler=createHandler(cfg,{
+    native:async(_exe,_operation,slot)=>{
+      nativeCount++;
+      events.push('native');
+      return {schema:1,ok:true,operation:'target',slot,
+        pid:402,windowId:nativeCount===1?1202:1203,
+        createdFileTime:'134000000000000001',sessionId:1,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+        gameplayInput:'NOT_VERIFIED'};
+    },
+    inspectCua:async()=>{
+      events.push('uia');
+      return {schema:1,provider:'CUA_WINDOWS_UIA_READ_ONLY',
+        status:'UIA_ELEMENTS_READ_UNVERIFIED',elementsComplete:true,
+        actionPermitted:false,screenshotCaptured:false,
+        elements:[{index:0,role:'Button',label:'Play',
+          enabled:true,actions:['invoke']}]};
+    },
+    aiInput:async()=>{throw Error('No game input');},
+  });
+  await assert.rejects(()=>handler.callTool(
+    'assess_client_background_action',{slot:2,elementIndex:0,
+      action:'invoke'}),/TEAM_OBSERVATION_STALE_OR_REPLACED/);
+  assert.deepEqual(events,['native','uia','native']);
+  handler.shutdown();
+
+  let contacted=0;
+  const unconfigured=createHandler(config(),{
+    native:async()=>{contacted++;throw Error('Unexpected native call');},
+    inspectCua:async()=>{contacted++;throw Error('Unexpected Cua call');},
+  });
+  const refusal=await unconfigured.callTool('assess_client_background_action',
+    {slot:2,elementIndex:0,action:'invoke'});
+  assert.equal(refusal.status,'BACKGROUND_UNAVAILABLE');
+  assert.equal(refusal.reason,'CUA_UIA_NOT_CONFIGURED');
+  assert.equal(refusal.actionDispatched,false);
+  assert.equal(contacted,0);
+  unconfigured.shutdown();
 });
 
 test('semantic MCP inspection without Cua does not contact Windows',async()=>{

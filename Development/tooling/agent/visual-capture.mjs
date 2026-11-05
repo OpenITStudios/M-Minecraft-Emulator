@@ -108,7 +108,7 @@ export function projectCuaSemanticWindow(result,target) {
       result.screenshot_mime_type!==undefined) fail();
   const elements=result.elements.map(row=>{
     if (!row || Array.isArray(row) || typeof row!=='object' ||
-        !Number.isInteger(row.element_index) || row.element_index<1 ||
+        !Number.isInteger(row.element_index) || row.element_index<0 ||
         row.element_index>5000 ||
         typeof row.role!=='string' || row.role.length>64 ||
         (row.actions!==undefined &&
@@ -136,6 +136,71 @@ export function projectCuaSemanticWindow(result,target) {
     screenshotCaptured:false,actionPermitted:false,
     gameplayInput:'NOT_VERIFIED'};
 }
+// P59: this is an assessment of a UIA-advertised operation, NOT an
+// actuation grant. No action token, foreground route or input execution
+// exists here. A semantic Invoke may itself bring a target forward, so
+// its no-interruption behavior remains UNKNOWN without Windows evidence.
+export function assessCuaStrictBackgroundAction(inspection,{
+  elementIndex,action,
+}={}) {
+  if(!Number.isSafeInteger(elementIndex) || elementIndex<0 ||
+     elementIndex>5000 || action!=='invoke') {
+    throw new TypeError('Only an indexed UIA invoke assessment is supported');
+  }
+  const result={
+    schema:1,deliveryMode:'STRICT_BACKGROUND',status:'BACKGROUND_UNAVAILABLE',
+    reason:null,elementIndex,action,
+    actionDispatched:false,actionPermitted:false,
+    foregroundFallback:false,windowActivated:false,
+    screenshotCaptured:false,backgroundEffect:'NOT_VERIFIED',
+    gameInput:'NOT_VERIFIED',
+  };
+  const refuse=reason=>({...result,reason});
+  if(inspection?.status==='BACKGROUND_UNAVAILABLE') {
+    return refuse('CUA_UIA_NOT_CONFIGURED');
+  }
+  if(inspection?.schema!==1 ||
+     inspection?.provider!=='CUA_WINDOWS_UIA_READ_ONLY' ||
+     inspection?.screenshotCaptured!==false ||
+     inspection?.actionPermitted!==false ||
+     !Array.isArray(inspection?.elements) ||
+     inspection.elements.length>CUA_UIA_MAX_ELEMENTS) {
+    return refuse('UNTRUSTED_UIA_INSPECTION');
+  }
+  const identity=inspection.identity;
+  if(!Number.isInteger(inspection.slot) ||
+     inspection.slot<1 || inspection.slot>5 ||
+     !identity || !Number.isSafeInteger(identity.pid) || identity.pid<1 ||
+     !Number.isSafeInteger(identity.windowId) || identity.windowId<1 ||
+     !Number.isSafeInteger(identity.sessionId) || identity.sessionId<0 ||
+     typeof identity.createdFileTime!=='string' ||
+     !/^\d{1,20}$/.test(identity.createdFileTime)) {
+    return refuse('NATIVE_TARGET_UNVERIFIED');
+  }
+  if(inspection.status!=='UIA_ELEMENTS_READ_UNVERIFIED' ||
+     inspection.elementsComplete!==true) {
+    return refuse('UIA_INCOMPLETE_OR_DEGRADED');
+  }
+  // A malformed or repeated source index must never become authority for
+  // whichever element happens to be first in an untrusted projection.
+  const matches=inspection.elements.filter(e=>e?.index===elementIndex);
+  if(matches.length!==1) return refuse('UIA_ELEMENT_ABSENT_OR_AMBIGUOUS');
+  const element=matches[0];
+  if(element.role!=='Button' || element.enabled!==true ||
+     typeof element.label!=='string' || !element.label.trim() ||
+     !Array.isArray(element.actions) ||
+     !element.actions.includes('invoke')) {
+    return refuse('UIA_INVOKE_NOT_ADVERTISED_ON_ENABLED_BUTTON');
+  }
+  return {...result,status:'SEMANTIC_CANDIDATE_NOT_EXECUTED',
+    reason:'UIA_INVOKE_ADVERTISED_BACKGROUND_UNPROVEN',
+    target:{slot:inspection.slot,pid:identity.pid,
+      windowId:identity.windowId,sessionId:identity.sessionId,
+      createdFileTime:identity.createdFileTime},
+    element:{index:elementIndex,role:'Button',label:element.label},
+    next:'NO_DISPATCH_UNTIL_SEPARATELY_AUTHORIZED_AND_VERIFIABLE'};
+}
+
 export async function inspectCuaWindowElements(cuaExecutable,target,{
   platform=process.platform,statFile=lstat,execute=execFileAsync,
 }={}) {
