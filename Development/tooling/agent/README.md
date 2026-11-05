@@ -66,10 +66,11 @@ identical (PID, birth, Windows session and root HWND) across reads.
   CUA and native WGC share a **3 MiB lossless PNG** limit. The observer
   and MCP image response use the same **4 MiB base64** ceiling.
   Oversize, expired, replaced or inconsistent frames fail closed.
-- WGC frames are buffered and transferred in the existing bounded
-  `LTG1` protocol. Native producer FPS follows the requested observer
-  interval within 1–5 FPS; a persistent worker is never automatically
-  installed or packaged.
+- WGC frames use the existing bounded `LTG1` protocol. Invalid
+  timestamps are refused from the fixed header before allocating PNG
+  bytes, and rechecked after assembly. Native producer FPS follows
+  the requested observer interval within 1–5 FPS; no worker is
+  automatically installed or packaged.
 - The observer uses one short-lived per-slot cache, bounded freshness
   and sampling intervals, adaptive backoff for identical PNG bytes,
   and metadata-only group summaries. Replayed worker sequences are

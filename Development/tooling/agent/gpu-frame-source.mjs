@@ -67,7 +67,14 @@ export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
            epoch>BigInt(Number.MAX_SAFE_INTEGER)) {
           throw new Error('Invalid GPU frame sequence/size/time');
         }
-        fields={width,height,sequence,capturedAtMs:Number(epoch)};
+        const capturedAtMs=Number(epoch);
+        // Reject untrusted stale/future header times BEFORE allocating or
+        // copying up to 3 MiB of PNG data for a frame we cannot use.
+        const now=clock();
+        if(capturedAtMs>now+5000 || capturedAtMs<now-90000) {
+          throw new Error('GPU frame timestamp outside capture lifecycle');
+        }
+        fields={width,height,sequence,capturedAtMs};
         bytes=Buffer.allocUnsafe(length);
         bytesUsed=0;
       }
@@ -77,7 +84,10 @@ export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
       bytesUsed+=count;
       if(bytesUsed<bytes.length) break;
       const {width,height,sequence,capturedAtMs}=fields;
-      if(capturedAtMs>clock()+5000 || capturedAtMs<clock()-90000) {
+      // Still recheck after fragmented transfer: time may advance while
+      // an otherwise acceptable PNG is being assembled.
+      const now=clock();
+      if(capturedAtMs>now+5000 || capturedAtMs<now-90000) {
         throw new Error('GPU frame timestamp outside capture lifecycle');
       }
       const image=inspectPng(bytes);

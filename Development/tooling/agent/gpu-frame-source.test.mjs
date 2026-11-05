@@ -65,6 +65,27 @@ test('bad frame length, unknown magic and stale timestamp are refused',()=>{
   assert.throws(()=>make().push(corrupt),/sequence\/size/);
   assert.throws(()=>make().push(packet(1,1)),/timestamp/);
 });
+test('invalid WGC timestamps are refused from headers before PNG assembly',()=>{
+  const headerOnly=packet(1,1).subarray(0,28);
+  const rejectStale=createGpuPacketDecoder(()=>{}, {clock:()=>100000});
+  assert.throws(()=>rejectStale.push(headerOnly),/timestamp/);
+  const future=packet(1,106000).subarray(0,28);
+  const rejectFuture=createGpuPacketDecoder(()=>{}, {clock:()=>100000});
+  assert.throws(()=>rejectFuture.push(future),/timestamp/);
+});
+
+test('WGC timestamp is rechecked after a fragmented frame transfer',()=>{
+  let now=100000;
+  const frames=[];
+  const decoder=createGpuPacketDecoder(frame=>frames.push(frame),
+    {clock:()=>now});
+  const split=packet(1,100000);
+  decoder.push(split.subarray(0,28)); // Valid header, no pixels yet.
+  now=190001; // A delayed sender must not make this image fresh.
+  assert.throws(()=>decoder.push(split.subarray(28)),/timestamp/);
+  assert.deepEqual(frames,[]);
+});
+
 test('GPU binary cannot use arbitrary or relative executable names',()=>{
   assert.throws(()=>validateGpuExecutable('./gpu.exe'));
   assert.throws(()=>validateGpuExecutable(path.resolve('powershell.exe')));
