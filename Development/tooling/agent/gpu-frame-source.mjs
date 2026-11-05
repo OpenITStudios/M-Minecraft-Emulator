@@ -132,6 +132,15 @@ export function createGpuFrameSource({
       cancel(state.deadlineTimer);state.deadlineTimer=null;
     }
     try {state.process.kill();} catch { /* exit is not authority over games */ }
+    // The source's slot map must not permanently retain a stopped child,
+    // stdout listeners, decoder or partially assembled 3 MiB PNG.
+    // Preserve only the existing bounded status counters for diagnostics.
+    // Late callbacks still see their own inactive state and cannot replace
+    // or revoke a newly started worker on this same slot.
+    if (slots.get(state.slot)===state) {
+      slots.set(state.slot,{slot:state.slot,status,frames:state.frames,
+        errors:state.errors,active:false});
+    }
   }
   async function start(slot,target,{durationMs=30000,fps=5}={}) {
     if (closed) throw new Error('GPU capture source closed');

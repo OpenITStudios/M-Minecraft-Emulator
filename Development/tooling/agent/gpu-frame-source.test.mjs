@@ -119,6 +119,48 @@ test('one capture worker preserves only latest frame and stops without game cont
   source.shutdown();
 });
 
+test('stopped WGC worker retains counters but not authority over a restarted slot',async()=>{
+  const children=[];
+  const target={pid:42,windowId:123,
+    createdFileTime:'134000000000000001',sessionId:1};
+  const source=createGpuFrameSource({
+    executable:path.resolve('lazy-tester-gpu-capture.exe'),
+    platform:'win32',clock:()=>100000,
+    statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+    spawnProcess:()=>{
+      const child=new EventEmitter();
+      child.stdout=new EventEmitter();
+      child.kills=0;
+      child.kill=()=>{child.kills++;return true;};
+      children.push(child);
+      return child;
+    },
+    schedule:()=>({unref(){}}),cancel:()=>{},
+  });
+  try {
+    await source.start(2,target);
+    children[0].stdout.emit('data',packet(1));
+    assert.equal(source.status(2).frames,1);
+    source.stop([2]);
+    assert.deepEqual(source.status(2),{
+      slot:2,status:'STOPPED_BY_REQUEST',frames:1,errors:0,active:false,
+    });
+    assert.equal(children[0].kills,1);
+    assert.throws(()=>source.latest(2,target),/GPU_SOURCE_NOT_ACTIVE/);
+
+    await source.start(2,target);
+    // A late old-worker callback must not corrupt the new active worker.
+    children[0].stdout.emit('data',packet(2));
+    children[0].emit('close');
+    assert.equal(source.status(2).status,'STARTING');
+    children[1].stdout.emit('data',packet(1));
+    assert.equal(source.latest(2,target).workerSequence,1);
+    assert.equal(source.status(2).frames,1);
+    assert.equal(children[1].kills,0);
+  } finally {source.shutdown();}
+  assert.equal(children[1].kills,1);
+});
+
 test('identical new WGC frame retains base64 without losing sequence and time',async()=>{
   const pipe=new EventEmitter();
   const child=new EventEmitter();child.stdout=pipe;

@@ -76,6 +76,9 @@ identical (PID, birth, Windows session and root HWND) across reads.
 - Identical WGC PNG byte hashes and dimensions reuse the previous
   on-demand base64 representation, while worker sequence/timestamp and
   native identity/freshness are always checked independently.
+- When WGC stops or fails, the provider's slot map retains only
+  bounded status counters—not the stopped child, decoder or partial PNG.
+  Late callbacks from the old worker cannot change a restarted slot.
 - The observer uses one short-lived per-slot cache, bounded freshness
   and sampling intervals, adaptive backoff for identical PNG bytes,
   and metadata-only group summaries. Replayed worker sequences are
