@@ -155,6 +155,22 @@ assessor remains `BACKGROUND_UNAVAILABLE`; no action, dependency,
 fork, daemon, test or release changes. Detailed owner/boundary
 decision is recorded in the existing Windows parity design.
 
+## P63 — Upstream Invoke proposal + early MCP refusal (SOURCE_ONLY)
+
+The existing `assess_client_background_action` now shares its one
+`validateCuaStrictBackgroundIntent` validator with the pure assessor
+**before** native/UIA observation. Invalid or unrecognized action
+types, indices, caller-supplied tokens, foreground overrides, fake
+postconditions and retries are rejected without touching Cua or
+the native controller. This is read-only gate hardening, not action
+support. Negative Node fixtures were authored, NOT_EXECUTED.
+
+The full proposed upstream Rust operation and refusal matrix live
+in the existing [Windows parity design](../../../docs/system/windows-background-computer-use.md).
+Current Cua `click`/`invoke_menu` still cannot satisfy zero-interruption;
+no local Rust fork, driver executable, UIA mutation, experimental MCP
+tool or gameplay command was added. `BACKGROUND_UNAVAILABLE` remains
+the only actionable outcome; a semantic candidate is information only.
 ## Efficient visual observation
 
 Use `start_visual_observation`, `get_multi_client_visual_state`,

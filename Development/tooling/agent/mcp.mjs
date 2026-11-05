@@ -16,7 +16,7 @@ import {inputExecutionStatus} from './input-delivery.mjs';
 import {projectAgentActivity} from './activity-status.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,summarizeEvidenceReports,normalizeEvidenceSlots} from './evidence-summary.mjs';
-import {captureCuaWindow,inspectCuaWindowElements,assessCuaStrictBackgroundAction,validateCuaExecutable} from './visual-capture.mjs';
+import {captureCuaWindow,inspectCuaWindowElements,assessCuaStrictBackgroundAction,validateCuaStrictBackgroundIntent,validateCuaExecutable} from './visual-capture.mjs';
 import {validateDiagnosticsRoot,diagnosticsOverview,listDiagnosticIssues,
   getDiagnosticIssue,queryDiagnosticEvidence} from './diagnostics-local.mjs';
 import {validateTestingArchiveRoot,archiveTestingResult,
@@ -2407,13 +2407,17 @@ export function createHandler(config,{
       keysExactly(args,['slot','elementIndex','action']);
       const slot=slotOf(args.slot);
       protectedSlot(slot);
+      // Reject malformed intent before any native/UIA observation; clients
+      // cannot upgrade an assessment with a token, fallback or retry flag.
+      // This one shared validator is also used by the pure assessor.
+      const intent=validateCuaStrictBackgroundIntent({
+        elementIndex:args.elementIndex,action:args.action,
+      });
       // Always refresh via the existing identity-fenced read. A previous
       // tool result or caller-supplied UIA label is never a current action
       // authority. No input API is called from this read-only assessor.
       const inspected=await callTool('inspect_client_ui',{slot});
-      return assessCuaStrictBackgroundAction(inspected,{
-        elementIndex:args.elementIndex,action:args.action,
-      });
+      return assessCuaStrictBackgroundAction(inspected,intent);
     }
     if (name==='inspect_client_ui') {
       keysExactly(args,['slot']);

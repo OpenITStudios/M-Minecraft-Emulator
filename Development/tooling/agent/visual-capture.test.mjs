@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import {inspectPng,validateCuaExecutable,buildCuaWindowQuery,MAX_PNG_BYTES,readBoundedPng,
   buildCuaSemanticWindowQuery,projectCuaSemanticWindow,
-  inspectCuaWindowElements,assessCuaStrictBackgroundAction} from './visual-capture.mjs';
+  inspectCuaWindowElements,assessCuaStrictBackgroundAction,
+  validateCuaStrictBackgroundIntent} from './visual-capture.mjs';
 
 const png1x1=Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6YQAAAAASUVORK5CYII=',
@@ -111,6 +112,25 @@ test('P60 snapshot provenance refuses missing, mismatched and duplicate tokens',
     assert.equal(read.snapshotProvenance,'UNVERIFIED');
     assert.equal(read.actionPermitted,false);
     assert.equal(JSON.stringify(read).includes('s0000000a'),false);
+  }
+});
+
+test('P63 strict Invoke assessment preflight has no mutation or fallback arguments',()=>{
+  const accepted=validateCuaStrictBackgroundIntent({
+    elementIndex:0,action:'invoke',
+  });
+  assert.deepEqual(accepted,{elementIndex:0,action:'invoke'});
+  for(const invalid of [
+    {elementIndex:-1,action:'invoke'},
+    {elementIndex:5001,action:'invoke'},
+    {elementIndex:0.5,action:'invoke'},
+    {elementIndex:0,action:'set_value'},
+    {elementIndex:0,action:'expand'},
+    {elementIndex:0},
+    {},
+  ]) {
+    assert.throws(()=>validateCuaStrictBackgroundIntent(invalid),
+      /Only an indexed UIA invoke assessment/);
   }
 });
 

@@ -32,13 +32,12 @@ NOT_VERIFIED.
   background; first read-only semantic UIA via existing Cua Driver,
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
-- **Last source stages:** P58 `inspect_client_ui`, P59/P60 read-only
-  `assess_client_background_action` with snapshot provenance,
-  P61 refusal for Invoke-advertising Buttons, P62 driver-integration
-  decision: upstream Cua's existing registry/snapshot/verification
-  owners only; no supported Invoke-only transport or Minecraft
-  target-owned oracle. P58-P61 fixtures AUTHORED_NOT_EXECUTED,
-  P62 design review SOURCE_ONLY; no Windows action enabled.
+- **Last source stages:** P58-P61 read-only UIA inspection/candidacy
+  with strict refusal, P62 selected upstream Cua registry/snapshot
+  owners; P63 defined the strict Invoke-only Rust upstream proposal,
+  app-owned counter readback example and negative fixtures, and
+  prevalidates MCP assessment intent before native reads. All
+  fixtures AUTHORED_NOT_EXECUTED; no Windows action enabled.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -82,6 +81,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P63 | Exact-source upstream Rust contract and negative fixture matrix; refuse malformed assessment intent before native/UIA reads | Source-authored fixtures NOT_EXECUTED; no input/backend enabled |
 | P62 | Selected minimal upstream Cua registry/snapshot extension boundary; existing verify_state is conditional readback only; no safe provider exists yet | REMOTE_GITHUB design/source review; no code/tests executed |
 | P61 | Audit pinned/newer Cua paths; explicitly refuse even advertised Invoke candidates without no-fallback transport and app-owned readback | Authored negative fixtures, NOT_EXECUTED |
 | P60 | Check Cua snapshot/token/index at read; refuse unbound candidates; expose blocked non-Invoke-only delivery | Authored negative fixtures, NOT_EXECUTED |
@@ -166,17 +166,15 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**P63 — prepare a source-only upstream-compatible strict Invoke
-extension proposal, without wiring product input.** Use the pinned
-Cua Windows registry, snapshot resolver and UIA code to specify the
-minimum Rust contract and negative fixtures for a single-operation
-Invoke-only transport (no fallback, exact native birth/HWND/session
-revalidation and uncertain outcome), plus one explicitly chosen
-app-owned postcondition. This proposal is **not** permission to
-fork/install/execute Cua or to modify a third-party repository.
-Only promote to an actual adapter if a maintainer-supported
-upstream implementation and target-class focus safety have credible
-evidence; otherwise preserve `BACKGROUND_UNAVAILABLE`.
-No local Node tests, Windows/Codex/Minecraft runs, CI, builds,
-packages, login or user data access. Minecraft gameplay acceptance
-remains NOT_VERIFIED.
+**P64: source-review acceptance gate for upstream strict Invoke
+support, not speculative product integration.** At current `Local`
+HEAD check whether Cua exposes a maintainer-supported, exact-version
+`invoke_element_strict`/equivalent with NO fallback and native
+PID/birth/HWND/session fencing; compare it against P63's negative
+fixture matrix and independent target-owned oracle. If no such
+upstream capability exists, keep Lazy Tester `BACKGROUND_UNAVAILABLE`
+and record the specific upstream contribution/authorization blocker
+in this single handoff; do not add a local driver, daemon, stub
+tool, or pretend an unreleased proposal is executable.
+Third-party repo mutation, native/Windows/Codex/Minecraft tests,
+CI/build/install and actual actions require their own permission.

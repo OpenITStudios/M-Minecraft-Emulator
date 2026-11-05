@@ -153,13 +153,15 @@ export function projectCuaSemanticWindow(result,target) {
 // invoke_menu deliberately fronts a window. No compatible Invoke-only
 // transport or app-owned postcondition exists in this MCP. Refuse even
 // a well-formed enabled Invoke button, instead of advertising readiness.
-export function assessCuaStrictBackgroundAction(inspection,{
-  elementIndex,action,
-}={}) {
+export function validateCuaStrictBackgroundIntent({elementIndex,action}={}) {
   if(!Number.isSafeInteger(elementIndex) || elementIndex<0 ||
      elementIndex>5000 || action!=='invoke') {
     throw new TypeError('Only an indexed UIA invoke assessment is supported');
   }
+  return {elementIndex,action};
+}
+export function assessCuaStrictBackgroundAction(inspection,intent={}) {
+  const {elementIndex,action}=validateCuaStrictBackgroundIntent(intent);
   const result={
     schema:1,deliveryMode:'STRICT_BACKGROUND',status:'BACKGROUND_UNAVAILABLE',
     reason:null,elementIndex,action,semanticCandidate:false,

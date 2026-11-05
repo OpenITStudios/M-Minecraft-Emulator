@@ -750,6 +750,27 @@ test('background UI action assessment reuses fresh native-fenced UIA only',async
       arguments:{slot:2,elementIndex:0,action:'type_text'}}});
   assert.equal(invalid.result.isError,true);
   assert.deepEqual(events,['native','uia','native']);
+  // Direct callTool and MCP transport must both reject bad intent BEFORE
+  // performing a fresh UIA/native read; no foreground, caller token,
+  // unreviewed postcondition or automatic retry parameter is permitted.
+  for(const request of [
+    {slot:2,elementIndex:0,action:'foreground'},
+    {slot:2,elementIndex:0,action:'set_value'},
+    {slot:2,elementIndex:0,action:'invoke',deliveryMode:'foreground'},
+    {slot:2,elementIndex:0,action:'invoke',elementToken:'s00000001:0'},
+    {slot:2,elementIndex:0,action:'invoke',retry:true},
+    {slot:2,elementIndex:0,action:'invoke',postcondition:{status:'satisfied'}},
+    {slot:2,elementIndex:5001,action:'invoke'},
+    {slot:2,elementIndex:-1,action:'invoke'},
+    {slot:2,elementIndex:0.5,action:'invoke'},
+    {slot:2,elementIndex:0},
+  ]) {
+    await assert.rejects(
+      ()=>h.callTool('assess_client_background_action',request),
+      /Invalid tool arguments|Only an indexed UIA invoke assessment/,
+    );
+    assert.deepEqual(events,['native','uia','native']);
+  }
   h.shutdown();
 });
 

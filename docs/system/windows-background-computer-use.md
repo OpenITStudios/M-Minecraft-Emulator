@@ -320,6 +320,108 @@ https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs
 https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/rust/crates/cua-driver-core/src/expectation.rs
 https://github.com/trycua/cua/blob/290552c6374da181314e26d69156198f7d48c0df/libs/cua-driver/docs/action-result-contract.md
 
+**P63 implementation-ready upstream proposal (6 November 2026;
+`REMOTE_GITHUB` only, not an implemented Cua feature).** Exact
+reviewed upstream HEAD:
+`81f3e1bbc0d113c1a33a71b4150fb6ece6a5e9cd`. The original
+Cua Windows registry, click, snapshot store, UIA node and verification
+implementations relevant to this proposal are unchanged from P62's
+pin. A current installed `cua-driver.exe` was not inspected.
+
+### Rust owner and contract — proposed only
+
+Place any eventual implementation **upstream**, not in Lazy Tester:
+
+| Cua source owner | Minimal proposed change |
+| --- | --- |
+| `platform-windows/src/tools/impl_.rs` | Register a dedicated, non-default `invoke_element_strict` tool, never reuse `ClickTool` or `InvokeMenuTool` dispatch |
+| `platform-windows/src/uia/mod.rs` + `snapshot.rs` | Use a bounded, fresh, HWND-scoped tree with a unique enabled UIA `Button`, preserving its COM lifetime and internal `automation_id`/element identity; reject MSAA and web/unknown providers |
+| `cua-driver-core/src/snapshot_store.rs` | Reuse retained-element ownership and stale-snapshot refusal; do not treat a cached token or bare index as a capability or create another snapshot registry |
+| `platform-windows/src/win32/windows.rs` | Extend exact HWND/process verification to pinned creation FILETIME + OS session and root ownership immediately around dispatch |
+| `cua-driver-core/src/expectation.rs` | Reuse bounded `verify_state` predicates for a separately approved app-owned oracle; no generic screenshot/title/tree-diff acceptance |
+| Existing Rust test modules | Add pure admission/outcome and isolated native negative fixtures; no CI or Windows execution is authorized in this project |
+
+The proposed **internal Rust request** (not a released JSON wire
+schema) contains `target = {pid, root_hwnd, creation_filetime,
+os_session_id}`, `expected_element = {original_index,
+control_type: Button, expected_automation_id}` and one explicitly
+operator-approved, target-specific intent. The element must be
+re-resolved *inside the same driver call*; source `UiaNode` already
+has `automation_id`, but the retained `RetainedElement` currently
+holds only COM pointer/kind/geometry and does not pin process birth.
+Automation ID can be absent or duplicated: neither it nor a label
+alone authorizes an action. Missing/changed/ambiguous identity
+refuses without retargeting or finding another button. No raw
+`element_token` supplied by the model is accepted as action authority.
+
+**Required execution ordering (future; no method is now wired):**
+
+1. Pre-dispatch: require reviewed app-class non-interruption evidence,
+   operator's explicit action scope, known exact native target, and a
+   declared typed postcondition. Protect MC01 in hybrid mode.
+2. Validate native OS process handle identity: PID, creation FILETIME,
+   session ID, live root HWND and owner. Keep a query handle during
+   the operation. For UWP brokered frames, also pin and verify the
+   application child process; an `ApplicationFrameHost.exe` PID
+   alone is NOT an app identity. Refuse unsupported brokered cases.
+3. Create a fresh bounded UIA tree in the same Cua operation, verify
+   its completeness and exactly one stable expected button identity,
+   retain its COM reference and re-check live enabled/InvokePattern.
+   Another snapshot cannot retarget this retained reference;
+   revalidate target identity just before COM entry. Remaining
+   OS/provider races must still be acknowledged.
+4. Mark COM dispatch as **possibly started** before entering
+   `IUIAutomationInvokePattern::Invoke` exactly once. Never use
+   `PostMessage`, `SendInput`, coordinate injection, alternate UIA
+   patterns, menu activation, overlay motion, window disable/enable
+   or any foreground fallback. An Invoke HRESULT is not success.
+5. Recheck the native identity and independently observe the declared
+   target-owned state. Any timeout/cancel/disconnect/provider failure
+   after COM entry, changed native identity, unverifiable effect or
+   focus-interruption observation yields `OUTCOME_UNKNOWN_NO_RETRY`.
+   Only unchanged identity + independently verified expected outcome
+   + proven no-interruption for that exact class could support
+   `TARGET_POSTCONDITION_VERIFIED` in an eventual acceptance run.
+
+**One concrete app-owned postcondition, for a future *isolated* test
+fixture only:** a purpose-built non-Minecraft Win32 counter window
+has a unique enabled UIA Button `Increment` (AutomationId
+`CounterIncrement`) and a separate read-only UIA Edit with stable
+label `CounterValue` and ValuePattern value `0`. The declared
+effect is `CounterValue` changing exactly from `0` to `1` after one
+Invoke. Upstream `verify_state` may check a unique element with
+`selector: {role: "Edit", label_contains: "CounterValue"}`,
+`value_equals: "1"`, `stable_samples: 2`,
+`include_screenshot: false`, and a bounded timeout, **if** the
+fixture genuinely exposes that property and readback remains in
+the same pinned process/window. The baseline `0` must be verified
+before dispatch. No such fixture has been run or shipped; the
+example is NOT evidence of Windows or Minecraft compatibility.
+UIA value readback must be kept inside the verifier, returning only
+bounded booleans/status to MCP, never private edit-field contents.
+An already-satisfied postcondition or unrelated concurrent change
+must not be attributed to the action.
+
+### P63 negative fixture proposal (all AUTHORED_AS_DESIGN, NOT_EXECUTED)
+
+| Case | Expected pre-dispatch/action outcome |
+| --- | --- |
+| Missing/duplicate/reindexed button, disabled UIA, missing/duplicate `automation_id`, partial/truncated UIA walk, MSAA-only provider | `BACKGROUND_UNAVAILABLE`, Invoke calls = 0 |
+| Caller supplies stale/bare/foreign token, pixel/foreground/`click` fallback, modifier, automatic retry or fake `verify_state` success | `BACKGROUND_UNAVAILABLE`, Invoke calls = 0 |
+| PID reused, creation FILETIME/session mismatch, HWND replaced, root owner changed, UWP frame child changed | `BACKGROUND_UNAVAILABLE` if prior to COM; no retarget |
+| Window class is WPF/Chromium/Electron/unknown without specific no-focus evidence, iconic/occluded case unsupported | `BACKGROUND_UNAVAILABLE`, Invoke calls = 0 |
+| Unique complete UIA button but no separately declared trusted app-owned postcondition, or baseline is already `1` | `BACKGROUND_UNAVAILABLE`, Invoke calls = 0 |
+| UIA InvokePattern absent or COM setup fails *before* Invoke entry | `BACKGROUND_UNAVAILABLE`, Invoke calls = 0 |
+| UIA Invoke COM entered, then failed HRESULT, timeout, cancellation, disconnect, or provider crash | `OUTCOME_UNKNOWN_NO_RETRY`, Invoke calls <= 1, no fallback or auto retry |
+| COM reports success but postcondition is unsatisfied/unknown, ambiguous, web-owned or untrusted | `OUTCOME_UNKNOWN_NO_RETRY`, no gameplay PASS |
+| Target changes immediately after Invoke; pre/post focus matches but monitor observed transient activation; pointer/keyboard/z-order changed | `OUTCOME_UNKNOWN_NO_RETRY`, strict-background acceptance FAIL |
+| Only verified isolated counter fixture: baseline `0`, one Invoke, target-owned value `1`, exact native identity, proven no disturbance for the whole interval | Candidate `TARGET_POSTCONDITION_VERIFIED` **only after authorized native execution** |
+
+These cases define the *proposed* upstream Rust fixture assertions.
+No local Rust test, CI, installed binary, Cua process, operator
+input, or Windows gameplay is exercised. The real product retains
+`BACKGROUND_UNAVAILABLE` until an upstream-supported implementation,
+native focus evidence, and an application-specific oracle exist.
 **P58 source-only implementation:** `inspect_client_ui({slot})`
 uses the existing configured Cua Driver `get_window_state`
 CLI with `include_screenshot:false` and up to 64 structured
