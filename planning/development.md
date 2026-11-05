@@ -10,6 +10,14 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P46 WGC duplicate hash elimination (5 November 2026, SOURCE_ONLY):**
+  `gpu-frame-source.mjs` now retains the SHA-256 already returned by the
+  existing PNG inspector instead of re-hashing each frame. The original
+  decoder, metadata, packet checks and trust boundaries are unchanged;
+  a regression fixture is AUTHORED_NOT_EXECUTED. Actual throughput
+  improvement is NOT_MEASURED.
+
+
 - **P45 lossless PNG admission alignment (5 November 2026, SOURCE_ONLY):**
   CUA capture and WGC reader now share the original capture module's 3 MiB
   PNG budget, exactly matching the existing observer's 4 MiB encoded cap.

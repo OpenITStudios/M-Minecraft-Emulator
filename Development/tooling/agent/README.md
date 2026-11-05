@@ -147,6 +147,17 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P46 — Reuse the inspected PNG digest on each WGC frame (SOURCE_ONLY)
+
+The WGC packet decoder previously called `inspectPng(bytes)`, which already
+computes SHA-256, then hashed the SAME complete image again for its frame
+metadata. The original decoder now reuses `image.sha256` and drops its
+redundant crypto import. This removes one complete PNG hash per decoded GPU
+frame without changing the digest, packet format, identity checks or capture
+bounds. One existing decoder fixture asserts the retained digest matches
+SHA-256 of the original PNG. **AUTHORED_NOT_EXECUTED**; throughput/CPU
+improvements have not been measured on Windows.
+
 ## P45 — One PNG admission budget for visual observation (SOURCE_ONLY)
 
 The existing CUA capture now refuses PNGs over **3 MiB** at file stat and

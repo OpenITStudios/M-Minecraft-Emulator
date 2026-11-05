@@ -3,7 +3,6 @@
 // Does NOT launch Minecraft, inject inputs, persist pixels or expose a port.
 // Source-only candidate; no local/source/Windows tests authorized yet.
 import {spawn} from 'node:child_process';
-import {createHash} from 'node:crypto';
 import {lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {inspectPng,MAX_PNG_BYTES} from './visual-capture.mjs';
@@ -73,7 +72,7 @@ export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
       pending=pending.subarray(HEADER+length);
       lastSequence=sequence;
       onFrame({sequence,capturedAtMs,width,height,
-        sha256:createHash('sha256').update(bytes).digest('hex'),
+        sha256:image.sha256,
         bytes});
     }
   }

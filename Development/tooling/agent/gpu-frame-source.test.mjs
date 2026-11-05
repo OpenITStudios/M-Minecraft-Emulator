@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {EventEmitter} from 'node:events';
+import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {
   createGpuPacketDecoder,createGpuFrameSource,validateGpuExecutable,
@@ -29,6 +30,8 @@ test('stream accepts split transport chunks and preserves frame order',()=>{
   assert.deepEqual(found.map(x=>x.sequence),[1,2]);
   assert.equal(found[1].width,1);
   assert.match(found[1].sha256,/^[a-f0-9]{64}$/);
+  assert.equal(found[1].sha256,createHash('sha256').update(png).digest('hex'));
+  // inspectPng already owns the one full-buffer digest; no second hash path.
   assert.throws(()=>decoder.push(packet(2)),/sequence/);
 });
 test('bad frame length, unknown magic and stale timestamp are refused',()=>{
