@@ -10,6 +10,21 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P32 MCP disconnection input-fence (5 November 2026, SOURCE_ONLY):**
+  The existing MCP handler could continue an awaited active action
+  after `shutdown()` returned from native lease acquire, or continue
+  observed-action preflight after its native window read. One
+  per-handler closed flag now refuses subsequent tools, fences both
+  awaited admission points and suppresses late stdio replies.
+  Already-dispatched input is aborted; exact-owner neutral/release
+  cleanup remains permitted. New MCP processes still start with
+  explicit per-slot reconciliation holds; old packets are never
+  automatically replayed. Node fixtures covering 4/5-client acquire
+  races, preflight disconnect and active-batch cleanup are
+  AUTHORED_NOT_EXECUTED. No Rust wire change, new controller,
+  external agent, CI, source test, Windows/Minecraft run or package.
+  See [MCP P32](../Development/tooling/agent/README.md).
+
 - **P31 epoch-bound AI acquire (5 November 2026,
   SOURCE_ONLY):** The existing Rust writer book already fences input
   and release by slot/PID/birth/epoch, but native `AiLeaseAcquire`

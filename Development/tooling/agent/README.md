@@ -147,6 +147,34 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P32 — MCP disconnect fences late input (source-only)
+
+The existing optional MCP stdio handler previously aborted a running
+multi-client batch during `shutdown()` but did not refuse a late
+continuation after an awaited native lease acquire or observed-action
+identity preflight. A pending acquire ACK could therefore still start
+a new AI action with an already-aborted transaction; a completed native
+target read could likewise proceed after stdin closed.
+
+One existing per-handler `closed` flag now fences newly received tools
+and these two asynchronous admission boundaries. A late lease acquire
+ACK is **not** authorization for active input: its already-confirmed,
+still-neutral lease enters existing `finally` exact-owner release
+without pulse dispatch. In-flight active transport is aborted and
+its original selected cohort remains uncertain, while existing
+per-slot neutral/release cleanup can still run. A stale preflight
+returns `MCP_CONNECTION_CLOSED` before acquiring a writer lease;
+the stdio owner suppresses late replies after closure.
+
+There is **no** extra MCP/server instance, agent daemon, retry,
+unverified input, process adoption, status store, or changed native
+wire schema. Reconnecting MCP still starts with all opted-in AI slots
+held pending explicit original-controller reconciliation. Negative
+Node fixtures cover disconnect during an awaited acquire, visual
+preflight, already-dispatched batch, and post-close tool admission
+in four/five-client modes. Tests are AUTHORED_NOT_EXECUTED;
+real Windows/Minecraft operation, source suites and five-client
+acceptance remain NOT_VERIFIED.
 ## P31 — Epoch-bound native process generation (SOURCE_ONLY)
 
 An existing writer lease already binds subsequent `AiLeasedInput`,

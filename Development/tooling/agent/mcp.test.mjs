@@ -3188,6 +3188,130 @@ test('first nonbusy observed capture error requests whole-cohort abort, never pa
 });
 
 
+
+test('P32 pending lease acquire cannot dispatch after MCP shutdown',async()=>{
+  for(const [mode,slots] of [
+    ['human-plus-four-ai',[2,3,4,5]],['five-ai',[1,2,3,4,5]]
+  ]) {
+    let notify,finish,armed=false,batches=0,neutralWrites=0;
+    const entered=new Promise(resolve=>{notify=resolve;});
+    const gate=new Promise(resolve=>{finish=resolve;});
+    const leases=[];
+    const h=createHandler({...config(mode),experimentalMultiClientInputEnabled:true},{
+      aiLease:async(_exe,operation,selected,opts)=>{
+        leases.push([operation,...selected]);
+        if(armed&&operation==='acquire'&&!opts.neutralOnly){
+          notify();await gate; // stdin closes before native acquire reply
+        }
+        return leaseAck(_exe,operation,selected,opts);
+      },
+      aiInput:async(_exe,frame)=>{
+        neutralWrites++;
+        return {schema:1,slot:frame.slot,
+          status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+          gameplayObserved:false};
+      },
+      aiMultiBatch:async()=>{batches++;throw Error('LATE_INPUT_FORBIDDEN');},
+    });
+    await h.callTool('stop_experimental_multi_client_actions',{slots});
+    neutralWrites=0;leases.length=0;armed=true;
+    const pending=h.callTool('run_experimental_multi_client_actions',{
+      actions:slots.map(aiMove),
+    });
+    await entered;
+    h.shutdown();
+    h.shutdown(); // idempotent
+    finish();
+    await assert.rejects(pending,/AI_SEQUENCE_ABORTED/);
+    assert.equal(batches,0,'late acquire ACK must not dispatch pulses');
+    assert.equal(neutralWrites,0,'undispatched action needs only neutral lease release');
+    assert.deepEqual(leases,[
+      ['acquire',...slots],...slots.map(slot=>['release',slot])
+    ]);
+    await assert.rejects(()=>h.callTool('stop_experimental_multi_client_actions',{
+      slots,
+    }),/MCP_CONNECTION_CLOSED/);
+    assert.equal(await h.handle({
+      jsonrpc:'2.0',id:99,method:'tools/list',
+    }),null,'closed MCP no longer accepts requests');
+  }
+});
+
+test('P32 observed action preflight stops at disconnect without a new writer',async()=>{
+  for(const mode of ['human-plus-four-ai','five-ai']){
+    const fixture=teamVisualFixture(mode);
+    let notify,finish,armed=false,leases=0,batches=0;
+    const entered=new Promise(resolve=>{notify=resolve;});
+    const gate=new Promise(resolve=>{finish=resolve;});
+    const h=createHandler({...config(mode),experimentalMultiClientInputEnabled:true},{
+      visualObserverFactory:fixture.factory,
+      native:async(...args)=>{
+        if(armed){notify();await gate;armed=false;}
+        return fixture.native(...args);
+      },
+      aiLease:async(...args)=>{leases++;return leaseAck(...args);},
+      aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false}),
+      aiMultiBatch:async()=>{batches++;throw Error('LATE_NATIVE_INPUT');},
+    });
+    await h.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
+    leases=0;
+    const basis=(await h.callTool('get_multi_client_visual_state',{}))
+      .frames.map(frame=>frame.baseline);
+    fixture.markDelivered();
+    armed=true;
+    const pending=h.callTool('run_experimental_observed_actions',{
+      actions:fixture.slots.map(aiMove),basis,
+    });
+    await entered;
+    h.shutdown();
+    finish();
+    await assert.rejects(pending,/MCP_CONNECTION_CLOSED/);
+    assert.equal(leases,0,'no lease acquisition after disconnected preflight');
+    assert.equal(batches,0,'no action input after stream closure');
+  }
+});
+
+test('P32 active batch cancellation retains exact-owner neutral cleanup',async()=>{
+  const slots=[2,3,4,5],neutral=[],calls=[];
+  let signalStart;
+  const entered=new Promise(resolve=>{signalStart=resolve;});
+  const h=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    aiLease:async(_exe,op,selected,opts)=>{
+      calls.push([op,...selected]);
+      return leaseAck(_exe,op,selected,opts);
+    },
+    aiInput:async(_exe,frame)=>{
+      neutral.push(frame.slot);
+      return {schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false};
+    },
+    aiMultiBatch:async(_exe,_batch,{signal})=>{
+      signalStart();
+      return new Promise((_resolve,reject)=>{
+        if(signal.aborted){reject(Error('AI_SEQUENCE_ABORTED'));return;}
+        signal.addEventListener('abort',()=>reject(Error('AI_SEQUENCE_ABORTED')),
+          {once:true});
+      });
+    },
+  });
+  await h.callTool('stop_experimental_multi_client_actions',{slots});
+  neutral.length=0;calls.length=0;
+  const pending=h.callTool('run_experimental_multi_client_actions',{
+    actions:slots.map(aiMove),
+  });
+  await entered;
+  h.shutdown();
+  await assert.rejects(pending,/AI_SEQUENCE_ABORTED/);
+  assert.deepEqual(neutral,slots,
+    'in-flight input must still attempt independent exact-owner neutral');
+  assert.deepEqual(calls,[
+    ['acquire',...slots],...slots.map(slot=>['release',slot])
+  ]);
+});
+
 test('new 4/5 AI MCP connection does not trust any old channel without explicit reconciliation',async()=>{
   for(const [mode,slots] of [
     ['human-plus-four-ai',[2,3,4,5]],

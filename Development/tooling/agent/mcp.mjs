@@ -76,7 +76,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'AI_LEASE_EPOCH_REQUIRED',
   'AI_WRITER_LEASE_UNCONFIRMED',
   'AI_WRITER_LEASE_RELEASE_UNCONFIRMED',
-  'AI_INPUT_RECOVERY_REQUIRED',
+  'AI_INPUT_RECOVERY_REQUIRED','MCP_CONNECTION_CLOSED',
   'PROBE_SOURCE_REVIEW_REQUIRED',
 ]);
 function publicToolError(error) {
@@ -1315,6 +1315,12 @@ export function createHandler(config,{
   qaClock=()=>Date.now(),
 }={}) {
   let inFlight=false; // mutating or exclusive native operation
+  // Stdio closure fences pending preflight/lease continuations in THIS
+  // existing MCP handler. It does not own game lifecycle or recovery.
+  let closed=false;
+  const requireOpen=()=>{
+    if(closed)throw new Error('MCP_CONNECTION_CLOSED');
+  };
   // One volatile plan per slot; not a Minecraft world manager or an auto-run loop.
   const probeQaPlans=new Map();
   // Only correlation identifiers, never a second checkpoint or outcome
@@ -1557,6 +1563,7 @@ export function createHandler(config,{
     }
   }
   async function callTool(name,args) {
+    requireOpen();
     if(name==='probe_qa' && args && Object.hasOwn(args,'inspectRun')) {
       // No preparation, source ZIP, log, client capture, status write,
       // native game input, owner transfer or controller startup.
@@ -2562,6 +2569,9 @@ export function createHandler(config,{
             // imagery for a new input batch. Do not guess a replacement PID.
             throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
           }
+          // Native target inspection may complete after MCP stdin closed.
+          // No following slot check or lease may be started in that case.
+          requireOpen();
           if(!sameNativeVisualTarget(live,frame.baseline?.captureIdentity)) {
             // Known different native child: revoke only this slot's obsolete
             // visual cache and GPU producer. Do not touch another game.
@@ -2579,6 +2589,7 @@ export function createHandler(config,{
             includeImage:false,
           }).metadata));
         refuseUncertain(schedule.slots);
+        requireOpen();
       } finally {
         inFlight=false;
       }
@@ -2639,6 +2650,10 @@ export function createHandler(config,{
           throw error;
         }
         leaseHeld=true;
+        // A previously awaited native acquire may return after shutdown.
+        // Refuse new active input; finally still releases the confirmed
+        // neutral lease via the same original controller.
+        if(closed||abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
         // A visual source could disappear during the await. Do not
         // acquire a lease and then send the already-invalidated action.
         refuseUncertain(schedule.slots);
@@ -2925,6 +2940,7 @@ export function createHandler(config,{
     throw new Error('Unknown tool');
   }
   async function handle(message) {
+    if(closed)return null;
     if (!message || message.jsonrpc!=='2.0' || typeof message.method!=='string') return null;
     if (!Object.hasOwn(message,'id')) return null;
     const id=message.id;
@@ -2969,6 +2985,11 @@ export function createHandler(config,{
     }catch {return err(-32603,'Internal error');}
   }
   return {handle,callTool,shutdown:()=>{
+    if(closed)return;
+    closed=true;
+    // Native input may already have published packets. Quarantine the
+    // touched cohort and retain the existing exact-owner finally cleanup.
+    if(multiSequence)markAiUncertain(multiSequence.slots);
     mc02SequenceAbort?.abort();
     multiSequence?.abort.abort();
     if (gpuStartup) gpuStartup.cancelled=true;
@@ -2980,14 +3001,15 @@ export function createHandler(config,{
 export function serve(config) {
   const handler=createHandler(config);
   const rl=readline.createInterface({input:process.stdin,crlfDelay:Infinity,terminal:false});
-  rl.once('close',()=>handler.shutdown());
+  let disconnected=false;
+  rl.once('close',()=>{disconnected=true;handler.shutdown();});
   rl.on('line',async line=>{
-    if (Buffer.byteLength(line)>REQUEST_LIMIT) return;
+    if (disconnected||Buffer.byteLength(line)>REQUEST_LIMIT) return;
     let message;
     try{message=JSON.parse(line);}catch{return;}
     try {
       const reply=await handler.handle(message);
-      if (reply) process.stdout.write(JSON.stringify(reply)+'\n');
+      if (reply&&!disconnected) process.stdout.write(JSON.stringify(reply)+'\n');
     }catch { /* MCP stdout must remain parseable; failures are returned by handler. */ }
   });
 }
