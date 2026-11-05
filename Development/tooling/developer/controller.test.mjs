@@ -442,6 +442,79 @@ test('quality review rejects repeated paths rather than overcounting selected ch
   assert.match(review.reason,/repeated/);
 });
 
+
+test('cross-module review identifies all three concrete MCP/native/UI seams without claiming review ran',()=>{
+  const paths=[
+    'Development/tooling/agent/mcp.mjs',
+    'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+    'Development/apps/desktop/src/app/presentation/agentActivity.ts'
+  ];
+  const result=qualityReviewForPaths(paths,SHA);
+  assert.equal(result.status,'REVIEW_REQUIRED');
+  assert.deepEqual(result.crossModuleReviews.map(s=>s.id),[
+    'agent-input-lease','native-desktop-session','agent-activity-mirror'
+  ]);
+  assert.deepEqual(result.crossModuleReviews.map(s=>s.status),
+    ['REVIEW_REQUIRED','REVIEW_REQUIRED','REVIEW_REQUIRED']);
+  assert.ok(result.crossModuleReviews.every(s=>
+    s.provenance==='SOURCE_PATH_SELECTION_ONLY'&&s.execution==='NOT_EXECUTED'&&
+    s.reviewParties.every(p=>p.status==='NOT_REVIEWED')));
+  assert.deepEqual(result.crossModuleReviews[2].selectedParties,
+    ['agent-mcp','native-controller','desktop-ui']);
+  assert.deepEqual(result.crossModuleReviews[2].counterpartsNotSelected,[]);
+  assert.deepEqual(result.recommendedValidationTaskIds,['source.validate']);
+  assert.equal(result.evidence.minecraftRuntime,'NOT_EXECUTED');
+  assert.deepEqual(result.crossModuleReviews,qualityReviewForPaths(paths,SHA).crossModuleReviews);
+});
+
+test('a single changed MCP source or activity fixture still requires reviewing unchanged source endpoints',()=>{
+  const mcp=qualityReviewForPaths(['Development/tooling/agent/mcp.mjs'],SHA);
+  assert.deepEqual(mcp.crossModuleReviews.map(s=>s.id),[
+    'agent-input-lease','agent-activity-mirror'
+  ]);
+  assert.deepEqual(mcp.crossModuleReviews[0].counterpartsNotSelected,
+    ['native-controller']);
+  assert.deepEqual(mcp.crossModuleReviews[1].counterpartsNotSelected,
+    ['native-controller','desktop-ui']);
+  assert.ok(mcp.crossModuleReviews[0].reviewParties.some(p=>
+    p.id==='native-controller'&&!p.selectedInChangeSet&&
+    p.inspectFiles.includes('Development/apps/desktop/src-tauri/src/engine/agent_cli.rs')));
+  const fixture=qualityReviewForPaths(['Development/tooling/agent/activity-status.test.mjs'],SHA);
+  assert.deepEqual(fixture.crossModuleReviews.map(s=>s.id),['agent-activity-mirror']);
+  assert.deepEqual(fixture.crossModuleReviews[0].selectedParties,['agent-mcp']);
+});
+
+test('desktop-only native or UI changes route to their exact consumer boundaries',()=>{
+  const session=qualityReviewForPaths(
+    ['Development/apps/desktop/src-tauri/src/engine/process_identity.rs'],SHA);
+  assert.deepEqual(session.crossModuleReviews.map(s=>s.id),['native-desktop-session']);
+  assert.deepEqual(session.crossModuleReviews[0].counterpartsNotSelected,['desktop-ui']);
+  const view=qualityReviewForPaths(
+    ['Development/apps/desktop/src/AgentActivityNotice.svelte'],SHA);
+  assert.deepEqual(view.crossModuleReviews.map(s=>s.id),['agent-activity-mirror']);
+  assert.deepEqual(view.crossModuleReviews[0].counterpartsNotSelected,
+    ['agent-mcp','native-controller']);
+  assert.deepEqual(qualityReviewForPaths([],SHA).crossModuleReviews,[]);
+  assert.deepEqual(qualityReviewForPaths(
+    ['docs/system/education-native-coordinate-hud.md'],SHA).crossModuleReviews,[]);
+  assert.deepEqual(qualityReviewForPaths(
+    ['Development/tooling/agent/check-education-native-hud-source.mjs'],SHA).crossModuleReviews,[]);
+});
+
+test('protected and duplicate review paths never expose or pass critical seam review',()=>{
+  const blocked=qualityReviewForPaths([
+    'Development/tooling/agent/mcp.mjs','Data/Profiles/secret'
+  ],SHA);
+  assert.equal(blocked.status,'BLOCKED');
+  assert.deepEqual(blocked.crossModuleReviews,[]);
+  const repeated=qualityReviewForPaths([
+    'Development/apps/desktop/src/LazyTesterApp.svelte',
+    'Development/apps/desktop/src/LazyTesterApp.svelte'
+  ],SHA);
+  assert.equal(repeated.status,'BLOCKED');
+  assert.deepEqual(repeated.crossModuleReviews,[]);
+});
+
 test('quality review fails closed for protected, absolute or path traversal inputs',()=>{
   for(const path of ['Data/world','workspace/private','App/launcher.exe',
     '../Data/private','a/../../Data','/etc/passwd','C:/Users/test/world',

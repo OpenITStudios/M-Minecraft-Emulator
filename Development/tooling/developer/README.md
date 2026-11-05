@@ -45,6 +45,19 @@ A docs-only HUD review still recommends the existing documentation validation
 task; a fixture/source change still recommends the existing source validation
 task. Neither recommendation means the task ran.
 
+For critical MCP/native/UI source boundaries, the same read-only result also
+includes `crossModuleReviews`. Each source-selected seam lists the affected
+participants, **other participants that were not selected**, exact canonical
+files to inspect, and risk checks. The reviewed interfaces are:
+`agent-input-lease` (MCP ↔ original Rust controller),
+`native-desktop-session` (Rust ↔ typed Svelte/Tauri UI), and
+`agent-activity-mirror` (MCP → Rust → UI). A single changed file can
+require reviewing other owners even when those files are absent from the
+selected diff; this absence never proves compatibility. Every participant
+remains `NOT_REVIEWED` and each seam reports
+`SOURCE_PATH_SELECTION_ONLY`/`NOT_EXECUTED`. There is **no automatic
+caller traversal**, runtime control, new source test executor, or PASS.
+
 The review emits three **NOT_EXECUTED** stages: Propose (alternatives), Probe
 (counterexamples/negative cases), Compose (select only source-supported change).
 It also exposes the existing recommended validation tasks as **recommendations

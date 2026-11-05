@@ -242,6 +242,149 @@ function safeReviewPath(path) {
     !isAbsolute(path) && !win32.isAbsolute(path) &&
     posix.normalize(path)===path && path!=='..' && !path.startsWith('../');
 }
+
+// These are the existing, direct source authority boundaries. They do not
+// inspect callers, prove runtime compatibility, or grant tool permissions.
+// A changed endpoint requires a human/source reviewer to examine all parties.
+const CRITICAL_REVIEW_SEAMS=Object.freeze([
+  Object.freeze({
+    id:'agent-input-lease',
+    parties:[
+      {id:'agent-mcp',sourcePaths:[
+        'Development/tooling/agent/mcp.mjs',
+        'Development/tooling/agent/mcp.test.mjs',
+        'Development/tooling/agent/input-route.mjs',
+        'Development/tooling/agent/input-route.test.mjs',
+        'Development/tooling/agent/input-delivery.mjs',
+        'Development/tooling/agent/input-delivery.test.mjs',
+        'Development/tooling/agent/input-timeline.mjs',
+        'Development/tooling/agent/input-timeline.test.mjs',
+        'Development/tooling/agent/visual-observer.mjs',
+        'Development/tooling/agent/visual-observer.test.mjs'
+      ],inspectFiles:[
+        'Development/tooling/agent/mcp.mjs',
+        'Development/tooling/agent/input-delivery.mjs'
+      ]},
+      {id:'native-controller',sourcePaths:[
+        'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs',
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs'
+      ],inspectFiles:[
+        'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs',
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs'
+      ]}
+    ],
+    checks:[
+      'Follow MCP request through same-image agent CLI and authenticated original Rust IPC; neither owns a second Minecraft lifecycle.',
+      'Review per-slot PID/birth/session/HWND and fenced lease-epoch admission, interrupted writer cleanup and fail-closed recovery.',
+      'Native transport ACK and a delivered visual frame do not prove Minecraft accepted keyboard/mouse input.'
+    ]
+  }),
+  Object.freeze({
+    id:'native-desktop-session',
+    parties:[
+      {id:'native-controller',sourcePaths:[
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/instance_identity.rs',
+        'Development/apps/desktop/src-tauri/src/engine/process_identity.rs',
+        'Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs',
+        'Development/apps/desktop/src-tauri/src/engine/workspace_surface/controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/workspace_surface/previews.rs',
+        'Development/apps/desktop/src-tauri/src/commands/native_clients.rs'
+      ],inspectFiles:[
+        'Development/apps/desktop/src-tauri/src/commands/native_clients.rs',
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/engine/workspace_surface.rs'
+      ]},
+      {id:'desktop-ui',sourcePaths:[
+        'Development/apps/desktop/src/LazyTesterApp.svelte',
+        'Development/apps/desktop/src/app/bridge/lazyTester.ts',
+        'Development/apps/desktop/src/app/bridge/invokeRuntime.ts',
+        'Development/apps/desktop/src/app/bridge/workspaceSurface.ts',
+        'Development/apps/desktop/src/app/presentation/sessionFeedback.ts',
+        'Development/apps/desktop/test/lazy-tester.test.ts',
+        'Development/apps/desktop/test/workspace-surface.test.ts',
+        'Development/apps/desktop/test/observed-process.test.ts'
+      ],inspectFiles:[
+        'Development/apps/desktop/src/LazyTesterApp.svelte',
+        'Development/apps/desktop/src/app/bridge/lazyTester.ts',
+        'Development/apps/desktop/src/app/bridge/invokeRuntime.ts'
+      ]}
+    ],
+    checks:[
+      'Review typed bridge, Tauri command admission and original session identity rather than copying lifecycle authority into Svelte.',
+      'Check replaced/unknown process and HWND, stale selection, pending CloseOne/CloseAll, and five-slot DWM preview recovery.',
+      'Missing controller data must not silently become STOPPED, authenticated world, successful sign-in or gameplay.'
+    ]
+  }),
+  Object.freeze({
+    id:'agent-activity-mirror',
+    parties:[
+      {id:'agent-mcp',sourcePaths:[
+        'Development/tooling/agent/mcp.mjs',
+        'Development/tooling/agent/mcp.test.mjs',
+        'Development/tooling/agent/activity-status.mjs',
+        'Development/tooling/agent/activity-status.test.mjs'
+      ],inspectFiles:[
+        'Development/tooling/agent/activity-status.mjs',
+        'Development/tooling/agent/mcp.mjs'
+      ]},
+      {id:'native-controller',sourcePaths:[
+        'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs',
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs',
+        'Development/apps/desktop/src-tauri/src/commands/native_clients.rs'
+      ],inspectFiles:[
+        'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+        'Development/apps/desktop/src-tauri/src/commands/native_clients.rs'
+      ]},
+      {id:'desktop-ui',sourcePaths:[
+        'Development/apps/desktop/src/app/presentation/agentActivity.ts',
+        'Development/apps/desktop/src/AgentActivityNotice.svelte',
+        'Development/apps/desktop/src/app/bridge/lazyTester.ts',
+        'Development/apps/desktop/src/LazyTesterApp.svelte',
+        'Development/apps/desktop/test/lazy-tester.test.ts'
+      ],inspectFiles:[
+        'Development/apps/desktop/src/app/presentation/agentActivity.ts',
+        'Development/apps/desktop/src/AgentActivityNotice.svelte',
+        'Development/apps/desktop/src/app/bridge/lazyTester.ts'
+      ]}
+    ],
+    checks:[
+      'Trace only the explicitly published, bounded MCP activity projection through same-image native admission to the UI.',
+      'Preserve native rejection of webview activity publication, stale ATTENTION semantics, fixed profile slots and validated Probe counts.',
+      'The UI must say reported by local agent: no verified PC control, native game input, world attribution or map PASS.'
+    ]
+  })
+]);
+function crossModuleReviewForPaths(paths) {
+  const selected=new Set(paths);
+  return CRITICAL_REVIEW_SEAMS.flatMap(seam=>{
+    const parties=seam.parties.map(p=>({
+      id:p.id,
+      selectedInChangeSet:p.sourcePaths.some(file=>selected.has(file)),
+      inspectFiles:[...p.inspectFiles],
+      status:'NOT_REVIEWED'
+    }));
+    const touched=parties.filter(p=>p.selectedInChangeSet).map(p=>p.id);
+    if(!touched.length)return [];
+    return [{
+      id:seam.id,status:'REVIEW_REQUIRED',
+      selectedParties:touched,
+      counterpartsNotSelected:parties.filter(p=>!p.selectedInChangeSet).map(p=>p.id),
+      reviewParties:parties,checks:[...seam.checks],
+      provenance:'SOURCE_PATH_SELECTION_ONLY',
+      execution:'NOT_EXECUTED'
+    }];
+  });
+}
+
 export function qualityReviewForPaths(paths,revision) {
   if(!SHA.test(revision??'')) throw Error('Quality review requires an exact source SHA');
   const validation=planForPaths(paths,revision);
@@ -249,7 +392,7 @@ export function qualityReviewForPaths(paths,revision) {
       paths.some(path=>!safeReviewPath(path)) ||
       new Set(paths).size!==paths.length) {
     return {status:'BLOCKED',sourceSha:revision,changedCount:paths.length,
-      areas:[],recommendedValidationTaskIds:[],stages:[],
+      areas:[],crossModuleReviews:[],recommendedValidationTaskIds:[],stages:[],
       reason:'Protected, repeated or unsafe paths cannot be admitted to quality review',
       proof:'NOT_EXECUTED'};
   }
@@ -260,6 +403,7 @@ export function qualityReviewForPaths(paths,revision) {
   return {
     status:paths.length?'REVIEW_REQUIRED':'NO_CHANGES',
     sourceSha:revision,changedCount:paths.length,areas,
+    crossModuleReviews:crossModuleReviewForPaths(paths),
     recommendedValidationTaskIds:[...validation.taskIds],
     stages:paths.length?[
       {id:'PROPOSE',status:'NOT_EXECUTED',

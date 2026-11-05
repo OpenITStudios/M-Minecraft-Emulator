@@ -10,6 +10,23 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P28 cross-module quality review (5 November 2026, SOURCE_ONLY):**
+  The existing `DEV.cmd review` now projects three narrowly scoped,
+  deterministic source-boundary review obligations for MCP/native input,
+  native/Tauri/UI session presentation and MCP-to-Rust-to-UI activity
+  reporting. A change in one selected owner still lists counterpart
+  source owners for inspection even when not in the diff; no absence
+  is interpreted as verified compatibility. Obligations remain
+  `REVIEW_REQUIRED` with per-owner `NOT_REVIEWED`, provenance
+  `SOURCE_PATH_SELECTION_ONLY`, and `NOT_EXECUTED`. Authored
+  positive/negative fixtures include one-sided changes, full three-layer
+  selections, HUD isolation, and protected/duplicate path refusal.
+  One existing developer controller remains the sole owner: no external
+  harness runtime, agent, second state store, CI, Windows source test,
+  gameplay or installer was executed. See
+  [developer controller](../Development/tooling/developer/README.md).
+
+
 - **P27 HUD review routing integrity (5 November 2026, SOURCE_ONLY):**
   The existing `DEV.cmd review` area selector previously treated the HUD
   source test as generic agent-MCP work and the canonical HUD guide as

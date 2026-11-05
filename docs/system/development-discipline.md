@@ -57,6 +57,16 @@ Minecraft controller.
    bundled in Lazy Tester. MCP `mcp.mjs` and Rust session controller
    retain their established owners.
 
+For native controller, MCP and desktop presentation changes, the existing
+`review` response includes explicit `crossModuleReviews` source-path
+seams. Each requires examining the other established owners even if they are
+absent from the selected diff: authenticated MCP/native input admission,
+native/Tauri/typed-UI session presentation, and the bounded MCP activity
+mirror. The entries are **review requests only**, not completed dependency
+analysis or an assertion that unselected files are unchanged. A single changed
+critical source may trigger more than one seam; no second controller, automatic
+agent dispatch or new quality runner is introduced.
+
 The `review` envelope contains area/risk prompts, selected validation task
 IDs, input provenance, and explicit `NOT_REVIEWED`/`NOT_EXECUTED` states.
 It deliberately cannot produce a winner, execute tests, install upstream
