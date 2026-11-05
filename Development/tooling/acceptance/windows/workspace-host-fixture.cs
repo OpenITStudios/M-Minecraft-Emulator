@@ -25,6 +25,67 @@ internal static class WorkspaceHostFixture
             base.WndProc(ref message);
         }
     }
+    // P65: a disposable, *manual-only* UIA outcome oracle. It is never
+    // started by normal workspace tests, installed, or connected to the
+    // Minecraft controller. Control.Name/AccessibleName are discovery
+    // candidates, not verified UIA AutomationIds until Windows is tested.
+    sealed class UiaCounterWindow : Form
+    {
+        int count;
+        public UiaCounterWindow()
+        {
+            Text = "Synthetic UIA Counter — no Minecraft";
+            StartPosition = FormStartPosition.Manual;
+            Bounds = new Rectangle(120, 120, 390, 190);
+            var label = new Label
+            {
+                Name = "CounterLabel", Text = "CounterValue",
+                AccessibleName = "CounterLabel",
+                Location = new Point(20, 20), Size = new Size(120, 26),
+            };
+            var value = new TextBox
+            {
+                Name = "CounterValue", AccessibleName = "CounterValue",
+                Text = "0", ReadOnly = true, ShortcutsEnabled = false,
+                TabStop = false, Location = new Point(155, 18),
+                Size = new Size(80, 26),
+            };
+            var increment = new Button
+            {
+                Name = "CounterIncrement", AccessibleName = "Increment",
+                Text = "Increment", Location = new Point(20, 62),
+                Size = new Size(145, 36),
+            };
+            increment.Click += delegate
+            {
+                // Count *every* action: a repeated Invoke yields 2, never a
+                // false positive for the declared 0 -> 1 single-action oracle.
+                count = checked(count + 1);
+                value.Text = count.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            };
+            Controls.Add(label);
+            Controls.Add(value);
+            Controls.Add(increment);
+        }
+    }
+
+    // Must be explicitly invoked as --uia-counter. No automatic click,
+    // input injection, screenshots, network or private files.
+    static int RunUiaCounter()
+    {
+        using (var window = new UiaCounterWindow())
+        using (var lifetime = new System.Windows.Forms.Timer { Interval = 30000 })
+        using (var safety = new System.Threading.Timer(
+            delegate { Environment.Exit(3); }, null, 30000,
+            System.Threading.Timeout.Infinite))
+        {
+            lifetime.Tick += delegate { lifetime.Stop(); window.Close(); };
+            lifetime.Start();
+            Application.Run(window);
+        }
+        return 0;
+    }
+
     const int Style = -16;
     const long Child = 0x40000000L, Popup = 0x80000000L;
     const uint FrameChanged = 0x20, NoActivate = 0x10, NoZOrder = 4;
@@ -85,6 +146,7 @@ internal static class WorkspaceHostFixture
         if (!SetProcessDpiAwarenessContext(new IntPtr(-4))) throw new InvalidOperationException("Cannot establish PMv2");
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
         Application.EnableVisualStyles();
+        if (args.Length == 1 && args[0] == "--uia-counter") return RunUiaCounter();
         if (args.Length == 2 && args[0] == "crash-recovery") return CrashRecovery(args[1], false);
         if (args.Length == 2 && args[0] == "independent-surface-crash") return CrashRecovery(args[1], true);
         if (args.Length == 2 && args[0] == "protected-manager-crash") return ProtectedManagerCrash(args[1]);

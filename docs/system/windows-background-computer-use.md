@@ -477,6 +477,25 @@ This P64 review closes the current bounded source-only action
 admission work; further stages should be evidence-triggered rather
 than repetitive source-status commits.
 
+**P65 source-only test-oracle fixture (6 November 2026):** The existing
+`Development/tooling/acceptance/windows/workspace-host-fixture.cs`
+now contains a separately selected `--uia-counter` WinForms mode.
+It creates one disposable window, a uniquely named `Increment` button
+(`Name: CounterIncrement`) and a separate read-only `CounterValue`
+TextBox initialized to `0`. Each genuine click increases the counter
+by exactly one, making duplicate dispatch visible as `2` rather
+than falsely confirming a single Invoke. The synthetic window
+automatically exits after 30 seconds; it has **no automatic input,
+external process selection, credentials, files, telemetry or Minecraft
+access**, and the existing workspace acceptance script never selects
+this mode. This is actual authored fixture source, **not** a claimed
+test pass. WinForms-to-UIA role, AutomationId, provider stability,
+ValuePattern readback and focus behavior are still NOT_VERIFIED on
+Windows; the P63 example cannot be treated as a confirmed target-owned
+oracle until these are observed. The Cua strict-action blocker P64
+is unchanged; no driver, MCP input or ordinary product component
+was added.
+
 **P58 source-only implementation:** `inspect_client_ui({slot})`
 uses the existing configured Cua Driver `get_window_state`
 CLI with `include_screenshot:false` and up to 64 structured

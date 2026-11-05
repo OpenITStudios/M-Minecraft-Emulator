@@ -32,13 +32,13 @@ NOT_VERIFIED.
   background; first read-only semantic UIA via existing Cua Driver,
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
-- **Last source stages:** P58-P61 read-only UIA inspection/candidacy
-  with strict refusal; P62-P63 established a source-only upstream
-  Invoke-only proposal and early intent rejection; P64 reviewed
-  upstream Cua HEAD `a59783a45f1c9ec55cb33acb58f1bb7b54497c73`
-  and found no compatible action API. Track now
-  **BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE**; prior fixtures
-  AUTHORED_NOT_EXECUTED and no Windows action enabled.
+- **Last source stages:** P58-P61 read-only UIA inspection/candidacy,
+  P62-P63 upstream Invoke-only design, P64 upstream
+  **BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE** remains intact. P65 adds
+  manual-only synthetic WinForms counter source in the already
+  existing workspace fixture to enable future app-owned UIA outcome
+  review; it does not launch, test, install or enable input.
+  All P58-P65 fixtures AUTHORED_NOT_EXECUTED.
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -82,6 +82,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| P65 | Added opt-in UIA counter mode to existing synthetic Windows fixture, exposing an independent read-only 0->1 state oracle without action dispatch | AUTHORED_NOT_EXECUTED; no package/controller/runtime change |
 | P64 | Upstream exact-source admission review: no no-fallback Invoke-only tool, native birth/session dispatch fence or Minecraft postcondition | BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE; no files outside docs/handoff |
 | P63 | Exact-source upstream Rust contract and negative fixture matrix; refuse malformed assessment intent before native/UIA reads | Source-authored fixtures NOT_EXECUTED; no input/backend enabled |
 | P62 | Selected minimal upstream Cua registry/snapshot extension boundary; existing verify_state is conditional readback only; no safe provider exists yet | REMOTE_GITHUB design/source review; no code/tests executed |
@@ -168,19 +169,16 @@ No source-only review may mark these runtime gates PASS.
 
 ## Single next step
 
-**BLOCKED — external Cua strict-action dependency; no automatic P65
-under the present authorization.** Preserve the existing
-`assess_client_background_action` refusal
-(`BACKGROUND_UNAVAILABLE` /
-`CUA_INVOKE_ONLY_ROUTE_NOT_AVAILABLE`). Resume implementation only
-when there is **new** maintainer-supported, source-reviewed Cua
-Invoke-only/no-fallback capability **or** the operator separately
-authorizes a contribution to `trycua/cua`. Then re-pin the actual
-upstream and `Local` HEAD, review P63's negative matrix, and decide
-the smallest source-only integration; real action delivery additionally
-requires separate Windows and operator permission, no-focus proof
-and a verified target-owned postcondition. The P63 proposal is not
-an installed tool. Until a new evidence/authorization hinge occurs,
-do not create repeated status commits, a second driver, a stub MCP
-action, or foreground fallback. All Node/Rust/Windows/Codex/Minecraft
-and five-client gates remain NOT_EXECUTED/NOT_VERIFIED.
+**P66 — resume independent source-only engineering, not the blocked
+Cua dispatch track.** At a freshly pinned `Local` HEAD, review the
+existing multi-client native input timeline and retained-controller
+consumers for one objectively demonstrated safety/correctness gap.
+Correct only the first wrong owner with bounded negative fixtures;
+do not create a second input backend or expand speculative code.
+P64 remains `BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE` and
+`assess_client_background_action` must still refuse. The P65
+`--uia-counter` fixture is manual-only, never auto-launched,
+packaged or accepted as Windows proof until separately authorized
+source tests and real target observations. Continue GitHub-only
+source work; no local tests, Windows, Minecraft, CI, build, install,
+private profiles/worlds or release actions.
