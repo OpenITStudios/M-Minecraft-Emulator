@@ -599,6 +599,29 @@ static_assert(rawCopiedRecordCount(8,sizeof(RAWINPUT)-1)==0);
 static_assert(rawCopiedRecordCount(0,sizeof(RAWINPUT))==0);
 static_assert(rawCopiedRecordCount(8,2*sizeof(RAWINPUT))==2);
 
+// The final Raw Input admission is sampled only AFTER any potentially
+// delayed Win32 window-owner lookup. An expired/changed active word cannot
+// pass merely because the original snapshot revision was stable BEFORE
+// that lookup. Zero-word pending UP records still require the same gate.
+constexpr bool rawFinalCopyAllowed(bool coherent,bool sameWindow,
+    std::uint64_t plannedWord,std::uint64_t sampledWord,
+    std::uint64_t plannedRevision,std::uint64_t sampledRevision) noexcept {
+    return coherent && sameWindow && plannedRevision!=0 &&
+        !(plannedRevision&1) && plannedRevision==sampledRevision &&
+        plannedWord==sampledWord;
+}
+// Source-only compile-time fixtures: active/zero successes, changed
+// word after window sampling, changed/odd revision, invalid window or
+// incoherent plan. AUTHORED_NOT_EXECUTED.
+static_assert(rawFinalCopyAllowed(true,true,1,1,2,2));
+static_assert(rawFinalCopyAllowed(true,true,0,0,2,2));
+static_assert(!rawFinalCopyAllowed(true,true,1,0,2,2));
+static_assert(!rawFinalCopyAllowed(true,true,0,1,2,2));
+static_assert(!rawFinalCopyAllowed(true,true,1,1,2,4));
+static_assert(!rawFinalCopyAllowed(true,true,1,1,3,3));
+static_assert(!rawFinalCopyAllowed(true,false,1,1,2,2));
+static_assert(!rawFinalCopyAllowed(false,true,1,1,2,2));
+
 // GetRawInputBuffer accepts partial batches: the caller may provide room
 // for one RAWINPUT even when the current virtual plan has many transitions.
 // Advance ONLY the state represented by successfully copied records.
@@ -729,9 +752,21 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     // to be unchanged (e.g. a zero packet during a release transaction).
     // After a failed read, held state and per-key/camera cursors are
     // intentionally unchanged; the next game poll can finish the release.
-    if (!plan.coherent || currentPacket()!=word ||
-        view->cursorRevision.load(std::memory_order_seq_cst)!=plan.revision ||
-        (plan.count!=0 && ownedGameWindow(word==0)!=window)) {
+    // The retained OGLES window revalidation uses Win32 calls which
+    // can return after an active packet has expired. Finish THAT
+    // potentially slow check before sampling the final live packet.
+    // The last revision read follows currentPacket(), so a native
+    // ReleaseAll or replacement write begun during the final sample
+    // also cannot authorize copying stale DOWN/camera events.
+    const bool sameWindow=plan.coherent &&
+        (plan.count==0 || ownedGameWindow(word==0)==window);
+    const auto latestWord=sameWindow?currentPacket():0;
+    const auto latestRevision=sameWindow?
+        view->cursorRevision.load(std::memory_order_seq_cst):0;
+    if (!rawFinalCopyAllowed(plan.coherent,sameWindow,
+            word,latestWord,plan.revision,latestRevision)) {
+        // An invalidated plan must not consume any per-button or
+        // cursor state. Next actual game poll can recover pending UPs.
         *size=0;
         rawBufferBusy.clear(std::memory_order_release);
         SetLastError(previous);return 0;

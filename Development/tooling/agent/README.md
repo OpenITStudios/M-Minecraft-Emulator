@@ -147,6 +147,41 @@ control, Skills Probe source/world attribution, and gameplay are NOT_VERIFIED.
 An opt-in status report is not evidence of native AI movement or successful
 Probe command execution.
 
+## P41 — Final Raw Input admission after window verification (SOURCE_ONLY)
+
+The optional C++ Raw Input reader from P40 verifies that an
+existing native packet, shared-memory revision and original game
+window still match before it copies synthetic events. The source
+previously checked `currentPacket()` and `cursorRevision`
+**before** calling `ownedGameWindow()` again. That last window
+verification invokes Win32 ownership/class/visibility APIs; if
+it stalls until a packet expires, its earlier valid packet
+check cannot stop a stale active DOWN or relative-camera record
+from being copied into the game's Raw Input buffer.
+
+The existing C++ reader now completes any needed original
+OGLES-window verification **first**, then samples the latest
+`currentPacket()` and revision in an explicit order immediately
+before sizing/copying a buffer prefix. A single pure
+`rawFinalCopyAllowed` contract requires an originally coherent
+plan, matching window, stable even shared revision and identical
+current virtual word. It admits both current active words and
+already-neutral zero-word release plans, while rejecting a word
+that expired during slow window inspection, a replacement
+packet, odd or changed revision and wrong/unknown game window.
+On refusal, no event is copied and no `rawHeldMask`, press
+counter, or cursor position is advanced; later polling may
+still drain pending key-up/mouse-up via the existing P40 logic.
+
+Pure compile-time negative fixtures document active/zero
+success, active-to-zero change, zero-to-active change, altered
+revision, odd revision, wrong window and incoherent plan.
+**AUTHORED_NOT_EXECUTED**: no C++ compile or native Windows/
+Minecraft input run was performed. The host Minecraft Education
+client may not poll this API, and a native/shared-memory ACK
+cannot prove gameplay key-up. The 96-byte ABI, Rust owner, MCP,
+feature OFF defaults, profiles, installer and CI remain unchanged.
+
 ## P40 — Same-poll deferred Raw Input release after queue drain (SOURCE_ONLY)
 
 The optional original C++ Raw Input consumer already maintains

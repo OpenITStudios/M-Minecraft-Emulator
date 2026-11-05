@@ -10,6 +10,25 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P41 final Raw Input window/TTL commit gate (5 November 2026,
+  SOURCE_ONLY):** The optional C++ `observedRawBuffer` previously
+  sampled `currentPacket` and shared-memory revision BEFORE its
+  last `ownedGameWindow` call. That window ownership/class/visibility
+  check could complete after the bounded 500-ms packet expired,
+  letting stale active DOWN/look records reach the game buffer.
+  The same existing reader now performs window verification first,
+  samples `currentPacket` then the revision last, and uses a pure
+  `rawFinalCopyAllowed` gate immediately before capacity/copy.
+  The gate refuses changed/expired packet, odd/changed revision,
+  unknown window and incoherent plan, while admitting a valid
+  zero-word P40 release plan. On refusal it retains all
+  `rawHeldMask` and pointer cursors. Compile-time negative
+  fixtures AUTHORED_NOT_EXECUTED. No new input path, schema,
+  controller, feature activation, local tests, CI, Windows/
+  Minecraft run, game profile or installer change.
+  See [agent P41](../Development/tooling/agent/README.md).
+
+
 - **P40 Raw Input same-poll release after physical drain (5 November 2026,
   SOURCE_ONLY):** The original C++ GetRawInputBuffer consumer built
   its synthetic plan before draining the physical Raw Input queue;
