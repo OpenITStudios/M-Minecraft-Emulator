@@ -56,7 +56,11 @@ fn native_error(error: io::Error) -> &'static str {
     }
     match error.kind() {
         io::ErrorKind::WouldBlock => "NATIVE_BUSY",
-        io::ErrorKind::TimedOut | io::ErrorKind::Interrupted => "OUTCOME_UNCERTAIN",
+        // A broken result channel may follow a native operation which
+        // already reached the retained controller. This is NOT a
+        // definitive refusal and cannot authorize another input write.
+        io::ErrorKind::TimedOut | io::ErrorKind::Interrupted |
+        io::ErrorKind::BrokenPipe => "OUTCOME_UNCERTAIN",
         io::ErrorKind::PermissionDenied => "NATIVE_REFUSED",
         io::ErrorKind::Unsupported => "UNSUPPORTED",
         _ => "NATIVE_UNAVAILABLE",
@@ -817,6 +821,10 @@ mod tests {
             "NATIVE_WRITER_MODE_MISMATCH");
         assert_eq!(native_error(Error::other("Unknown private controller detail")),
             "NATIVE_UNAVAILABLE");
+        assert_eq!(native_error(Error::new(ErrorKind::BrokenPipe,
+            "original IPC worker result missing")),"OUTCOME_UNCERTAIN");
+        assert_eq!(native_error(Error::new(ErrorKind::TimedOut,
+            "original worker still running")),"OUTCOME_UNCERTAIN");
     }
     #[test]
     fn one_shot_command_accepts_only_inspect_or_five_slots() {

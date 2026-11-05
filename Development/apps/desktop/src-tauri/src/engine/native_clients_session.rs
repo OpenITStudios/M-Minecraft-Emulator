@@ -955,10 +955,34 @@ pub(crate) type SessionReply = Result<SessionSnapshot, String>;
 #[cfg(windows)]
 pub(crate) mod pipe;
 
+// The private one-shot receiver is the only local identity of an IPC
+// request still in flight. Its bytes cannot be attributed to any later
+// request, and it is never retried or published as a new response.
+// Do not introduce a separate transaction owner or public wire token.
 #[cfg(windows)]
 struct PendingRequest {
     replies: std::sync::mpsc::Receiver<io::Result<SessionReply>>,
     worker: std::thread::JoinHandle<()>,
+}
+
+#[cfg(windows)]
+enum PendingWorkerWait {
+    // A response belongs to the unique original worker only.
+    Completed(io::Result<SessionReply>),
+    StillRunning,
+    ResultChannelLost,
+}
+#[cfg(windows)]
+fn classify_pending_worker_wait(
+    outcome:Result<io::Result<SessionReply>,std::sync::mpsc::RecvTimeoutError>
+)->PendingWorkerWait {
+    match outcome {
+        Ok(result)=>PendingWorkerWait::Completed(result),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)=>
+            PendingWorkerWait::StillRunning,
+        Err(std::sync::mpsc::RecvTimeoutError::Disconnected)=>
+            PendingWorkerWait::ResultChannelLost,
+    }
 }
 #[cfg(windows)]
 struct Controller {
@@ -1139,10 +1163,11 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
                     "The previous session request is still running; games are preserved",
                 ))
             }
-            _ => {
-                // The old response is not the reply to THIS new request.
-                // Even a completed late success cannot be replayed or
-                // silently used to clear the previous unknown outcome.
+            Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                // This exact receiver belongs to the PREVIOUS worker,
+                // not the current caller. A late native reply or broken
+                // sender is drained and joined without replaying it,
+                // pretending success or releasing the uncertainty gate.
                 let pending = owner.pending.take().unwrap();
                 let _ = pending.worker.join();
                 owner.uncertain = true;
@@ -1167,14 +1192,11 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         let _ = sender.send(transact(request));
     });
     owner.pending = Some(PendingRequest { replies, worker });
-    let outcome = owner
-        .pending
-        .as_ref()
-        .unwrap()
-        .replies
-        .recv_timeout(std::time::Duration::from_secs(45));
+    let outcome = classify_pending_worker_wait(
+        owner.pending.as_ref().unwrap().replies
+            .recv_timeout(std::time::Duration::from_secs(45)));
     match outcome {
-        Ok(result) => {
+        PendingWorkerWait::Completed(result) => {
             let pending = owner.pending.take().unwrap();
             let _ = pending.worker.join();
             match result {
@@ -1190,12 +1212,28 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
                 }
             }
         }
-        Err(_) => {
-            // Keep this exact worker/buffers/connection alive. Never start a replacement on timeout.
+        PendingWorkerWait::StillRunning => {
+            // The unique original worker may still execute its request.
+            // Retain its receiver, buffers, peer pin and thread. Never
+            // start a second worker or blindly resend its mutation.
             owner.uncertain = true;
             Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 "Session request is still pending; refresh to observe its eventual outcome",
+            ))
+        }
+        PendingWorkerWait::ResultChannelLost => {
+            // A terminated sender is NOT a running timeout. No complete
+            // original reply was received, so the mutation outcome is
+            // unknown even though its local worker can now be joined.
+            // The next safe Inspect still observes current native state;
+            // no old reply can be synthesized or retried here.
+            let pending = owner.pending.take().unwrap();
+            let _ = pending.worker.join();
+            owner.uncertain = true;
+            Err(io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "Original session request worker returned no result; outcome uncertain",
             ))
         }
     }
@@ -1616,6 +1654,58 @@ mod tests {
                     neutral_only:true,
                 }));
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn pending_worker_outcomes_keep_one_shot_request_provenance() {
+        use std::sync::mpsc::{self,RecvTimeoutError};
+        use std::time::Duration;
+        // Local channels only: no named pipe, controller, game or VM.
+        let (tx,rx)=mpsc::sync_channel::<io::Result<SessionReply>>(1);
+        assert!(matches!(
+            classify_pending_worker_wait(rx.recv_timeout(Duration::ZERO)),
+            PendingWorkerWait::StillRunning
+        ));
+        tx.send(Ok(Ok(SessionSnapshot::stopped()))).unwrap();
+        assert!(matches!(
+            classify_pending_worker_wait(rx.recv_timeout(Duration::ZERO)),
+            PendingWorkerWait::Completed(Ok(Ok(_)))
+        ));
+        // The old channel's result never appears on another request's
+        // distinct receiver, even if their invocation order overlaps.
+        let (tx_old,rx_old)=mpsc::sync_channel::<io::Result<SessionReply>>(1);
+        let (tx_new,rx_new)=mpsc::sync_channel::<io::Result<SessionReply>>(1);
+        tx_old.send(Ok(Err("Original native refusal".into()))).unwrap();
+        assert!(matches!(
+            classify_pending_worker_wait(rx_new.recv_timeout(Duration::ZERO)),
+            PendingWorkerWait::StillRunning
+        ));
+        assert!(matches!(
+            classify_pending_worker_wait(rx_old.recv_timeout(Duration::ZERO)),
+            PendingWorkerWait::Completed(Ok(Err(_)))
+        ));
+        // A transport error from the correct worker is NOT a successful
+        // native reply, even if the worker did finish.
+        tx_new.send(Err(io::Error::other("Original result unverified"))).unwrap();
+        assert!(matches!(
+            classify_pending_worker_wait(rx_new.recv_timeout(Duration::ZERO)),
+            PendingWorkerWait::Completed(Err(_))
+        ));
+        let (tx_lost,rx_lost)=mpsc::sync_channel::<io::Result<SessionReply>>(1);
+        drop(tx_lost);
+        assert!(matches!(
+            rx_lost.recv_timeout(Duration::ZERO),
+            Err(RecvTimeoutError::Disconnected)
+        ));
+        // The dead worker's closed response channel is not a timeout.
+        let (_sender,receiver)=mpsc::sync_channel::<io::Result<SessionReply>>(1);
+        // Senders are dropped before checking to model a crashed worker.
+        drop(_sender);
+        assert!(matches!(
+            classify_pending_worker_wait(receiver.recv_timeout(Duration::ZERO)),
+            PendingWorkerWait::ResultChannelLost
+        ));
     }
 
     #[cfg(windows)]

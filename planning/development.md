@@ -10,6 +10,28 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P35 late IPC result provenance (5 November 2026,
+  SOURCE_ONLY):** The existing Rust native transport already binds
+  one worker and one response receiver to each request, preserving
+  identity without a speculative public transaction ID. Audit found
+  `recv_timeout` incorrectly reported both a live 45-second wait
+  and a closed worker response channel as `TimedOut`. The
+  original `native_clients_session.rs` now distinguishes completed
+  reply, still-running worker and disconnected sender. A live
+  worker remains retained and blocks other mutations; a stopped
+  sender is joined and reported as `BrokenPipe`, while the
+  result of any possibly executed mutation remains uncertain.
+  The original one-shot CLI maps `BrokenPipe` to the bounded
+  `OUTCOME_UNCERTAIN` status, not `NATIVE_UNAVAILABLE`.
+  Late replies are drained only from their unique original
+  receiver and never replayed or misattributed to a later caller.
+  Pure Rust regression fixtures AUTHORED_NOT_EXECUTED.
+  No second controller, wire fields, new retry, CI,
+  Windows/Minecraft execution or installer; the P34 Inspect-only
+  uncertainty reconciliation boundary remains in place.
+  See [architecture P35](../docs/system/architecture.md).
+
+
 - **P34 pending-worker reconciliation admission (5 November 2026,
   SOURCE_ONLY):** Native `request()` retained a timed-out worker
   and blocked another mutation while it was pending, but

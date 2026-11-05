@@ -114,6 +114,43 @@ boundary contract, **not** a duplicate module inventory or task queue.
 8. Runtime and developer build caches are distinct from accounts, worlds
    and installer-preservation data. No unscoped cleanup is authorized.
 
+## Pending IPC result provenance and disconnected worker (P35)
+
+A request to the retained Rust controller has **one locally owned
+worker and one one-shot response receiver**. The mutex and pending
+request gate refuse another exchange while that original worker is
+unresolved. The unique receiver is sufficient to distinguish an old
+local worker's result from a new request; inventing an unrelated
+public transaction identifier or making the caller replay a mutation
+would not improve controller-side acceptance.
+
+Previously the `recv_timeout(45s)` branch handled both a live,
+still-pending worker and `RecvTimeoutError::Disconnected` identically
+as `TimedOut`. This misreported a terminated worker/sender as if
+it were still working. The original IPC owner now separates:
+
+- **Completed:** a complete worker result is consumed from its own
+  receiver; a fresh successful session Inspect (not Settings) is
+  still the only route that can clear prior uncertainty.
+- **StillRunning:** preserve the original worker/receiver and signal
+  timeout; do not create a replacement or replay the request.
+- **ResultChannelLost:** join and retire the terminated worker; return
+  a distinct broken-pipe error, but **retain uncertainty** because a
+  native effect may have happened before the local result disappeared.
+  The existing one-shot native CLI maps this transport result to its
+  fixed `OUTCOME_UNCERTAIN` code, not `NATIVE_UNAVAILABLE`, so MCP
+  cannot treat it as a guaranteed non-executed request.
+
+A late result drained by a subsequent caller remains linked only to
+its original one-shot receiver, is never returned as that caller's
+result and never clears uncertainty automatically. No request wire
+field, game-session owner, polling thread, retry, public result
+schema or installation path changed. One pure Rust fixture covers
+late verified/native-refused replies, live wait, transport failure,
+independent channels and disconnected sender.
+Fixtures are AUTHORED_NOT_EXECUTED; real IPC/Windows/Minecraft
+behaviour remains NOT_VERIFIED.
+
 ## Pending worker uncertainty and Settings inspection (P34)
 
 The original native session client retains a timed-out IPC worker
