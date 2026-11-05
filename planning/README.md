@@ -7,6 +7,11 @@
 **Local-test plan:** [Computer Use Windows local-test guide](../docs/validation/ai-computer-use-localtest.md)
 (separate authorization required before running any checks or games).
 
+The full 5 November P1–P46 source continuation was preserved as a
+**historical-only snapshot** before condensing the single current handoff:
+[Source handoff through 5 November 2026](history/source-handoff-through-2026-11-05.md).
+Do not follow archived "Next" instructions; consult `development.md`.
+
 The complete earlier 2 November source handoff was archived without
 deleting any decisions or historical proof:
 [Probe and native source handoff through 2 November 2026](history/source-handoff-through-2026-11-02.md).
