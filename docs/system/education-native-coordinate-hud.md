@@ -258,6 +258,32 @@ description and bounded ordinary-file reads. They are
 **AUTHORED_NOT_EXECUTED**, and the current exact-HEAD parser, Windows
 filesystem, Education 26.33 rendering and gameplay remain unexecuted.
 
+
+## P26 — Pinned Bedrock label/binding semantics (5 November 2026)
+
+The P25 structural inspector already checked coordinate containment, adjacent
+days row, image dimensions, and native binding names. It did **not**
+reject a synthetic vanilla sample that kept the binding names but changed the
+coordinate text control from a `label` to another type, removed its native
+`#text` expression, or changed its update conditions.
+
+Source comparison against pinned
+`Mojang/bedrock-samples@15701fa9c13923f12662984c32c124327e40e3d3`
+(`resource_pack/ui/hud_screen.json`, lines 873–912) confirms:
+
+- `player_position_text.type = "label"` and `text = "#text"`;
+- the text binding uses `binding_condition = "always_when_visible"`;
+- the image visibility binding uses `binding_condition = "always"`.
+
+The existing inspector now enforces those specific contract details and adds
+negative synthetic fixtures for altered label type/text and conditions. This
+is a **pinned Bedrock structural diagnostic only**, not a claim that
+Education 26.33 exposes the same UI, has working merge behavior, or has been
+tested. Official source is pinned before any stronger witness status.
+The v0.3.0 world-scoped RP, pack metadata and installed app remain unchanged.
+Fixtures are AUTHORED_NOT_EXECUTED; no command, test runner, build, CI, game,
+world or installer was started.
+
 ## References
 
 - Mojang vanilla Bedrock HUD sample:

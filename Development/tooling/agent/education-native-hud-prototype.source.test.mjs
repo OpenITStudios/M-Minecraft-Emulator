@@ -137,9 +137,11 @@ const syntheticBedrockJsonc=String.raw`{
     "controls": [
       {"player_position_text": {
         "type": "label",
+        "text": "#text",
         "bindings": [
           {"binding_name":"#player_position_text",
            "binding_name_override":"#text",
+           "binding_condition":"always_when_visible",
            "binding_type":"global"},
         ]
       }}
@@ -147,6 +149,7 @@ const syntheticBedrockJsonc=String.raw`{
     "bindings": [
       {"binding_name":"#player_position_visible",
        "binding_name_override":"#visible",
+       "binding_condition":"always",
        "binding_type":"global"},
     ]
   }
@@ -175,6 +178,12 @@ test('JSONC structure refuses missing/duplicated/nonadjacent coordinate instance
       '{"player_position@hud.player_position": {}}, {"intermediate_hint": {}},'),
     replace('"#player_position_visible"', '"#some_other_visible"'),
     replace('"#player_position_text"', '"#some_other_text"'),
+    replace('"type": "label"', '"type": "button"'),
+    replace('"text": "#text"', '"text": "#wrong_text"'),
+    replace('"binding_condition":"always_when_visible"',
+      '"binding_condition":"always"'),
+    replace('"binding_condition":"always",\n       "binding_type":"global"',
+      '"binding_condition":"always_when_visible",\n       "binding_type":"global"'),
     replace('"orientation": "vertical"', '"orientation": "horizontal"'),
   ]) {
     assert.throws(()=>inspectVanillaHudStructure(source),/HUD_SOURCE_REFUSED/);

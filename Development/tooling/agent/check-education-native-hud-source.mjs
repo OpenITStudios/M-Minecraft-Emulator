@@ -208,18 +208,23 @@ export function inspectVanillaHudStructure(text) {
     Object.hasOwn(panel.controls[0],'player_position_text'),
     'native player_position image/text layout drift');
   const textLabel=panel.controls[0].player_position_text;
+  requireContract(object(textLabel)&&textLabel.type==='label'&&
+    textLabel.text==='#text',
+    'native position label type/text expression drift');
   const nativeText=Array.isArray(textLabel?.bindings)
     ?textLabel.bindings.filter(b=>
       b?.binding_name==='#player_position_text' &&
       b.binding_name_override==='#text' &&
+      b.binding_condition==='always_when_visible'&&
       b.binding_type==='global'): [];
   const nativeVisible=Array.isArray(panel.bindings)
     ?panel.bindings.filter(b=>
       b?.binding_name==='#player_position_visible' &&
       b.binding_name_override==='#visible'&&
+      b.binding_condition==='always'&&
       b.binding_type==='global'): [];
   requireContract(nativeText.length===1&&nativeVisible.length===1,
-    'native position text or visibility binding unavailable');
+    'native position text or visibility binding contract drift');
   return Object.freeze({
     sampleStatus:'STRUCTURAL_REVIEW_UNTRUSTED_UNTIL_SHA_CHECK',
     chatStackChildren:names.length,

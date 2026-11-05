@@ -10,6 +10,19 @@ new-revision acceptance.
 
 ## Product and owners
 
+- **P26 HUD vanilla label semantics (5 November 2026, SOURCE_ONLY):**
+  Compared the pinned Mojang Bedrock HUD text control with the existing
+  structure inspector. The check now validates that the original coordinate
+  text is a label with `text: "#text"`, text binding condition
+  `always_when_visible`, and position visibility condition `always`.
+  The prior checker admitted alternate label types/text expressions with
+  matching binding names. Additional negative source fixtures are
+  AUTHORED_NOT_EXECUTED. No Resource Pack change, test execution,
+  external harness runtime, CI, Windows or Education gameplay occurred.
+  These are Bedrock source invariants, not Education 26.33 proof.
+  See [HUD P26](../docs/system/education-native-coordinate-hud.md).
+
+
 - **P25 HUD preflight admission hardening (5 November 2026,
   SOURCE_ONLY):** An evidence-grounded code audit found that the
   manually invoked checker used Node `JSON.parse` (which retains the last
