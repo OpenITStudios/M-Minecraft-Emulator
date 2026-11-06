@@ -386,9 +386,14 @@ HWND ownedGameWindow(bool permitHiddenForRelease) {
 HWND WINAPI observedForeground() {
     const DWORD previous=GetLastError();
     const HWND real=originalForeground();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
     const HWND owned=word ? ownedGameWindow() : nullptr;
-    const bool liveOwned=owned && packetLiveAt(word,GetTickCount());
+    // The owned-root lookup can outlast ReleaseAll, a new native packet,
+    // TTL expiry or a hybrid MC01 foreground change. Reuse the exact
+    // live-publication gate already required for virtual key/cursor reads:
+    // stale game-local focus must never be returned after neutralization.
+    const bool liveOwned=owned && sameLiveActivePublication(word,revision);
     if (liveOwned) isolated.store(true,std::memory_order_release);
     SetLastError(previous);
     return liveOwned ? owned : real;
@@ -396,13 +401,15 @@ HWND WINAPI observedForeground() {
 HWND WINAPI observedActive() {
     const DWORD previous=GetLastError();
     const HWND real=originalActive();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
     const HWND owned=word ? ownedGameWindow() : nullptr;
     // GetActiveWindow is scoped to the caller's thread, unlike the
-    // process-wide GetForegroundWindow query.
+    // process-wide GetForegroundWindow query. A stopped/replaced original
+    // channel cannot spoof active status while that thread check runs.
     const bool ownThread=owned &&
         GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId() &&
-        packetLiveAt(word,GetTickCount());
+        sameLiveActivePublication(word,revision);
     if (ownThread) isolated.store(true,std::memory_order_release);
     SetLastError(previous);
     return ownThread ? owned : real;
@@ -410,13 +417,15 @@ HWND WINAPI observedActive() {
 HWND WINAPI observedFocus() {
     const DWORD previous=GetLastError();
     const HWND real=originalFocus();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
     const HWND owned=word ? ownedGameWindow() : nullptr;
     // GetFocus is thread-local too. Never pretend that a worker thread
-    // owns the Minecraft game window's message queue.
+    // owns the Minecraft game window's message queue, nor return stale
+    // virtual focus after native ReleaseAll or a human focus change.
     const bool ownThread=owned &&
         GetWindowThreadProcessId(owned,nullptr)==GetCurrentThreadId() &&
-        packetLiveAt(word,GetTickCount());
+        sameLiveActivePublication(word,revision);
     if (ownThread) isolated.store(true,std::memory_order_release);
     SetLastError(previous);
     return ownThread ? owned : real;

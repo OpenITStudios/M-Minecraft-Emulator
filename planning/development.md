@@ -43,7 +43,12 @@ NOT_VERIFIED.
   CLI/IPC calls. Failure, cancellation, timeout, uncertain or injected
   results retain independent neutral/quarantine and explicit recovery.
   The original controller/C++ reader and v4 ABI remain unchanged;
-  Node/Rust fixtures AUTHORED_NOT_EXECUTED.
+  Node/Rust fixtures AUTHORED_NOT_EXECUTED. Source acceptance review
+  found one remaining C++ read-path mismatch: virtual foreground/active/
+  focus hooks could return stale spoofed focus after ReleaseAll or
+  a changed native publication during their owned-window lookup. Their
+  final return now reuses the existing same-live-publication gate,
+  without new ownership, ABI or enablement. C++ tests NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -88,6 +93,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Integrated virtual focus return fence | Existing game-local GetForegroundWindow/GetActiveWindow/GetFocus detours now pin original revision and recheck live native packet, OGLES ownership, human foreground and expiry before returning spoofed focus; native ReleaseAll/replacement cannot leave an acknowledged stale focus result after the check | Reuses existing sameActivePublication C++ negative fixtures; compile-OFF; Windows tests NOT_EXECUTED |
 | Integrated exact-content ACK | Node hashes exact ordered native pulse argv; Rust CLI echoes the same SHA-256; mismatch is uncertain and keeps existing 4/5-AI neutral/quarantine | Node/Rust negative fixtures AUTHORED_NOT_EXECUTED |
 | Raw Input size-query admission | Size-only query now reports one RAWINPUT record only for a coherent same-word, even-revision, same original OGLES game-thread plan; stale/torn plans report zero without advancing any press/release cursor | C++ compile-time negative cases AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input signed-look bound | Share overflow-safe bounded i64 delta with cursor polling before planning Raw Input; retains pending key-up/mouse-up ordering at extreme cumulative look totals | C++ constexpr boundary assertions AUTHORED_NOT_EXECUTED; feature compile-OFF |
@@ -207,8 +213,10 @@ additional per-function micro-milestones:
   independent per-process v4 96-byte mapping and existing C++ keyboard,
   cursor and buffered Raw Input readers. Previous source fixes remain:
   exact OGLES owner/thread, TTL/epoch, bounded look, zero-word key-up,
-  mouse-up and partial-prefix consumption. No driver, second writer or
-  default product enablement.
+  mouse-up and partial-prefix consumption. Existing virtual foreground,
+  active and focus returns now recheck the exact same live native
+  publication after their HWND/thread lookup. No driver, second writer,
+  extra hook, changed ABI or default product enablement.
 - **C — Neutral / recovery provenance (SOURCE_IMPLEMENTED):**
   The original native CLI returns `neutralSlots` and
   `neutralState:NATIVE_PER_SLOT_NEUTRAL_ACK` only after every attempted
@@ -244,13 +252,19 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-Conclude the SAME integrated A/B/C source package by reconciling the
-end-to-end source acceptance matrix: exact 4/5-client pulse content,
-canonical native neutral-slot proof, direct writer lease/ReleaseAll,
-partial-group failure, cancel/timeout, explicit MCP recovery, and
-C++ Raw Input zero-word pending UP. Compare fixture coverage at the
-exact Local HEAD. Fix only an actual remaining cross-layer mismatch.
-No new controller/driver/dispatch backend, no default activation, no
-CI. Cua strict Invoke-only stays `BACKGROUND_UNAVAILABLE`;
-Node/Rust/C++ tests, builds, Windows, Minecraft and five-client
-gameplay remain NOT_EXECUTED/NOT_VERIFIED.
+The integrated A/B/C source matrix has been reviewed end-to-end:
+exact 4/5-client pulse content and canonical neutral-slot receipt,
+native lease/ReleaseAll, partial-group failure, cancel/timeout,
+explicit MCP recovery, and original C++ Raw Input zero-word pending UP.
+The source-proven late virtual-focus return mismatch was corrected in
+its existing C++ owner, reusing the original live-publication fence.
+No second engine, driver, IPC/ABI migration or default enablement.
+
+**Next evidence boundary:** stop speculative source hardening on this
+completed review. An operator-authorized Windows build / isolated
+source tests must establish compiler, Raw Input and foreground safety
+before Minecraft Education 4/5-client movement and no-user-interruption
+acceptance can be claimed. Until then all source tests, builds, Windows
+runtime and Minecraft gameplay remain NOT_EXECUTED/NOT_VERIFIED;
+strict Cua Invoke-only remains `BACKGROUND_UNAVAILABLE`, GitHub
+Actions CI disabled and `main` unchanged.
