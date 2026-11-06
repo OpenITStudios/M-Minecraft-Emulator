@@ -119,3 +119,25 @@ live Minecraft sessions, screen-reader and visual acceptance are
 **Next bounded visual work:** inspect layout/keyboard behavior across the
 supported Windows sizes and failure states when separate runtime approval
 is given; otherwise continue source-only fixes on the first UI owner.
+
+
+## Storage review keyboard policy — source-only addition
+
+The three existing inline confirmations (web-cache cleanup, saved-settings
+recovery, and full profile deletion) share one UI-only keyboard grammar:
+
+- **Open:** cache/settings review focuses **Cancel**; full deletion keeps the
+  existing initial focus on the typed exact-profile identity field.
+- **Cancel:** a visible Cancel or **Escape from within the active review** returns
+  focus to the original action button if it is still connected and enabled.
+  Escape outside an active review is not intercepted and cannot steal game input.
+- **Admission:** reviews remain inline; they are **not** modals and do not trap
+  Tab or add a new lifecycle state. All actions still use existing controller
+  admission, confirmation tokens, and fail-closed outcomes.
+- **Disabled guidance:** settings and Storage explain unavailable changes
+  using the last observed result; explanations are not proof of permission.
+
+This is an authored source contract, **not** an executed Windows accessibility,
+Tauri, keyboard, or screen-reader acceptance result. The existing
+`Development/apps/desktop/test/storage-review-focus.test.ts` source fixtures
+are `AUTHORED_NOT_EXECUTED`.
