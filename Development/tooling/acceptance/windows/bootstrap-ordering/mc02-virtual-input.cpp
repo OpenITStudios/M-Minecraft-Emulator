@@ -965,6 +965,18 @@ static_assert(!rawFinalCopyAllowed(true,true,1,1,2,4));
 static_assert(!rawFinalCopyAllowed(true,true,1,1,3,3));
 static_assert(!rawFinalCopyAllowed(true,false,1,1,2,2));
 static_assert(!rawFinalCopyAllowed(false,true,1,1,2,2));
+// Size-only GetRawInputBuffer calls do not consume records. They must
+// never advertise an incoherent/torn plan as a pending down/up record.
+// Only a presently admitted plan with at least one transition needs
+// caller storage; the next real read rechecks everything independently.
+constexpr UINT rawSizeQueryBytes(bool admitted,UINT count) noexcept {
+    return admitted && count!=0?static_cast<UINT>(sizeof(RAWINPUT)):0u;
+}
+static_assert(rawSizeQueryBytes(false,1)==0u);
+static_assert(rawSizeQueryBytes(false,25)==0u);
+static_assert(rawSizeQueryBytes(true,0)==0u);
+static_assert(rawSizeQueryBytes(true,1)==sizeof(RAWINPUT));
+static_assert(rawSizeQueryBytes(true,25)==sizeof(RAWINPUT));
 
 // A numeric HWND can be destroyed and reused while the genuine physical
 // queue is being drained, or between provisional copy and final readback.
@@ -1080,9 +1092,21 @@ UINT WINAPI observedRawBuffer(PRAWINPUT data,PUINT size,UINT headerBytes) {
     }
     auto plan=gameThread?nextRawPlan(word):RawPlan{};
     if (!data) {
-        // Win32 size query never consumes the action. The next call
-        // with a real buffer must still see the same queued transitions.
-        *size=plan.count?static_cast<UINT>(sizeof(RAWINPUT)):0;
+        // A size-only query MUST NOT advertise a DOWN/camera record
+        // from an incoherent plan after ReleaseAll or a replacement
+        // native publication. Keep the full same-HWND/game-thread and
+        // same-word/revision gate, without draining physical input or
+        // consuming any virtual key-up/press/camera read cursor.
+        bool admitted=false;
+        if (plan.coherent && plan.count && gameThread &&
+            rawOriginalThreadStillOwns(window,word==0)) {
+            const auto latestWord=currentPacket();
+            const auto latestRevision=
+                view->cursorRevision.load(std::memory_order_seq_cst);
+            admitted=rawFinalCopyAllowed(plan.coherent,true,
+                word,latestWord,plan.revision,latestRevision);
+        }
+        *size=rawSizeQueryBytes(admitted,plan.count);
         rawBufferBusy.clear(std::memory_order_release);
         SetLastError(previous);return 0;
     }

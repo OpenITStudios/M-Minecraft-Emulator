@@ -36,13 +36,13 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
-  Latest source-only hardening keeps pending buffered Raw Input
-  key-up/mouse-up planning valid even at opposite signed i64 camera
-  limits: both cursor consumers now share the same bounded, overflow-
-  safe delta calculation before recording cursor consumption. The
-  original release ordering, native Rust v4 writer, HWND/thread gate,
-  cursor mutex and compile-OFF defaults are unchanged. C++/Rust
-  execution NOT_EXECUTED.
+  Latest source-only correction makes the original buffered Raw Input
+  size-query honor the same coherent native revision, window owner and
+  original game thread as a real record read. A torn or stale plan
+  cannot falsely advertise a pending DOWN/camera/UP buffer; no record,
+  key-up, mouse-up or look cursor is consumed by the query. Previous
+  signed look bound, original Rust v4 writer and compile-OFF defaults
+  remain unchanged; C++/Rust execution NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -87,6 +87,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Raw Input size-query admission | Size-only query now reports one RAWINPUT record only for a coherent same-word, even-revision, same original OGLES game-thread plan; stale/torn plans report zero without advancing any press/release cursor | C++ compile-time negative cases AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input signed-look bound | Share overflow-safe bounded i64 delta with cursor polling before planning Raw Input; retains pending key-up/mouse-up ordering at extreme cumulative look totals | C++ constexpr boundary assertions AUTHORED_NOT_EXECUTED; feature compile-OFF |
 | Virtual cursor recenter publication fence | SetCursorPos permits live recenter only against original active publication, or stable native zero-packet menu state; a concurrent ReleaseAll/replacement rolls back both virtual axes without touching physical cursor | C++ constexpr negative fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Virtual cursor position interleaving | One short local mutex keeps initial physical sampling, recenter, virtual X/Y reads and camera delta commits coherent; lost ReleaseAll publication rolls back both temporary axes and leaves look backlog unconsumed | Source-only static contract inspection; tests NOT_EXECUTED |
@@ -219,14 +220,15 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only inspect the original pending Raw Input DOWN→UP
-one-record prefix path and native release transaction for a remaining
-proven correctness defect.** Re-pin `Local`; compare the C++ rawHeldMask,
-press-count and cursor read cursors with the Rust v4 ReleaseAll
-boundary. Preserve original game-thread OGLES ownership, hidden-window
-zero-word release, and no physical input fallback. Fix only a source-
-demonstrable defect; otherwise avoid speculative extra safeguards or
-milestone churn. Original 4/5-client input remains compile-OFF,
-strict Cua Invoke `BACKGROUND_UNAVAILABLE`; C++/Rust/Node tests,
-builds, CI, Windows and Minecraft NOT_EXECUTED/NOT_VERIFIED pending
-separate operator approval.
+**Source-only inspect the original buffered Raw Input release-prefix
+and post-copy consumption path** after coherent size-only admission.
+Pin fresh `Local`, compare `nextRawPlan`, `consumeRawRecord`,
+`rawHeldMask` and the Rust v4 `ReleaseAll` transaction, focusing on
+a demonstrable loss/duplicate of an already-delivered DOWN's pending
+UP when the caller has capacity for one RAWINPUT. Fix only a proven
+existing-owner defect; otherwise stop source changes, keep prior
+decisions and retain `NOT_EXECUTED` as the actual proof ceiling.
+No new driver, controller, scheduler, global input, Cua fallback or
+package. Native input stays compile-OFF; Cua Invoke-only remains
+`BACKGROUND_UNAVAILABLE`. C++/Rust/Node source tests, builds, CI,
+Windows and Minecraft remain NOT_EXECUTED/NOT_VERIFIED.
