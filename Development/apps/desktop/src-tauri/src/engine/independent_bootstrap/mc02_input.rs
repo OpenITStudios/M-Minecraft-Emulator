@@ -85,6 +85,35 @@ fn admit_batch_cleanup_sender(
     Ok(())
 }
 
+// Packet TTL (350ms for a scheduled batch) and the 500ms native
+// request limit stop ACTIVE input, but do NOT acknowledge that the
+// original game consumed its pending key-up/mouse-up Raw Input events.
+// A delayed implicit batch release may safely publish a NEW neutral
+// timestamp only when the old issued time has not been superseded
+// AND the exact authenticated CLI is STILL the last native publisher.
+// Explicit one-shot Stop retains the existing fresh-request age rule.
+// This never extends the lifetime or acceptance of active input.
+fn admit_native_release_stamp(
+    issued_at_ms:u64,now_ms:u64,last_active_ms:u64,last_release_ms:u64,
+    requester:Option<(u32,u64)>,last_sender:Option<(u32,u64)>,
+    batch_cleanup:bool,
+)->Result<u64,&'static str> {
+    let age=now_ms.checked_sub(issued_at_ms)
+        .filter(|_|issued_at_ms!=0)
+        .ok_or("MC02 release request expired before native delivery")?;
+    // Compare ORIGINAL issue ordering before promoting a delayed,
+    // exact-owner cleanup to the actual time of its accepted release.
+    admit_native_release_order(issued_at_ms,last_active_ms,last_release_ms)?;
+    admit_batch_cleanup_sender(requester,last_sender,batch_cleanup)?;
+    if age>MAX_INPUT_REQUEST_AGE_MS {
+        if !batch_cleanup {
+            return Err("MC02 release request expired before native delivery");
+        }
+        return Ok(now_ms);
+    }
+    Ok(issued_at_ms)
+}
+
 // The old unleased CLI request contains only an MC02 slot, not the
 // original child's PID/birth. If that child is reaped and relaunched
 // during the 500-ms request lifetime, target equality against the
@@ -258,23 +287,6 @@ impl Channel {
         }
         let view=self.mapped()?;
         let now=unsafe{GetTickCount64()};
-        if issued_at_ms==0 || now.checked_sub(issued_at_ms)
-            .is_none_or(|age|age>MAX_INPUT_REQUEST_AGE_MS) {
-            let _=unsafe{UnmapViewOfFile(view)};
-            return Err(invalid("MC02 release request expired before native delivery"));
-        }
-        // Compare BOTH original issue-time watermarks. An older neutral
-        // must not reset cursor epoch/press counters after a newer accepted
-        // neutral, even when no intervening active command was published.
-        // Active and neutral timestamps tied in the same millisecond still
-        // favor release, without authorizing a new input packet.
-        if let Err(reason)=admit_native_release_order(
-            issued_at_ms,
-            self.last_active_issued_at_ms.load(Ordering::SeqCst),
-            self.last_release_issued_at_ms.load(Ordering::SeqCst)) {
-            let _=unsafe{UnmapViewOfFile(view)};
-            return Err(invalid(reason));
-        }
         let mut source=match self.last_cli_sender.lock() {
             Ok(source)=>source,
             Err(_)=>{
@@ -282,14 +294,24 @@ impl Channel {
                 return Err(invalid("MC02 last native sender unavailable"));
             }
         };
-        // A stale batch cleanup must not erase a newer same-tick
-        // one-shot publication from a DIFFERENT authenticated CLI.
-        // Explicit Stop has batch_cleanup=false and stays allowed.
-        if let Err(reason)=admit_batch_cleanup_sender(
+        // Always check the OLD issue time against both original
+        // watermarks before considering a delayed release. Once the
+        // 500ms request window has elapsed, only this exact batch's
+        // last actual native publisher may clear its own held state.
+        // Its release gets a fresh COMMIT timestamp, not new permission
+        // for any earlier active packet. A newer one-shot/Stop, even
+        // issued within the same millisecond, vetoes old batch cleanup.
+        let release_stamp=match admit_native_release_stamp(
+            issued_at_ms,now,
+            self.last_active_issued_at_ms.load(Ordering::SeqCst),
+            self.last_release_issued_at_ms.load(Ordering::SeqCst),
             cli_sender,*source,batch_cleanup) {
-            let _=unsafe{UnmapViewOfFile(view)};
-            return Err(invalid(reason));
-        }
+            Ok(stamp)=>stamp,
+            Err(reason)=>{
+                let _=unsafe{UnmapViewOfFile(view)};
+                return Err(invalid(reason));
+            }
+        };
         let input=unsafe{&*view.Value.cast::<SharedInput>()};
         // Use the same v4 even/odd publication rule as movement writes.
         // Packet zero makes all virtual key/mouse polling return released;
@@ -320,7 +342,7 @@ impl Channel {
         // OR neutral issue time was refused before altering the v4 state.
         // Never let a late pre-release active pulse resurrect controls.
         self.last_release_issued_at_ms.fetch_max(
-            issued_at_ms,Ordering::SeqCst);
+            release_stamp,Ordering::SeqCst);
         // Publication may have succeeded even when Unmap later fails.
         *source=cli_sender;
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
@@ -461,7 +483,61 @@ impl Channel {
 mod rising_edge_counter_tests {
     use super::{checked_rising_press_counts,active_group_write_in_time,
         admit_native_release_order,admit_native_active_order,
-        admit_batch_cleanup_sender,issued_after_original_channel_bind};
+        admit_native_release_stamp,admit_batch_cleanup_sender,
+        issued_after_original_channel_bind};
+
+    #[test]
+    fn expired_legacy_batch_cleanup_still_releases_exact_native_publisher() {
+        // Authored source fixture only; no native IPC/Windows/game.
+        // Original game may need key-up/mouse-up AFTER 350ms pulse TTL.
+        // 500ms native input age cannot be used as a neutral ACK.
+        let batch=Some((201u32,134_000_000_000_000_000u64));
+        let one_shot=Some((202u32,134_000_000_000_010_000u64));
+        let stop=Some((203u32,134_000_000_000_020_000u64));
+        for cohort in [&[2,3,4,5][..],&[1,2,3,4,5][..]] {
+            for _slot in cohort {
+                // Within the normal request window, preserve the exact
+                // original issue time, including at 350ms and 500ms.
+                for now in [1350,1500] {
+                    assert_eq!(admit_native_release_stamp(
+                        1000,now,1000,0,batch,batch,true),Ok(1000));
+                }
+                // After the 500ms threshold, only the SAME authentic
+                // last publisher may neutralize; fence its old future
+                // active requests using the current native commit time.
+                assert_eq!(admit_native_release_stamp(
+                    1000,1501,1000,0,batch,batch,true),Ok(1501));
+                assert_eq!(admit_native_active_order(1200,1000,1501),
+                    Err("MC02 active input predates neutral release"));
+                // An expired explicit one-shot is never promoted.
+                assert_eq!(admit_native_release_stamp(
+                    1000,1501,1000,0,stop,batch,false),
+                    Err("MC02 release request expired before native delivery"));
+                // Never erase a different same-tick native one-shot,
+                // explicit Stop, or a shared state with unknown origin.
+                for owner in [one_shot,stop,None] {
+                    assert_eq!(admit_native_release_stamp(
+                        1000,1501,1000,0,batch,owner,true),
+                        Err("MC02 batch cleanup superseded by another native sender"));
+                }
+                // Proof of a newer accepted command takes precedence
+                // over the batch owner's otherwise matching PID/birth.
+                assert_eq!(admit_native_release_stamp(
+                    1000,1501,1001,0,batch,batch,true),
+                    Err("MC02 release predates newer active input"));
+                assert_eq!(admit_native_release_stamp(
+                    1000,1501,1000,1001,batch,batch,true),
+                    Err("MC02 release predates newer neutral release"));
+                // Future issue and zero timestamps remain invalid.
+                assert_eq!(admit_native_release_stamp(
+                    1502,1501,0,0,batch,batch,true),
+                    Err("MC02 release request expired before native delivery"));
+                assert_eq!(admit_native_release_stamp(
+                    0,1501,0,0,batch,batch,true),
+                    Err("MC02 release request expired before native delivery"));
+            }
+        }
+    }
 
     #[test]
     fn obsolete_same_tick_batch_cleanup_does_not_clear_another_native_cli() {

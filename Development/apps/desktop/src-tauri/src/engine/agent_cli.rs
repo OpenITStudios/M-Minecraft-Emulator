@@ -352,12 +352,13 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
         }
         Ok(())
     })();
-    // The native writer compares requested issue times, not CLI
-    // completion order. Reuse the last attempted pulse's timestamp for
-    // cleanup; a later one-shot accepted by another CLI can then veto
-    // this old ReleaseAll BEFORE cursor/packet publication.
-    // If this stamp is already expired, native refuses it rather than
-    // silently changing ownership. Virtual TTL is still bounded.
+    // Native admission always compares the LAST attempted pulse's
+    // ORIGINAL issue time. A newer one-shot vetoes its ReleaseAll,
+    // including same-tick differences in authenticated CLI sender.
+    // If the old 500ms request window expires before this release,
+    // the original Channel can still neutralize ONLY if this CLI is
+    // the last actual publisher; its fresh commit timestamp fences
+    // stale input. TTL 350ms is never native key-up acknowledgement.
     if let Some(issued_at_ms)=last_attempted_issue_ms {
         let released=native_clients_session::request(SessionRequest::Mc02Input{
             slot:2,keys:0,dx:0,dy:0,ttl_ms:1,issued_at_ms,
