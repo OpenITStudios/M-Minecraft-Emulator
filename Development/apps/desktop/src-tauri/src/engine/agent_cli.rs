@@ -427,10 +427,14 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
         }
         Ok(())
     })();
-    // Every possibly touched ORIGINAL channel is released independently.
-    // A killed CLI cannot guarantee this; each native packet also expires.
+    // A complete success response is possible ONLY after a native
+    // neutral ACK on EACH possibly touched exact slot. Return the sorted
+    // attempted cohort as source transport evidence, not gameplay key-up.
+    // This allows the original MCP to avoid redundant cleanup after
+    // proven success, but uncertain/failed batches still re-neutralize.
+    let neutral_slots=attempted.into_iter().collect::<Vec<_>>();
     let mut release_failed=false;
-    for slot in attempted {
+    for &slot in &neutral_slots {
         if native_clients_session::request(SessionRequest::AiLeasedInput{
             slot,keys:0,dx:0,dy:0,ttl_ms:1,
             issued_at_ms:unsafe{GetTickCount64()},
@@ -446,6 +450,8 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
         "pulses":pulses.len(),
         "timestampGroups":groups,
         "pulseDigest":pulse_digest,
+        "neutralSlots":neutral_slots,
+        "neutralState":"NATIVE_PER_SLOT_NEUTRAL_ACK",
         "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
         "gameplayObserved":false}))
 }
@@ -897,6 +903,21 @@ mod tests {
         record_multi_ai_group_attempt(&later,&mut attempted);
         assert_eq!(attempted.iter().copied().collect::<Vec<_>>(),
             [2,3,4,5]);
+    }
+
+    #[cfg(all(windows,target_arch="x86_64",
+           feature="lazy-tester-package",feature="mc02-native-input"))]
+    #[test]
+    fn group_cleanup_cohort_is_exact_sorted_no_extra_slots() {
+        // Source fixture only: a successful native receipt can report
+        // only the attempted per-slot channels. No Windows I/O invoked.
+        use std::collections::BTreeSet;
+        for original in [vec![2,3,4,5],vec![1,2,3,4,5]] {
+            let mut attempted=BTreeSet::new();
+            for slot in original.iter().rev() {attempted.insert(*slot);}
+            let neutral_slots=attempted.into_iter().collect::<Vec<_>>();
+            assert_eq!(neutral_slots,original);
+        }
     }
 
     #[cfg(feature="mc02-native-input")]

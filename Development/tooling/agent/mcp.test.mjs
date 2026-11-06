@@ -5,7 +5,8 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
-  matchesNativeMultiClientBatchReceipt} from './mcp.mjs';
+  matchesNativeMultiClientBatchReceipt,
+  canReuseVerifiedNativeBatchNeutral} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -46,12 +47,15 @@ test('hybrid four and full five AI native ACKs require exact pulse payload conte
     const receipt={schema:1,ok:true,operation:'ai-multi-input-batch',
       slots,pulses:expected.pulseCount,timestampGroups:3,
       pulseDigest:expected.pulseDigest,
+      neutralSlots:slots,neutralState:'NATIVE_PER_SLOT_NEUTRAL_ACK',
       delivery:'PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF',
       gameplayObserved:false};
     assert.equal(matchesNativeMultiClientBatchReceipt(receipt,expected),true);
     for(const altered of [
       {pulseDigest:'b'.repeat(64)},{pulseDigest:undefined},
       {pulses:receipt.pulses-1},{timestampGroups:2},
+      {neutralSlots:slots.slice(1)},
+      {neutralSlots:[...slots].reverse()},{neutralState:'UP_UNCONFIRMED'},
       {slots:[...slots].reverse()},{gameplayObserved:true},
       {delivery:'MINECRAFT_GAMEPLAY_PROVEN'},
     ]) {
@@ -59,6 +63,30 @@ test('hybrid four and full five AI native ACKs require exact pulse payload conte
         {...receipt,...altered},expected),false,
       'No native transport ACK when any exact-payload or proof field changes');
     }
+  }
+});
+
+test('only confirmed canonical 4/5-AI native sender may reuse already-ACKed per-slot neutral',()=>{
+  // Author-time safety matrix. A fake test callback or uncertain receipt
+  // must ALWAYS retain the existing independent native neutral path.
+  for(const slots of [[2,3,4,5],[1,2,3,4,5]]) {
+    const verified={schema:1,slots,gameplayObserved:false,
+      status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+      nativeNeutralState:'NATIVE_PER_SLOT_NEUTRAL_ACK',
+      nativeNeutralSlots:slots,pulseDigest:'a'.repeat(64)};
+    const options={verifiedSender:true,transportConfirmed:true};
+    assert.equal(canReuseVerifiedNativeBatchNeutral(verified,slots,options),true);
+    assert.equal(canReuseVerifiedNativeBatchNeutral(verified,slots,{
+      ...options,verifiedSender:false}),false,
+    'an injected/fake provider cannot skip original per-slot neutral');
+    assert.equal(canReuseVerifiedNativeBatchNeutral(verified,slots,{
+      ...options,transportConfirmed:false}),false);
+    assert.equal(canReuseVerifiedNativeBatchNeutral(
+      {...verified,nativeNeutralSlots:slots.slice(0,-1)},slots,options),false);
+    assert.equal(canReuseVerifiedNativeBatchNeutral(
+      {...verified,pulseDigest:'not-a-verified-digest'},slots,options),false);
+    assert.equal(canReuseVerifiedNativeBatchNeutral(
+      {...verified,gameplayObserved:true},slots,options),false);
   }
 });
 

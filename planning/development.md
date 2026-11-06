@@ -36,11 +36,14 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
-  Active integrated A/B/C source track now binds original MCP native
-  transport receipts to exact ordered 4/5-AI pulse bytes with a Rust-
-  echoed SHA-256. The same Rust controller/C++ reader, per-slot
-  neutral and MCP recovery remain in charge. Node/Rust negative fixtures
-  AUTHORED_NOT_EXECUTED; no runtime evidence.
+  Integrated A/B/C now verifies exact 4/5-AI pulse bytes AND source
+  neutral ACK coverage. The original CLI explicitly reports each
+  controller-neutralized slot; the canonical verified MCP sender may
+  reuse it on a successful receipt, avoiding duplicate per-slot neutral
+  CLI/IPC calls. Failure, cancellation, timeout, uncertain or injected
+  results retain independent neutral/quarantine and explicit recovery.
+  The original controller/C++ reader and v4 ABI remain unchanged;
+  Node/Rust fixtures AUTHORED_NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -206,11 +209,18 @@ additional per-function micro-milestones:
   exact OGLES owner/thread, TTL/epoch, bounded look, zero-word key-up,
   mouse-up and partial-prefix consumption. No driver, second writer or
   default product enablement.
-- **C — Failure and recovery (FIXTURES_AUTHORED_NOT_EXECUTED):**
-  Keep original MCP cohort quarantine and explicit neutral recovery,
-  CLI per-slot best-effort cleanup and Rust same-lease neutral ACK.
-  Added Node and Rust negative fixtures for same-count wrong payload
-  and reordered pulses in hybrid 4-AI and full 5-AI source paths.
+- **C — Neutral / recovery provenance (SOURCE_IMPLEMENTED):**
+  The original native CLI returns `neutralSlots` and
+  `neutralState:NATIVE_PER_SLOT_NEUTRAL_ACK` only after every attempted
+  original channel has an acknowledged native neutral write. Node
+  validates full exact slot coverage alongside the pulse digest. MCP
+  reuses this confirmed neutral ONLY from its canonical verified sender
+  and successful transport; it can then proceed to existing per-slot
+  lease release without spawning 4/5 redundant neutral CLI calls.
+  Any injected provider, missing/altered receipt, abort, timeout, or
+  partially failed group still attempts the original independent
+  neutral and quarantines uncertainty. Node/Rust negative fixtures
+  cover hybrid 4-AI and full 5-AI, all AUTHORED_NOT_EXECUTED.
 
 **Source flow:** agent intents -> deterministic pulse stream -> one
 native CLI scheduler / grouped IPC -> original per-slot Rust state
@@ -218,10 +228,14 @@ and neutral -> exact-content transport ACK -> existing uncertain and
 recovery path. SHA-256 is not a native signature, installed binary
 attestation, game effect, simultaneous delivery or human-input proof.
 
-**Efficiency/safety:** digest is computed once per bounded batch;
-no added per-frame IPC/Win32 reads, driver, extra state owner or
-runtime change. The existing 150-ms lateness bound, 350-ms TTL,
-protected human MC01 and compile-OFF features remain unchanged.
+**Efficiency/safety:** SHA-256 is computed once per bounded batch.
+Successful, exact-content native ACKs can eliminate redundant 4/5
+one-shot neutral CLI/IPC exchanges; error paths remain conservative.
+This is a source-level reduction in calls, not a measured latency
+claim. No new per-frame IPC/Win32 reads, driver, input provider,
+additional state owner or default product activation. Existing
+150-ms lateness, 350-ms TTL, human MC01 protection and compile-OFF
+flags remain.
 
 **Proof:** REMOTE_GITHUB source review; Node/Rust/C++ fixtures
 NOT_EXECUTED, Windows/Minecraft performance and five-client input
@@ -230,11 +244,13 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-Continue the SAME A/B/C integrated source deliverable, next reviewing
-full-stack cancellation and neutral/error provenance: MCP receipt and
-quarantine -> CLI grouped dispatch/deadline and cleanup -> Rust exact
-lease/ReleaseAll -> C++ pending Raw Input UP. Fix only demonstrated
-cross-layer issues, consolidate existing-owner negative fixtures and
-avoid renewed per-function milestones. Native input stays compile-OFF,
-no Cua foreground fallback; source tests, builds, CI, Windows and
-Minecraft remain NOT_EXECUTED/NOT_VERIFIED until separate permission.
+Conclude the SAME integrated A/B/C source package by reconciling the
+end-to-end source acceptance matrix: exact 4/5-client pulse content,
+canonical native neutral-slot proof, direct writer lease/ReleaseAll,
+partial-group failure, cancel/timeout, explicit MCP recovery, and
+C++ Raw Input zero-word pending UP. Compare fixture coverage at the
+exact Local HEAD. Fix only an actual remaining cross-layer mismatch.
+No new controller/driver/dispatch backend, no default activation, no
+CI. Cua strict Invoke-only stays `BACKGROUND_UNAVAILABLE`;
+Node/Rust/C++ tests, builds, Windows, Minecraft and five-client
+gameplay remain NOT_EXECUTED/NOT_VERIFIED.

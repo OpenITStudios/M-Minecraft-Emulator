@@ -738,8 +738,30 @@ export function matchesNativeMultiClientBatchReceipt(receipt,{
     receipt?.timestampGroups===timestampGroups &&
     typeof pulseDigest==='string' && /^[a-f0-9]{64}$/.test(pulseDigest) &&
     receipt?.pulseDigest===pulseDigest &&
+    receipt?.neutralState==='NATIVE_PER_SLOT_NEUTRAL_ACK' &&
+    JSON.stringify(receipt?.neutralSlots)===JSON.stringify(slots) &&
     receipt?.delivery==='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF' &&
     receipt?.gameplayObserved===false;
+}
+
+// Only a successful receipt from the EXACT original verified Node
+// sender may replace redundant MCP neutral writes. Test-injected native
+// callbacks are deliberately NOT authoritative: they must still invoke
+// the separate per-slot neutral path, even if they spoof these fields.
+// This proves shared-state neutral ACK, NOT a Minecraft key-up.
+export function canReuseVerifiedNativeBatchNeutral(receipt,slots,{
+  verifiedSender=false,transportConfirmed=false,
+}={}) {
+  return verifiedSender===true && transportConfirmed===true &&
+    Array.isArray(slots) && slots.length>0 && slots.length<=5 &&
+    slots.every((slot,i)=>Number.isInteger(slot)&&slot>=1&&slot<=5&&
+      (i===0||slot>slots[i-1])) &&
+    receipt?.schema===1 && receipt?.gameplayObserved===false &&
+    receipt?.status==='EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED' &&
+    receipt?.nativeNeutralState==='NATIVE_PER_SLOT_NEUTRAL_ACK' &&
+    JSON.stringify(receipt?.nativeNeutralSlots)===JSON.stringify(slots) &&
+    typeof receipt?.pulseDigest==='string' &&
+    /^[a-f0-9]{64}$/.test(receipt.pulseDigest);
 }
 
 export async function sendExperimentalMultiClientBatchNative(
@@ -825,6 +847,8 @@ export async function sendExperimentalMultiClientBatchNative(
   return {schema:1,slots:[...slots].sort((a,b)=>a-b),
     pulsesAcknowledged:pulses.length,timestampGroupsAcknowledged:expectedGroups,
     pulseDigest,
+    nativeNeutralState:receipt.neutralState,
+    nativeNeutralSlots:[...receipt.neutralSlots],
     status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
     gameplayObserved:false,
     humanInputUninterrupted:'NOT_PROVEN',
@@ -2743,6 +2767,7 @@ export function createHandler(config,{
       const run={abort,slots:schedule.slots};
       multiSequence=run;
       let dispatched=false,transportConfirmed=false;
+      let nativeNeutralReceipt=null;
       let leaseAttempted=false,leaseHeld=false;
       let leaseDefinitelyDenied=false;
       let neutralUnconfirmed=[],released=[];
@@ -2775,6 +2800,7 @@ export function createHandler(config,{
         }
         if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
         transportConfirmed=true;
+        nativeNeutralReceipt=receipt;
         return receipt;
       }finally{
         // A failed/aborted action may already have published packets.
@@ -2783,9 +2809,20 @@ export function createHandler(config,{
         if(dispatched&&!transportConfirmed)markAiUncertain(schedule.slots);
         if(leaseHeld) {
           // A claim that never dispatched input remains initially neutral.
-          const neutral=dispatched?
-            await releaseAiSlots(schedule.slots,leaseEpoch):
-            {acknowledged:schedule.slots,unconfirmed:[]};
+          // The original CLI has ALREADY sent independent neutral to
+          // every touched slot before emitting its exact-content ACK.
+          // Skip 4/5 duplicate CLI process/IPC calls only for the
+          // canonical sender + fully confirmed exact-slot neutral proof.
+          // Aborted/uncertain/fake transport responses still take the
+          // existing conservative independent neutral/quarantine path.
+          const nativeNeutralConfirmed=canReuseVerifiedNativeBatchNeutral(
+            nativeNeutralReceipt,schedule.slots,{
+              verifiedSender:aiMultiBatch===sendExperimentalMultiClientBatchNative,
+              transportConfirmed,
+            });
+          const neutral=!dispatched || nativeNeutralConfirmed?
+            {acknowledged:[...schedule.slots],unconfirmed:[]}:
+            await releaseAiSlots(schedule.slots,leaseEpoch);
           neutralUnconfirmed=neutral.unconfirmed;
           if(neutralUnconfirmed.length)markAiUncertain(neutralUnconfirmed);
           // Each selected native child can disappear between its
