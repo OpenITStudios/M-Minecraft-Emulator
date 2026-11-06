@@ -12,6 +12,7 @@
 #include <initializer_list>
 #include <cwchar>
 #include <limits>
+#include <mutex>
 #if defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
 #include <array>
 #endif
@@ -65,6 +66,12 @@ std::atomic<std::uint64_t> rejectedThroughEpoch{0};
 std::atomic<bool> isolated{false}; // latched after first valid AI command
 std::atomic<bool> cursorInitialized{false};
 std::atomic<LONG> virtualX{0},virtualY{0};
+// Only virtual cursor position is synchronized here. The lock never
+// guards a real Win32 call, native IPC, Detours trampoline or diagnostic.
+// It prevents a delayed first real-pointer sample from overwriting a
+// later AI recenter, and prevents GetCursorPos seeing mixed X/Y updates.
+// The separate cursorReadBusy still owns cumulative look read cursors.
+std::mutex cursorPositionMutex;
 // Strictly one-shot hook-return evidence. A positive virtual return means
 // only that THIS game process polled an opted-in API: it does not prove
 // Minecraft applied the input to movement, camera or attack.
@@ -410,11 +417,19 @@ bool virtualMode(std::uint64_t word) {
         owner==GetCurrentProcessId();
     const bool useVirtual=isolated.load(std::memory_order_acquire)||
         !ownForeground;
-    if (useVirtual && !cursorInitialized.exchange(true,std::memory_order_acq_rel)) {
+    if (useVirtual && !cursorInitialized.load(std::memory_order_acquire)) {
+        // Read the physical initial point OUTSIDE the position lock.
+        // Another original game thread can SetCursorPos while this
+        // trampoline is delayed; the later recenter wins that race.
         POINT point{};
-        if (originalCursor && originalCursor(&point)) {
-            virtualX.store(point.x,std::memory_order_release);
-            virtualY.store(point.y,std::memory_order_release);
+        const bool sampled=originalCursor && originalCursor(&point);
+        std::lock_guard<std::mutex> lock(cursorPositionMutex);
+        if (!cursorInitialized.load(std::memory_order_relaxed)) {
+            if (sampled) {
+                virtualX.store(point.x,std::memory_order_release);
+                virtualY.store(point.y,std::memory_order_release);
+            }
+            cursorInitialized.store(true,std::memory_order_release);
         }
     }
     return useVirtual;
@@ -607,19 +622,38 @@ void applyPendingCursor(std::uint64_t word,std::uint64_t revision) {
                 sameNativePublicationAtReturn(word,revision)) {
                 const auto stepX=boundedVirtualLookStep(x,baseX);
                 const auto stepY=boundedVirtualLookStep(y,baseY);
-                virtualX.fetch_add(static_cast<LONG>(stepX),
-                    std::memory_order_acq_rel);
-                virtualY.fetch_add(static_cast<LONG>(stepY),
-                    std::memory_order_acq_rel);
-                seenEpoch=epoch;
-                seenRevision=before;
-                // Only a delivered bounded prefix is consumed. Remaining
-                // motion stays pending for the next original game poll;
-                // no new shared-memory field or second producer is needed.
-                seenX=baseX+stepX;
-                seenY=baseY+stepY;
-                if (stepX || stepY) noteVirtualRead(sawVirtualLook,
-                    L"[LT_MC02_INPUT][VIRTUAL_LOOK_RETURNED]\n");
+                bool committed=false;
+                {
+                    // Serialize the two virtual coordinates with a
+                    // concurrent game-local SetCursorPos or GetCursorPos.
+                    // Do not expose either axis until both are updated.
+                    std::lock_guard<std::mutex> lock(cursorPositionMutex);
+                    const LONG oldX=virtualX.load(std::memory_order_relaxed);
+                    const LONG oldY=virtualY.load(std::memory_order_relaxed);
+                    virtualX.fetch_add(static_cast<LONG>(stepX),
+                        std::memory_order_acq_rel);
+                    virtualY.fetch_add(static_cast<LONG>(stepY),
+                        std::memory_order_acq_rel);
+                    // ReleaseAll may have landed in the tiny interval
+                    // between the earlier admission and these writes.
+                    // Undo BOTH provisional axes while SetCursorPos and
+                    // GetCursorPos are excluded; do not consume the delta.
+                    committed=sameNativePublicationAtReturn(word,revision);
+                    if (!committed) {
+                        virtualX.store(oldX,std::memory_order_release);
+                        virtualY.store(oldY,std::memory_order_release);
+                    }
+                }
+                if (committed) {
+                    seenEpoch=epoch;
+                    seenRevision=before;
+                    // Consume only the delivered bounded prefix. Its
+                    // unconsumed remainder survives within this epoch.
+                    seenX=baseX+stepX;
+                    seenY=baseY+stepY;
+                    if (stepX || stepY) noteVirtualRead(sawVirtualLook,
+                        L"[LT_MC02_INPUT][VIRTUAL_LOOK_RETURNED]\n");
+                }
             }
         }
     }
@@ -638,8 +672,13 @@ BOOL WINAPI observedCursor(LPPOINT point) {
 #if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
     if (word) applyPendingCursor(word,revision);
 #endif
-    point->x=virtualX.load(std::memory_order_acquire);
-    point->y=virtualY.load(std::memory_order_acquire);
+    {
+        // Paired snapshot: no half-updated cursor while another game
+        // thread recenters or consumes a relative camera delta.
+        std::lock_guard<std::mutex> lock(cursorPositionMutex);
+        point->x=virtualX.load(std::memory_order_acquire);
+        point->y=virtualY.load(std::memory_order_acquire);
+    }
     SetLastError(previous);
     return TRUE;
 }
@@ -650,8 +689,14 @@ BOOL WINAPI observedSetCursor(int x,int y) {
         SetLastError(previous); return originalSetCursor(x,y);
     }
     // MC02's cursor recentering never physically moves MC01's pointer.
-    virtualX.store(x,std::memory_order_release);
-    virtualY.store(y,std::memory_order_release);
+    // Both axes are one game-local update, even when the first physical
+    // cursor snapshot from another thread has not returned yet.
+    {
+        std::lock_guard<std::mutex> lock(cursorPositionMutex);
+        virtualX.store(x,std::memory_order_release);
+        virtualY.store(y,std::memory_order_release);
+        cursorInitialized.store(true,std::memory_order_release);
+    }
     SetLastError(previous);
     return TRUE;
 }

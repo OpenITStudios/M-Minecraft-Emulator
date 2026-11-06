@@ -36,13 +36,13 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
-  Latest source review found a missing closing brace after
-  `observedKeyboard`, which left the virtual cursor functions nested
-  inside a Win32 hook and made both C++ feature variants structurally
-  invalid. Restored the function boundary without altering cursor
-  or native input semantics. Both compile-flag source paths have
-  balanced scope in a static review; compiler/build NOT_EXECUTED.
-  The previous bounded cursor backlog fix remains unchanged.
+  Source cursor interleaving correction: a short process-local position
+  lock now protects initial sampling, SetCursorPos recenter, GetCursorPos
+  paired X/Y read, and bounded look delta publication. No genuine Win32
+  call or diagnostic runs while this lock is held. If ReleaseAll changes
+  the native publication during a provisional delta update, both virtual
+  axes roll back before any read cursor advances. The preceding missing
+  observedKeyboard brace is fixed. C++/Rust execution NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -87,6 +87,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Virtual cursor position interleaving | One short local mutex keeps initial physical sampling, recenter, virtual X/Y reads and camera delta commits coherent; lost ReleaseAll publication rolls back both temporary axes and leaves look backlog unconsumed | Source-only static contract inspection; tests NOT_EXECUTED |
 | Virtual cursor scope correction | Close `observedKeyboard` before the virtual cursor implementation so optional Raw-buffer and default polling branches remain namespace-level functions | Both C++ preprocessor branches statically scope-balanced; MSVC tests/build NOT_EXECUTED |
 | Virtual cursor bounded backlog | Per-poll cursor move limited to ±32767 without dropping remaining accumulated look; same native revision can deliver its unconsumed prefix after exact publication revalidation | C++ compile-time negative boundary assertions AUTHORED_NOT_EXECUTED; compile-OFF |
 | Win32 last native-write fence | Additional lightweight v4 publication check after keyboard diagnostics; rollback tentative async press cursor on lost native publication, zero held KeyState and scrub KeyboardState | C++ constexpr negatives authored NOT_EXECUTED; compile-OFF |
@@ -216,14 +217,15 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only examine the original `GetCursorPos` / `SetCursorPos`
-interleaving after the scope correction.** Re-pin `Local`, trace the
-same-process virtual position atomics, the existing bounded delta
-consumer, and the Rust writer's ReleaseAll/epoch publication. Change
-only a concrete cursor correctness defect; avoid additional state,
-new controller/driver, foreground takeover, runtime gate relaxation,
-or status churn. Keep default native input compile-OFF, Cua
-Invoke-only `BACKGROUND_UNAVAILABLE`, protected human MC01 and
-the original pending Raw Input key-up/mouse-up route. C++/Rust/Node
-tests, Windows builds, CI, installed game and five-client execution
-remain NOT_EXECUTED until operator authorization.
+**Source-only review of the existing cursor and buffered Raw Input
+return-time contracts after paired-position synchronization.** Pin
+`Local`, inspect the original Rust v4 `release_all` boundary and the
+C++ virtual cursor/Raw Input consumers for a demonstrable stale input
+or reentrant locking defect. Correct only an actual error using the
+current owner and bounded authored fixtures. Avoid another controller,
+driver, transport, extra global input, CI or speculative milestones.
+Preserve MC01 physical control, zero-word pending key-up/mouse-up, the
+default compile-OFF native-input mode and Cua
+`BACKGROUND_UNAVAILABLE`. Source tests, MSVC/Rust builds, installer,
+Windows and Minecraft gameplay remain NOT_EXECUTED/NOT_VERIFIED until
+separately authorized.
