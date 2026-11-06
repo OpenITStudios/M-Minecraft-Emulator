@@ -36,13 +36,11 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
-  Latest source-only correction makes the original buffered Raw Input
-  size-query honor the same coherent native revision, window owner and
-  original game thread as a real record read. A torn or stale plan
-  cannot falsely advertise a pending DOWN/camera/UP buffer; no record,
-  key-up, mouse-up or look cursor is consumed by the query. Previous
-  signed look bound, original Rust v4 writer and compile-OFF defaults
-  remain unchanged; C++/Rust execution NOT_EXECUTED.
+  Active integrated A/B/C source track now binds original MCP native
+  transport receipts to exact ordered 4/5-AI pulse bytes with a Rust-
+  echoed SHA-256. The same Rust controller/C++ reader, per-slot
+  neutral and MCP recovery remain in charge. Node/Rust negative fixtures
+  AUTHORED_NOT_EXECUTED; no runtime evidence.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -87,6 +85,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Integrated exact-content ACK | Node hashes exact ordered native pulse argv; Rust CLI echoes the same SHA-256; mismatch is uncertain and keeps existing 4/5-AI neutral/quarantine | Node/Rust negative fixtures AUTHORED_NOT_EXECUTED |
 | Raw Input size-query admission | Size-only query now reports one RAWINPUT record only for a coherent same-word, even-revision, same original OGLES game-thread plan; stale/torn plans report zero without advancing any press/release cursor | C++ compile-time negative cases AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input signed-look bound | Share overflow-safe bounded i64 delta with cursor polling before planning Raw Input; retains pending key-up/mouse-up ordering at extreme cumulative look totals | C++ constexpr boundary assertions AUTHORED_NOT_EXECUTED; feature compile-OFF |
 | Virtual cursor recenter publication fence | SetCursorPos permits live recenter only against original active publication, or stable native zero-packet menu state; a concurrent ReleaseAll/replacement rolls back both virtual axes without touching physical cursor | C++ constexpr negative fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -188,47 +187,54 @@ Minecraft, run local source tests, enable GitHub Actions, install experimental
 DLLs, touch credentials/worlds, dispatch game commands, or promote to `main`.
 No source-only review may mark these runtime gates PASS.
 
-## Efficient implementation sequence — current native-input track
+## Integrated A/B/C native input implementation
 
-This is a **dependency order, not authorization for runtime work or a
-second active backlog**. Develop only one source-proven issue at a time:
+The operator selected ONE integrated full-stack source deliverable, not
+additional per-function micro-milestones:
 
-1. **Completed P66–P69: native input integrity** — source corrections
-   for attempted-slot/release safety, exact MCP error/quarantine and
-   per-poll live root HWND checks; no new transport.
-2. **Source hardening on demand** — audit the *original* 4/5-client
-   controller, CLI scheduler and per-client consumer for real remaining
-   identity, epoch, deadline, cross-slot or key-up defects. Change only
-   the first wrong source owner and its direct fixtures. Do not add an
-   extra controller, dispatch abstraction or speculative stage count.
-3. **Verification preparation** — reuse the existing source-only Node,
-   Rust, C++ and manual synthetic UIA counter fixtures. Compare the
-   exact planned source SHA and negative cases before any separately
-   authorized execution; only actual runs count as test results.
-4. **Independent runtime acceptance (separate permission)** — after
-   explicit operator approval, validate original Windows input safety,
-   neutral/readback and human foreground, then Minecraft Education
-   actual motion and 4/5-client concurrency. ABI/IPC ACKs alone are not
-   game proof. The unrelated Cua strict Invoke-only dependency stays
-   `BLOCKED_NO_SUPPORTED_UPSTREAM_ROUTE` until upstream capability
-   and verified focus isolation exist.
+- **A — Orchestration and exact-content receipt (SOURCE_IMPLEMENTED):**
+  MCP retains its deterministic four/five-AI compiler and the one
+  original CLI timestamp-group scheduler. Node SHA-256 hashes the
+  EXACT sorted pulse JSON bytes passed to the CLI argv. The same-image
+  Rust CLI echoes SHA-256 of those exact bytes after complete batch
+  validation. Node requires matching digest, slots, pulse/group counts
+  and explicit NOT_GAMEPLAY transport status. Changed payload with
+  identical slot/count metadata is not accepted as an ACK.
+- **B — Original native consumer (COMPILE_OFF):** one Rust controller,
+  independent per-process v4 96-byte mapping and existing C++ keyboard,
+  cursor and buffered Raw Input readers. Previous source fixes remain:
+  exact OGLES owner/thread, TTL/epoch, bounded look, zero-word key-up,
+  mouse-up and partial-prefix consumption. No driver, second writer or
+  default product enablement.
+- **C — Failure and recovery (FIXTURES_AUTHORED_NOT_EXECUTED):**
+  Keep original MCP cohort quarantine and explicit neutral recovery,
+  CLI per-slot best-effort cleanup and Rust same-lease neutral ACK.
+  Added Node and Rust negative fixtures for same-count wrong payload
+  and reordered pulses in hybrid 4-AI and full 5-AI source paths.
 
-**Efficiency rule:** no extra framework, duplicate handoff, automatic
-CI, periodic speculative audit, feature activation or rewrite. If
-no source-verifiable correctness defect remains, stop source changes
-and preserve the actual execution gate as NOT_EXECUTED.
+**Source flow:** agent intents -> deterministic pulse stream -> one
+native CLI scheduler / grouped IPC -> original per-slot Rust state
+and neutral -> exact-content transport ACK -> existing uncertain and
+recovery path. SHA-256 is not a native signature, installed binary
+attestation, game effect, simultaneous delivery or human-input proof.
+
+**Efficiency/safety:** digest is computed once per bounded batch;
+no added per-frame IPC/Win32 reads, driver, extra state owner or
+runtime change. The existing 150-ms lateness bound, 350-ms TTL,
+protected human MC01 and compile-OFF features remain unchanged.
+
+**Proof:** REMOTE_GITHUB source review; Node/Rust/C++ fixtures
+NOT_EXECUTED, Windows/Minecraft performance and five-client input
+NOT_VERIFIED, Cua strict Invoke-only `BACKGROUND_UNAVAILABLE`.
+GitHub Actions CI remains disabled.
 
 ## Single next step
 
-**Source-only inspect the original buffered Raw Input release-prefix
-and post-copy consumption path** after coherent size-only admission.
-Pin fresh `Local`, compare `nextRawPlan`, `consumeRawRecord`,
-`rawHeldMask` and the Rust v4 `ReleaseAll` transaction, focusing on
-a demonstrable loss/duplicate of an already-delivered DOWN's pending
-UP when the caller has capacity for one RAWINPUT. Fix only a proven
-existing-owner defect; otherwise stop source changes, keep prior
-decisions and retain `NOT_EXECUTED` as the actual proof ceiling.
-No new driver, controller, scheduler, global input, Cua fallback or
-package. Native input stays compile-OFF; Cua Invoke-only remains
-`BACKGROUND_UNAVAILABLE`. C++/Rust/Node source tests, builds, CI,
-Windows and Minecraft remain NOT_EXECUTED/NOT_VERIFIED.
+Continue the SAME A/B/C integrated source deliverable, next reviewing
+full-stack cancellation and neutral/error provenance: MCP receipt and
+quarantine -> CLI grouped dispatch/deadline and cleanup -> Rust exact
+lease/ReleaseAll -> C++ pending Raw Input UP. Fix only demonstrated
+cross-layer issues, consolidate existing-owner negative fixtures and
+avoid renewed per-function milestones. Native input stays compile-OFF,
+no Cua foreground fallback; source tests, builds, CI, Windows and
+Minecraft remain NOT_EXECUTED/NOT_VERIFIED until separate permission.

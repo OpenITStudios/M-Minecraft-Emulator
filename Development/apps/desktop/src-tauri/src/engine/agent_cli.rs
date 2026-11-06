@@ -314,6 +314,22 @@ fn record_multi_ai_group_attempt(
     attempted.extend(group.iter().map(|pulse|pulse.slot));
 }
 
+// The existing sha2 dependency ties an ACK to exact ordered UTF-8
+// wire bytes originally sent from Node, without another native IPC,
+// controller, input hook, game process or shared-memory field.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn multi_ai_wire_digest(payload:&str)->String {
+    use sha2::{Digest,Sha256};
+    const HEX:&[u8;16]=b"0123456789abcdef";
+    let mut out=String::with_capacity(64);
+    for &byte in Sha256::digest(payload.as_bytes()).iter() {
+        out.push(char::from(HEX[usize::from(byte>>4)]));
+        out.push(char::from(HEX[usize::from(byte&15)]));
+    }
+    out
+}
+
 #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
 fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
@@ -361,6 +377,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
         requested.insert(pulse.slot);
         last=Some((pulse.at_ms,pulse.slot));
     }
+    let pulse_digest=multi_ai_wire_digest(&args[2]);
     let started=unsafe{GetTickCount64()};
     let mut attempted=BTreeSet::<u32>::new();
     let mut groups=0usize;
@@ -428,6 +445,7 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
         "slots":requested.into_iter().collect::<Vec<_>>(),
         "pulses":pulses.len(),
         "timestampGroups":groups,
+        "pulseDigest":pulse_digest,
         "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
         "gameplayObserved":false}))
 }
@@ -837,6 +855,24 @@ mod tests {
                 assert!(group.iter().all(|f|f.at_ms==group[0].at_ms));
             }
         }
+    }
+
+    #[cfg(all(windows,target_arch="x86_64",
+           feature="lazy-tester-package",feature="mc02-native-input"))]
+    #[test]
+    fn native_digest_refuses_equal_count_changed_pulses() {
+        // Authored NOT_EXECUTED: all have two pulses, one timestamp,
+        // two slots, but different look or wire order.
+        let original=r#"[{"slot":2,"atMs":0,"keys":1,"dx":0,"dy":0,"ttlMs":350},{"slot":3,"atMs":0,"keys":1,"dx":0,"dy":0,"ttlMs":350}]"#;
+        let different_look=r#"[{"slot":2,"atMs":0,"keys":1,"dx":1,"dy":0,"ttlMs":350},{"slot":3,"atMs":0,"keys":1,"dx":0,"dy":0,"ttlMs":350}]"#;
+        let different_order=r#"[{"slot":3,"atMs":0,"keys":1,"dx":0,"dy":0,"ttlMs":350},{"slot":2,"atMs":0,"keys":1,"dx":0,"dy":0,"ttlMs":350}]"#;
+        let digest=multi_ai_wire_digest(original);
+        assert_eq!(digest.len(),64);
+        assert!(digest.bytes().all(|b|b.is_ascii_hexdigit()&&
+            !b.is_ascii_uppercase()));
+        assert_eq!(digest,multi_ai_wire_digest(original));
+        assert_ne!(digest,multi_ai_wire_digest(different_look));
+        assert_ne!(digest,multi_ai_wire_digest(different_order));
     }
 
     #[cfg(all(windows,target_arch="x86_64",

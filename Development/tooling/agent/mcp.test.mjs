@@ -4,7 +4,8 @@ import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
-  sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch} from './mcp.mjs';
+  sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
+  matchesNativeMultiClientBatchReceipt} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -35,6 +36,30 @@ test('modes, absolute paths, no implicit native permissions',()=>{
     .gpuExecutable,path.resolve('lazy-tester-gpu-capture.exe'));
   assert.equal(parseConfiguration(['--cua-exe',path.resolve('cua-driver.exe')])
     .cuaExecutable,path.resolve('cua-driver.exe'));
+});
+
+test('hybrid four and full five AI native ACKs require exact pulse payload content',()=>{
+  // Source-authored only; neither the fixture nor the native input runs.
+  for(const slots of [[2,3,4,5],[1,2,3,4,5]]) {
+    const expected={slots,pulseCount:slots.length*3,
+      timestampGroups:3,pulseDigest:'a'.repeat(64)};
+    const receipt={schema:1,ok:true,operation:'ai-multi-input-batch',
+      slots,pulses:expected.pulseCount,timestampGroups:3,
+      pulseDigest:expected.pulseDigest,
+      delivery:'PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF',
+      gameplayObserved:false};
+    assert.equal(matchesNativeMultiClientBatchReceipt(receipt,expected),true);
+    for(const altered of [
+      {pulseDigest:'b'.repeat(64)},{pulseDigest:undefined},
+      {pulses:receipt.pulses-1},{timestampGroups:2},
+      {slots:[...slots].reverse()},{gameplayObserved:true},
+      {delivery:'MINECRAFT_GAMEPLAY_PROVEN'},
+    ]) {
+      assert.equal(matchesNativeMultiClientBatchReceipt(
+        {...receipt,...altered},expected),false,
+      'No native transport ACK when any exact-payload or proof field changes');
+    }
+  }
 });
 
 test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{

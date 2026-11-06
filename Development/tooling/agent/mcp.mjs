@@ -721,6 +721,27 @@ export async function sendExperimentalAiWriterLeaseNative(
 
 // One short-lived SAME-IMAGE CLI coordinates all requested AI slots.
 // No second Minecraft session owner or background agent daemon is created.
+// The native transport receipt must be tied to the exact ordered
+// pulse bytes (including keys, mouse look and TTL), not just the number
+// of slots/timestamps. SHA-256 is NOT game proof or CLI authentication.
+export function matchesNativeMultiClientBatchReceipt(receipt,{
+  slots,pulseCount,timestampGroups,pulseDigest,
+}={}) {
+  return receipt?.schema===1 && receipt?.ok===true &&
+    receipt?.operation==='ai-multi-input-batch' &&
+    Array.isArray(slots) && slots.length>0 && slots.length<=5 &&
+    slots.every((slot,i)=>Number.isInteger(slot)&&slot>=1&&slot<=5&&
+      (i===0||slot>slots[i-1])) &&
+    Array.isArray(receipt?.slots) &&
+    JSON.stringify(receipt.slots)===JSON.stringify(slots) &&
+    receipt?.pulses===pulseCount &&
+    receipt?.timestampGroups===timestampGroups &&
+    typeof pulseDigest==='string' && /^[a-f0-9]{64}$/.test(pulseDigest) &&
+    receipt?.pulseDigest===pulseDigest &&
+    receipt?.delivery==='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF' &&
+    receipt?.gameplayObserved===false;
+}
+
 export async function sendExperimentalMultiClientBatchNative(
     executable,batches,{signal,writerId,mode,leaseEpoch}={}) {
   if(!executable||!path.isAbsolute(executable)||!Array.isArray(batches)||
@@ -764,6 +785,8 @@ export async function sendExperimentalMultiClientBatchNative(
   if(Buffer.byteLength(serialized,'utf8')>24000) {
     throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
   }
+  // Exact bytes passed to the original same-image native CLI.
+  const pulseDigest=createHash('sha256').update(serialized,'utf8').digest('hex');
   let stdout;
   try {
     const response=await execFileAsync(executable,[
@@ -791,18 +814,17 @@ export async function sendExperimentalMultiClientBatchNative(
   }
   let receipt;
   try{receipt=JSON.parse(stdout.trim());}catch{}
-  if(receipt?.schema!==1||receipt?.ok!==true||
-     receipt?.operation!=='ai-multi-input-batch'||
-     !Array.isArray(receipt?.slots)||
-     JSON.stringify(receipt.slots)!==JSON.stringify([...slots].sort((a,b)=>a-b))||
-     receipt?.pulses!==pulses.length||
-     receipt?.timestampGroups!==expectedGroups||
-     receipt?.delivery!=='PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF'||
-     receipt?.gameplayObserved!==false) {
+  if(!matchesNativeMultiClientBatchReceipt(receipt,{
+    slots:[...slots].sort((a,b)=>a-b),pulseCount:pulses.length,
+    timestampGroups:expectedGroups,pulseDigest,
+  })) {
+    // Dispatch may have reached one or all native slots. Keep the
+    // caller's existing per-slot neutral/quarantine path; never replay.
     throw new Error('AI_INPUT_NATIVE_RESULT_UNVERIFIED');
   }
   return {schema:1,slots:[...slots].sort((a,b)=>a-b),
     pulsesAcknowledged:pulses.length,timestampGroupsAcknowledged:expectedGroups,
+    pulseDigest,
     status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
     gameplayObserved:false,
     humanInputUninterrupted:'NOT_PROVEN',
