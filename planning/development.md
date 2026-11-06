@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Original MC02 legacy batch process pin | One existing authenticated native Inspect pins original MC02 PID/birth/session before first batch pulse. The already-existing private Mc02Input variant gains one optional batch_origin field, omitted for older one-shot bytes; actor compares it to the retained Channel binding BEFORE marking legacy input or publishing v4. Every batch pulse and its neutral carry the same origin; replacement/initial unverified target fail closed. Canonical MCP does not neutralize another child after proven pre-dispatch refusal | Rust actor/wire/CLI and Node negative fixtures AUTHORED_NOT_EXECUTED; no new public command, game-shared ABI, writer or per-pulse target lookup |
 | Original MC02 child-bind timestamp fence | Original per-process native Channel now records its single monotonic bind time after exact child identity binding and refuses both active and ReleaseAll requests issued before or at that time, before v4 memory is mapped. Native batch cleanup classifies this known pre-publication refusal as MC02_RELEASE_OBSOLETE so the verified MCP sender cannot neutralize the newly launched game with another fresh CLI. This is a bounded old-child refusal; same-tick cross-CLI command origin after bind remains unknown | Pure Rust four/five-cohort and CLI error-kind fixtures AUTHORED_NOT_EXECUTED, no private IPC/ABI/enablement change |
 | Legacy MC02 batch cleanup original-issue fence | The same-image native batch uses its last potentially dispatched pulse's original issue timestamp for ReleaseAll, not a fresh cleanup time. If a newer one-shot or neutral was accepted, original Channel refuses the stale release before shared-memory mutation. Definitive stale/expired actor refusal is exposed as MC02_RELEASE_OBSOLETE; only canonical MCP sender can avoid a dangerous second freshly timed neutral. Other uncertainty retains the original independent fallback | Rust/Node negative fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or feature activation change |
 | Legacy MC02 canonical neutral ACK reuse | Original MC02 CLI already releases the channel before successful batch response; MCP no longer launches a redundant, potentially backdated neutral CLI for its exact canonical sender. Failed/aborted/malformed/injected receipts keep independent neutral. Late Stop during cleanup cannot produce false success | Pure Node provenance and late-Stop fixtures AUTHORED_NOT_EXECUTED, no controller/IPC/v4 ABI change |
@@ -285,40 +286,47 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-This pass inspected the legacy-MC02 original game Channel::bind,
-the retained reaping/relaunch lifecycle, private one-shot Mc02Input
-request shape, and Channel::release_all/active write admission.
-An already-issued CLI packet carries slot + timestamp but not the
-prior game's PID/birth. After an original child exits and a fresh
-MC02 process binds, checking the NEW channel's PID/birth could
-wrongly treat that old request as intended for the new process.
+This source pass traced the exact process-identity information already
+available from the original authenticated SessionRequest::Inspect:
+each responding MC02 has PID, Windows createdFileTime and session ID,
+independently validated by the retained native process/window owner.
+The legacy batch formerly sent only numerical slot and a newly issued
+timestamp on each private Mc02Input request. It could therefore adopt
+a relaunched original MC02 when a later pulse was minted AFTER the
+replacement's Channel::bind timestamp, despite the previous fence.
 
-The same existing per-process Channel now pins one private monotonic
-bind watermark at the end of its original child binding. Both active
-and neutral writes refuse issued_at_ms at/before that new binding
-BEFORE mapping or changing game shared-memory bytes. The original
-CLI maps only the exact corresponding native refusal to
-`MC02_RELEASE_OBSOLETE` during batch cleanup; canonical MCP
-then avoids an unsafe newly timed fallback on the replacement game.
-The human MC01 remains protected, 4/5-client leased paths are not
-replaced, and v4/IPC schemas and compile-OFF state remain unchanged.
+The original same-image batch CLI now takes ONE read-only controller
+Inspect BEFORE any pulse and pins its original process identity.
+Source birth must precede the original MCP request's end-of-millisecond
+wall timestamp; an absent/nonresponding/replaced child refuses without
+dispatch. The existing private Mc02Input request adds OPTIONAL
+batch_origin PID/birth/session, copied to every subsequent batch
+pulse and its cleanup. The controller compares this witness with
+the retained original Channel's already-bound identity BEFORE
+legacy_begin_write and native shared-state mutation; each active
+input still passes the existing live identity/window checks. The
+one-shot legacy serialization remains byte-for-byte unchanged with
+batch_origin omitted, and the pipe's endpoint continues enforcing the
+SAME image, user/session and file identity. This is a reviewed
+additive PRIVATE IPC field, not a new public tool, controller,
+named pipe, per-pulse Win32 lookup, or shared ABI migration.
 
-This is NOT full cross-process provenance. Two different commands
-issued AFTER bind within the same GetTickCount64 millisecond remain
-indistinguishable in the current legacy request. A batch that remains
-alive and mints a NEW pulse AFTER process replacement also cannot
-prove it belongs to its original child using only issue timestamps.
-Fixing those requires an explicitly designed exact-process binding
-in the existing controller contract; do not claim them solved from
-source inspection. All fixtures are AUTHORED_NOT_EXECUTED.
+The canonical MCP suppresses a new-time fallback neutral only for a
+confirmed original native pre-dispatch target refusal or proven
+obsolete batch cleanup; injected callbacks, timeouts, IPC loss and
+other ambiguous results still attempt independent neutral. Native
+refusal is not evidence that Minecraft saw a key-up. Rust and Node
+fixtures were AUTHORED_NOT_EXECUTED. Same-millisecond independent
+legacy writers after binding remain ambiguous: this pin prevents
+cross-CHILD adoption but does not create a per-one-shot lease/nonce
+or prove any game received input. Do not overclaim source acceptance.
 
-**Single next source action:** examine whether the existing native
-profile identity snapshot can be used to bind the legacy batch to
-its original child without a second controller, new public IPC
-surface, or per-pulse expensive target lookups. If source does not
-prove a safe same-owner solution, preserve the blocked state and
-focus on existing bounded work rather than speculative input paths.
-Operator preference CODE FIRST; Rust/Node/C++ tests, Windows build
-and Minecraft 4/5-client gameplay remain NOT_EXECUTED/NOT_VERIFIED.
-Cua strict Invoke-only is `BACKGROUND_UNAVAILABLE`;
-GitHub Actions disabled and `main` remains unchanged.
+**Single next source action:** inspect the remaining same-tick
+legacy writer-vs-writer ordering only if a concrete fix can reuse the
+original Channel/lease authority without disrupting explicitly
+authorized Stop/neutral actions. Avoid schema churn or speculative
+providers. The operator prefers CODE FIRST; Node/Rust/C++ tests,
+Windows builds, installed hooks and Minecraft four/five-client
+acceptance remain NOT_EXECUTED/NOT_VERIFIED.
+Cua strict Invoke-only stays `BACKGROUND_UNAVAILABLE`;
+GitHub Actions disabled and `main` unchanged.

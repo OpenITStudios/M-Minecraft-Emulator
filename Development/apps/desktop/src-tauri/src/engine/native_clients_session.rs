@@ -644,7 +644,14 @@ pub enum SessionRequest {
     #[cfg(feature="mc02-native-input")]
     LaunchAiExperiment {slot:u32,mode:AgentControlMode},
     #[cfg(feature="mc02-native-input")]
-    Mc02Input {slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64},
+    Mc02Input {
+        slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64,
+        // Only the legacy batch opts in: immutable original PID/birth/
+        // Windows session observed ONCE before its first pulse.
+        // Absence retains the established one-shot wire shape exactly.
+        #[serde(default,skip_serializing_if="Option::is_none")]
+        batch_origin:Option<Mc02BatchOrigin>,
+    },
     #[cfg(feature="mc02-native-input")]
     AiLeasedInput {
         slot:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,issued_at_ms:u64,
@@ -669,6 +676,25 @@ pub enum SessionRequest {
     },
     CloseOne { slot: u32 },
     CloseAll,
+}
+
+// Correlation-only original child witness for the existing legacy
+// Mc02Input request. Not an authority delegated to the CLI: the
+// retained actor compares it to its own original process/channel
+// before the legacy lease book or game state is modified.
+#[cfg(feature="mc02-native-input")]
+#[derive(Clone,Copy,Debug,PartialEq,Eq,Deserialize,Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Mc02BatchOrigin {
+    pub(crate) pid:u32,
+    pub(crate) birth:u64,
+    pub(crate) session:u32,
+}
+#[cfg(feature="mc02-native-input")]
+impl Mc02BatchOrigin {
+    pub(crate) fn valid(self)->bool {
+        self.pid!=0 && self.birth!=0 && self.session!=0
+    }
 }
 
 #[cfg(feature="mc02-native-input")]
@@ -1135,13 +1161,16 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         }
     }
     #[cfg(feature="mc02-native-input")]
-    if let SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms}=request {
-        // Native IPC must not trust any client-side MCP/CLI button mask.
-        // One admission rule covers both active writes and release-all.
+    if let SessionRequest::Mc02Input {
+        slot,keys,dx,dy,ttl_ms,issued_at_ms,batch_origin,
+    }=request {
+        // Native IPC must not trust CLI-provided control values or a
+        // caller-supplied PID/birth claim. The actor separately verifies
+        // this original-process witness before any legacy state change.
         admit_native_input_frame(slot,keys,dx,dy,ttl_ms)?;
-        if issued_at_ms==0 {
+        if issued_at_ms==0 || batch_origin.is_some_and(|pin|!pin.valid()) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Missing native input issue timestamp"));
+                "Invalid native MC02 issue time or batch origin"));
         }
     }
     #[cfg(feature="mc02-native-input")]
@@ -2350,6 +2379,45 @@ mod tests {
             ).collect::<Vec<_>>();
             exited.acquire(&replacement,&owner,&epoch,1002,false).unwrap();
         }
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn legacy_mc02_optional_batch_origin_preserves_one_shot_wire_and_rejects_bad_pin() {
+        // Pure serde fixture. No controller, native IPC, Windows or game.
+        let old=serde_json::json!({"operation":"Mc02Input",
+            "slot":2,"keys":0,"dx":0,"dy":0,"ttl_ms":1,"issued_at_ms":100});
+        let decoded:SessionRequest=serde_json::from_value(old.clone()).unwrap();
+        assert!(matches!(decoded,SessionRequest::Mc02Input{
+            batch_origin:None,..}));
+        let one_shot=SessionRequest::Mc02Input{slot:2,keys:0,dx:0,dy:0,
+            ttl_ms:1,issued_at_ms:100,batch_origin:None};
+        assert_eq!(serde_json::to_value(one_shot).unwrap(),old,
+            "older legacy one-shot IPC shape must remain unchanged");
+        let pin=Mc02BatchOrigin{pid:202,birth:134_000_000_000_000_000,
+            session:1};
+        let pinned=SessionRequest::Mc02Input{slot:2,keys:1,dx:0,dy:0,
+            ttl_ms:350,issued_at_ms:101,batch_origin:Some(pin)};
+        let wire=serde_json::to_value(pinned).unwrap();
+        assert!(matches!(serde_json::from_value::<SessionRequest>(
+            wire.clone()).unwrap(),SessionRequest::Mc02Input{
+            batch_origin:Some(found),..} if found==pin));
+        for wrong in [
+            serde_json::json!({"pid":0,"birth":pin.birth,"session":1}),
+            serde_json::json!({"pid":pin.pid,"birth":0,"session":1}),
+            serde_json::json!({"pid":pin.pid,"birth":pin.birth,"session":0}),
+        ] {
+            let invalid=Mc02BatchOrigin{
+                pid:wrong["pid"].as_u64().unwrap() as u32,
+                birth:wrong["birth"].as_u64().unwrap(),
+                session:wrong["session"].as_u64().unwrap() as u32,
+            };
+            assert!(!invalid.valid());
+        }
+        let mut extra=wire;
+        extra["batch_origin"]["unreviewed_owner"]=serde_json::json!(true);
+        assert!(serde_json::from_value::<SessionRequest>(extra).is_err(),
+            "private expected-process wire must deny unknown fields");
     }
 
     #[cfg(feature="mc02-native-input")]

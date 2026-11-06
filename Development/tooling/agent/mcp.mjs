@@ -629,16 +629,18 @@ export function canReuseVerifiedMc02BatchNeutral(receipt,pulseCount,{
     receipt?.gameplayObserved===false;
 }
 
-// If the original MC02 native batch explicitly reports that its
-// cleanup was refused BEFORE v4 publication (a newer one-shot owns
-// the timestamp or the earlier 350-ms TTL is expired), do not spawn
-// a newer neutral CLI that could clear another command. Fake callbacks
-// and all ambiguous errors must retain independent cleanup.
+// Only the canonical original native batch may prove that its own
+// cleanup is obsolete OR that it could not pin the original child
+// BEFORE dispatching ANY pulse. Neither allows a freshly timestamped
+// fallback neutral against a possibly new MC02 process. Fake callbacks
+// and ambiguous errors retain independent original-channel cleanup.
 export function confirmedObsoleteMc02BatchCleanup(error,{
   verifiedSender=false,
 }={}) {
-  return verifiedSender===true &&
-    error?.message==='Native request refused: MC02_RELEASE_OBSOLETE';
+  return verifiedSender===true && [
+    'Native request refused: MC02_RELEASE_OBSOLETE',
+    'Native request refused: MC02_BATCH_TARGET_UNVERIFIED',
+  ].includes(error?.message);
 }
 
 // One opaque, ephemeral writer correlation ID per explicitly opted-in MCP.

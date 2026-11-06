@@ -116,13 +116,49 @@ struct Mc02BatchPulse {
 // SessionReply maps original controller InvalidData into ErrorKind::Other.
 #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
+fn pin_original_mc02_batch_from_snapshot(
+    snapshot:&super::native_clients_session::SessionSnapshot,
+    requested_at_ms:u64,
+)->Result<super::native_clients_session::Mc02BatchOrigin,&'static str> {
+    use super::native_clients_session::Mc02BatchOrigin;
+    const UNIX_TO_FILETIME_100NS:u128=116_444_736_000_000_000;
+    if snapshot.schema!=1 || snapshot.profiles.len()!=5 ||
+       snapshot.profiles.iter().enumerate().any(|(i,p)|p.slot!=i as u32+1) {
+        return Err("MC02_BATCH_TARGET_UNVERIFIED");
+    }
+    let profile=&snapshot.profiles[1];
+    if profile.state!="RUNNING" {
+        return Err("MC02_BATCH_TARGET_UNVERIFIED");
+    }
+    let process=profile.process.as_ref()
+        .filter(|process|process.responding)
+        .ok_or("MC02_BATCH_TARGET_UNVERIFIED")?;
+    let birth=process.created_file_time.parse::<u64>()
+        .map_err(|_|"MC02_BATCH_TARGET_UNVERIFIED")?;
+    let pin=Mc02BatchOrigin{pid:process.pid,birth,session:process.session_id};
+    // The process must ALREADY have existed when the model/MCP minted
+    // this original batch request; an Inspect taken after a relaunch
+    // cannot silently adopt the replacement. Millisecond birth ties
+    // remain a conservative known limitation, not identity proof.
+    let end_of_request_ms=UNIX_TO_FILETIME_100NS+
+        (u128::from(requested_at_ms)+1)*10_000;
+    if requested_at_ms==0 || !pin.valid() ||
+       u128::from(birth)>=end_of_request_ms {
+        return Err("MC02_BATCH_TARGET_UNVERIFIED");
+    }
+    Ok(pin)
+}
+
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
 fn mc02_batch_cleanup_error(error:&io::Error)->&'static str {
     if matches!(error.kind(),io::ErrorKind::Other|io::ErrorKind::InvalidData) &&
        matches!(error.to_string().as_str(),
            "MC02 release predates newer active input" |
            "MC02 release predates newer neutral release" |
            "MC02 release request expired before native delivery" |
-           "MC02 input predates original channel binding") {
+           "MC02 input predates original channel binding" |
+           "MC02 batch original process changed before native input") {
         return "MC02_RELEASE_OBSOLETE";
     }
     "MC02_RELEASE_UNCONFIRMED"
@@ -255,10 +291,26 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
         }
         previous=Some(pulse.at_ms);
     }
-    // The first authored action may start AFTER a wait. Schedule all
-    // offsets relative to this single process's monotonic start and
-    // publish nothing during the preceding delay; no synthetic neutral
-    // pulse or process restart is required at time zero.
+    // One authenticated, read-only source pin BEFORE the first pulse.
+    // Subsequent existing Mc02Input requests carry this SAME original
+    // PID/birth/session in an optional private field; the retained actor
+    // compares it to its own original Channel binding BEFORE writes.
+    // An unavailable/changed target is DEFINITIVELY no batch dispatch:
+    // do not let MCP neutralize a replacement process as cleanup.
+    let observed=native_clients_session::request(SessionRequest::Inspect)
+        .map_err(|_|"MC02_BATCH_TARGET_UNVERIFIED")?;
+    let batch_origin=pin_original_mc02_batch_from_snapshot(
+        &observed,requested_at_ms)?;
+    let after_observation=std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_|"MC02_BATCH_TARGET_UNVERIFIED")?.as_millis();
+    if after_observation<u128::from(requested_at_ms) ||
+       after_observation-u128::from(requested_at_ms)>500 {
+        return Err("MC02_BATCH_TARGET_UNVERIFIED");
+    }
+    // Schedule relative to original same-image CLI monotonic start.
+    // Only ONE native Inspect was added, never a per-pulse OS target
+    // lookup, another game controller or a new external CLI tool.
     let started=unsafe{GetTickCount64()};
     // Timestamp of the last pulse which MAY have reached the original
     // native actor. A later cleanup must not claim it was issued after
@@ -282,6 +334,7 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
             let snapshot=native_clients_session::request(SessionRequest::Mc02Input{
                 slot:2,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,
                 ttl_ms:pulse.ttl_ms,issued_at_ms,
+                batch_origin:Some(batch_origin),
             }).map_err(native_error)?;
             if snapshot.schema!=1||snapshot.profiles.len()!=5 {
                 return Err("INVALID_NATIVE_SNAPSHOT");
@@ -307,6 +360,7 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
     if let Some(issued_at_ms)=last_attempted_issue_ms {
         let released=native_clients_session::request(SessionRequest::Mc02Input{
             slot:2,keys:0,dx:0,dy:0,ttl_ms:1,issued_at_ms,
+            batch_origin:Some(batch_origin),
         });
         if let Err(error)=released {
             return Err(mc02_batch_cleanup_error(&error));
@@ -665,7 +719,9 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
         let issued_at_ms=uptime_now.checked_sub(request_age_ms as u64)
             .filter(|stamp|*stamp!=0).ok_or("STALE_MC02_INPUT")?;
         let request=if legacy {
-            SessionRequest::Mc02Input{slot,keys,dx,dy,ttl_ms,issued_at_ms}
+            SessionRequest::Mc02Input{
+                slot,keys,dx,dy,ttl_ms,issued_at_ms,batch_origin:None,
+            }
         }else{
             SessionRequest::AiLeasedInput {
                 slot,keys,dx,dy,ttl_ms,issued_at_ms,
@@ -886,6 +942,40 @@ mod tests {
     #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
     #[test]
+    fn original_mc02_batch_pin_refuses_unverified_or_newly_launched_process() {
+        // Pure snapshot fixture; no Windows Inspector, IPC, controller
+        // creation or Minecraft access. Exact original birth is the pin.
+        let issued=1_800_000_000_000u64;
+        let prior_birth=116_444_736_000_000_000u128+
+            u128::from(issued-5_000)*10_000;
+        let mut snapshot=super::native_clients_session::SessionSnapshot::stopped();
+        snapshot.profiles[1].state="RUNNING".into();
+        snapshot.profiles[1].process=Some(
+            crate::engine::process_identity::OwnedProcess{
+                pid:202,created_file_time:prior_birth.to_string(),
+                session_id:1,window_handle:"0x123".into(),responding:true,
+            });
+        let original=pin_original_mc02_batch_from_snapshot(
+            &snapshot,issued).unwrap();
+        assert_eq!(original.pid,202);
+        assert_eq!(original.birth,prior_birth as u64);
+        assert_eq!(original.session,1);
+        snapshot.profiles[1].process.as_mut().unwrap()
+            .created_file_time=(prior_birth+60_000_000).to_string();
+        assert!(pin_original_mc02_batch_from_snapshot(&snapshot,issued).is_err(),
+            "a new process launched AFTER the issued request cannot be pinned");
+        snapshot.profiles[1].process.as_mut().unwrap()
+            .created_file_time=prior_birth.to_string();
+        snapshot.profiles[1].process.as_mut().unwrap().responding=false;
+        assert!(pin_original_mc02_batch_from_snapshot(&snapshot,issued).is_err());
+        snapshot.profiles[1].process.as_mut().unwrap().responding=true;
+        snapshot.profiles[1].slot=3;
+        assert!(pin_original_mc02_batch_from_snapshot(&snapshot,issued).is_err());
+    }
+
+    #[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+    #[test]
     fn obsolete_legacy_mc02_batch_cleanup_requires_proven_actor_refusal() {
         // Pure authored Rust fixture; never executes controller or game.
         use std::io::{Error,ErrorKind};
@@ -894,6 +984,7 @@ mod tests {
             "MC02 release predates newer neutral release",
             "MC02 release request expired before native delivery",
             "MC02 input predates original channel binding",
+            "MC02 batch original process changed before native input",
         ] {
             for kind in [ErrorKind::Other,ErrorKind::InvalidData] {
                 assert_eq!(mc02_batch_cleanup_error(&Error::new(kind,reason)),

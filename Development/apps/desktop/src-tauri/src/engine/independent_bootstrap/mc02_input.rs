@@ -162,6 +162,9 @@ impl Channel {
         }))
     }
     pub(super) fn mode(&self)->AgentControlMode {self.mode}
+    pub(super) fn original_binding(&self)->Option<(u32,u64,u32)> {
+        self.target
+    }
     pub(super) fn reader(&self)->HANDLE {
         self.section.readonly.as_raw_handle() as HANDLE
     }

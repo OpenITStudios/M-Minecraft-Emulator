@@ -94,11 +94,15 @@ test('only confirmed canonical 4/5-AI native sender may reuse already-ACKed per-
 
 test('canonical MC02 obsolete cleanup is distinct from uncertain transport',()=>{
   // AUTHORED_NOT_EXECUTED. Pure provenance check, no Windows/game.
-  const expected=Error('Native request refused: MC02_RELEASE_OBSOLETE');
-  assert.equal(confirmedObsoleteMc02BatchCleanup(expected,{
-    verifiedSender:true}),true);
-  assert.equal(confirmedObsoleteMc02BatchCleanup(expected,{
-    verifiedSender:false}),false);
+  for(const reason of [
+    'MC02_RELEASE_OBSOLETE','MC02_BATCH_TARGET_UNVERIFIED',
+  ]) {
+    const expected=Error('Native request refused: '+reason);
+    assert.equal(confirmedObsoleteMc02BatchCleanup(expected,{
+      verifiedSender:true}),true);
+    assert.equal(confirmedObsoleteMc02BatchCleanup(expected,{
+      verifiedSender:false}),false);
+  }
   for(const error of [
     Error('Native request refused: MC02_RELEASE_UNCONFIRMED'),
     Error('Native request refused: NATIVE_BUSY'),
@@ -108,26 +112,28 @@ test('canonical MC02 obsolete cleanup is distinct from uncertain transport',()=>
     verifiedSender:true}),false);
 });
 
-test('injected MC02 obsolete-refusal result still attempts independent neutral',async()=>{
-  const cfg={...config(),experimentalMc02InputEnabled:true};
-  let neutrals=0;
-  const handler=createHandler(cfg,{
-    mc02Batch:async()=>{
-      throw Error('Native request refused: MC02_RELEASE_OBSOLETE');
-    },
-    mc02Input:async(_exe,frame)=>{
-      assert.deepEqual([frame.keys,frame.dx,frame.dy,frame.ttlMs],
-        [0,0,0,1]);
-      neutrals++;
-      return {schema:1,slot:2,gameplayObserved:false,
-        status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'};
-    },
-  });
-  await assert.rejects(()=>handler.callTool('run_experimental_mc02_actions',{
-    slot:2,actions:[{slot:2,kind:'move_forward',atMs:0,durationMs:320}],
-  }),/MC02_RELEASE_OBSOLETE/);
-  assert.equal(neutrals,1,'fake no-write result cannot skip native cleanup');
-  handler.shutdown();
+test('injected MC02 obsolete/no-dispatch refusal cannot skip independent neutral',async()=>{
+  for(const reason of ['MC02_RELEASE_OBSOLETE','MC02_BATCH_TARGET_UNVERIFIED']) {
+    const cfg={...config(),experimentalMc02InputEnabled:true};
+    let neutrals=0;
+    const handler=createHandler(cfg,{
+      mc02Batch:async()=>{
+        throw Error('Native request refused: '+reason);
+      },
+      mc02Input:async(_exe,frame)=>{
+        assert.deepEqual([frame.keys,frame.dx,frame.dy,frame.ttlMs],
+          [0,0,0,1]);
+        neutrals++;
+        return {schema:1,slot:2,gameplayObserved:false,
+          status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'};
+      },
+    });
+    await assert.rejects(()=>handler.callTool('run_experimental_mc02_actions',{
+      slot:2,actions:[{slot:2,kind:'move_forward',atMs:0,durationMs:320}],
+    }),new RegExp(reason));
+    assert.equal(neutrals,1,'fake no-write result cannot skip native cleanup');
+    handler.shutdown();
+  }
 });
 
 test('MC02 native neutral reuse requires the canonical sender and exact completed batch',()=>{

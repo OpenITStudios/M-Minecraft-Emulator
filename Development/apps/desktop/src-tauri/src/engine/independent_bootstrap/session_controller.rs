@@ -11,7 +11,7 @@ use std::{io::Write, time::{Duration, Instant}};
 use virtual_clients_core::InspectionBudget;
 #[cfg(feature="mc02-native-input")]
 use crate::engine::native_clients_session::{
-    AgentControlMode,AiInputFrame,AiLeaseBook,
+    AgentControlMode,AiInputFrame,AiLeaseBook,Mc02BatchOrigin,
     validate_ai_input_group,validate_ai_lease_slots,
     validate_ai_acquire_epoch,current_ai_filetime,
 };
@@ -21,6 +21,16 @@ fn ai_writer_mode_matches(slot:u32,requested:AgentControlMode,
                           actual:AgentControlMode)->bool {
     (1..=5).contains(&slot) && requested==actual &&
     (requested!=AgentControlMode::HumanPlusFourAi || slot!=1)
+}
+
+// Only the retained actor's already-bound original child may satisfy
+// the one-time batch pin. The old one-shot path remains unpinned and
+// keeps its existing 500-ms issue/bind/lease/window admission.
+#[cfg(feature="mc02-native-input")]
+fn legacy_mc02_batch_matches_original(
+    pin:Option<Mc02BatchOrigin>,original:Option<(u32,u64,u32)>
+)->bool {
+    pin.is_none_or(|p|original==Some((p.pid,p.birth,p.session)))
 }
 
 // After partial-group failure, attempt a neutral release on EVERY slot
@@ -377,16 +387,28 @@ impl Sessions {
     }
     #[cfg(feature="mc02-native-input")]
     fn legacy_mc02_input(&mut self,slot:u32,keys:u32,dx:i32,dy:i32,
-        ttl_ms:u32,issued_at_ms:u64)->io::Result<()> {
+        ttl_ms:u32,issued_at_ms:u64,
+        batch_origin:Option<Mc02BatchOrigin>)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         // Historical unleased Mc02Input is ONLY the hybrid MC02 pilot.
         // All 4/5-AI controls, including per-slot cleanup, now use
         // AiLeasedInput. Never let the compatibility wire bypass a lease
         // on MC01 or MC03-MC05, or touch a full-five AI mode channel.
-        if slot!=2 || !self.running[1].as_ref()
-            .and_then(|game|game.children[0].mc02_input.as_ref())
-            .is_some_and(|input|input.mode()==AgentControlMode::HumanPlusFourAi) {
+        let channel=self.running.get(1).and_then(|entry|entry.as_ref())
+            .and_then(|game|game.children[0].mc02_input.as_ref());
+        if slot!=2 || !channel.is_some_and(|input|
+            input.mode()==AgentControlMode::HumanPlusFourAi) {
             return Err(invalid("Legacy MC02 input is not bound to a hybrid child"));
+        }
+        // A legacy batch pinned its exact ORIGINAL child once. Do not
+        // allow later pulse OR cleanup to adopt another Minecraft process
+        // after reap/relaunch, even when its new input issue time passes
+        // the replacement Channel's monotonic bind fence. This comparison
+        // reads only the retained Channel tuple, not Win32 per heartbeat.
+        // Refuse BEFORE legacy_begin_write or any v4 memory mutation.
+        if !legacy_mc02_batch_matches_original(
+            batch_origin,channel.and_then(|input|input.original_binding())) {
+            return Err(invalid("MC02 batch original process changed before native input"));
         }
         let now=unsafe{GetTickCount64()};
         self.ai_leases.legacy_allowed(slot,now)?;
@@ -1566,8 +1588,11 @@ fn run() -> io::Result<()> {
                     sessions.launch_ai_experiment(slot,mode).map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
-                SessionRequest::Mc02Input {slot,keys,dx,dy,ttl_ms,issued_at_ms} => {
-                    sessions.legacy_mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)
+                SessionRequest::Mc02Input {
+                    slot,keys,dx,dy,ttl_ms,issued_at_ms,batch_origin,
+                } => {
+                    sessions.legacy_mc02_input(slot,keys,dx,dy,ttl_ms,
+                        issued_at_ms,batch_origin)
                         .map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]
@@ -1686,6 +1711,26 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn original_mc02_batch_pin_refuses_replaced_child_before_legacy_write() {
+        // Pure comparison fixture; production checks the retained binding
+        // BEFORE touching legacy lease state or native input memory.
+        let pin=Mc02BatchOrigin{pid:202,birth:134_000_000_000_000_000,
+            session:1};
+        let original=Some((pin.pid,pin.birth,pin.session));
+        assert!(legacy_mc02_batch_matches_original(Some(pin),original));
+        assert!(!legacy_mc02_batch_matches_original(Some(pin),
+            Some((999,pin.birth+100,1))),"replacement PID/birth");
+        assert!(!legacy_mc02_batch_matches_original(Some(pin),
+            Some((pin.pid,pin.birth+1,1))),"reused numeric PID");
+        assert!(!legacy_mc02_batch_matches_original(Some(pin),
+            Some((pin.pid,pin.birth,2))),"new Windows session");
+        assert!(!legacy_mc02_batch_matches_original(Some(pin),None));
+        assert!(legacy_mc02_batch_matches_original(None,original),
+            "old one-shot route retains its current independent admission");
+    }
+
     #[cfg(feature="mc02-native-input")]
     #[test]
     fn ai_writer_acquisition_requires_matching_original_launch_mode() {
