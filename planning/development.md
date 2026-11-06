@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Native lease-refusal provenance fence | The existing Rust CLI recognizes busy/mode actor refusal only when the error KIND and exact message agree. BrokenPipe, timeout, interruption and controller contention may no longer impersonate proven no-write; MCP keeps uncertainty and recovery on such responses | Rust negative actor-versus-transport fixtures AUTHORED_NOT_EXECUTED, no native controller/IPC change |
 | Stale ReleaseAll after newer neutral fence | The original per-slot Rust writer refuses an older neutral issue timestamp after a newer accepted neutral, not only after newer active input. This avoids invalidating v4 cursor revisions/epochs and pending raw key-up reads from replayed old neutral CLI calls; same-tick release remains admitted | Original four/five-client pure Rust boundary fixtures AUTHORED_NOT_EXECUTED; experimental compile-OFF |
 | Final native AI timestamp-group deadline | Original Rust Channel::write now receives the existing group deadline through the retained controller, checking GetTickCount64 before v4 publication after slow Windows HWND/mapping reads; late packets refuse and take existing partial-group neutral/recovery. Direct writes and ReleaseAll remain unchanged, no ABI/IPC migration | Rust hybrid four-AI/full five-AI boundary and CLI error fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Late native ACK cancellation fence | Existing MCP batch completion now refuses stale success if Stop or shutdown arrives during per-slot lease release after native ACK. All original cleanup attempts finish, the affected cohort remains quarantined, and neutral/lease failures keep priority | Four/five-AI late Stop and shutdown negative fixtures AUTHORED_NOT_EXECUTED |
@@ -292,13 +293,23 @@ Equal timestamp neutral remains the conservative tie-breaker.
 No extra owner, IPC call, per-frame read, feature activation or
 shared-memory ABI change was introduced.
 
-**Single next source action:** inspect the existing direct/legacy
-MC02 neutral caller alongside the original controller's 4/5-client
-lease-recovery path for an independently demonstrable stale-ACK or
-wrong-target error classification. Do not build a second recovery
-manager or add guard code without a specific source failure.
-Operator preference remains CODE FIRST. Rust/Node/MSVC source tests,
-Windows builds, installed input hooks, Minecraft gameplay and
-four/five-client acceptance remain NOT_EXECUTED/NOT_VERIFIED.
-Strict Cua Invoke-only is `BACKGROUND_UNAVAILABLE`; GitHub Actions
-CI stays disabled and `main` remains unchanged.
+This continuation traced the original MC02 neutral ACK, mode-bound
+4/5-client lease recovery, authenticated native SessionReply conversion,
+Rust CLI error mapping and the existing MCP
+`definitelyDeniedWriterLease` consumer. Process identity, writer epoch,
+and exact-owner neutral already fail closed. One cross-layer source gap:
+CLI previously trusted the TEXT of writer busy/mode mismatch errors
+without checking io::ErrorKind. A same-text BrokenPipe/timeout could
+be mistaken for definitive no-write, suppressing MCP's uncertain-acquire
+quarantine. The original CLI now requires matching expected actor kinds;
+transport errors remain OUTCOME_UNCERTAIN. It adds no new transport,
+IPC/schema/ABI change or default game input.
+
+**Single next source action:** inspect any other native CLI error
+classification which could incorrectly assert a definite no-mutation
+outcome before an original 4/5-AI writer lease. Make a change only
+for a concrete source mismatch, not status churn or duplicate state.
+Operator preference remains CODE FIRST. Node/Rust/C++ tests, Windows
+builds, experimental game hooks and Minecraft 4/5-client acceptance
+remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only stays
+`BACKGROUND_UNAVAILABLE`, CI disabled and `main` unchanged.

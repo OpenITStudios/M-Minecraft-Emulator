@@ -43,7 +43,11 @@ fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'sta
 }
 
 fn native_error(error: io::Error) -> &'static str {
-    if error.to_string()=="AI writer mode conflicts with original game channel" {
+    // A recognized actor refusal is definitive only when its error
+    // kind belongs to the retained controller. Lost IPC results cannot
+    // masquerade as proven pre-mutation mode refusals.
+    if matches!(error.kind(),io::ErrorKind::Other|io::ErrorKind::InvalidData) &&
+       error.to_string()=="AI writer mode conflicts with original game channel" {
         return "NATIVE_WRITER_MODE_MISMATCH";
     }
     // The original actor rejects an expired or pre-birth acquire epoch
@@ -73,12 +77,15 @@ fn native_error(error: io::Error) -> &'static str {
        error.to_string()=="AI timestamp group missed its native deadline" {
         return "AI_SEQUENCE_DEADLINE";
     }
-    // Fixed, allowlisted native writer-conflict status. Other controller
-    // errors are never forwarded raw into the MCP model response.
-    if matches!(error.to_string().as_str(),
-        "AI writer lease conflict; existing game input preserved" |
-        "AI slot is not owned by this live writer lease" |
-        "An AI slot is held by a different native writer") {
+    // Exact actor lease conflicts use PermissionDenied directly, or
+    // ErrorKind::Other when the authenticated SessionReply string is
+    // converted back to io::Error. Same-text transport errors are never
+    // definitive no-write evidence for the MCP recovery decision.
+    if matches!(error.kind(),io::ErrorKind::Other|io::ErrorKind::PermissionDenied) &&
+       matches!(error.to_string().as_str(),
+           "AI writer lease conflict; existing game input preserved" |
+           "AI slot is not owned by this live writer lease" |
+           "An AI slot is held by a different native writer") {
         return "NATIVE_WRITER_BUSY";
     }
     match error.kind() {
@@ -938,6 +945,32 @@ mod tests {
         assert_eq!(native_error(Error::other(
             "AI writer mode conflicts with original game channel")),
             "NATIVE_WRITER_MODE_MISMATCH");
+        assert_eq!(native_error(Error::new(ErrorKind::InvalidData,
+            "AI writer mode conflicts with original game channel")),
+            "NATIVE_WRITER_MODE_MISMATCH");
+        assert_eq!(native_error(Error::new(ErrorKind::PermissionDenied,
+            "AI writer lease conflict; existing game input preserved")),
+            "NATIVE_WRITER_BUSY");
+        for message in [
+            "AI writer lease conflict; existing game input preserved",
+            "AI slot is not owned by this live writer lease",
+            "An AI slot is held by a different native writer",
+            "AI writer mode conflicts with original game channel",
+        ] {
+            // This source-only negative fixture protects the same
+            // no-write error codes consumed by MCP's lease-acquire gate.
+            for kind in [
+                ErrorKind::BrokenPipe,ErrorKind::TimedOut,
+                ErrorKind::Interrupted,
+            ] {
+                assert_eq!(native_error(Error::new(kind,message)),
+                    "OUTCOME_UNCERTAIN",
+                    "transport loss is not native no-write evidence");
+            }
+            assert_eq!(native_error(Error::new(ErrorKind::WouldBlock,message)),
+                "NATIVE_BUSY",
+                "transport contention is not a proven actor rejection");
+        }
         assert_eq!(native_error(Error::new(ErrorKind::PermissionDenied,
             "AI transaction predates original game or is stale")),
             "NATIVE_WRITER_EPOCH_STALE");
