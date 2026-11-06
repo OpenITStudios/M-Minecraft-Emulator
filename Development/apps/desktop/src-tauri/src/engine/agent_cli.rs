@@ -158,7 +158,8 @@ fn mc02_batch_cleanup_error(error:&io::Error)->&'static str {
            "MC02 release predates newer neutral release" |
            "MC02 release request expired before native delivery" |
            "MC02 input predates original channel binding" |
-           "MC02 batch original process changed before native input") {
+           "MC02 batch original process changed before native input" |
+           "MC02 batch cleanup superseded by another native sender") {
         return "MC02_RELEASE_OBSOLETE";
     }
     "MC02_RELEASE_UNCONFIRMED"
@@ -985,6 +986,7 @@ mod tests {
             "MC02 release request expired before native delivery",
             "MC02 input predates original channel binding",
             "MC02 batch original process changed before native input",
+            "MC02 batch cleanup superseded by another native sender",
         ] {
             for kind in [ErrorKind::Other,ErrorKind::InvalidData] {
                 assert_eq!(mc02_batch_cleanup_error(&Error::new(kind,reason)),

@@ -239,7 +239,9 @@ impl Sessions {
     #[cfg(feature="mc02-native-input")]
     fn mc02_input(&self,slot:u32,keys:u32,dx:i32,dy:i32,
                   ttl_ms:u32,issued_at_ms:u64,
-                  group_deadline_ms:Option<u64>)->io::Result<()> {
+                  group_deadline_ms:Option<u64>,
+                  cli_sender:Option<(u32,u64)>,
+                  batch_cleanup:bool)->io::Result<()> {
         use crate::engine::workspace_surface::with_verified_native_window;
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GetForegroundWindow,IsHungAppWindow,IsIconic,IsWindowVisible,
@@ -262,7 +264,8 @@ impl Sessions {
         if release_only {
             // Independent exact-owner release never depends on another slot
             // still running or on any window keeping foreground focus.
-            return input.release_all(pid,birth,session,issued_at_ms);
+            return input.release_all(pid,birth,session,issued_at_ms,
+                cli_sender,batch_cleanup);
         }
         let target=window(child,false)
             .ok_or_else(||invalid("Verified AI game window unavailable"))?;
@@ -276,7 +279,7 @@ impl Sessions {
                 return Err(invalid("AI window is not playable"));
             }
             input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms,
-                human_hwnd,ai_hwnd,group_deadline_ms)
+                human_hwnd,ai_hwnd,group_deadline_ms,cli_sender)
         };
         if input.mode()==AgentControlMode::FiveAi {
             // No artificial human foreground requirement in all-five mode.
@@ -379,7 +382,7 @@ impl Sessions {
         self.ai_leases.begin_write(slot,owner,epoch,pid,birth,
             unsafe{GetTickCount64()},keys==0&&dx==0&&dy==0)?;
         self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms,
-            group_deadline_ms)?;
+            group_deadline_ms,None,false)?;
         // A new neutral ACK is the ONLY event that restores releasability.
         // This is native transport evidence, not Minecraft key-up proof.
         self.ai_leases.wrote(slot,owner,epoch,pid,birth,
@@ -388,7 +391,8 @@ impl Sessions {
     #[cfg(feature="mc02-native-input")]
     fn legacy_mc02_input(&mut self,slot:u32,keys:u32,dx:i32,dy:i32,
         ttl_ms:u32,issued_at_ms:u64,
-        batch_origin:Option<Mc02BatchOrigin>)->io::Result<()> {
+        batch_origin:Option<Mc02BatchOrigin>,
+        original_cli_sender:(u32,u64))->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         // Historical unleased Mc02Input is ONLY the hybrid MC02 pilot.
         // All 4/5-AI controls, including per-slot cleanup, now use
@@ -417,7 +421,8 @@ impl Sessions {
         // potential write; only a confirmed neutral ACK may clear the
         // legacy channel's possible 500-ms hold early.
         self.ai_leases.legacy_begin_write(slot,now);
-        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms,None)?;
+        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms,
+            None,Some(original_cli_sender),batch_origin.is_some())?;
         self.ai_leases.legacy_wrote(slot,unsafe{GetTickCount64()},
             keys==0&&dx==0&&dy==0);
         Ok(())
@@ -1591,8 +1596,14 @@ fn run() -> io::Result<()> {
                 SessionRequest::Mc02Input {
                     slot,keys,dx,dy,ttl_ms,issued_at_ms,batch_origin,
                 } => {
+                    // Reuse SAME verified named-pipe peer already pinned
+                    // by Endpoint::verify; no user-provided owner token,
+                    // extra per-pulse OS lookup or second controller.
+                    let source=manager.as_ref()
+                        .ok_or_else(||"Original MC02 CLI peer unavailable".to_string())?
+                        .input_sender();
                     sessions.legacy_mc02_input(slot,keys,dx,dy,ttl_ms,
-                        issued_at_ms,batch_origin)
+                        issued_at_ms,batch_origin,source)
                         .map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]

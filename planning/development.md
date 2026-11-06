@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Same-tick MC02 batch cleanup source pin | The original authenticated pipe already pins the CLI process PID/birth; original Channel now remembers its last accepted publisher. A legacy batch's implicit ReleaseAll requires exactly that publisher, even within the same GetTickCount64 millisecond. Explicit Stop and 4/5-AI neutral bypass the batch-only source match. Known refusal reuses MC02_RELEASE_OBSOLETE and canonical MCP no-fresh-retry safety | Rust 4/5-cohort and CLI error fixtures AUTHORED_NOT_EXECUTED; zero IPC/game ABI changes |
 | Same-millisecond active input admission fence | The existing original per-child Channel requires active issue time strictly newer than its last accepted active and neutral times. An equal-tick delayed CLI can no longer replace the current key/camera publication, while ReleaseAll preserves the explicit Stop safety tie-breaker | Pure source Rust 4-AI/5-AI negative fixture AUTHORED_NOT_EXECUTED; no IPC/v4 ABI/lease changes |
 | Original MC02 legacy batch process pin | One existing authenticated native Inspect pins original MC02 PID/birth/session before first batch pulse. The already-existing private Mc02Input variant gains one optional batch_origin field, omitted for older one-shot bytes; actor compares it to the retained Channel binding BEFORE marking legacy input or publishing v4. Every batch pulse and its neutral carry the same origin; replacement/initial unverified target fail closed. Canonical MCP does not neutralize another child after proven pre-dispatch refusal | Rust actor/wire/CLI and Node negative fixtures AUTHORED_NOT_EXECUTED; no new public command, game-shared ABI, writer or per-pulse target lookup |
 | Original MC02 child-bind timestamp fence | Original per-process native Channel now records its single monotonic bind time after exact child identity binding and refuses both active and ReleaseAll requests issued before or at that time, before v4 memory is mapped. Native batch cleanup classifies this known pre-publication refusal as MC02_RELEASE_OBSOLETE so the verified MCP sender cannot neutralize the newly launched game with another fresh CLI. This is a bounded old-child refusal; same-tick cross-CLI command origin after bind remains unknown | Pure Rust four/five-cohort and CLI error-kind fixtures AUTHORED_NOT_EXECUTED, no private IPC/ABI/enablement change |
@@ -287,39 +288,40 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-The original per-process Channel already rejects an active packet
-issued at/before its most recent ReleaseAll and any active packet
-STRICTLY older than its most recent accepted active command. A
-remaining native ordering hole was demonstrated: two CLI processes
-can issue active input on the SAME GetTickCount64 millisecond but
-reach the authenticated original actor in a different order. The
-second accepted equal-tick frame could overwrite the first button
-mask and camera deltas without establishing that it was newer.
+This source pass corrected the remaining same-tick legacy MC02
+batch-cleanup-vs-one-shot ambiguity. The existing authenticated
+named-pipe Endpoint already pinned every short-lived CLI peer by
+PID, process birth, executable identity, user/logon and Windows
+session. That tuple was not previously used for input ordering.
+The original Peer now caches its already-verified PID alongside
+its pinned birth, and its single controller passes this immutable
+pair to the original per-game Channel. No new OS target lookup or
+serialized request field was introduced.
 
-This source-only change makes the original Channel active admission
-require an issue timestamp STRICTLY GREATER than both latest active
-and latest neutral watermarks. Equal-tick active requests fail closed
-before any shared-memory packet/cursor/edge publication. The
-established ReleaseAll tie-breaker remains unchanged and explicitly
-issued same-tick Stop/neutral remains allowed to release controls.
-Existing 4/5-client lease book, original per-game identity, private
-batch_origin pin, IPC layout, v4 96-byte ABI and compile-OFF feature
-flags stay untouched. Source-level 4/5-AI fixtures are
-AUTHORED_NOT_EXECUTED; this is not Windows/game acceptance.
+The Channel remembers the LAST native publisher before any Unmap
+can make an already-written packet's reply uncertain. A legacy
+batch's IMPLICIT cleanup is allowed only for the exact same
+authenticated CLI process that last published native state.
+A one-shot active or Stop from a different CLI is not erased by
+an old batch cleanup—even when issued within the SAME millisecond.
+The original CLI maps this proven pre-publication mismatch to
+MC02_RELEASE_OBSOLETE, so the canonical MCP avoids a second
+freshly timestamped cleanup. Explicit user Stop and neutral-only
+4/5-client AI lease recovery are NEVER subject to batch matching,
+and keep their existing safe ReleaseAll priority.
 
-**Remaining exact ambiguity:** old batch cleanup and a newer active
-one-shot can share the same issue millisecond; ReleaseAll still wins
-ties for safety, and the original legacy one-shot request has no
-transaction nonce to distinguish old cleanup from operator Stop.
-Do not claim perfect same-tick cleanup isolation or game key-up.
+The witness is per-original-child only; it is not an OS security
+token, model-intent proof, independent input owner or game key-up
+attestation. Existing private IPC/96-byte v4 ABI, launch opt-in,
+human MC01 protection, child identity checks and single actor
+remain unchanged. Rust pure fixture AUTHORED_NOT_EXECUTED.
 
-**Single next source action:** assess whether the existing original
-Channel and its batch-origin data can differentiate an obsolete
-same-tick batch cleanup from explicitly requested neutral, while
-preserving Stop and avoiding new controller/status/protocol layers.
-If not safely source-demonstrable, document the bounded limitation
-rather than adding speculative guards. Operator preference CODE FIRST:
-Node/Rust/C++ tests, Windows builds and Minecraft 4/5-client input
-remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only is
-`BACKGROUND_UNAVAILABLE`, GitHub Actions CI disabled and
-`main` unchanged.
+**Single next source action:** inspect the same legacy batch's
+last attempted pulse when its native writer fails after possible
+publication, including acknowledgement ambiguity and the
+350/500-ms expiry rules. Fix a demonstrable gap only in original
+owners; avoid new status layers. Operator prefers CODE FIRST:
+Node/Rust/C++ tests, Windows builds, game hooks and Minecraft
+four/five-client acceptance stay NOT_EXECUTED/NOT_VERIFIED.
+Cua Invoke-only is still `BACKGROUND_UNAVAILABLE`; GitHub
+Actions disabled and `main` unchanged.

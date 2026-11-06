@@ -194,9 +194,16 @@ fn image(path: &std::path::Path) -> io::Result<(File, ImageId)> {
 pub(crate) struct Peer {
     process: OwnedHandle,
     _image: File,
+    pid:u32,
     birth: u64,
 }
 impl Peer {
+    // Original named-pipe endpoint already verified and pinned the CLI
+    // process. No extra per-pulse process query or caller-provided token.
+    #[cfg(feature="mc02-native-input")]
+    pub(crate) fn input_sender(&self)->(u32,u64) {
+        (self.pid,self.birth)
+    }
     pub(crate) fn alive(&self) -> bool {
         // Original handle remains pinned; PID reuse cannot turn it into another peer.
         let mut created: FILETIME = unsafe { mem::zeroed() };
@@ -385,6 +392,7 @@ impl Endpoint {
         let peer = Peer {
             process,
             _image: pinned,
+            pid,
             birth,
         };
         if !peer.alive() {

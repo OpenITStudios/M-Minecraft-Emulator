@@ -73,6 +73,18 @@ fn admit_native_active_order(
     Ok(())
 }
 
+// Batch cleanup is implicit: it may release only the same original CLI
+// that last published native keys. An explicit one-shot Stop and leased
+// AI recovery remain exempt so a same-tick key-up is always permitted.
+fn admit_batch_cleanup_sender(
+    requester:Option<(u32,u64)>,last:Option<(u32,u64)>,batch:bool
+)->Result<(),&'static str> {
+    if batch && (requester.is_none() || requester!=last) {
+        return Err("MC02 batch cleanup superseded by another native sender");
+    }
+    Ok(())
+}
+
 // The old unleased CLI request contains only an MC02 slot, not the
 // original child's PID/birth. If that child is reaped and relaunched
 // during the 500-ms request lifetime, target equality against the
@@ -160,6 +172,9 @@ pub(super) struct Channel {
     // Delayed packets and delayed old neutral requests must not overwrite
     // a newer active input written by another already-authorized CLI.
     last_active_issued_at_ms: AtomicU64,
+    // Per-original-game source of the last accepted v4 publication.
+    // Retained pipe peer PID+birth, NOT a new lease or shared-memory field.
+    last_cli_sender:std::sync::Mutex<Option<(u32,u64)>>,
 }
 impl Channel {
     pub(super) fn create(slot:u32, mode:Option<AgentControlMode>) -> io::Result<Option<Self>> {
@@ -177,6 +192,7 @@ impl Channel {
             sequence:AtomicU8::new(0),
             last_release_issued_at_ms:AtomicU64::new(0),
             last_active_issued_at_ms:AtomicU64::new(0),
+            last_cli_sender:std::sync::Mutex::new(None),
         }))
     }
     pub(super) fn mode(&self)->AgentControlMode {self.mode}
@@ -231,7 +247,9 @@ impl Channel {
     // losing focus must never block the attempt to clear MC02's controls.
     // No device, desktop cursor, external process or foreground is touched.
     pub(super) fn release_all(&self,pid:u32,birth:u64,session:u32,
-                              issued_at_ms:u64)->io::Result<()> {
+                              issued_at_ms:u64,
+                              cli_sender:Option<(u32,u64)>,
+                              batch_cleanup:bool)->io::Result<()> {
         if self.target!=Some((pid,birth,session)) {
             return Err(invalid("MC02 release target does not match owned process"));
         }
@@ -254,6 +272,21 @@ impl Channel {
             issued_at_ms,
             self.last_active_issued_at_ms.load(Ordering::SeqCst),
             self.last_release_issued_at_ms.load(Ordering::SeqCst)) {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid(reason));
+        }
+        let mut source=match self.last_cli_sender.lock() {
+            Ok(source)=>source,
+            Err(_)=>{
+                let _=unsafe{UnmapViewOfFile(view)};
+                return Err(invalid("MC02 last native sender unavailable"));
+            }
+        };
+        // A stale batch cleanup must not erase a newer same-tick
+        // one-shot publication from a DIFFERENT authenticated CLI.
+        // Explicit Stop has batch_cleanup=false and stays allowed.
+        if let Err(reason)=admit_batch_cleanup_sender(
+            cli_sender,*source,batch_cleanup) {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid(reason));
         }
@@ -288,13 +321,16 @@ impl Channel {
         // Never let a late pre-release active pulse resurrect controls.
         self.last_release_issued_at_ms.fetch_max(
             issued_at_ms,Ordering::SeqCst);
+        // Publication may have succeeded even when Unmap later fails.
+        *source=cli_sender;
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
         Ok(())
     }
     pub(super) fn write(&self,pid:u32,birth:u64,session:u32,
                         keys:u32,dx:i32,dy:i32,ttl_ms:u32,
                         issued_at_ms:u64,human_hwnd:usize,ai_hwnd:usize,
-                        group_deadline_ms:Option<u64>)->io::Result<()> {
+                        group_deadline_ms:Option<u64>,
+                        cli_sender:Option<(u32,u64)>)->io::Result<()> {
         // Final source-side defense: no direct caller may bypass the
         // admission rules or turn a release request into an active write.
         let action=crate::engine::native_clients_session::admit_native_input_frame(
@@ -382,6 +418,13 @@ impl Channel {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid("AI timestamp group missed its native deadline"));
         }
+        let mut source=match self.last_cli_sender.lock() {
+            Ok(source)=>source,
+            Err(_)=>{
+                let _=unsafe{UnmapViewOfFile(view)};
+                return Err(invalid("MC02 last native sender unavailable"));
+            }
+        };
         let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);
         let word=((expires as u64)<<32) | ((dy as i8 as u8 as u64)<<24)
              | ((dx as i8 as u8 as u64)<<16)
@@ -406,6 +449,9 @@ impl Channel {
         // watermark rejects any delayed older active packet thereafter,
         // without changing the game-visible 96-byte shared-state ABI.
         self.last_active_issued_at_ms.fetch_max(issued_at_ms,Ordering::SeqCst);
+        // Preserve the last published source BEFORE a possible Unmap
+        // failure can make the original native ACK uncertain.
+        *source=cli_sender;
         if unsafe{UnmapViewOfFile(view)}==0 {return Err(io::Error::last_os_error());}
         Ok(())
     }
@@ -415,7 +461,35 @@ impl Channel {
 mod rising_edge_counter_tests {
     use super::{checked_rising_press_counts,active_group_write_in_time,
         admit_native_release_order,admit_native_active_order,
-        issued_after_original_channel_bind};
+        admit_batch_cleanup_sender,issued_after_original_channel_bind};
+
+    #[test]
+    fn obsolete_same_tick_batch_cleanup_does_not_clear_another_native_cli() {
+        // Pure source fixture, not executed. Applies to either 4/5 AI
+        // per-client original channel; no Windows or game instance.
+        let batch=Some((201,134_000_000_000_000_000u64));
+        let one_shot=Some((202,134_000_000_000_100_000u64));
+        let stop=Some((203,134_000_000_000_200_000u64));
+        for cohort in [&[2,3,4,5][..],&[1,2,3,4,5][..]] {
+            for _slot in cohort {
+                // Same-tick ReleaseAll is otherwise admitted.
+                assert_eq!(admit_native_release_order(100,100,0),Ok(()));
+                assert_eq!(admit_batch_cleanup_sender(batch,batch,true),Ok(()));
+                assert_eq!(admit_batch_cleanup_sender(batch,one_shot,true),
+                    Err("MC02 batch cleanup superseded by another native sender"));
+                assert_eq!(admit_batch_cleanup_sender(batch,stop,true),
+                    Err("MC02 batch cleanup superseded by another native sender"));
+                assert_eq!(admit_batch_cleanup_sender(batch,None,true),
+                    Err("MC02 batch cleanup superseded by another native sender"));
+                // Explicit operator Stop can always neutralize safely,
+                // even when another source last published the controls.
+                assert_eq!(admit_batch_cleanup_sender(stop,batch,false),Ok(()));
+                assert_eq!(admit_batch_cleanup_sender(stop,one_shot,false),Ok(()));
+                // Normal 4/5 AI leased neutral stays outside this gate.
+                assert_eq!(admit_batch_cleanup_sender(None,batch,false),Ok(()));
+            }
+        }
+    }
 
     #[test]
     fn original_channel_refuses_ambiguous_same_tick_active_replacement() {
