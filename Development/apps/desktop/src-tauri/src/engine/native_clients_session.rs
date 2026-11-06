@@ -954,12 +954,27 @@ impl AiLeaseBook {
     // concurrent/following 4/5-AI lease cannot adopt it while the input
     // channel's bounded (<=500ms) TTL may still be alive. The retained
     // session actor calls legacy_allowed first and serializes both steps.
-    pub(crate) fn legacy_begin_write(&mut self,slot:u32,now:u64) {
-        // A failed native send can publish input before it errors.
-        // Mark possibly active BEFORE the original channel I/O. Expiry
-        // stops virtual polling but must not clear this recovery gate.
-        self.legacy_neutral_pending[(slot-1) as usize]=true;
-        self.legacy_until_ms[(slot-1) as usize]=now.saturating_add(500);
+    pub(crate) fn legacy_begin_write(&mut self,slot:u32,now:u64)->(u64,bool) {
+        // Preserve the EXACT previous legacy fence, including an older
+        // unresolved input. A later native rejection proven to occur
+        // BEFORE v4 publication may restore it; a lost transport reply
+        // or failure after packet publication MUST retain POSSIBLY_ACTIVE.
+        let index=(slot-1) as usize; // Original actor checked slot first.
+        let prior=(self.legacy_until_ms[index],
+                   self.legacy_neutral_pending[index]);
+        self.legacy_neutral_pending[index]=true;
+        self.legacy_until_ms[index]=now.saturating_add(500);
+        prior
+    }
+    // Only the original serialized actor may invoke this immediately
+    // after a DEFINITIVE pre-publication native writer refusal. Never
+    // use it for Unmap errors, missing IPC ACKs, timeout or unknown IO.
+    pub(crate) fn legacy_restore_unpublished(
+        &mut self,slot:u32,prior:(u64,bool)
+    ) {
+        let index=(slot-1) as usize;
+        self.legacy_until_ms[index]=prior.0;
+        self.legacy_neutral_pending[index]=prior.1;
     }
     pub(crate) fn legacy_wrote(&mut self,slot:u32,now:u64,neutral:bool) {
         self.claims[(slot-1) as usize]=None;
@@ -2275,6 +2290,50 @@ mod tests {
         assert!(book.acquire(&[(2,202,2002)],&a,&e3,1512,false).is_ok());
     }
 
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn definite_legacy_no_write_restores_prior_fence_for_four_and_five_ai() {
+        // Pure author-time lease-book fixture, no Windows native writer,
+        // Minecraft, IPC or source test execution. Restoration must NOT
+        // convert an already unresolved older input into neutral state.
+        let owner="a".repeat(32);
+        let four=[(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
+        let five=[(1,201,2201),(2,202,2202),(3,203,2203),
+                  (4,204,2204),(5,205,2205)];
+        for cohort in [&four[..],&five[..]] {
+            let mut book=AiLeaseBook::default();
+            book.legacy_allowed(2,1000).unwrap();
+            let before=book.legacy_begin_write(2,1000);
+            assert_eq!(before,(0,false));
+            // No packet was published by the refused attempt:
+            // a clean original channel stays available to new leases.
+            book.legacy_restore_unpublished(2,before);
+            let first=synthetic_ai_epoch(1);
+            book.acquire(cohort,&owner,&first,1001,false).unwrap();
+            book.release(cohort,&owner,&first,1002).unwrap();
+
+            // Prior acknowledged active input still has pending key-up
+            // even after 350/500-ms TTL expires. Restoring a failed
+            // newer request cannot erase this earlier uncertainty.
+            book.legacy_wrote(2,1010,false);
+            book.legacy_allowed(2,1511).unwrap();
+            let prior_active=book.legacy_begin_write(2,1511);
+            assert_eq!(prior_active,(1510,true));
+            book.legacy_restore_unpublished(2,prior_active);
+            let newer=synthetic_ai_epoch(2);
+            assert!(book.acquire(cohort,&owner,&newer,10_000,false).is_err(),
+                "previous unresolved legacy input is still quarantined");
+            // If native failed AFTER publishing or its ACK was lost,
+            // do NOT call restore: the latest conservative fence stays.
+            let uncertain=book.legacy_begin_write(2,10_001);
+            assert_eq!(uncertain,(1510,true));
+            assert!(book.acquire(cohort,&owner,&newer,11_000,false).is_err());
+            book.legacy_wrote(2,11_001,true); // fresh native neutral ACK
+            book.acquire(cohort,&owner,&newer,11_002,false).unwrap();
+            book.release(cohort,&owner,&newer,11_003).unwrap();
+        }
+    }
 
     #[cfg(feature="mc02-native-input")]
     #[test]

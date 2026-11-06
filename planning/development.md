@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Original legacy pre-publication fence rollback | The retained actor restores the exact previous legacy 500-ms/pending state only when its original Channel returns a known InvalidData refusal BEFORE v4 packet/cursor publication. An old unresolved pulse remains fenced, and unknown/Unmap-after-publish/transport errors never roll back. A definitive stale/wrong-publisher native refusal therefore does not unnecessarily quarantine a clean MC02 for all future 4/5-AI acquisitions | Pure four/five-cohort AiLeaseBook and actor error-kind negative fixtures AUTHORED_NOT_EXECUTED; no IPC/ABI/second controller change |
 | Expired MC02 batch native neutral recovery | The original Channel now compares the batch's original issued_at_ms and exact authenticated last-publisher PID/birth before deciding neutral admission. If 350ms pulse TTL and 500ms request age expire but the batch is STILL the last publisher, it may publish an exact original-child ReleaseAll using the current native commit time. If newer active/Stop or another sender exists, release is denied before publication and canonical MCP never sends a dangerous fresh fallback. Explicit Stop retains its original 500ms age admission | Pure Rust 4/5-cohort TTL/ack-loss negative fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI/second worker change |
 | Same-tick MC02 batch cleanup source pin | The original authenticated pipe already pins the CLI process PID/birth; original Channel now remembers its last accepted publisher. A legacy batch's implicit ReleaseAll requires exactly that publisher, even within the same GetTickCount64 millisecond. Explicit Stop and 4/5-AI neutral bypass the batch-only source match. Known refusal reuses MC02_RELEASE_OBSOLETE and canonical MCP no-fresh-retry safety | Rust 4/5-cohort and CLI error fixtures AUTHORED_NOT_EXECUTED; zero IPC/game ABI changes |
 | Same-millisecond active input admission fence | The existing original per-child Channel requires active issue time strictly newer than its last accepted active and neutral times. An equal-tick delayed CLI can no longer replace the current key/camera publication, while ReleaseAll preserves the explicit Stop safety tie-breaker | Pure source Rust 4-AI/5-AI negative fixture AUTHORED_NOT_EXECUTED; no IPC/v4 ABI/lease changes |
@@ -289,49 +290,38 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-This pass followed the original MC02 batch's last attempted native
-pulse through its 350ms game-input packet TTL, the 500ms native
-request age, original Channel::release_all, short-lived CLI
-MC02_RELEASE_OBSOLETE mapping and the canonical MCP fallback.
-The C++ Raw Input consumer explicitly preserves possibly pending
-key-up/mouse-up events when the active packet has expired; it may
-complete them only on a later real game poll. Therefore expiration
-is NEVER acknowledgement that the original game consumed the
-neutral release.
+This source pass reviewed Sessions::legacy_mc02_input and original
+AiLeaseBook's before-I/O legacy fence against exact pre-publication
+writer refusals. The actor always marked MC02 potentially active
+BEFORE entering the original Channel, correctly protecting against
+a failure AFTER v4 publication or a missing ACK. But an explicit
+stale timestamp, obsolete/wrong publisher, expired input, target
+binding mismatch or press-count exhaustion is rejected by the
+original Channel BEFORE publishing any v4 state. Those definite
+no-write responses previously left the NEW legacy pending fence
+armed, even if MC02 had been clean before the attempt; the original
+4/5-AI lease book would quarantine it indefinitely until an
+independent explicit neutral arrived.
 
-Previously a late original-batch cleanup with its pinned pulse
-issue timestamp was refused after 500ms, classified obsolete, and
-the canonical MCP did not attempt another neutral. If the original
-batch remained the LAST actual CLI publisher, this could leave
-native neutral unacknowledged despite no competing input writer.
-The existing Channel now reuses BOTH original issue-time watermarks
-and the already-verified original process/last CLI publisher. For
-a batch's implicit ReleaseAll ONLY, a >500ms request may publish
-neutral with a FRESH NATIVE COMMIT timestamp when the original
-unsuperseded issue time and SAME last authenticated publisher both
-match. The new release watermark also fences any late old active
-packet, without admitting expired active writes. A different
-one-shot/Stop/AI publisher, newer issue time, process replacement
-or missing original native publication fails closed BEFORE changing
-game v4 memory. Explicit one-shot Stop and leased 4/5-AI recovery
-retain their previous independent admission; normal ≤500ms
-ReleaseAll still uses its original issue time. No new IPC, CLI
-process retry, controller, external hook, shared ABI or enablement.
+The original AiLeaseBook now returns the prior (until_ms,pending)
+pair from legacy_begin_write and restores that EXACT prior pair
+only on the original actor's allowlisted InvalidData pre-publication
+errors. No extra owner, background worker or shared game state
+was introduced. A prior unresolved legacy pulse remains pending,
+even if its packet TTL expired; a later native UnmapViewOfFile
+failure, unknown/ambiguous Win32 error or transport ACK loss
+NEVER triggers rollback. Source-only actor and 4/5-cohort Rust
+negative fixtures are AUTHORED_NOT_EXECUTED. Exact one-controller,
+human-owned MC01, original child PID/birth/session and ReleaseAll
+contracts remain unchanged, as do the private IPC and v4 game ABI.
 
-Pure Rust 350/500ms expiration, latest-publisher, timestamp-order
-and late-active negative fixtures are AUTHORED_NOT_EXECUTED.
-Game-side key-up still requires real Minecraft reads and cannot
-be claimed from this source-only change.
-
-**Single next source action:** inspect the original pre-publication
-error path in Sessions::legacy_mc02_input for a definitive stale,
-wrong-publisher or expired refusal that leaves its legacy
-neutral-pending lease fence armed even though the native writer
-never published a packet. If source proves a safe no-write rollback,
-correct only the existing AiLeaseBook/actor with a pure fixture;
-preserve uncertain/Unmap-after-write pending state. Operator
-preference CODE FIRST. Rust/Node/C++ tests, Windows builds,
-installed hooks and 4/5-client Minecraft acceptance remain
-NOT_EXECUTED/NOT_VERIFIED; strict Cua Invoke-only remains
+**Single next source action:** perform a bounded final source
+integrity review of the original 4/5-AI lease/legacy native
+status paths, especially verified no-write error propagation
+through CLI and MCP, then STOP rather than adding another guard
+without a specific source failure. The operator preference
+remains CODE FIRST: Rust/Node/C++ tests, Windows builds and
+real Minecraft input/five-client acceptance stay
+NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only remains
 `BACKGROUND_UNAVAILABLE`, GitHub Actions CI disabled and
 `main` unchanged.

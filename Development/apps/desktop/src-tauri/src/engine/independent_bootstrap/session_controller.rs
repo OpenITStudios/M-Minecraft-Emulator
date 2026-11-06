@@ -33,6 +33,30 @@ fn legacy_mc02_batch_matches_original(
     pin.is_none_or(|p|original==Some((p.pid,p.birth,p.session)))
 }
 
+// Only exact InvalidData from the ORIGINAL Channel's named pre-v4
+// admission branches proves that the attempted command never changed
+// its game packet. This excludes unknown Win32 errors, UnmapViewOfFile
+// after publication, transport failures, missing/late ACK and every
+// arbitrary same-text IO kind. Restore the pre-attempt legacy fence
+// ONLY on these definitive rejects; do not clear older pending input.
+#[cfg(feature="mc02-native-input")]
+fn legacy_native_refused_before_publication(error:&io::Error)->bool {
+    error.kind()==io::ErrorKind::InvalidData &&
+        matches!(error.to_string().as_str(),
+            "MC02 release target does not match owned process" |
+            "MC02 input predates original channel binding" |
+            "MC02 release request expired before native delivery" |
+            "MC02 release predates newer active input" |
+            "MC02 release predates newer neutral release" |
+            "MC02 batch cleanup superseded by another native sender" |
+            "Unbound, expired or invalid MC02 input command" |
+            "MC02 input request expired before native delivery" |
+            "MC02 active input predates neutral release" |
+            "MC02 active input predates newer active input" |
+            "MC02 press edge count exhausted until input epoch reset" |
+            "MC02 last native sender unavailable")
+}
+
 // After partial-group failure, attempt a neutral release on EVERY slot
 // which may have reached native I/O. A failed release must not suppress
 // the remaining attempts or be hidden behind the original group error.
@@ -416,13 +440,19 @@ impl Sessions {
         }
         let now=unsafe{GetTickCount64()};
         self.ai_leases.legacy_allowed(slot,now)?;
-        // A failed native send can have published an active or neutral
-        // packet already. Fence out another 4/5-AI writer BEFORE the
-        // potential write; only a confirmed neutral ACK may clear the
-        // legacy channel's possible 500-ms hold early.
-        self.ai_leases.legacy_begin_write(slot,now);
-        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms,
-            None,Some(original_cli_sender),batch_origin.is_some())?;
+        // Native IO may fail AFTER v4 publication, so fence first.
+        // Only a proven pre-publication original writer refusal may
+        // restore the EXACT old fence, including old pending activity.
+        // Never let a lost ACK, Unmap error or unknown return make an
+        // uncertain native write appear neutral.
+        let prior=self.ai_leases.legacy_begin_write(slot,now);
+        if let Err(error)=self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms,
+            None,Some(original_cli_sender),batch_origin.is_some()) {
+            if legacy_native_refused_before_publication(&error) {
+                self.ai_leases.legacy_restore_unpublished(slot,prior);
+            }
+            return Err(error);
+        }
         self.ai_leases.legacy_wrote(slot,unsafe{GetTickCount64()},
             keys==0&&dx==0&&dy==0);
         Ok(())
@@ -1722,6 +1752,48 @@ pub(super) fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn legacy_prepublication_refusal_is_distinct_from_unknown_native_ack() {
+        // Pure error provenance check. All named original Channel
+        // branches reject before cursorRevision/packet publication.
+        use std::io::{Error,ErrorKind};
+        for message in [
+            "MC02 release target does not match owned process",
+            "MC02 input predates original channel binding",
+            "MC02 release request expired before native delivery",
+            "MC02 release predates newer active input",
+            "MC02 release predates newer neutral release",
+            "MC02 batch cleanup superseded by another native sender",
+            "Unbound, expired or invalid MC02 input command",
+            "MC02 input request expired before native delivery",
+            "MC02 active input predates neutral release",
+            "MC02 active input predates newer active input",
+            "MC02 press edge count exhausted until input epoch reset",
+            "MC02 last native sender unavailable",
+        ] {
+            assert!(legacy_native_refused_before_publication(
+                &Error::new(ErrorKind::InvalidData,message)));
+            for uncertain in [
+                ErrorKind::BrokenPipe,ErrorKind::TimedOut,
+                ErrorKind::Interrupted,ErrorKind::WouldBlock,
+                ErrorKind::Other,ErrorKind::PermissionDenied,
+            ] {
+                assert!(!legacy_native_refused_before_publication(
+                    &Error::new(uncertain,message)),
+                    "same text from a different error provenance is not proof");
+            }
+        }
+        for message in [
+            "The Windows memory view could not be unmapped",
+            "Original session request worker returned no result",
+            "AI group neutral release unconfirmed",
+        ] {
+            assert!(!legacy_native_refused_before_publication(
+                &Error::new(ErrorKind::InvalidData,message)));
+        }
+    }
+
     #[cfg(feature="mc02-native-input")]
     #[test]
     fn original_mc02_batch_pin_refuses_replaced_child_before_legacy_write() {
