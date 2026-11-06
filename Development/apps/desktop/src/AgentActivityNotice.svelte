@@ -1,4 +1,5 @@
 <script lang="ts">
+  import {onDestroy} from 'svelte';
   import type {ActivityView} from './app/presentation/agentActivity.js';
   export let view:ActivityView;
   let detailsElement: HTMLDetailsElement | undefined;
@@ -16,6 +17,17 @@
     if (detailsElement?.open && next instanceof Node && !detailsElement.contains(next))
       detailsElement.open = false;
   }
+
+  onDestroy(() => {
+    // A short-lived controller report may disappear while its summary owns
+    // keyboard focus. Restore focus only in that case, never from gameplay.
+    const focused = document.activeElement;
+    if (!(focused instanceof Node) || !detailsElement?.contains(focused)) return;
+    const playNav = document.querySelector<HTMLButtonElement>(
+      '.lt-topbar nav button[aria-current="page"]');
+    if (playNav?.isConnected && !playNav.disabled)
+      playNav.focus({preventScroll: true});
+  });
 </script>
 <svelte:window on:keydown={closeOnEscape} />
 

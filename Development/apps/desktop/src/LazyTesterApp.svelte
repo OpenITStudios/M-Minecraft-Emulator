@@ -95,6 +95,7 @@
   // UI-only keyboard focus references, never another game or window owner.
   let closeOneTrigger: HTMLButtonElement | null = null;
   let closeCancelButton: HTMLButtonElement | undefined;
+  let closeOneReviewElement: HTMLElement | undefined;
   // UI warning only; native presentation authority remains in workspace_surface.
   let uncertainWindowSlots = new Set<ProfileSlot>();
   let previewStatuses: PreviewStatus[] = [];
@@ -450,9 +451,14 @@
     });
   }
   function closeReviewKeydown(event: KeyboardEvent) {
-    if (closeOneSlot!==null && event.key==='Escape') {
-      event.preventDefault();event.stopPropagation();cancelCloseOne();
-    }
+    // Scoped to the focused review: Escape elsewhere belongs to its actual
+    // control, not to an unrelated Minecraft CloseOne confirmation.
+    if (closeOneSlot===null || event.key!=='Escape' ||
+        !(event.target instanceof Node) ||
+        !closeOneReviewElement?.contains(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    cancelCloseOne();
   }
   function requestCloseOne(slot: ProfileSlot, trigger: HTMLButtonElement) {
     if (closeInProgress || nativeExitReview || busy || closingOneSlot !== null) return;
@@ -942,7 +948,7 @@
           observePreview={image} onSelect={select} onLaunch={launch}
           onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}/>
         {#if closeOneSlot!==null}
-          <section class="lt-single-close-confirm" aria-label="Confirm one Minecraft close">
+          <section class="lt-single-close-confirm" aria-label="Confirm one Minecraft close" bind:this={closeOneReviewElement}>
             <h3>Close Minecraft - {closeOneSlot}?</h3>
             <p>Only this Minecraft session will be asked to exit normally. Other games will keep running. Save any work in Minecraft before continuing.</p>
             <div class="lt-actions">

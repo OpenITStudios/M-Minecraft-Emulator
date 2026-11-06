@@ -291,3 +291,63 @@ and consumer review. New and updated fixtures are
 `AUTHORED_NOT_EXECUTED`; WebView2/Svelte compatibility, live screen reader,
 Windows 920x620 at 100/125/150/200% DPI, native DWM, five mixed licensed
 sessions and Minecraft gameplay acceptance remain `NOT_EXECUTED`.
+
+
+## Keyboard focus and Windows visual acceptance matrix — source-only plan
+
+The original CloseOne review now handles **Escape only when the event
+originates inside the focused confirmation section**. Opening CloseOne still
+focuses **Cancel**; Escape there still cancels and restores focus to the
+original Close game button. An Escape pressed over Play navigation, the
+Coordinates/F3 disclosures, or another WebView control must not silently
+dismiss an unrelated close review. The original native CloseOne admission,
+normal-exit process owner and stale-inspection gates remain unchanged.
+
+Short-lived `AI & Testing` controller reports may vanish while keyboard
+focus is inside their disclosure. Immediately before the read-only
+component unmounts, it attempts to move focus to the existing currently
+selected top-navigation button, **only if focus is inside that disclosure**.
+It never redirects focus from a game, starts an observer, or retains an
+expired report. WebView2 runtime focus restoration is NOT_VERIFIED.
+
+The existing opt-in headless-browser journey had role queries for the
+older bare `Launch Minecraft - N` / `Select Minecraft - N` names. The
+present launcher names also expose observed status, so those source-only
+queries use action+slot prefixes. When the native state blocks Launch,
+assert against the exact keyed card and ensure its accessible name does
+not promise launch. This aligns test intent with product behavior; no
+fixture was run and no failure was masked.
+
+### Additional visual/interaction acceptance checks
+
+This is a **supplemental source-authored QA matrix**, not new test-case
+registry, a runnable script or an extension of the existing 306-case
+test master. All rows are `NOT_EXECUTED` until separately approved
+Windows/runtime evidence exists.
+
+| Check | View and setup | Required observed acceptance | Evidence and ceiling |
+| --- | --- | --- | --- |
+| UX-F01 | Play, selected running slot, close review open | Cancel receives initial focus; Escape inside review cancels, restores original Close game focus without a game exit | Keyboard trace + native CloseOne absence; TARGET_WINDOWS |
+| UX-F02 | Same review; keyboard focus manually moves to Play navigation | Escape outside review leaves review open and does not send CloseOne | Focus/DOM trace; TARGET_WINDOWS |
+| UX-F03 | Storage, cache/settings/full-clear review | Safe Cancel or exact identity input receives focus; Escape within review returns to initiating control | Keyboard trace; TARGET_WINDOWS |
+| UX-F04 | F3, Coordinates, optional AI & Testing disclosures | One open at a time, Escape returns to own summary; game focus/keys are not stolen | Keyboard focus trace + WebView2 version; TARGET_WINDOWS |
+| UX-F05 | Optional AI & Testing report expires while focused | Report disappears on schedule, no stale gameplay claims; focus returns to active nav only when owned by disappearing disclosure | Recorded keyboard focus + native report age; TARGET_WINDOWS |
+| UX-V01 | 920×620 at 100/125/150/200% display scaling | All five keyed MC cards remain ordered, central 16:9 viewport remains positive and fully in bounds; no clipped essential action | Sanitized screenshot + measured DOM/native DWM rectangles; TARGET_WINDOWS |
+| UX-V02 | 1280×900 and expanded desktop window, 5 mixed observed states | Names/status and long errors remain accessible; selected card never moves/reparents, no stale running count | Screenshot, text/accessibility snapshot, native state receipts; TARGET_WINDOWS |
+| UX-V03 | Long connection/recovery messages, narrow effective width | All support references and warnings remain reachable by Tab/scroll; no overlay covers the native game or critical button | Keyboard/scroll video or screenshot; TARGET_WINDOWS |
+| UX-V04 | Popup F3/Coordinates at minimum viewport and scrolled Settings | Popups stay within viewport, do not displace native tiles, do not carry stale selected game data | Panel bounds + screenshot + native selected identity; TARGET_WINDOWS |
+| UX-A01 | Windows High Contrast, 200% text, reduced motion | Focus outlines, action state and error meaning are visible without relying on color alone | Windows UI accessibility screenshots + screen reader traversal; TARGET_WINDOWS |
+| UX-S01 | Storage full clear in disposable profile, operator-approved separately | Typed exact profile name + acknowledgement + native token required; data is never cleared merely by UI validation | Synthetic/disposable safe setup and original native admission evidence; TARGET_WINDOWS + explicit destructive-action approval |
+
+For each executed row, capture one pinned 40-character commit SHA,
+Windows build, WebView2 version, DPI scaling, viewport dimensions, native
+window-binding identity as sanitized metadata, control focus before/after,
+expected/observed result, and PASS/FAIL/INCONCLUSIVE/BLOCKED. Do not
+upload credentials, private world names or raw machine identifiers.
+Record outcomes only through existing validation/handoff evidence paths.
+Source fixture authoring and repository review are `REMOTE_GITHUB`,
+not Windows, Minecraft gameplay, or five-client acceptance.
+
+**Current phase proof:** exact GitHub source/blob checks only.
+Svelte/typecheck, browser fixture execution, Windows focus/DPI testing,
+DWM runtime and Minecraft remain **NOT_EXECUTED**.

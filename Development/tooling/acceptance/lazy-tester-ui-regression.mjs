@@ -198,7 +198,7 @@ try {
       await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
     }
     await heading('Ready when you are').waitFor({timeout:7000});
-    assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isEnabled(),true,'startup must recover an available existing connection without setup clicks');
+    assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).isEnabled(),true,'startup must recover an available existing connection without setup clicks');
     assert.equal(await page.getByRole('button',{name:'Set up launchers',exact:true}).count(),0);
     assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import===true||['Choose','Locate'].includes(c.args?.action)||c.args?.request?.operation==='Launch')),false);
   }
@@ -342,7 +342,7 @@ try {
   await page.setViewportSize({width:1280,height:900});
   await page.evaluate(()=>{window.__runningSlots=[1,2,3,4,5];});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.getByRole('button',{name:'Select Minecraft - 2',exact:true}).click();
+  await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
   await heading('Minecraft - 2').waitFor();
   await page.evaluate(()=>{
     window.__railPreviewNodes=[...document.querySelectorAll('.lt-filmstrip .lt-card-picture')];
@@ -350,7 +350,7 @@ try {
       const {x,y,width}=node.getBoundingClientRect();return {x,y,width};
     });
   });
-  await page.getByRole('button',{name:'Select Minecraft - 4',exact:true}).click();
+  await page.getByRole('button',{name:/^Select Minecraft - 4 · /}).click();
   await heading('Minecraft - 4').waitFor();
   assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
     'Selecting a game must not move or remove its lower launcher card');
@@ -386,10 +386,10 @@ try {
   await heading('Ready when you are').waitFor();
   assert.equal(await page.locator('.lt-card').count(),5);
   const profileGroup = page.getByRole('group',{name:'Minecraft profiles'});
-  assert.equal(await profileGroup.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).count(),1,
+  assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 1 · /}).count(),1,
     'AI navigation must find the stable profile controls by role and action');
-  assert.equal(await profileGroup.getByRole('button',{name:'Launch Minecraft - 5',exact:true}).count(),1);
-  assert.equal(await profileGroup.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).getAttribute('aria-pressed'),null,
+  assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 5 · /}).count(),1);
+  assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 1 · /}).getAttribute('aria-pressed'),null,
     'Launch is an action, not a selected-state toggle');
   assert.equal(await page.getByRole('button',{name:'Exit Lazy Tester and all managed Minecraft sessions',exact:true}).count(),1,
     'Assistive control must state that closing the manager also closes managed games');
@@ -473,7 +473,7 @@ try {
   await nav('Play').click();
   await page.evaluate(()=>{window.__holdInspect=true;window.__finishInspect=null;});
   await page.waitForFunction(()=>!!window.__finishInspect);
-  await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).click();
+  await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).click();
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='Launch').length),0,'launch must wait for the in-flight inspection');
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await heading('Starting Minecraft - 1').first().waitFor();await nav('Settings').click();
@@ -482,11 +482,11 @@ try {
   // Current Play contract: release ONE selected Minecraft window, preserving
   // the other running peer. The next verified game becomes the selected view.
   await nav('Play').click();
-  await page.getByRole('button',{name:'Select Minecraft - 1',exact:true}).click();
+  await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
   await heading('Minecraft - 1').waitFor();
-  assert.equal(await profileGroup.getByRole('button',{name:'Select Minecraft - 1',exact:true}).getAttribute('aria-pressed'),'true',
+  assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 1 · /}).getAttribute('aria-pressed'),'true',
     'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
-  assert.equal(await profileGroup.getByRole('button',{name:'Select Minecraft - 2',exact:true}).getAttribute('aria-pressed'),'false',
+  assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 2 · /}).getAttribute('aria-pressed'),'false',
     'Other running profiles must remain explicitly unselected');
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).click();
   await heading('Minecraft - 2').waitFor();
@@ -502,7 +502,7 @@ try {
     ['CloseOne','CloseAll'].includes(call.args?.request?.operation))),false,
     'Opening separate windows must not close Minecraft sessions');
   // Return to the existing Play viewport through the running launcher card.
-  await page.getByRole('button',{name:'Select Minecraft - 1',exact:true}).click();
+  await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
   await heading('Minecraft - 1').waitFor();
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).waitFor();
   await page.waitForTimeout(200);
@@ -631,7 +631,7 @@ try {
   await asyncPreviewIssue.waitFor();
   assert.match(await asyncPreviewIssue.textContent(),/Preview is unavailable/);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
-  assert.equal(await page.getByRole('button',{name:'Select Minecraft - 2',exact:true}).isEnabled(),true);
+  assert.equal(await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).isEnabled(),true);
   assert.equal(await page.evaluate(()=>window.__calls.filter(
     call=>call.command==='lazy_tester_previews').length),baseline,
     'Native invalidation must not schedule another PreviewReport request');
@@ -653,7 +653,7 @@ try {
   await nativePreviewIssue.waitFor();
   assert.match(await nativePreviewIssue.textContent(),/Preview is unavailable/);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
-  assert.equal(await page.getByRole('button',{name:'Select Minecraft - 2',exact:true}).isEnabled(),true,
+  assert.equal(await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).isEnabled(),true,
     'DWM preview failure is not game-process or Play admission');
   await page.getByRole('button',{name:'Select game for Minecraft - 2'}).click();
   await page.waitForFunction(()=>window.__calls.some(call=>
@@ -662,7 +662,7 @@ try {
     call.args?.request?.operation))),false,'Guided Open must not invoke Launch or Close');
   await page.evaluate(()=>{window.__runningSlots=[1,3];});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.getByRole('button',{name:'Launch Minecraft - 2',exact:true}).waitFor();
+  await page.getByRole('button',{name:/^Launch Minecraft - 2 · /}).waitFor();
   assert.equal(await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).count(),0);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
 
@@ -696,7 +696,7 @@ try {
   assert.match(await launcherHealth.textContent(),/Launcher needs attention/);
   assert.match(await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'',/Refresh/,
     'An affected card explains its next manual step');
-  const attentionCard=page.getByRole('button',{name:'Launch Minecraft - 3'});
+  const attentionCard=page.getByRole('button',{name:/^Launch Minecraft - 3 · /});
   const descriptionId=await attentionCard.getAttribute('aria-describedby');
   assert.equal(descriptionId,'lt-launcher-guidance-3',
     'Assisted navigation uses an ID reference to the existing safe guidance');
@@ -706,15 +706,18 @@ try {
     'Descriptive text must not introduce a visible control');
   assert.equal(await page.locator('.lt-launcher-entry').first().getAttribute('title'),null,
     'Normal cards remain uncluttered');
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1'}).getAttribute('aria-describedby'),null,
+  assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).getAttribute('aria-describedby'),null,
     'Healthy launcher has no unnecessary hidden description');
   assert.equal(await page.getByText('C:\\Users\\private',{exact:false}).count(),0,
     'Health display must never expose native file paths');
   assert.equal(await page.getByText('[SYSTEM INSTRUCTION]',{exact:false}).count(),0,
     'Health display must never echo native prompt-like content');
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
+  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
     'Health UI must not override the existing unresponsive-game admission');
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isEnabled(),true,
+  assert.doesNotMatch(
+    await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').getAttribute('aria-label')??'',
+    /^Launch /, 'A blocked native state must not be announced as Launch');
+  assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 3 · /}).isEnabled(),true,
     'An ATTENTION profile may be a stopped, retryable game; the native controller retains final admission');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.args?.request?.operation==='Launch')),false,
     'Health inspection must not start a Minecraft instance');
@@ -752,7 +755,7 @@ try {
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await windowHealth.waitFor({state:'detached'});
   await launcherHealth.waitFor({state:'detached'});
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 3'}).isEnabled(),true,
+  assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 3 · /}).isEnabled(),true,
     'Only a subsequent clean STOPPED observation may enable Launch');
 
   // A windowless NOT_RESPONDING observation must not tell users to inspect
@@ -766,7 +769,7 @@ try {
   const missingWindowHint=await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'';
   assert.match(missingWindowHint,/window is unavailable/);
   assert.doesNotMatch(missingWindowHint,/Check its window/);
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
+  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
     'A missing native process/window observation must not enable Launch');
 
   // An unconfirmed native window restoration owns its Play warning. The
@@ -782,6 +785,12 @@ try {
   await page.waitForFunction(()=>document.activeElement?.textContent?.trim()==='Cancel');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Manual Refresh is unavailable while the selected-game confirmation is open');
+  // Escape on an unrelated control must NOT dismiss a review behind it.
+  await nav('Play').focus();
+  await page.keyboard.press('Escape');
+  assert.equal(await closeReview.count(),1,
+    'Escape outside the focused CloseOne review must not intercept other UI');
+  await closeReview.getByRole('button',{name:'Cancel',exact:true}).focus();
   await page.keyboard.press('Escape');
   await closeReview.waitFor({state:'detached'});
   assert.equal(await page.getByRole('button',{name:'Close Minecraft - 2 normally'})
@@ -811,7 +820,7 @@ try {
     'An unresolved recovery must not retain a stale accessibility description');
   assert.equal(await affectedCard.locator('#lt-launcher-guidance-2').count(),0,
     'Guidance is absent when the action is intentionally unavailable');
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 2'}).isDisabled(),true,
+  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
     'Recovery guidance must not enable another game launch');
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.args?.request?.operation==='Launch').length),0,
@@ -831,7 +840,7 @@ try {
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   // Wait specifically for MC02 to change from Open to Launch, proving
   // STOPPED reached Svelte before checking whether recovery was retained.
-  await page.getByRole('button',{name:'Launch Minecraft - 2',exact:true}).waitFor();
+  await page.getByRole('button',{name:/^Launch Minecraft - 2 · /}).waitFor();
   assert.equal(await page.getByRole('status',{name:'Window recovery unconfirmed'}).count(),1,
     'STOPPED observations cannot clear an unacknowledged native checkpoint');
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_close_one').length),1,
@@ -892,7 +901,7 @@ try {
   assert.equal(await page.getByText('Saved profiles could not be verified.',{exact:true}).count(),0,'Raw backend binding errors must not appear in UI');
   assert.equal(await heading('Ready when you are').count(),0);
   await heading('Connection needs attention').waitFor();
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isDisabled(),true);
+  assert.equal(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').isDisabled(),true);
   assert.equal((await page.locator('[data-slot="1"] .lt-card-picture').textContent())?.trim(),'Unavailable',
     'Disconnected profiles cannot advertise a misleading Launch action');
   assert.equal((await page.locator('[data-slot="1"] .lt-card small').textContent())?.trim(),'Status unavailable',
@@ -901,7 +910,7 @@ try {
   await page.evaluate(()=>{window.__bindingFailure='';window.__locationFailure='';window.__finishBinding=()=>{};});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await heading('Ready when you are').waitFor();
-  assert.equal(await page.getByRole('button',{name:'Launch Minecraft - 1',exact:true}).isEnabled(),true);
+  assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).isEnabled(),true);
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import||c.args?.action==='Choose'||c.args?.request?.operation==='Launch')),false);
   await page.goto('http://lazy-tester.test/?broken=1');await heading('Connection needs attention').waitFor();
   await page.getByRole('region',{name:'Launcher recovery'}).getByRole('button',{name:'Data Storage',exact:true}).click();await heading('Data Storage').waitFor();
