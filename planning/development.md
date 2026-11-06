@@ -36,10 +36,13 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
-  Latest owner-local C++ correction retains over-limit virtual cursor
-  deltas as bounded prefixes instead of losing them, and rechecks native
-  publication before cursor consumption. No new writer, driver, ABI
-  or default build; C++ constexpr fixtures AUTHORED_NOT_EXECUTED.
+  Latest source review found a missing closing brace after
+  `observedKeyboard`, which left the virtual cursor functions nested
+  inside a Win32 hook and made both C++ feature variants structurally
+  invalid. Restored the function boundary without altering cursor
+  or native input semantics. Both compile-flag source paths have
+  balanced scope in a static review; compiler/build NOT_EXECUTED.
+  The previous bounded cursor backlog fix remains unchanged.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -84,6 +87,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Virtual cursor scope correction | Close `observedKeyboard` before the virtual cursor implementation so optional Raw-buffer and default polling branches remain namespace-level functions | Both C++ preprocessor branches statically scope-balanced; MSVC tests/build NOT_EXECUTED |
 | Virtual cursor bounded backlog | Per-poll cursor move limited to ±32767 without dropping remaining accumulated look; same native revision can deliver its unconsumed prefix after exact publication revalidation | C++ compile-time negative boundary assertions AUTHORED_NOT_EXECUTED; compile-OFF |
 | Win32 last native-write fence | Additional lightweight v4 publication check after keyboard diagnostics; rollback tentative async press cursor on lost native publication, zero held KeyState and scrub KeyboardState | C++ constexpr negatives authored NOT_EXECUTED; compile-OFF |
 | Win32 virtual polling final-read gate | Preserve publication revision with initial virtual input; recheck full target/focus/TTL before returning keyboard masks, committing async press counts, or consuming camera delta; scrub GetKeyboardState on late neutral | C++ negative constexpr fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -212,15 +216,14 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only inspect cursor recentering and latest native packet
-admission in the original C++ input consumer.** Pin fresh `Local`.
-Check `observedSetCursor` and `observedCursor` against the
-controller-owned cursor epoch, the new bounded cumulative-look read
-cursor and the original ReleaseAll. If a proven stale/cross-thread
-cursor problem exists, correct it in the current owner with bounded
-source-only fixtures; otherwise retain the existing code and move to
-the next unfinished native integration contract. Do not add a new
-driver, controller, global input route, backend, status ledger or
-package. Cua Invoke-only remains `BACKGROUND_UNAVAILABLE`;
-experimental native input stays compile-OFF. Node/Rust/C++ tests,
-builds, CI, Windows and Minecraft remain NOT_EXECUTED/NOT_VERIFIED.
+**Source-only examine the original `GetCursorPos` / `SetCursorPos`
+interleaving after the scope correction.** Re-pin `Local`, trace the
+same-process virtual position atomics, the existing bounded delta
+consumer, and the Rust writer's ReleaseAll/epoch publication. Change
+only a concrete cursor correctness defect; avoid additional state,
+new controller/driver, foreground takeover, runtime gate relaxation,
+or status churn. Keep default native input compile-OFF, Cua
+Invoke-only `BACKGROUND_UNAVAILABLE`, protected human MC01 and
+the original pending Raw Input key-up/mouse-up route. C++/Rust/Node
+tests, Windows builds, CI, installed game and five-client execution
+remain NOT_EXECUTED until operator authorization.

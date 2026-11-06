@@ -553,6 +553,7 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
     }
     SetLastError(previous);
     return TRUE;
+}
 
 #if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
 // Do not discard all pending relative look when the original controller
