@@ -28,6 +28,8 @@
           --lt-danger:#efacb6;
           --lt-viewport-bg:#101319;
           --lt-danger-hover:#c42b1c;
+          --lt-control-min-height:36px;
+          --lt-radius-control:6px;
           display:flex;
           flex-direction:column;
           height:100vh;
@@ -653,4 +655,36 @@
 }
 @media (forced-colors:active){
   .lt-settings-layout input[aria-invalid="true"]{border-color:ButtonText}
+}
+
+/* Minimal Professional — consistent actions in Settings and Storage only.
+   The existing native Play viewport and all five DWM thumbnail targets
+   intentionally receive no new width, height, padding or layout rules. */
+.lt-settings-layout :is(.lt-actions > button,.lt-setting > button,.lt-danger-zone > button){
+  min-height:var(--lt-control-min-height);
+  border-radius:var(--lt-radius-control);
+  font-size:13px;
+  line-height:1.3;
+}
+.lt-settings-layout :is(.lt-group > h2,.lt-storage-packs summary,.lt-advanced summary){
+  line-height:1.4;
+}
+.lt-settings-layout .lt-group > h2{margin-bottom:12px}
+.lt-settings-layout .lt-actions > button.lt-secondary:hover:not(:disabled),
+.lt-settings-layout .lt-setting > button.lt-secondary:hover:not(:disabled){
+  background:var(--lt-selected-bg);
+}
+.lt-settings-layout .lt-cache-confirm{border-left:3px solid var(--lt-accent)}
+.lt-settings-layout .lt-delete-confirm{border-left-color:var(--lt-danger)}
+/* Status emphasis only: do not alter card geometry, thumbnail width or row height.
+   Color is supplementary to the original exact native-observation text. */
+.lt-filmstrip .lt-card small.lt-status-attention{color:var(--lt-warning)}
+.lt-filmstrip .lt-card small.lt-status-pending{color:var(--lt-muted)}
+.lt-filmstrip .lt-card small.lt-status-selected{color:var(--lt-accent)}
+/* Preview failure is an observation issue, not proof the game has stopped. */
+.lt-app .lt-preview-slot-issue{color:var(--lt-warning)!important}
+@media (forced-colors:active){
+  .lt-filmstrip .lt-card small.lt-status-attention,
+  .lt-filmstrip .lt-card small.lt-status-selected{color:CanvasText}
+  .lt-app .lt-preview-slot-issue{color:CanvasText!important}
 }

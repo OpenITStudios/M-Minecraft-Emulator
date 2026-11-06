@@ -220,3 +220,38 @@ associated owners are outside this change.
 New regression expectations are `AUTHORED_NOT_EXECUTED`. Svelte typecheck,
 Windows keyboard, screen reader, 920×620 and DPI layouts, installer,
 five-client gameplay and native recovery remain `NOT_EXECUTED`.
+
+## Minimal Professional — visual hierarchy and launcher status labels
+
+The active five-card launcher rail is unchanged in number, keyed slot order,
+thumbnail positioning, 16:9 aspect ratio, and selected native presentation.
+The accessibility name on a card describes the **observed action**, not an
+invented launch: select when the native state is `RUNNING`, launch only
+when the existing `canRequestLaunch` predicate permits it, and otherwise
+announce the last native state (or unavailable connection). This is
+presentation-only; native admission remains authoritative.
+
+Launcher card status text is unchanged. The selected status uses the
+existing accent color, and `ATTENTION` / `NOT_RESPONDING` use the warning
+color. A failed DWM preview is amber rather than a fatal-game error.
+Color is supplementary to the English textual status, not a status source,
+gameplay readiness indicator, or new alarm mechanism. No preview/card
+height or width is altered.
+
+General Settings receives explicit section names for Graphics, Frame
+Limits, App behavior and Installation & data. Data Storage groups its
+existing three measurements under **Storage overview** and exposes the
+original destructive section with an accessible heading. No metrics,
+permissions, profile data or automatic observations are added.
+
+Settings/Storage action buttons have one shared 36px minimum height,
+13px label size, and control radius; hover/review styling is scoped only
+to Settings and Storage. The new token does not resize Play controls,
+the five-card rail, or game windows. A small set of previously stale source
+fixture expectations for the existing **Refresh** recovery wording were
+aligned with the current source contract, without changing product behavior.
+
+**Evidence:** exact GitHub source review only; fixtures are
+`AUTHORED_NOT_EXECUTED`. Svelte/TypeScript, native Windows visual
+accessibility, screen reader, 920x620 and DPI scaling, DWM preview geometry,
+and five-client Minecraft acceptance remain `NOT_EXECUTED`.

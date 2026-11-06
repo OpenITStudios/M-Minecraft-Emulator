@@ -29,6 +29,16 @@
   // A changing native enumeration never changes a launcher's visual slot.
   // Existing keyed elements retain their original native DWM preview targets.
   $: orderedProfiles = [...profiles].sort((left, right) => left.slot - right.slot);
+
+  // Accessible action names describe what is currently possible. A blocked or
+  // unobserved launcher is never announced as a ready-to-launch button.
+  function cardActionName(profile: ProfileSession): string {
+    const name = 'Minecraft - ' + profile.slot;
+    if (!available || !bindingConfigured) return name + ' · Status unavailable';
+    if (profile.state === 'RUNNING') return 'Select ' + name;
+    if (canRequestLaunch(profile)) return 'Launch ' + name;
+    return name + ' · ' + labels[profile.state];
+  }
 </script>
 
 <div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">
@@ -40,14 +50,21 @@
     <div class="lt-launcher-entry" data-slot={profile.slot} title={guidance??undefined}>
       <button class="lt-card" class:selected={active===profile.slot&&!detached}
         aria-pressed={profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
-        aria-label={(profile.state==='RUNNING'?'Select ':'Launch ')+'Minecraft - '+profile.slot}
+        aria-label={cardActionName(profile)}
         aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
         disabled={busy||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
         <strong>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
         <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
-        <small>{!available||!bindingConfigured?'Status unavailable':active===profile.slot&&!detached&&profile.state==='RUNNING'?'Selected in Play':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
+        <small class={available&&bindingConfigured
+          ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'
+            ? 'lt-status-attention'
+            : profile.state==='STARTING'
+              ? 'lt-status-pending'
+              : active===profile.slot&&!detached&&profile.state==='RUNNING'
+                ? 'lt-status-selected' : '')
+          : ''}>{!available||!bindingConfigured?'Status unavailable':active===profile.slot&&!detached&&profile.state==='RUNNING'?'Selected in Play':profile.state==='RUNNING'&&separateSlots.has(profile.slot)?'Separate window':profile.state==='RUNNING'?'Running in background':labels[profile.state]}</small>
       </button>
       {#if guidance}<span id={'lt-launcher-guidance-'+profile.slot} hidden>{guidance}</span>{/if}
       {#if healthItem}

@@ -552,8 +552,8 @@ describe('Lazy Tester existing-card guidance',()=>{
   });
   it('explains uncertain status using the original manual recovery',()=>{
     expect(launcherCardGuidance({...stopped,state:'STARTING'},true)).toContain('starting');
-    expect(launcherCardGuidance({...stopped,state:'NOT_RESPONDING'},true)).toContain('Check status');
-    expect(launcherCardGuidance({...stopped,state:'ATTENTION'},true)).toContain('Check status');
+    expect(launcherCardGuidance({...stopped,state:'NOT_RESPONDING'},true)).toContain('Refresh');
+    expect(launcherCardGuidance({...stopped,state:'ATTENTION'},true)).toContain('Refresh');
     expect(launcherCardGuidance({...stopped,process:{pid:9,createdFileTime:'1',sessionId:1,windowHandle:'0x9',responding:true}},true)).toContain('Refresh');
   });
   it('distinguishes a missing game window from an unresponsive window',()=>{
@@ -649,7 +649,7 @@ describe('Guided Recovery pending-work and stale-action hardening',()=>{
     expect(guidedRecoveryAllowed(issue,{...profile,process:{...profile.process!,responding:false}},2,'open',gate)).toBe(false);
     expect(guidedRecoveryAllowed(issue,{...profile,process:null},2,'open',gate)).toBe(false);
   });
-  it('keeps Check status as a read-only recommendation with the same pending-work guard',()=>{
+  it('keeps Refresh as a read-only recommendation with the same pending-work guard',()=>{
     const check={...issue,kind:'window' as const,action:'refresh' as const};
     const blockedProfile={...profile,state:'NOT_RESPONDING' as const,process:null};
     expect(guidedRecoveryAllowed(check,blockedProfile,2,'refresh',gate)).toBe(true);
