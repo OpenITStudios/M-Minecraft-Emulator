@@ -29,6 +29,15 @@ fn checked_rising_press_counts(previous:u64,rising:u8)->Option<u64> {
     Some(counts)
 }
 
+// Group deadlines follow the same original Rust actor to the final
+// native publication. Slow HWND checks/MapViewOfFile can outlast
+// the actor's initial 150-ms admission; a 500-ms age guard alone
+// is too weak. Standalone active input and neutral ReleaseAll retain
+// their existing separate admissions.
+fn active_group_write_in_time(now:u64,group_deadline_ms:Option<u64>)->bool {
+    group_deadline_ms.is_none_or(|limit|now!=0 && limit!=0 && now<=limit)
+}
+
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
 const VERSION: u32 = 4;
@@ -218,7 +227,8 @@ impl Channel {
     }
     pub(super) fn write(&self,pid:u32,birth:u64,session:u32,
                         keys:u32,dx:i32,dy:i32,ttl_ms:u32,
-                        issued_at_ms:u64,human_hwnd:usize,ai_hwnd:usize)->io::Result<()> {
+                        issued_at_ms:u64,human_hwnd:usize,ai_hwnd:usize,
+                        group_deadline_ms:Option<u64>)->io::Result<()> {
         // Final source-side defense: no direct caller may bypass the
         // admission rules or turn a release request into an active write.
         let action=crate::engine::native_clients_session::admit_native_input_frame(
@@ -299,6 +309,15 @@ impl Channel {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid("MC02 press edge count exhausted until input epoch reset"));
         };
+        // The actor's pre-group check happened before potentially delayed
+        // native identity, HWND and view mapping work. Fail closed at the
+        // LAST original-writer boundary, before changing its sequence or
+        // any v4 shared-memory field. Group neutral cleanup uses ReleaseAll
+        // and is never blocked by this active-only deadline.
+        if !active_group_write_in_time(unsafe{GetTickCount64()},group_deadline_ms) {
+            let _=unsafe{UnmapViewOfFile(view)};
+            return Err(invalid("AI timestamp group missed its native deadline"));
+        }
         let sequence=self.sequence.fetch_add(1,Ordering::Relaxed).wrapping_add(1);
         let word=((expires as u64)<<32) | ((dy as i8 as u8 as u64)<<24)
              | ((dx as i8 as u8 as u64)<<16)
@@ -330,7 +349,24 @@ impl Channel {
 
 #[cfg(test)]
 mod rising_edge_counter_tests {
-    use super::checked_rising_press_counts;
+    use super::{checked_rising_press_counts,active_group_write_in_time};
+
+    #[test]
+    fn per_slot_group_deadline_is_rechecked_before_v4_publication() {
+        // Pure authored negative fixture, no Windows/game/IPC execution.
+        // The original actor may check at 1100, but the final native
+        // writer must refuse a slot arriving after the 1150 cutoff.
+        for cohort in [&[2,3,4,5][..],&[1,2,3,4,5][..]] {
+            for _slot in cohort {
+                assert!(active_group_write_in_time(1150,Some(1150)));
+                assert!(!active_group_write_in_time(1151,Some(1150)));
+                assert!(!active_group_write_in_time(1150,Some(0)));
+            }
+        }
+        // Direct opt-in writes use the existing per-request TTL and epoch
+        // admission; ReleaseAll bypasses this active-only writer entirely.
+        assert!(active_group_write_in_time(1151,None));
+    }
 
     #[test]
     fn per_key_counter_rejects_wrap_before_any_partial_publish() {

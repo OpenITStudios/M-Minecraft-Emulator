@@ -62,7 +62,16 @@ NOT_VERIFIED.
   successful action receipt. The original MCP now rechecks cancellation
   after every lease release attempt, keeps the selected cohort in
   explicit-recovery quarantine, and never replays it. Four/five-AI
-  late Stop/shutdown fixtures AUTHORED_NOT_EXECUTED.
+  late Stop/shutdown fixtures AUTHORED_NOT_EXECUTED. The next native
+  partial-group review found a demonstrable final-write deadline gap:
+  the actor checked 150-ms lateness BEFORE potentially slow HWND/root
+  verification and memory mapping; Channel::write only checked 500-ms
+  request age and could publish after the group's deadline. The same
+  actor deadline is now passed internally into the existing Rust writer
+  and rechecked immediately before v4 publication. Direct single-slot
+  input and ReleaseAll remain unchanged; the CLI keeps explicit
+  AI_SEQUENCE_DEADLINE only for a genuine actor reply, not lost IPC.
+  Rust negative fixtures AUTHORED_NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -107,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Final native AI timestamp-group deadline | Original Rust Channel::write now receives the existing group deadline through the retained controller, checking GetTickCount64 before v4 publication after slow Windows HWND/mapping reads; late packets refuse and take existing partial-group neutral/recovery. Direct writes and ReleaseAll remain unchanged, no ABI/IPC migration | Rust hybrid four-AI/full five-AI boundary and CLI error fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Late native ACK cancellation fence | Existing MCP batch completion now refuses stale success if Stop or shutdown arrives during per-slot lease release after native ACK. All original cleanup attempts finish, the affected cohort remains quarantined, and neutral/lease failures keep priority | Four/five-AI late Stop and shutdown negative fixtures AUTHORED_NOT_EXECUTED |
 | Observed 4/5-AI post-lease PNG fence | The existing MCP round retains the exact delivered frame basis across the native lease wait, rejects stale/advanced images before batch dispatch, and reports the actual native request start time. No second observer or controller | Hybrid four-AI / full five-AI negative fixtures AUTHORED_NOT_EXECUTED; no Minecraft game input proof |
 | Integrated virtual focus return fence | Existing game-local GetForegroundWindow/GetActiveWindow/GetFocus detours now pin original revision and recheck live native packet, OGLES ownership, human foreground and expiry before returning spoofed focus; native ReleaseAll/replacement cannot leave an acknowledged stale focus result after the check | Reuses existing sameActivePublication C++ negative fixtures; compile-OFF; Windows tests NOT_EXECUTED |
@@ -282,20 +292,22 @@ Transport start now reflects actual batch handoff. No new controller,
 driver, shared-memory ABI, default feature enablement, or background
 dispatch provider was introduced.
 
-This source pass closes the demonstrated late native-ACK cancellation
-gap. A Stop/shutdown after native transport ACK but during remaining
-original per-slot lease releases now prevents a misleading success
-response. The same native cleanup completes independently per slot;
-stronger neutral/lease failures retain priority, cancellation latches
-the whole selected cohort, and no input is replayed. No second input
-owner, driver, new IPC/ABI, default activation or game test.
+This source pass closes the demonstrated final native group-deadline
+gap. The actor already checked the 150-ms group cutoff, but slow window
+validation or view mapping could delay an otherwise authorized frame
+until after that cutoff. The original per-client Rust writer now
+enforces the SAME deadline immediately before first shared-memory
+publication, keeping the existing partial-group neutral, MCP quarantine
+and explicit recovery. CLI preserves a confirmed actor deadline refusal
+without treating broken IPC as a verified actor response. This changes
+no public wire format, 96-byte v4 ABI, installed payload, input hook
+or default feature state.
 
-**Single next source action:** review the original Rust native writer's
-partial-group failure and CLI-side neutral response only for a
-source-demonstrable gap not covered by existing lease/provenance guards.
-Avoid speculative layers. Operator preference remains CODE FIRST:
-Node/Rust/C++ tests, builds, Windows installs, Minecraft gameplay and
-four/five-client acceptance remain NOT_EXECUTED/NOT_VERIFIED until
-separately approved. Cua strict Invoke-only stays
-`BACKGROUND_UNAVAILABLE`; GitHub Actions CI is disabled and
-`main` stays unchanged.
+**Single next source action:** review the existing original per-slot
+ReleaseAll timestamp ordering and recovery-only lease boundary for a
+concrete, not-yet-fixed mismatch. Change only the owning source path
+if evidence warrants it; avoid independent controllers or redundant
+state. Operator preference is CODE FIRST. Node/Rust/C++ tests and
+builds, Windows sessions, Minecraft gameplay and four/five-client
+acceptance remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only
+stays `BACKGROUND_UNAVAILABLE`; CI disabled and `main` unchanged.

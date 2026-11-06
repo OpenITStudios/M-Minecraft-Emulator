@@ -228,7 +228,8 @@ impl Sessions {
 
     #[cfg(feature="mc02-native-input")]
     fn mc02_input(&self,slot:u32,keys:u32,dx:i32,dy:i32,
-                  ttl_ms:u32,issued_at_ms:u64)->io::Result<()> {
+                  ttl_ms:u32,issued_at_ms:u64,
+                  group_deadline_ms:Option<u64>)->io::Result<()> {
         use crate::engine::workspace_surface::with_verified_native_window;
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             GetForegroundWindow,IsHungAppWindow,IsIconic,IsWindowVisible,
@@ -265,7 +266,7 @@ impl Sessions {
                 return Err(invalid("AI window is not playable"));
             }
             input.write(pid,birth,session,keys,dx,dy,ttl_ms,issued_at_ms,
-                human_hwnd,ai_hwnd)
+                human_hwnd,ai_hwnd,group_deadline_ms)
         };
         if input.mode()==AgentControlMode::FiveAi {
             // No artificial human foreground requirement in all-five mode.
@@ -357,7 +358,8 @@ impl Sessions {
     }
     #[cfg(feature="mc02-native-input")]
     fn ai_leased_input(&mut self,slot:u32,keys:u32,dx:i32,dy:i32,
-        ttl_ms:u32,issued_at_ms:u64,owner:&str,epoch:&str)->io::Result<()> {
+        ttl_ms:u32,issued_at_ms:u64,owner:&str,epoch:&str,
+        group_deadline_ms:Option<u64>)->io::Result<()> {
         use windows_sys::Win32::System::SystemInformation::GetTickCount64;
         let (_,pid,birth)=self.ai_lease_target(slot)?;
         // Before touching the original shared channel, conservatively
@@ -366,7 +368,8 @@ impl Sessions {
         // authorize lease release if this write becomes uncertain.
         self.ai_leases.begin_write(slot,owner,epoch,pid,birth,
             unsafe{GetTickCount64()},keys==0&&dx==0&&dy==0)?;
-        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)?;
+        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms,
+            group_deadline_ms)?;
         // A new neutral ACK is the ONLY event that restores releasability.
         // This is native transport evidence, not Minecraft key-up proof.
         self.ai_leases.wrote(slot,owner,epoch,pid,birth,
@@ -392,7 +395,7 @@ impl Sessions {
         // potential write; only a confirmed neutral ACK may clear the
         // legacy channel's possible 500-ms hold early.
         self.ai_leases.legacy_begin_write(slot,now);
-        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms)?;
+        self.mc02_input(slot,keys,dx,dy,ttl_ms,issued_at_ms,None)?;
         self.ai_leases.legacy_wrote(slot,unsafe{GetTickCount64()},
             keys==0&&dx==0&&dy==0);
         Ok(())
@@ -425,7 +428,8 @@ impl Sessions {
             // have published state into this exact original game channel.
             attempted.push(frame.slot);
             if let Err(error)=self.ai_leased_input(frame.slot,frame.keys,
-                frame.dx,frame.dy,frame.ttl_ms,issued_at_ms,owner,epoch) {
+                frame.dx,frame.dy,frame.ttl_ms,issued_at_ms,owner,epoch,
+                Some(deadline_at_ms)) {
                 failure=Some(error);
                 break;
             }
@@ -439,7 +443,8 @@ impl Sessions {
             // release nor a native TTL is proof of physical Minecraft key-up.
             let released=release_attempted_ai_group(&attempted,|slot|
                 self.ai_leased_input(
-                    slot,0,0,0,1,unsafe{GetTickCount64()},owner,epoch)
+                    slot,0,0,0,1,unsafe{GetTickCount64()},owner,epoch,
+                    None)
             );
             if !released {
                 // Prior error may describe an ordinary deadline/target
@@ -1569,7 +1574,7 @@ fn run() -> io::Result<()> {
                 SessionRequest::AiLeasedInput {slot,keys,dx,dy,ttl_ms,
                     issued_at_ms,owner_id,lease_epoch} => {
                     sessions.ai_leased_input(slot,keys,dx,dy,ttl_ms,
-                        issued_at_ms,&owner_id,&lease_epoch)
+                        issued_at_ms,&owner_id,&lease_epoch,None)
                         .map_err(|error|error.to_string())?
                 }
                 #[cfg(feature="mc02-native-input")]

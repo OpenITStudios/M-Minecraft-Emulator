@@ -65,6 +65,14 @@ fn native_error(error: io::Error) -> &'static str {
        error.to_string()=="AI group neutral release unconfirmed" {
         return "AI_RELEASE_UNCONFIRMED";
     }
+    // The retained group actor or last original writer may reject a
+    // late slot after slow native HWND verification. Preserve the CLI's
+    // existing group deadline code, but never promote transport loss
+    // into an asserted actor refusal.
+    if matches!(error.kind(),io::ErrorKind::Other|io::ErrorKind::InvalidData) &&
+       error.to_string()=="AI timestamp group missed its native deadline" {
+        return "AI_SEQUENCE_DEADLINE";
+    }
     // Fixed, allowlisted native writer-conflict status. Other controller
     // errors are never forwarded raw into the MCP model response.
     if matches!(error.to_string().as_str(),
@@ -958,6 +966,16 @@ mod tests {
             "lost IPC cannot masquerade as a confirmed actor error");
         assert_eq!(native_error(Error::new(ErrorKind::TimedOut,
             "original worker still running")),"OUTCOME_UNCERTAIN");
+        assert_eq!(native_error(Error::other(
+            "AI timestamp group missed its native deadline")),
+            "AI_SEQUENCE_DEADLINE");
+        assert_eq!(native_error(Error::new(ErrorKind::InvalidData,
+            "AI timestamp group missed its native deadline")),
+            "AI_SEQUENCE_DEADLINE");
+        assert_eq!(native_error(Error::new(ErrorKind::BrokenPipe,
+            "AI timestamp group missed its native deadline")),
+            "OUTCOME_UNCERTAIN",
+            "lost IPC may not impersonate a proved actor deadline");
     }
     #[test]
     fn one_shot_command_accepts_only_inspect_or_five_slots() {
