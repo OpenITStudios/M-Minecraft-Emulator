@@ -337,6 +337,27 @@ bool sameNativePublicationAtReturn(std::uint64_t word,
         packetLiveAt(word,GetTickCount()));
     return safe && view->cursorRevision.load(std::memory_order_seq_cst)==revision;
 }
+// SetCursorPos can legitimately recenter an isolated game menu after
+// native ReleaseAll (packet 0), without re-enabling physical OS input.
+// Such a recenter must not cross an in-flight/new active publication.
+// Revision 0 + packet 0 is also the initial unmoved channel.
+constexpr bool sameNeutralPublication(std::uint64_t before,
+    std::uint64_t after,std::uint64_t packet) noexcept {
+    return !(before&1) && before==after && packet==0;
+}
+static_assert(sameNeutralPublication(0,0,0));
+static_assert(sameNeutralPublication(4,4,0));
+static_assert(!sameNeutralPublication(4,6,0)); // newer native write
+static_assert(!sameNeutralPublication(5,5,0)); // in-flight native write
+static_assert(!sameNeutralPublication(4,4,1)); // newly active command
+bool neutralPublicationAtReturn(std::uint64_t revision) {
+    if (!view) return false;
+    const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
+    if (before!=revision || (before&1)) return false;
+    const auto packet=view->packet.load(std::memory_order_seq_cst);
+    return sameNeutralPublication(before,
+        view->cursorRevision.load(std::memory_order_seq_cst),packet);
+}
 // A background game may skip its Win32 input polling loop after comparing
 // GetForegroundWindow/GetActiveWindow/GetFocus to its own game HWND.
 // Resolve only the pinned MC02 OGLES root in THIS opted-in child.
@@ -684,19 +705,44 @@ BOOL WINAPI observedCursor(LPPOINT point) {
 }
 BOOL WINAPI observedSetCursor(int x,int y) {
     const DWORD previous=GetLastError();
-    const auto word=currentPacket();
+    std::uint64_t revision=0;
+    const auto word=currentPacket(&revision);
+    // currentPacket intentionally does not expose a revision for neutral
+    // or refused active input. Only a real zero packet (or the unmoved
+    // initial mapping) can authorize a neutral menu recenter.
+    const auto neutralRevision=(!word && view)?
+        view->cursorRevision.load(std::memory_order_seq_cst):0;
     if (!virtualMode(word)) {
         SetLastError(previous); return originalSetCursor(x,y);
     }
-    // MC02's cursor recentering never physically moves MC01's pointer.
-    // Both axes are one game-local update, even when the first physical
-    // cursor snapshot from another thread has not returned yet.
+    // A full target/focus check belongs OUTSIDE the position lock.
+    // A native mutation can still arrive while waiting for that lock,
+    // so the final lightweight publication fence is checked inside it.
+    const bool activeAdmitted=word && sameLiveActivePublication(word,revision);
     {
         std::lock_guard<std::mutex> lock(cursorPositionMutex);
-        virtualX.store(x,std::memory_order_release);
-        virtualY.store(y,std::memory_order_release);
-        cursorInitialized.store(true,std::memory_order_release);
+        const auto stillCurrent=[&]() {
+            return word ? activeAdmitted &&
+                sameNativePublicationAtReturn(word,revision) :
+                neutralPublicationAtReturn(neutralRevision);
+        };
+        if (stillCurrent()) {
+            const LONG oldX=virtualX.load(std::memory_order_relaxed);
+            const LONG oldY=virtualY.load(std::memory_order_relaxed);
+            virtualX.store(x,std::memory_order_release);
+            virtualY.store(y,std::memory_order_release);
+            // Native ReleaseAll or a replacement packet may begin between
+            // these two axis writes. Undo both provisional coordinates
+            // without exposing a mixed pair to another game thread.
+            if (!stillCurrent()) {
+                virtualX.store(oldX,std::memory_order_release);
+                virtualY.store(oldY,std::memory_order_release);
+            } else {
+                cursorInitialized.store(true,std::memory_order_release);
+            }
+        }
     }
+    // A stale recenter must never fall back to the real Windows cursor.
     SetLastError(previous);
     return TRUE;
 }

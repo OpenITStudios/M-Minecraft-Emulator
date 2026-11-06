@@ -36,13 +36,14 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
-  Source cursor interleaving correction: a short process-local position
-  lock now protects initial sampling, SetCursorPos recenter, GetCursorPos
-  paired X/Y read, and bounded look delta publication. No genuine Win32
-  call or diagnostic runs while this lock is held. If ReleaseAll changes
-  the native publication during a provisional delta update, both virtual
-  axes roll back before any read cursor advances. The preceding missing
-  observedKeyboard brace is fixed. C++/Rust execution NOT_EXECUTED.
+  Source cursor hardening now fences recentering to the native
+  publication first admitted by the original controller. SetCursorPos
+  rechecks active word+revision before and after the paired virtual
+  coordinate update; on a concurrent native change both axes roll back.
+  Neutral-only menu recenter remains possible only with the SAME stable
+  zero-packet native revision. The existing cursor position mutex,
+  original Rust v4 channel and Raw Input pending releases are unchanged.
+  C++/Rust execution NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -87,6 +88,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Virtual cursor recenter publication fence | SetCursorPos permits live recenter only against original active publication, or stable native zero-packet menu state; a concurrent ReleaseAll/replacement rolls back both virtual axes without touching physical cursor | C++ constexpr negative fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Virtual cursor position interleaving | One short local mutex keeps initial physical sampling, recenter, virtual X/Y reads and camera delta commits coherent; lost ReleaseAll publication rolls back both temporary axes and leaves look backlog unconsumed | Source-only static contract inspection; tests NOT_EXECUTED |
 | Virtual cursor scope correction | Close `observedKeyboard` before the virtual cursor implementation so optional Raw-buffer and default polling branches remain namespace-level functions | Both C++ preprocessor branches statically scope-balanced; MSVC tests/build NOT_EXECUTED |
 | Virtual cursor bounded backlog | Per-poll cursor move limited to ±32767 without dropping remaining accumulated look; same native revision can deliver its unconsumed prefix after exact publication revalidation | C++ compile-time negative boundary assertions AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -217,15 +219,15 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only review of the existing cursor and buffered Raw Input
-return-time contracts after paired-position synchronization.** Pin
-`Local`, inspect the original Rust v4 `release_all` boundary and the
-C++ virtual cursor/Raw Input consumers for a demonstrable stale input
-or reentrant locking defect. Correct only an actual error using the
-current owner and bounded authored fixtures. Avoid another controller,
-driver, transport, extra global input, CI or speculative milestones.
-Preserve MC01 physical control, zero-word pending key-up/mouse-up, the
-default compile-OFF native-input mode and Cua
-`BACKGROUND_UNAVAILABLE`. Source tests, MSVC/Rust builds, installer,
-Windows and Minecraft gameplay remain NOT_EXECUTED/NOT_VERIFIED until
-separately authorized.
+**Source-only review of the existing virtual cursor and Raw Input
+release-time contracts after recenter admission.** Re-pin `Local` and
+inspect the original C++ reader against Rust v4 `release_all`, focusing
+on any unconsumed held-key release or stale look after a neutral
+transition. Correct only demonstrable owner-local errors with bounded
+negative fixtures; if no real source defect remains, retain current
+code rather than adding another controller, driver, transport,
+milestone or retry. Preserve original MC01 physical input, safe
+zero-word Raw Input key-up, default compile-OFF native input and
+`BACKGROUND_UNAVAILABLE` for strict Cua Invoke. C++/Rust/Node
+tests/builds, CI, Windows and Minecraft remain NOT_EXECUTED/
+NOT_VERIFIED until separately authorized.
