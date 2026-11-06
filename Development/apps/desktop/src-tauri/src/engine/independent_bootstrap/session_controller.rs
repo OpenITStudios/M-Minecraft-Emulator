@@ -33,16 +33,32 @@ fn legacy_mc02_batch_matches_original(
     pin.is_none_or(|p|original==Some((p.pid,p.birth,p.session)))
 }
 
-// Only exact InvalidData from the ORIGINAL Channel's named pre-v4
-// admission branches proves that the attempted command never changed
-// its game packet. This excludes unknown Win32 errors, UnmapViewOfFile
-// after publication, transport failures, missing/late ACK and every
-// arbitrary same-text IO kind. Restore the pre-attempt legacy fence
-// ONLY on these definitive rejects; do not clear older pending input.
+// Only exact InvalidData from the original actor's early window/mode
+// checks OR the original Channel's pre-v4 admission proves this
+// attempted command never published input. A changed MC01 foreground
+// or unavailable MC02 window can fail BEFORE Channel::write and must
+// not strand a new legacy neutral-pending fence for a no-write request.
+// Do NOT treat unknown Win32/HWND errors, an Unmap after publication,
+// a lost transport ACK or other same-text error kinds as proof.
+// Always preserve any older unresolved input fence.
 #[cfg(feature="mc02-native-input")]
 fn legacy_native_refused_before_publication(error:&io::Error)->bool {
     error.kind()==io::ErrorKind::InvalidData &&
         matches!(error.to_string().as_str(),
+            // Exact original Sessions::mc02_input early returns.
+            // These branches precede the only Channel::write call.
+            "Native AI experiment is closing" |
+            "AI profile is not running" |
+            "AI profile was not opted in at launch" |
+            "Verified AI game window unavailable" |
+            "AI game window is not responsive" |
+            "AI window is not playable" |
+            "Human MC01 is not running" |
+            "Hybrid human MC01 has an AI input channel" |
+            "Verified human MC01 window unavailable" |
+            "Human and AI game identities not independent" |
+            "MC01 human foreground changed" |
+            // Exact Channel pre-v4 publication rejects.
             "MC02 release target does not match owned process" |
             "MC02 input predates original channel binding" |
             "MC02 release request expired before native delivery" |
@@ -1759,6 +1775,20 @@ mod tests {
         // branches reject before cursorRevision/packet publication.
         use std::io::{Error,ErrorKind};
         for message in [
+            // Native foreground/window/mode refusal before the original
+            // Channel is ever called. An active game-input packet has
+            // not been published by THIS failed attempt.
+            "Native AI experiment is closing",
+            "AI profile is not running",
+            "AI profile was not opted in at launch",
+            "Verified AI game window unavailable",
+            "AI game window is not responsive",
+            "AI window is not playable",
+            "Human MC01 is not running",
+            "Hybrid human MC01 has an AI input channel",
+            "Verified human MC01 window unavailable",
+            "Human and AI game identities not independent",
+            "MC01 human foreground changed",
             "MC02 release target does not match owned process",
             "MC02 input predates original channel binding",
             "MC02 release request expired before native delivery",
@@ -1785,6 +1815,8 @@ mod tests {
             }
         }
         for message in [
+            "Unknown original HWND validation failure",
+            "Unknown Windows target process lookup result",
             "The Windows memory view could not be unmapped",
             "Original session request worker returned no result",
             "AI group neutral release unconfirmed",

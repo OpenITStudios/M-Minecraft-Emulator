@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Final native actor/CLI/MCP no-write integrity review | The last source audit confirmed exact busy/mode/stale writer lease statuses from original actor-compatible errors and conservative uncertain-IPC recovery. It found the legacy fence rollback missed exact InvalidData window/foreground/mode refusals returned BEFORE Channel::write. These are now allowlisted alongside proven original Channel pre-v4 rejects; generic Win32/Unmap-after-write/transport errors remain quarantined. Prior pending state is preserved | Expanded native Rust error-kind fixtures AUTHORED_NOT_EXECUTED; no new owner, status code, IPC/game ABI or feature enablement |
 | Original legacy pre-publication fence rollback | The retained actor restores the exact previous legacy 500-ms/pending state only when its original Channel returns a known InvalidData refusal BEFORE v4 packet/cursor publication. An old unresolved pulse remains fenced, and unknown/Unmap-after-publish/transport errors never roll back. A definitive stale/wrong-publisher native refusal therefore does not unnecessarily quarantine a clean MC02 for all future 4/5-AI acquisitions | Pure four/five-cohort AiLeaseBook and actor error-kind negative fixtures AUTHORED_NOT_EXECUTED; no IPC/ABI/second controller change |
 | Expired MC02 batch native neutral recovery | The original Channel now compares the batch's original issued_at_ms and exact authenticated last-publisher PID/birth before deciding neutral admission. If 350ms pulse TTL and 500ms request age expire but the batch is STILL the last publisher, it may publish an exact original-child ReleaseAll using the current native commit time. If newer active/Stop or another sender exists, release is denied before publication and canonical MCP never sends a dangerous fresh fallback. Explicit Stop retains its original 500ms age admission | Pure Rust 4/5-cohort TTL/ack-loss negative fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI/second worker change |
 | Same-tick MC02 batch cleanup source pin | The original authenticated pipe already pins the CLI process PID/birth; original Channel now remembers its last accepted publisher. A legacy batch's implicit ReleaseAll requires exactly that publisher, even within the same GetTickCount64 millisecond. Explicit Stop and 4/5-AI neutral bypass the batch-only source match. Known refusal reuses MC02_RELEASE_OBSOLETE and canonical MCP no-fresh-retry safety | Rust 4/5-cohort and CLI error fixtures AUTHORED_NOT_EXECUTED; zero IPC/game ABI changes |
@@ -290,38 +291,35 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-This source pass reviewed Sessions::legacy_mc02_input and original
-AiLeaseBook's before-I/O legacy fence against exact pre-publication
-writer refusals. The actor always marked MC02 potentially active
-BEFORE entering the original Channel, correctly protecting against
-a failure AFTER v4 publication or a missing ACK. But an explicit
-stale timestamp, obsolete/wrong publisher, expired input, target
-binding mismatch or press-count exhaustion is rejected by the
-original Channel BEFORE publishing any v4 state. Those definite
-no-write responses previously left the NEW legacy pending fence
-armed, even if MC02 had been clean before the attempt; the original
-4/5-AI lease book would quarantine it indefinitely until an
-independent explicit neutral arrived.
+**Final source-only native/CLI/MCP integrity review completed.**
+The only MCP writer lease acquisition refusals classified as
+definitely denied are original `NATIVE_WRITER_BUSY`,
+`NATIVE_WRITER_MODE_MISMATCH` and
+`NATIVE_WRITER_EPOCH_STALE`. These correspond to exact native
+actor-compatible error kinds/messages after original mode, child
+birth, epoch and lease admission checks, before any acquisition
+mutation. Unknown refusals, broken pipes, timeouts and lost ACKs
+remain uncertain; per-slot recovery and quarantine are preserved.
 
-The original AiLeaseBook now returns the prior (until_ms,pending)
-pair from legacy_begin_write and restores that EXACT prior pair
-only on the original actor's allowlisted InvalidData pre-publication
-errors. No extra owner, background worker or shared game state
-was introduced. A prior unresolved legacy pulse remains pending,
-even if its packet TTL expired; a later native UnmapViewOfFile
-failure, unknown/ambiguous Win32 error or transport ACK loss
-NEVER triggers rollback. Source-only actor and 4/5-cohort Rust
-negative fixtures are AUTHORED_NOT_EXECUTED. Exact one-controller,
-human-owned MC01, original child PID/birth/session and ReleaseAll
-contracts remain unchanged, as do the private IPC and v4 game ABI.
+A source-proven mismatch was corrected here: the original
+Sessions::mc02_input can refuse a nonresponsive/absent MC02
+window, missing human MC01 or changed MC01 foreground BEFORE
+calling Channel::write. Such exact InvalidData early refusals now
+restore the prior legacy pending fence, like original Channel
+pre-v4 refusals. The actor keeps earlier unresolved input pending,
+and generic Win32/HWND/IPC errors or native Unmap failures AFTER
+possible publication NEVER rollback. Pure Rust negative/positive
+provenance fixtures were AUTHORED_NOT_EXECUTED.
+No extra writer/lease owner, status type, IPC schema, v4 ABI,
+input hook or default-enable change was introduced.
 
-**Single next source action:** perform a bounded final source
-integrity review of the original 4/5-AI lease/legacy native
-status paths, especially verified no-write error propagation
-through CLI and MCP, then STOP rather than adding another guard
-without a specific source failure. The operator preference
-remains CODE FIRST: Rust/Node/C++ tests, Windows builds and
-real Minecraft input/five-client acceptance stay
-NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only remains
-`BACKGROUND_UNAVAILABLE`, GitHub Actions CI disabled and
-`main` unchanged.
+**Single next action: STOP speculative source guard changes on
+this track.** The native input source is integrated at the
+REMOTE_GITHUB review ceiling only. To establish actual
+correctness, source tests and Windows compilation would need
+separate operator authorization, then Minecraft Education 4/5
+client execution and gameplay/key-up acceptance. All of those
+remain `NOT_EXECUTED`/`NOT_VERIFIED`. Preserve original
+per-client neutral, hybrid human MC01, independent profile data,
+strict Cua Invoke-only `BACKGROUND_UNAVAILABLE`, disabled
+GitHub Actions, and release-reserved `main`.
