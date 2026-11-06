@@ -38,6 +38,23 @@ fn active_group_write_in_time(now:u64,group_deadline_ms:Option<u64>)->bool {
     group_deadline_ms.is_none_or(|limit|now!=0 && limit!=0 && now<=limit)
 }
 
+// The original actor serializes per-slot writes and neutral releases,
+// but separate CLI senders may arrive out of issue order. An older
+// ReleaseAll must not republish an obsolete cursor epoch/revision after
+// a newer neutral already completed, even with packet=0. Equal-tick
+// neutral is intentionally allowed (release wins the active-input tie).
+fn admit_native_release_order(
+    issued_at_ms:u64,last_active_ms:u64,last_release_ms:u64
+)->Result<(),&'static str> {
+    if issued_at_ms<last_active_ms {
+        return Err("MC02 release predates newer active input");
+    }
+    if issued_at_ms<last_release_ms {
+        return Err("MC02 release predates newer neutral release");
+    }
+    Ok(())
+}
+
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
 const VERSION: u32 = 4;
@@ -183,13 +200,17 @@ impl Channel {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid("MC02 release request expired before native delivery"));
         }
-        // A delayed final neutral from an older batch must not cancel an
-        // active pulse issued more recently by a separate CLI. If the
-        // millisecond tick is equal, neutral still wins: release is the
-        // safe ordering tie-breaker. This never authorizes new input.
-        if issued_at_ms<self.last_active_issued_at_ms.load(Ordering::SeqCst) {
+        // Compare BOTH original issue-time watermarks. An older neutral
+        // must not reset cursor epoch/press counters after a newer accepted
+        // neutral, even when no intervening active command was published.
+        // Active and neutral timestamps tied in the same millisecond still
+        // favor release, without authorizing a new input packet.
+        if let Err(reason)=admit_native_release_order(
+            issued_at_ms,
+            self.last_active_issued_at_ms.load(Ordering::SeqCst),
+            self.last_release_issued_at_ms.load(Ordering::SeqCst)) {
             let _=unsafe{UnmapViewOfFile(view)};
-            return Err(invalid("MC02 release predates newer active input"));
+            return Err(invalid(reason));
         }
         let input=unsafe{&*view.Value.cast::<SharedInput>()};
         // Use the same v4 even/odd publication rule as movement writes.
@@ -217,8 +238,8 @@ impl Channel {
         // CLI processes: after cancellation a newly issued neutral
         // request may overtake an earlier, delayed active request.
         // Preserve the greatest accepted same-machine GetTickCount64
-        // release issue time. A release older than the most recent active
-        // input was rejected before clearing the shared memory above.
+        // release issue time. Any release older than an accepted active
+        // OR neutral issue time was refused before altering the v4 state.
         // Never let a late pre-release active pulse resurrect controls.
         self.last_release_issued_at_ms.fetch_max(
             issued_at_ms,Ordering::SeqCst);
@@ -349,7 +370,28 @@ impl Channel {
 
 #[cfg(test)]
 mod rising_edge_counter_tests {
-    use super::{checked_rising_press_counts,active_group_write_in_time};
+    use super::{checked_rising_press_counts,active_group_write_in_time,
+        admit_native_release_order};
+
+    #[test]
+    fn stale_release_all_does_not_republish_a_newer_neutral_epoch() {
+        // Pure authored Rust fixture, no mapped game channel or Windows call.
+        // One per-slot channel is used in either original 4/5-AI cohort.
+        for cohort in [&[2,3,4,5][..],&[1,2,3,4,5][..]] {
+            for _slot in cohort {
+                assert_eq!(admit_native_release_order(100,0,101),
+                    Err("MC02 release predates newer neutral release"));
+                assert_eq!(admit_native_release_order(100,101,0),
+                    Err("MC02 release predates newer active input"));
+                assert_eq!(admit_native_release_order(100,102,103),
+                    Err("MC02 release predates newer active input"));
+                // Repeating the exact same issue tick remains a safe
+                // neutral tie, and a later explicit recovery can proceed.
+                assert_eq!(admit_native_release_order(101,101,101),Ok(()));
+                assert_eq!(admit_native_release_order(102,101,101),Ok(()));
+            }
+        }
+    }
 
     #[test]
     fn per_slot_group_deadline_is_rechecked_before_v4_publication() {

@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Stale ReleaseAll after newer neutral fence | The original per-slot Rust writer refuses an older neutral issue timestamp after a newer accepted neutral, not only after newer active input. This avoids invalidating v4 cursor revisions/epochs and pending raw key-up reads from replayed old neutral CLI calls; same-tick release remains admitted | Original four/five-client pure Rust boundary fixtures AUTHORED_NOT_EXECUTED; experimental compile-OFF |
 | Final native AI timestamp-group deadline | Original Rust Channel::write now receives the existing group deadline through the retained controller, checking GetTickCount64 before v4 publication after slow Windows HWND/mapping reads; late packets refuse and take existing partial-group neutral/recovery. Direct writes and ReleaseAll remain unchanged, no ABI/IPC migration | Rust hybrid four-AI/full five-AI boundary and CLI error fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Late native ACK cancellation fence | Existing MCP batch completion now refuses stale success if Stop or shutdown arrives during per-slot lease release after native ACK. All original cleanup attempts finish, the affected cohort remains quarantined, and neutral/lease failures keep priority | Four/five-AI late Stop and shutdown negative fixtures AUTHORED_NOT_EXECUTED |
 | Observed 4/5-AI post-lease PNG fence | The existing MCP round retains the exact delivered frame basis across the native lease wait, rejects stale/advanced images before batch dispatch, and reports the actual native request start time. No second observer or controller | Hybrid four-AI / full five-AI negative fixtures AUTHORED_NOT_EXECUTED; no Minecraft game input proof |
@@ -278,36 +279,26 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-The integrated A/B/C source matrix has been reviewed end-to-end:
-exact 4/5-client pulse content and canonical neutral-slot receipt,
-native lease/ReleaseAll, partial-group failure, cancel/timeout,
-explicit MCP recovery, and original C++ Raw Input zero-word pending UP.
-The late virtual-focus return mismatch is corrected in its C++ owner.
-This continuation fixes an observed-action source gap: a delayed native
-writer lease could leave a stale model-reviewed PNG basis eligible for
-dispatch. MCP now rechecks the exact image source/identity/age after
-lease ACK and before the native CLI request, without additional capture
-or OS IPC. Undispatched leases are released by the existing path.
-Transport start now reflects actual batch handoff. No new controller,
-driver, shared-memory ABI, default feature enablement, or background
-dispatch provider was introduced.
+This source pass checked the original 4/5-AI recovery-only lease,
+native writer and CLI neutral ordering. Lease ownership already
+fences obsolete owner/epoch/PID/birth attempts, and the original
+single actor serializes each channel. One source-proven gap remained:
+`Channel::release_all` compared a neutral request only with the
+latest ACTIVE timestamp, allowing a delayed older ReleaseAll to
+republish a second zero-word v4 transaction after a newer release.
+The same original writer now also checks its last accepted neutral
+timestamp before changing cursor revision, epoch or press counters.
+Equal timestamp neutral remains the conservative tie-breaker.
+No extra owner, IPC call, per-frame read, feature activation or
+shared-memory ABI change was introduced.
 
-This source pass closes the demonstrated final native group-deadline
-gap. The actor already checked the 150-ms group cutoff, but slow window
-validation or view mapping could delay an otherwise authorized frame
-until after that cutoff. The original per-client Rust writer now
-enforces the SAME deadline immediately before first shared-memory
-publication, keeping the existing partial-group neutral, MCP quarantine
-and explicit recovery. CLI preserves a confirmed actor deadline refusal
-without treating broken IPC as a verified actor response. This changes
-no public wire format, 96-byte v4 ABI, installed payload, input hook
-or default feature state.
-
-**Single next source action:** review the existing original per-slot
-ReleaseAll timestamp ordering and recovery-only lease boundary for a
-concrete, not-yet-fixed mismatch. Change only the owning source path
-if evidence warrants it; avoid independent controllers or redundant
-state. Operator preference is CODE FIRST. Node/Rust/C++ tests and
-builds, Windows sessions, Minecraft gameplay and four/five-client
-acceptance remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only
-stays `BACKGROUND_UNAVAILABLE`; CI disabled and `main` unchanged.
+**Single next source action:** inspect the existing direct/legacy
+MC02 neutral caller alongside the original controller's 4/5-client
+lease-recovery path for an independently demonstrable stale-ACK or
+wrong-target error classification. Do not build a second recovery
+manager or add guard code without a specific source failure.
+Operator preference remains CODE FIRST. Rust/Node/MSVC source tests,
+Windows builds, installed input hooks, Minecraft gameplay and
+four/five-client acceptance remain NOT_EXECUTED/NOT_VERIFIED.
+Strict Cua Invoke-only is `BACKGROUND_UNAVAILABLE`; GitHub Actions
+CI stays disabled and `main` remains unchanged.
