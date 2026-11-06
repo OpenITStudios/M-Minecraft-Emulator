@@ -351,3 +351,34 @@ not Windows, Minecraft gameplay, or five-client acceptance.
 **Current phase proof:** exact GitHub source/blob checks only.
 Svelte/typecheck, browser fixture execution, Windows focus/DPI testing,
 DWM runtime and Minecraft remain **NOT_EXECUTED**.
+
+## Post-eight-stage source consistency review — fail-safe draft and CSS cascade
+
+A static review across the exact `Local` UI source and authored fixtures
+found no mismatches in the direct literal source assertions sampled. That
+is **not** proof the Vitest fixtures, Svelte compiler, WebView2 or real game
+sessions execute successfully. Dynamic assertions and source compiler
+behavior remain unverified.
+
+One concrete source behavior gap was corrected: if an original
+`applyGraphics` request fails or returns an **unconfirmed**
+`changedProfiles` receipt, the chosen preset is retained as a UI-only
+per-slot draft before `settings` becomes unavailable. Users can revisit
+Settings after a deliberate status refresh without silently losing that
+choice. The original Rust admission, confirmation, disk writes and backup
+semantics are unchanged; an unconfirmed save never shows a saved state.
+Successful native confirmation still removes the draft. A visible status
+sentence now uses the exact **Lazy Tester** product spelling.
+
+One known CSS cascade conflict was removed: four Play-tool font sizes
+were already effectively **12px** because of later duplicate overrides.
+Those 12px values now reside at the original component selectors and the
+redundant group override is removed. Effective visual values stay the same;
+no launcher, DWM, native aperture, tooltip location or input-coordinate
+dimensions have been altered.
+
+**Proof ceiling:** `REMOTE_GITHUB` source/blob/consumer review and authored
+fixtures only. The exact current SHA must still undergo separately
+authorized Svelte/TypeScript execution, viewport visual inspection,
+WebView2 keyboard/accessibility, Windows DWM and Minecraft acceptance.
+No prior source-only result is promoted to executable PASS.

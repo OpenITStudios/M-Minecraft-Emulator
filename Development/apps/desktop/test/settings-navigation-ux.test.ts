@@ -15,6 +15,18 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(settings).toContain('{#if graphicsDirty}<button');
     expect(settings).not.toContain('invokeRuntime(');
   });
+  it('keeps a user graphics draft if its native save receipt is unconfirmed',()=>{
+    const app=load('LazyTesterApp.svelte');
+    const apply=app.split('async function applyPreset(')[1]
+      ?.split('  function requestPerformanceSave()')[0] ?? '';
+    expect(apply).toContain('graphicsDrafts.delete(request.slot)');
+    expect(apply).toContain('graphicsDrafts.set(request.slot,request.preset)');
+    expect(apply).toContain("issueKey='settings';settings=null;");
+    expect(apply).toContain("settings.changedProfiles===null");
+    expect(app).toContain("if (page==='settings') rememberGraphicsDraft()");
+    expect(app).toContain("graphicsPreset=graphicsChoice(selectedSlot)");
+    expect(app).toContain('Lazy Tester will leave Minecraft graphics options unchanged');
+  });
   it('moves screen-reader focus only to Settings / Storage headings on explicit navigation',()=>{
     const app=load('LazyTesterApp.svelte');
     expect(app).toContain('if (next !== \'workspace\' && !disposed && pageHeading?.isConnected)');
@@ -35,6 +47,14 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
     expect(app).toContain('status.confirmationToken!==pending.token');
     expect(storage).not.toContain('invokeRuntime(');
+  });
+  it('retains 12px effective Play tool copy at its original owner rule',()=>{
+    const css=load('lazy-tester.css');
+    expect(css).toContain('.lt-coordinate-popup .lt-coordinate-help{font-size:12px;');
+    expect(css).toContain('.lt-f3-popup .lt-f3-disclaimer{font-size:12px;');
+    expect(css).toContain('.lt-coordinate-saved-header button{font-size:12px;');
+    expect(css).toContain('.lt-coordinate-saved-buttons button{font-size:12px;');
+    expect(css).not.toContain('.lt-coordinate-popup .lt-coordinate-help,\n.lt-f3-popup .lt-f3-disclaimer,');
   });
   it('wraps only settings and storage rows without changing the game viewport',()=>{
     const css=load('lazy-tester.css');

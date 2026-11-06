@@ -421,9 +421,15 @@
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
       graphicsDrafts.delete(request.slot);
       settingsNotice=request.preset==='Preserve'
-        ? 'Minecraft - '+request.slot+': Preserve Visuals saved. LazyTester will leave Minecraft graphics options unchanged on future launches; existing edits are not automatically undone.'
+        ? 'Minecraft - '+request.slot+': Preserve Visuals saved. Lazy Tester will leave Minecraft graphics options unchanged on future launches; existing edits are not automatically undone.'
         : 'Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
-    }catch(error){issueKey='settings';settings=null;}
+    }catch(error){
+      // An unconfirmed controller receipt must not erase the user's pending
+      // choice. Keep a UI-only draft until a later Settings refresh can
+      // distinguish whether the native update actually persisted.
+      graphicsDrafts.set(request.slot,request.preset);
+      issueKey='settings';settings=null;
+    }
     finally{applyingPreset=false;busy=false;}
   }
   function requestPerformanceSave() {
