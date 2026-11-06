@@ -34,6 +34,14 @@
   export let onSaveAudio: (mode: BackgroundAudio) => void;
   export let onOpenDataFolder: () => void;
   export let onShowDataStorage: () => void;
+
+  // Field feedback only; original performanceValid and native admission own Save.
+  $: activeFpsFieldInvalid = typeof activeFps !== 'number' ||
+    !Number.isInteger(activeFps) || activeFps < 5 || activeFps > 1000;
+  $: backgroundFpsFieldInvalid = typeof backgroundFps !== 'number' ||
+    !Number.isInteger(backgroundFps) || backgroundFps < 5 ||
+    backgroundFps > 1000 ||
+    (!activeFpsFieldInvalid && backgroundFps > (activeFps ?? 1000));
 </script>
 
         <div class="lt-settings-content">
@@ -49,9 +57,14 @@
             {#if settings&&!settings.graphicsPresets}<p class="lt-error">Update the running controller before changing graphics presets. Existing games are preserved.</p>{/if}{#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
           </section>
           <section class="lt-group"><h2>Frame Limits <small>All launchers</small></h2>{#if settings}<form on:submit|preventDefault={onRequestPerformanceSave}>
-            <div class="lt-setting"><div><h3><label for="active-fps">While playing</label></h3><p>The game receiving keyboard and mouse input.</p></div><div class="lt-fps"><input id="active-fps" type="number" min="5" max="1000" required bind:value={activeFps} disabled={busy||performanceQueued}/> FPS</div></div>
-            <div class="lt-setting"><div><h3><label for="background-fps">In the background</label></h3><p>Other games keep running at this limit.</p></div><div class="lt-fps"><input id="background-fps" type="number" min="5" max={activeFps??1000} required bind:value={backgroundFps} disabled={busy||performanceQueued}/> FPS</div></div>
-            <p class="lt-help">Saved limits apply at the next launch. Running games keep their current limits.</p>{#if !performanceValid}<p class="lt-error" role="alert">Use whole numbers from 5 to 1000. Background FPS cannot exceed active FPS.</p>{/if}{#if performanceDirty && !available}<p class="lt-help" role="status">Session status is unavailable. Choose Refresh before saving these limits.</p>{/if}
+            <div class="lt-setting"><div><h3><label for="active-fps">While playing</label></h3><p>The game receiving keyboard and mouse input.</p></div><div class="lt-fps"><input id="active-fps" type="number" min="5" max="1000" required bind:value={activeFps} disabled={busy||performanceQueued} aria-invalid={activeFpsFieldInvalid} aria-describedby={activeFpsFieldInvalid?'lt-fps-guidance lt-active-fps-error':'lt-fps-guidance'}/> FPS</div></div>
+            <div class="lt-setting"><div><h3><label for="background-fps">In the background</label></h3><p>Other games keep running at this limit.</p></div><div class="lt-fps"><input id="background-fps" type="number" min="5" max={activeFps??1000} required bind:value={backgroundFps} disabled={busy||performanceQueued} aria-invalid={backgroundFpsFieldInvalid} aria-describedby={backgroundFpsFieldInvalid?'lt-fps-guidance lt-background-fps-error':'lt-fps-guidance'}/> FPS</div></div>
+            <p id="lt-fps-guidance" class="lt-help">Use whole numbers from 5 to 1000 FPS; background cannot exceed active FPS. Saved limits apply at the next launch; running games keep their current limits.</p>
+            {#if !performanceValid}<div class="lt-form-errors" role="status" aria-live="polite">
+              {#if activeFpsFieldInvalid}<p id="lt-active-fps-error" class="lt-field-error">While playing: enter a whole number from 5 to 1000.</p>{/if}
+              {#if backgroundFpsFieldInvalid}<p id="lt-background-fps-error" class="lt-field-error">In the background: enter a whole number from 5 to 1000, no higher than While playing.</p>{/if}
+            </div>{/if}
+            {#if performanceDirty && !available}<p class="lt-help" role="status">Session status is unavailable. Choose Refresh before saving these limits.</p>{/if}
             <div class="lt-actions"><button type="submit" disabled={busy||performanceQueued||!available||!performanceDirty||!performanceValid}>{savingPerformance||performanceQueued?'Saving…':'Save changes'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy||performanceQueued} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}<button type="button" class="lt-secondary" disabled={busy||performanceQueued} on:click={()=>{activeFps=120;backgroundFps=5;}}>Use 120 / 5</button></div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
           <section class="lt-group"><h2>App behavior</h2><div class="lt-setting"><div><h3>When Lazy Tester closes</h3><p>All Minecraft sessions started by Lazy Tester close normally first. Lazy Tester waits for them to finish before exiting.</p></div></div><p class="lt-help">If Minecraft is waiting for a dialog or has not finished closing, Lazy Tester stays open. Other Minecraft applications are left alone.</p><div class="lt-setting"><div><h3>Background game audio</h3><p>Mute games that are not receiving keyboard and mouse input. Existing user mute and volume settings are kept.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Update the running controller to enable audio control.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||audioQueued||!settings?.backgroundAudio} aria-label="Mute background games" on:change={event=>onSaveAudio(event.currentTarget.checked?'Mute':'Keep')}/>Mute background games</label></div></section>

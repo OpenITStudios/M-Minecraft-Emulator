@@ -55,6 +55,10 @@
   let cacheCancelButton: HTMLButtonElement | undefined;
   let settingsCancelButton: HTMLButtonElement | undefined;
 
+  // Presentation-only input feedback; native data-clear admission is unchanged.
+  $: typedFullClearNameIncorrect = fullReview !== null && fullName.length > 0 &&
+    fullName !== `Minecraft - ${fullReview.slot}`;
+
   function showCacheReview(trigger: HTMLButtonElement): void {
     reviewTrigger = trigger;
     const slot = selectedSlot;
@@ -114,6 +118,13 @@
           <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lt-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
           {#if clearSlot!==null||recovery!==null||fullReview!==null}<p id="lt-storage-review-guidance" class="lt-help" role="status">Finish or cancel the current review before choosing another Minecraft profile.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
+          {#if storage===null}
+            <p class="lt-storage-feedback" role="status">Storage measurements are unavailable. Choose Refresh to inspect again; an unmeasured size does not mean a profile is empty.</p>
+          {:else if !selectedStorage}
+            <p class="lt-storage-feedback" role="status">No measurement is available for this selected profile. Choose Refresh before making storage decisions.</p>
+          {:else if !available}
+            <p class="lt-storage-feedback" role="status">Session status is unavailable. The sizes below are from the last storage inspection, not a live measurement.</p>
+          {/if}
           <section class="lt-group"><div class="lt-setting"><h3>Profile data</h3><strong>{selectedStorage?(selectedStorage.partial?'At least ':'')+(selectedStorage.bytes/1048576).toFixed(1)+' MB':'Not measured'}</strong></div><div class="lt-setting"><h3>Web cache</h3><span>{selectedStorage&&!selectedStorage.cache.partial?(selectedStorage.cache.bytes/1048576).toFixed(1)+' MB':'Unavailable'}</span></div><div class="lt-setting"><h3>Available disk space</h3><span>{selectedStorage?.disk?(selectedStorage.disk.availableBytes/1073741824).toFixed(1)+' GB':'Unavailable'}</span></div><p class="lt-help">{storage?'Last measured at '+storageCheckedAt+'. Web cache is included in profile data.':'Use Refresh to measure storage. World sizes are not separately classified.'}</p></section>
           <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove recognized web cache. Accounts, worlds and game settings are kept.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lt-help">Cache cleanup is unavailable after the latest check. Choose Refresh to check again.</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></section>
           {#if clearSlot===selectedSlot}<section class="lt-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts and settings are kept. Other launchers are unchanged.</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>onClearCache(selectedSlot)}>Clear web cache</button><button class="lt-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview(onCancelCacheReview)}>Cancel</button></div></section>{/if}
@@ -167,8 +178,11 @@
               <h3>{fullReview.pending?'Finish clearing':'Clear all data for'} Minecraft - {fullReview.slot}?</h3>
               <p>This permanently removes this launcher's stored account data, worlds, cache, settings and backups. Other launchers and Windows-managed sign-in data are kept.</p>
               <label for="full-clear-name">Type Minecraft - {fullReview.slot} to confirm</label>
-              <input id="full-clear-name" type="text" maxlength="32" autocomplete="off" bind:value={fullName} disabled={busy}/>
-              <label class="lt-delete-ack"><input type="checkbox" bind:checked={fullAck} disabled={busy}/> I understand this cannot be undone and have exported any worlds I need.</label>
+              <input id="full-clear-name" type="text" maxlength="32" autocomplete="off" bind:value={fullName} disabled={busy} aria-invalid={typedFullClearNameIncorrect} aria-describedby={typedFullClearNameIncorrect?'lt-full-clear-hint lt-full-clear-error':'lt-full-clear-hint'}/>
+              <p id="lt-full-clear-hint" class="lt-help">Enter the profile name exactly, including spaces and punctuation. This is not a login or account name.</p>
+              {#if typedFullClearNameIncorrect}<p id="lt-full-clear-error" class="lt-field-error" role="status">The name does not match Minecraft - {fullReview.slot}. No deletion has been requested.</p>{/if}
+              <label class="lt-delete-ack"><input type="checkbox" bind:checked={fullAck} disabled={busy} aria-describedby="lt-full-clear-ack-hint"/> I understand this cannot be undone and have exported any worlds I need.</label>
+              <p id="lt-full-clear-ack-hint" class="lt-help">The acknowledgement is required before you can request permanent deletion.</p>
               <div class="lt-actions"><button type="submit" class="lt-danger" disabled={busy||refreshing||resizing||!fullAck||fullName!==`Minecraft - ${fullReview.slot}`||!selectedStorage?.fullClear?.canClear||selectedStorage?.fullClear?.confirmationToken!==fullReview.token}>Permanently clear data</button><button type="button" class="lt-secondary" disabled={busy} on:click={()=>cancelReview(onCancelFullReview)}>Cancel</button></div>
             </form>
           {/if}

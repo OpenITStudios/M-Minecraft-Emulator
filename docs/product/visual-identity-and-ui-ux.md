@@ -189,3 +189,34 @@ navigation, native DWM and Minecraft acceptance remain **NOT_EXECUTED**.
 These are source-only improvements. Visual layout at 920×620, DPI 125–200%,
 keyboard/screen reader focus, WebView2, Svelte typechecking and Minecraft
 runtime remain `NOT_EXECUTED` without separate authorized execution.
+
+## Field feedback, storage uncertainty, and bounded danger actions — source-only
+
+General Settings shows specific, accessible feedback for the two existing
+Frame Limits inputs. Each invalid number input has `aria-invalid` and
+`aria-describedby` referencing a visible field-specific explanation. The
+existing `validFpsLimits` and native `savePerformance` admission remain the
+only decision path for saving; the new UI expressions are strictly display
+projections. Values must be integers between 5 and 1000 and the background
+limit cannot exceed the active limit.
+
+The Data Storage full-profile deletion confirmation still requires the
+exact profile label, explicit acknowledgement and matching original
+confirmation token. Nonempty mismatched text is marked invalid, described
+inline, and cannot enable deletion. These explanations do not trigger extra
+deletion attempts or alter the existing native fail-closed checks.
+
+Storage measurements distinguish three conditions: no storage report,
+no measurement for the selected profile, and unavailable session status with
+previously measured sizes. In none of these states is an unmeasured value
+assumed to be zero or the profile assumed empty.
+
+Only Settings/Storage receives additional narrow-window wrapping for the
+danger action row, long storage values, form feedback and confirmations.
+The five-card Play rail, native 16:9 viewport, DWM preview placement and
+associated owners are outside this change.
+
+**Proof ceiling:** SOURCE_REVIEWED only at the exact committed revision.
+New regression expectations are `AUTHORED_NOT_EXECUTED`. Svelte typecheck,
+Windows keyboard, screen reader, 920×620 and DPI layouts, installer,
+five-client gameplay and native recovery remain `NOT_EXECUTED`.

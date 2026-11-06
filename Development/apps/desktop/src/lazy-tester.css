@@ -621,3 +621,36 @@
   .lt-settings-layout .lt-target,.lt-settings-layout .lt-launcher-heading{flex-wrap:wrap}
   .lt-settings-layout .lt-launcher-heading select{max-width:100%}
 }
+
+/* Field feedback and bounded Storage content. The native Play aperture,
+   five keyed DWM previews and launcher geometry remain untouched. */
+.lt-settings-layout .lt-field-error{
+  color:var(--lt-danger);
+  font-size:12px;
+  line-height:1.45;
+  overflow-wrap:anywhere;
+}
+.lt-settings-layout input[aria-invalid="true"]{border-color:var(--lt-danger)}
+.lt-settings-layout .lt-form-errors{min-width:0}
+.lt-settings-layout .lt-storage-feedback{
+  border-left:3px solid var(--lt-warning);
+  background:var(--lt-surface-raised);
+  padding:9px 12px;
+  font-size:13px;
+  overflow-wrap:anywhere;
+}
+.lt-settings-layout :is(.lt-cache-confirm,.lt-delete-confirm,.lt-advanced-body,.lt-storage-packs-body){
+  min-width:0;
+  max-width:100%;
+}
+.lt-settings-layout .lt-delete-confirm > *{max-width:100%;overflow-wrap:anywhere}
+.lt-settings-layout .lt-storage-packs-body .lt-setting > span{overflow-wrap:anywhere}
+@media (max-width:1050px){
+  .lt-settings-layout .lt-danger-zone{flex-wrap:wrap;align-items:flex-start;gap:12px}
+  .lt-settings-layout .lt-danger-zone > div{flex:1 1 100%}
+  .lt-settings-layout .lt-danger-zone > button{max-width:100%;white-space:normal;text-align:center}
+  .lt-settings-layout .lt-fps{flex-wrap:wrap}
+}
+@media (forced-colors:active){
+  .lt-settings-layout input[aria-invalid="true"]{border-color:ButtonText}
+}
