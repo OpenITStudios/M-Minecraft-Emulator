@@ -55,6 +55,24 @@ fn admit_native_release_order(
     Ok(())
 }
 
+// Separate native CLI processes may issue ACTIVE frames within the
+// same GetTickCount64 millisecond, then arrive in reverse order.
+// Actor arrival order does not establish which was issued later.
+// Refuse equal or older active issue times before any shared-memory
+// sequence, button state, cursor or rising-edge publication. Keep
+// ReleaseAll's existing equal-tick release-wins policy unchanged.
+fn admit_native_active_order(
+    issued_at_ms:u64,last_active_ms:u64,last_release_ms:u64
+)->Result<(),&'static str> {
+    if issued_at_ms<=last_release_ms {
+        return Err("MC02 active input predates neutral release");
+    }
+    if issued_at_ms<=last_active_ms {
+        return Err("MC02 active input predates newer active input");
+    }
+    Ok(())
+}
+
 // The old unleased CLI request contains only an MC02 slot, not the
 // original child's PID/birth. If that child is reaped and relaunched
 // during the 500-ms request lifetime, target equality against the
@@ -303,24 +321,19 @@ impl Channel {
             let _=unsafe{UnmapViewOfFile(view)};
             return Err(invalid("MC02 input request expired before native delivery"));
         }
-        // The original controller's single actor serializes Channel
-        // writes/releases. Distinct CLI IPC connections need not arrive
-        // in issue order. Any active pulse issued BEFORE (or on the same
-        // tick as) the latest completed neutral release is stale, even
-        // if its standalone 500-ms age check still passes.
-        if issued_at_ms<=self.last_release_issued_at_ms.load(Ordering::SeqCst) {
+        // Distinct authenticated CLI senders can arrive out of
+        // issuance order, including in ONE uptime millisecond.
+        // The retained actor cannot know whether an equal-tick
+        // active frame is older than another accepted active frame:
+        // refuse both stale and ambiguous equal issues. ReleaseAll
+        // still wins ties so explicit Stop can clear held controls.
+        // This gate precedes any v4 shared-memory mutation.
+        if let Err(reason)=admit_native_active_order(
+            issued_at_ms,
+            self.last_active_issued_at_ms.load(Ordering::SeqCst),
+            self.last_release_issued_at_ms.load(Ordering::SeqCst)) {
             let _=unsafe{UnmapViewOfFile(view)};
-            return Err(invalid("MC02 active input predates neutral release"));
-        }
-        // The original single actor processes IPC in arrival order, not
-        // necessarily GetTickCount64 issue order. Refuse an older active
-        // pulse after a newer active write: otherwise stale key masks
-        // and one-shot camera deltas can replace valid current controls.
-        // Equal-tick active writes retain actor order; any equal-tick
-        // ReleaseAll above still takes precedence over all of them.
-        if issued_at_ms<self.last_active_issued_at_ms.load(Ordering::SeqCst) {
-            let _=unsafe{UnmapViewOfFile(view)};
-            return Err(invalid("MC02 active input predates newer active input"));
+            return Err(invalid(reason));
         }
         let expires=(now as u32).wrapping_add(ttl_ms);
         // Do not advance the command sequence before the shared-state
@@ -401,7 +414,30 @@ impl Channel {
 #[cfg(test)]
 mod rising_edge_counter_tests {
     use super::{checked_rising_press_counts,active_group_write_in_time,
-        admit_native_release_order,issued_after_original_channel_bind};
+        admit_native_release_order,admit_native_active_order,
+        issued_after_original_channel_bind};
+
+    #[test]
+    fn original_channel_refuses_ambiguous_same_tick_active_replacement() {
+        // Pure authored source-only regression, no OS or game execution.
+        for cohort in [&[2,3,4,5][..],&[1,2,3,4,5][..]] {
+            for _slot in cohort {
+                assert_eq!(admit_native_active_order(101,100,0),Ok(()));
+                assert_eq!(admit_native_active_order(100,100,0),
+                    Err("MC02 active input predates newer active input"));
+                assert_eq!(admit_native_active_order(99,100,0),
+                    Err("MC02 active input predates newer active input"));
+                assert_eq!(admit_native_active_order(100,99,100),
+                    Err("MC02 active input predates neutral release"));
+                assert_eq!(admit_native_active_order(101,99,100),Ok(()));
+                // A neutral in the same millisecond still wins:
+                // never prevent an explicit Stop from releasing keys.
+                assert_eq!(admit_native_release_order(100,100,99),Ok(()));
+                assert_eq!(admit_native_release_order(100,101,99),
+                    Err("MC02 release predates newer active input"));
+            }
+        }
+    }
 
     #[test]
     fn delayed_legacy_mc02_command_cannot_adopt_relaunched_child() {

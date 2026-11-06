@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Same-millisecond active input admission fence | The existing original per-child Channel requires active issue time strictly newer than its last accepted active and neutral times. An equal-tick delayed CLI can no longer replace the current key/camera publication, while ReleaseAll preserves the explicit Stop safety tie-breaker | Pure source Rust 4-AI/5-AI negative fixture AUTHORED_NOT_EXECUTED; no IPC/v4 ABI/lease changes |
 | Original MC02 legacy batch process pin | One existing authenticated native Inspect pins original MC02 PID/birth/session before first batch pulse. The already-existing private Mc02Input variant gains one optional batch_origin field, omitted for older one-shot bytes; actor compares it to the retained Channel binding BEFORE marking legacy input or publishing v4. Every batch pulse and its neutral carry the same origin; replacement/initial unverified target fail closed. Canonical MCP does not neutralize another child after proven pre-dispatch refusal | Rust actor/wire/CLI and Node negative fixtures AUTHORED_NOT_EXECUTED; no new public command, game-shared ABI, writer or per-pulse target lookup |
 | Original MC02 child-bind timestamp fence | Original per-process native Channel now records its single monotonic bind time after exact child identity binding and refuses both active and ReleaseAll requests issued before or at that time, before v4 memory is mapped. Native batch cleanup classifies this known pre-publication refusal as MC02_RELEASE_OBSOLETE so the verified MCP sender cannot neutralize the newly launched game with another fresh CLI. This is a bounded old-child refusal; same-tick cross-CLI command origin after bind remains unknown | Pure Rust four/five-cohort and CLI error-kind fixtures AUTHORED_NOT_EXECUTED, no private IPC/ABI/enablement change |
 | Legacy MC02 batch cleanup original-issue fence | The same-image native batch uses its last potentially dispatched pulse's original issue timestamp for ReleaseAll, not a fresh cleanup time. If a newer one-shot or neutral was accepted, original Channel refuses the stale release before shared-memory mutation. Definitive stale/expired actor refusal is exposed as MC02_RELEASE_OBSOLETE; only canonical MCP sender can avoid a dangerous second freshly timed neutral. Other uncertainty retains the original independent fallback | Rust/Node negative fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or feature activation change |
@@ -286,47 +287,39 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-This source pass traced the exact process-identity information already
-available from the original authenticated SessionRequest::Inspect:
-each responding MC02 has PID, Windows createdFileTime and session ID,
-independently validated by the retained native process/window owner.
-The legacy batch formerly sent only numerical slot and a newly issued
-timestamp on each private Mc02Input request. It could therefore adopt
-a relaunched original MC02 when a later pulse was minted AFTER the
-replacement's Channel::bind timestamp, despite the previous fence.
+The original per-process Channel already rejects an active packet
+issued at/before its most recent ReleaseAll and any active packet
+STRICTLY older than its most recent accepted active command. A
+remaining native ordering hole was demonstrated: two CLI processes
+can issue active input on the SAME GetTickCount64 millisecond but
+reach the authenticated original actor in a different order. The
+second accepted equal-tick frame could overwrite the first button
+mask and camera deltas without establishing that it was newer.
 
-The original same-image batch CLI now takes ONE read-only controller
-Inspect BEFORE any pulse and pins its original process identity.
-Source birth must precede the original MCP request's end-of-millisecond
-wall timestamp; an absent/nonresponding/replaced child refuses without
-dispatch. The existing private Mc02Input request adds OPTIONAL
-batch_origin PID/birth/session, copied to every subsequent batch
-pulse and its cleanup. The controller compares this witness with
-the retained original Channel's already-bound identity BEFORE
-legacy_begin_write and native shared-state mutation; each active
-input still passes the existing live identity/window checks. The
-one-shot legacy serialization remains byte-for-byte unchanged with
-batch_origin omitted, and the pipe's endpoint continues enforcing the
-SAME image, user/session and file identity. This is a reviewed
-additive PRIVATE IPC field, not a new public tool, controller,
-named pipe, per-pulse Win32 lookup, or shared ABI migration.
+This source-only change makes the original Channel active admission
+require an issue timestamp STRICTLY GREATER than both latest active
+and latest neutral watermarks. Equal-tick active requests fail closed
+before any shared-memory packet/cursor/edge publication. The
+established ReleaseAll tie-breaker remains unchanged and explicitly
+issued same-tick Stop/neutral remains allowed to release controls.
+Existing 4/5-client lease book, original per-game identity, private
+batch_origin pin, IPC layout, v4 96-byte ABI and compile-OFF feature
+flags stay untouched. Source-level 4/5-AI fixtures are
+AUTHORED_NOT_EXECUTED; this is not Windows/game acceptance.
 
-The canonical MCP suppresses a new-time fallback neutral only for a
-confirmed original native pre-dispatch target refusal or proven
-obsolete batch cleanup; injected callbacks, timeouts, IPC loss and
-other ambiguous results still attempt independent neutral. Native
-refusal is not evidence that Minecraft saw a key-up. Rust and Node
-fixtures were AUTHORED_NOT_EXECUTED. Same-millisecond independent
-legacy writers after binding remain ambiguous: this pin prevents
-cross-CHILD adoption but does not create a per-one-shot lease/nonce
-or prove any game received input. Do not overclaim source acceptance.
+**Remaining exact ambiguity:** old batch cleanup and a newer active
+one-shot can share the same issue millisecond; ReleaseAll still wins
+ties for safety, and the original legacy one-shot request has no
+transaction nonce to distinguish old cleanup from operator Stop.
+Do not claim perfect same-tick cleanup isolation or game key-up.
 
-**Single next source action:** inspect the remaining same-tick
-legacy writer-vs-writer ordering only if a concrete fix can reuse the
-original Channel/lease authority without disrupting explicitly
-authorized Stop/neutral actions. Avoid schema churn or speculative
-providers. The operator prefers CODE FIRST; Node/Rust/C++ tests,
-Windows builds, installed hooks and Minecraft four/five-client
-acceptance remain NOT_EXECUTED/NOT_VERIFIED.
-Cua strict Invoke-only stays `BACKGROUND_UNAVAILABLE`;
-GitHub Actions disabled and `main` unchanged.
+**Single next source action:** assess whether the existing original
+Channel and its batch-origin data can differentiate an obsolete
+same-tick batch cleanup from explicitly requested neutral, while
+preserving Stop and avoiding new controller/status/protocol layers.
+If not safely source-demonstrable, document the bounded limitation
+rather than adding speculative guards. Operator preference CODE FIRST:
+Node/Rust/C++ tests, Windows builds and Minecraft 4/5-client input
+remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only is
+`BACKGROUND_UNAVAILABLE`, GitHub Actions CI disabled and
+`main` unchanged.
