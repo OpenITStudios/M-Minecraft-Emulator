@@ -17,11 +17,22 @@
           --lt-line:#343b48;
           --lt-muted:#b5bfd0;
           --lt-accent:#bac2ff;
+          /* Minimal Professional semantic palette: one canonical source. */
+          --lt-text:#edf0f7;
+          --lt-on-accent:#18203a;
+          --lt-surface-raised:#242a36;
+          --lt-selected-bg:#303a5c;
+          --lt-control-outline:#667387;
+          --lt-success:#95dfbd;
+          --lt-warning:#d3b480;
+          --lt-danger:#efacb6;
+          --lt-viewport-bg:#101319;
+          --lt-danger-hover:#c42b1c;
           display:flex;
           flex-direction:column;
           height:100vh;
           background:var(--lt-bg);
-          color:#edf0f7}
+          color:var(--lt-text)}
           .lt-app button,.lt-app input,.lt-app select{
             font:inherit}
             .lt-app button{
@@ -29,7 +40,7 @@
               border:1px solid transparent;
               border-radius:6px;
               background:var(--lt-accent);
-              color:#18203a;
+              color:var(--lt-on-accent);
               padding:9px 13px;
               font-weight:600;
               flex-shrink:0}
@@ -37,14 +48,14 @@
                 cursor:default;
                 opacity:.5}
                 .lt-app button.lt-secondary{
-                  background:#242a36;
+                  background:var(--lt-surface-raised);
                   color:inherit;
-                  border-color:var(--lt-line)}
+                  border-color:var(--lt-control-outline)}
                   .lt-app :is(button,a,input,select,summary):focus-visible{
                     outline:2px solid var(--lt-accent);
                     outline-offset:3px}
                     .lt-app input,.lt-app select{
-                      border:1px solid var(--lt-line);
+                      border:1px solid var(--lt-control-outline);
                       border-radius:6px;
                       padding:8px 10px;
                       background:var(--lt-bg);
@@ -74,7 +85,7 @@
                               width:29px;
                               height:29px;
                               border-radius:7px;
-                              background:#303a5c;
+                              background:var(--lt-selected-bg);
                               color:var(--lt-accent);
                               font-size:12px}
                               .lt-topbar nav{
@@ -100,10 +111,10 @@
                                         width:7px;
                                         height:7px;
                                         margin-right:6px;
-                                        background:#95dfbd;
+                                        background:var(--lt-success);
                                         border-radius:50%}
                                         .lt-dot.waiting{
-                                          background:#d3b480}
+                                          background:var(--lt-warning)}
                                           .lt-layout{
                                             flex:1;
                                             min-height:0;
@@ -127,7 +138,7 @@
                                                       color:var(--lt-muted);
                                                       font-weight:400}
                                                       .lt-sidebar button.chosen{
-                                                        background:#303a5c;
+                                                        background:var(--lt-selected-bg);
                                                         color:inherit}
                                                         .lt-app main{
                                                           flex:1;
@@ -273,7 +284,7 @@
                                                                                                                             flex:1;
                                                                                                                             min-width:0}
                                                                                                                             .lt-danger-zone h3,.lt-app button.lt-danger{
-                                                                                                                              color:#efacb6}
+                                                                                                                              color:var(--lt-danger)}
                                                                                                                               .lt-location-options{
                                                                                                                                 margin:26px 0 14px;
                                                                                                                                 padding-top:20px;
@@ -292,7 +303,7 @@
                                                                                                                                             container-type:size;
                                                                                                                                             display:grid;
                                                                                                                                             place-items:center;
-                                                                                                                                            background:#101319;
+                                                                                                                                            background:var(--lt-viewport-bg);
                                                                                                                                             border-radius:9px}
                                                                                                                                           .lt-viewport{
                                                                                                                                             /* This exact element also supplies native placement and input bounds. */
@@ -301,7 +312,7 @@
                                                                                                                                             flex:none;
                                                                                                                                             border:1px solid var(--lt-line);
                                                                                                                                             border-radius:9px;
-                                                                                                                                            background:#101319;
+                                                                                                                                            background:var(--lt-viewport-bg);
                                                                                                                                             overflow:hidden}
                                                                                                                                             .lt-viewport.lt-desktop{
                                                                                                                                               background:var(--lt-panel)}
@@ -347,7 +358,7 @@
                                                                                                                                                           font-size:14px}
                                                                                                                                                           .lt-filmstrip .lt-card.selected{
                                                                                                                                                             border-color:var(--lt-accent);
-                                                                                                                                                            background:#303a5c}
+                                                                                                                                                            background:var(--lt-selected-bg)}
                                                                                                                                                             .lt-card-picture{
                                                                                                                                                               display:grid;
                                                                                                                                                               place-items:center;
@@ -381,7 +392,7 @@
                                                                                                                                                                       overflow:auto;
                                                                                                                                                                       overflow-wrap:anywhere}
                                                                                                                                                                       .lt-alert p{
-                                                                                                                                                                        color:#ffd0b8}
+                                                                                                                                                                        color:var(--lt-danger)}
                                                                                                                                                                         .lt-binding{
                                                                                                                                                                           display:flex;
                                                                                                                                                                           align-items:center;
@@ -393,7 +404,7 @@
                                                                                                                                                                             flex:1;
                                                                                                                                                                             min-width:180px}
                                                                                                                                                                             .lt-error{
-                                                                                                                                                                              color:#ffc3b0!important}
+                                                                                                                                                                              color:var(--lt-danger)!important}
                                                                                                                                                                               .lt-cache-confirm{
                                                                                                                                                                                 margin-top:14px;
                                                                                                                                                                                 background:var(--lt-panel)}
@@ -422,15 +433,15 @@
                                                                                                                                                                                                       }
 
 /* One application frame in Play and Settings, including native aperture mode. */
-.lt-app .lt-window-bar{display:flex;align-items:stretch;height:32px;flex:none;background:#1c2029;border-bottom:1px solid #343b48;user-select:none}
-.lt-app .lt-window-drag{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;border:0;border-radius:0;background:transparent;color:#edf0f7;padding:0 12px;font-size:12px;font-weight:400}
-.lt-window-drag>span:first-child{display:grid;place-items:center;background:#bac2ff;color:#18203a;border-radius:4px;width:18px;height:18px;font-size:10px;font-weight:700}
-.lt-app .lt-window-control{display:grid;place-items:center;width:46px;padding:0;border:0;border-radius:0;background:transparent;color:#edf0f7}
-.lt-app .lt-window-control:hover{background:#343b48}
-.lt-app .lt-window-close:hover{background:#c42b1c;color:#fff}
+.lt-app .lt-window-bar{display:flex;align-items:stretch;height:32px;flex:none;background:var(--lt-panel);border-bottom:1px solid var(--lt-line);user-select:none}
+.lt-app .lt-window-drag{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;border:0;border-radius:0;background:transparent;color:var(--lt-text);padding:0 12px;font-size:12px;font-weight:400}
+.lt-window-drag>span:first-child{display:grid;place-items:center;background:var(--lt-accent);color:var(--lt-on-accent);border-radius:4px;width:18px;height:18px;font-size:10px;font-weight:700}
+.lt-app .lt-window-control{display:grid;place-items:center;width:46px;padding:0;border:0;border-radius:0;background:transparent;color:var(--lt-text)}
+.lt-app .lt-window-control:hover{background:var(--lt-line)}
+.lt-app .lt-window-close:hover{background:var(--lt-danger-hover);color:#fff}
 .lt-window-control svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1}
-.lt-app button:focus-visible{outline:2px solid #bac2ff;outline-offset:-3px}
-.lt-app{color-scheme:dark;border:1px solid #343b48}
+.lt-app button:focus-visible{outline:2px solid var(--lt-accent);outline-offset:-3px}
+.lt-app{color-scheme:dark;border:1px solid var(--lt-line)}
 /* Use each card's width instead of capping live previews at 100px high. */
 .lt-filmstrip{width:min(100%,1600px);gap:12px}
 .lt-card-picture{width:min(100%,calc(clamp(80px,16vh,180px) * 16 / 9));max-height:none}
@@ -446,7 +457,7 @@
 .lt-audio-toggle input { width:18px; height:18px; accent-color:#bfc3ff; }
 
 /* Normal-exit failure is a session-recovery state, not a second launcher manager. */
-.lt-exit-recovery{flex:none;border:1px solid var(--lt-line);border-radius:8px;background:#242a36;padding:11px 14px;margin-bottom:12px;font-size:13px}
+.lt-exit-recovery{flex:none;border:1px solid var(--lt-line);border-radius:8px;background:var(--lt-surface-raised);padding:11px 14px;margin-bottom:12px;font-size:13px}
 .lt-exit-recovery h2{font-size:14px;margin:0 0 5px}
 .lt-exit-recovery p{margin:4px 0 8px;line-height:1.45}
 .lt-exit-recovery details{margin-top:6px;color:var(--lt-muted);max-height:140px;overflow:auto;overflow-wrap:anywhere}
@@ -479,9 +490,9 @@
    activity. Absolute positioning preserves existing rail/viewport geometry. */
 .lt-topbar{position:relative}
 .lt-agent-activity{position:absolute;right:230px;top:9px;z-index:12;width:192px;font-size:12px}
-.lt-agent-activity summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;padding:8px 10px;border:1px solid var(--lt-line);border-radius:6px;background:#242a36;color:var(--lt-accent)}
+.lt-agent-activity summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;padding:8px 10px;border:1px solid var(--lt-line);border-radius:6px;background:var(--lt-surface-raised);color:var(--lt-accent)}
 .lt-agent-activity summary:focus-visible{outline:2px solid var(--lt-accent);outline-offset:2px}
-.lt-agent-activity-details{position:absolute;right:0;top:38px;width:310px;max-width:calc(100vw - 40px);max-height:260px;overflow:auto;padding:14px;border:1px solid var(--lt-line);border-radius:8px;background:var(--lt-panel);color:#edf0f7;box-shadow:0 6px 24px #0006}
+.lt-agent-activity-details{position:absolute;right:0;top:38px;width:310px;max-width:calc(100vw - 40px);max-height:260px;overflow:auto;padding:14px;border:1px solid var(--lt-line);border-radius:8px;background:var(--lt-panel);color:var(--lt-text);box-shadow:0 6px 24px #0006}
 .lt-agent-activity-details strong{display:block;font-size:13px}
 .lt-agent-activity-details p{margin:8px 0;font-size:12px;line-height:1.4}
 .lt-agent-activity-details small{display:block;margin-top:10px;color:var(--lt-muted);line-height:1.4}
@@ -496,7 +507,7 @@
 
 /* Optional, manual-only coordinate text utility. Five native DWM cards remain intact. */
 .lt-coordinate-paste{position:relative;z-index:14;flex:none;font-size:12px}
-.lt-coordinate-paste>summary{display:block;cursor:pointer;white-space:nowrap;border:1px solid var(--lt-line);background:#242a36;color:inherit;border-radius:6px;padding:7px 11px;font-size:12px;line-height:normal}
+.lt-coordinate-paste>summary{display:block;cursor:pointer;white-space:nowrap;border:1px solid var(--lt-line);background:var(--lt-surface-raised);color:inherit;border-radius:6px;padding:7px 11px;font-size:12px;line-height:normal}
 .lt-coordinate-paste>summary:hover{background:#303a48}
 .lt-coordinate-paste>summary:focus-visible{outline:2px solid var(--lt-accent);outline-offset:3px}
 .lt-coordinate-popup{position:absolute;right:0;top:calc(100% + 8px);width:390px;max-width:calc(100vw - 68px);max-height:min(640px,78vh);overflow:auto;border:1px solid var(--lt-line);border-radius:9px;background:var(--lt-panel);padding:15px;box-shadow:0 12px 28px #0009;display:grid;gap:9px;text-align:left}
@@ -504,11 +515,11 @@
 .lt-coordinate-popup .lt-coordinate-status{color:var(--lt-accent);font-size:12px}
 .lt-coordinate-popup p{font-size:12px;line-height:1.45;margin:0}
 .lt-coordinate-popup label{display:block;font-size:12px;color:var(--lt-muted);font-weight:600}
-.lt-coordinate-popup textarea,.lt-coordinate-popup select,.lt-coordinate-popup input{width:100%;min-width:0;font:inherit;font-size:13px;border:1px solid var(--lt-line);background:var(--lt-bg);color:inherit;border-radius:6px;padding:8px 10px}
+.lt-coordinate-popup textarea,.lt-coordinate-popup select,.lt-coordinate-popup input{width:100%;min-width:0;font:inherit;font-size:13px;border:1px solid var(--lt-control-outline);background:var(--lt-bg);color:inherit;border-radius:6px;padding:8px 10px}
 .lt-coordinate-popup textarea{resize:vertical;min-height:52px;max-height:100px;overflow:auto}
 .lt-coordinate-popup textarea:focus-visible,.lt-coordinate-popup select:focus-visible,.lt-coordinate-popup input:focus-visible{outline:2px solid var(--lt-accent);outline-offset:2px}
 .lt-coordinate-popup input[readonly]{font-family:Consolas,"Cascadia Mono",monospace}
-.lt-coordinate-popup .lt-coordinate-error{color:#ffb5aa;font-size:12px}
+.lt-coordinate-popup .lt-coordinate-error{color:var(--lt-danger);font-size:12px}
 .lt-coordinate-output{display:flex;align-items:center;gap:8px;min-width:0}
 .lt-coordinate-output input{flex:1}
 .lt-coordinate-popup .lt-coordinate-output button{flex:none;font-size:12px;padding:8px}
@@ -539,3 +550,44 @@
 .lt-coordinate-saved-text code{font-family:Consolas,"Cascadia Mono",monospace;font-size:12px;user-select:text}
 .lt-coordinate-saved-buttons{display:flex;flex-wrap:wrap;gap:6px}
 .lt-coordinate-saved-buttons button{font-size:11px;padding:6px 9px}
+
+/* Standalone Lazy Tester identity: reuse the bundle icon rather than duplicating
+   logo geometry in Tauri, the titlebar, and the empty Play surface. */
+.lt-brand > .lt-brand-mark,
+.lt-window-drag > span.lt-window-mark:first-child,
+.lt-empty > .lt-empty-mark{
+  display:block;
+  flex:none;
+  background:transparent url("../src-tauri/app-icon.svg") center / contain no-repeat;
+}
+.lt-brand > .lt-brand-mark{width:29px;height:29px;border-radius:7px}
+.lt-window-drag > span.lt-window-mark:first-child{width:18px;height:18px;border-radius:4px}
+.lt-empty > .lt-empty-mark{width:56px;height:56px;margin-bottom:12px}
+.lt-play-tools{display:flex;align-items:center;gap:6px;padding-left:8px;border-left:1px solid var(--lt-line)}
+.lt-app .lt-play-header .lt-header-actions{flex-wrap:wrap;justify-content:flex-end}
+.lt-app .lt-coordinate-paste > summary,.lt-app .lt-agent-activity summary{
+  border-color:var(--lt-control-outline);
+}
+.lt-app :is(button,a,input,textarea,select,summary):focus-visible{
+  outline:2px solid var(--lt-accent);
+  outline-offset:2px;
+}
+.lt-coordinate-popup .lt-coordinate-help,
+.lt-f3-popup .lt-f3-disclaimer,
+.lt-coordinate-saved-header button,
+.lt-coordinate-saved-buttons button{font-size:12px}
+@media (forced-colors:active){
+  .lt-app button,.lt-app input,.lt-app textarea,.lt-app select,
+  .lt-app summary{border:1px solid ButtonText}
+  .lt-filmstrip .lt-card.selected{outline:2px solid Highlight;outline-offset:-2px}
+  .lt-app :is(button,a,input,textarea,select,summary):focus-visible{
+    outline:2px solid Highlight;outline-offset:2px;
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .lt-app *, .lt-app *::before, .lt-app *::after{
+    transition-duration:0.01ms!important;
+    animation-duration:0.01ms!important;
+    scroll-behavior:auto!important;
+  }
+}

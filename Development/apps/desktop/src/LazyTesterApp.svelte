@@ -27,12 +27,28 @@
   let queuedPreset:{slot:ProfileSlot;preset:GraphicsPreset}|null=null;
   let queuedAudio:'Keep'|'Mute'|null=null;
   let selectedSlot:ProfileSlot=1, graphicsPreset:GraphicsPreset='Preserve';
+  // Unsaved graphics choices belong to this mounted UI only; they never write profile data.
+  const graphicsDrafts = new Map<ProfileSlot, GraphicsPreset>();
+  function rememberGraphicsDraft(): void {
+    const saved = settings?.graphicsPresets?.[selectedSlot - 1];
+    if (!saved) return;
+    if (graphicsPreset !== saved) graphicsDrafts.set(selectedSlot, graphicsPreset);
+    else graphicsDrafts.delete(selectedSlot);
+  }
+  function graphicsChoice(slot: ProfileSlot): GraphicsPreset {
+    return graphicsDrafts.get(slot) ?? settings?.graphicsPresets?.[slot - 1] ?? 'Preserve';
+  }
   let advanced=false;
   $: selectedStorage=storage?.find(item=>item.slot===selectedSlot);
   $: selectedProfile=profiles.find(item=>item.slot===selectedSlot);
   $: selectedPath=dataLocation?.profiles.find(item=>item.slot===selectedSlot)?.path;
   $: graphicsDirty=!!settings?.graphicsPresets&&graphicsPreset!==settings.graphicsPresets[selectedSlot-1];
-  function chooseSlot(slot:ProfileSlot){selectedSlot=slot;clearSlot=null;recovery=null;fullReview=null;settingsNotice='';graphicsPreset=settings?.graphicsPresets?.[slot-1]??'Preserve';}
+  function chooseSlot(slot:ProfileSlot){
+    if (slot===selectedSlot) return;
+    if (page==='settings') rememberGraphicsDraft();
+    selectedSlot=slot;clearSlot=null;recovery=null;fullReview=null;settingsNotice='';
+    graphicsPreset=graphicsChoice(slot);
+  }
   let savingPerformance=false;
   let queuedPerformance:{active:number;background:number}|null=null;
   let activeFps:number|undefined=144,backgroundFps:number|undefined=10,performanceNotice='';
@@ -101,7 +117,9 @@
   $: primary = active ?? requested ?? profiles.find(profile => profile.state === 'RUNNING')?.slot ?? 1;
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
-  $: playableCount = profiles.filter(profile => profile.state === 'RUNNING').length;
+  // Displayed observations are narrower than occupied sessions used for native safety gates.
+  $: observedRunningCount = profiles.filter(profile => profile.state === 'RUNNING').length;
+  $: startingCount = profiles.filter(profile => profile.state === 'STARTING').length;
   // Display-only health projection from the existing verified observations.
   // No new monitoring timer, native request or admission state.
   $: healthIssues = projectSessionHealth({
@@ -304,6 +322,7 @@
   function navigate(next: typeof page) {
     // Settings and storage require the Windows native session owner.
     if (nativeBackend !== 'WindowsNative') return;
+    if (page==='settings') rememberGraphicsDraft();
     closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
     if(next==='launchers')next='workspace';
     queuedPage = next; queued = null;queuedLaunch=null;
@@ -319,7 +338,7 @@
       if(next==='settings') {
         const snapshot=await lazyTester.settings();profiles=snapshot.profiles;settings=snapshot.settings;available=true;
         if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
-        graphicsPreset=settings.graphicsPresets?.[selectedSlot-1]??'Preserve';
+        graphicsPreset=graphicsChoice(selectedSlot);
       }
       if(next==='storage'||next==='settings') {
         try {dataLocation=await lazyTester.dataLocation();locationIssue='';}
@@ -380,6 +399,7 @@
       const snapshot=await lazyTester.applyGraphics(request.slot,request.preset);
       profiles=snapshot.profiles;settings=snapshot.settings;
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
+      graphicsDrafts.delete(request.slot);
       settingsNotice=request.preset==='Preserve'
         ? 'Minecraft - '+request.slot+': Preserve Visuals saved. LazyTester will leave Minecraft graphics options unchanged on future launches; existing edits are not automatically undone.'
         : 'Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
@@ -835,7 +855,7 @@
 <div class="lt-app">
   <WindowTitlebar backendSupport={nativeBackend} />
   <header class="lt-topbar">
-    <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span>LT</span>Lazy Tester</a>
+    <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span class="lt-brand-mark" aria-hidden="true"></span>Lazy Tester</a>
     <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress||nativeBackend!=='WindowsNative'} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
     {#if page==='workspace'&&available&&activityView}
       <AgentActivityNotice view={activityView}/>
@@ -847,7 +867,7 @@
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
-        <div class="lt-header-actions">{#if page==='workspace'}<F3InspectorPanel view={f3View} /><CoordinatePastePanel selectedSlot={active} />{/if}<button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={()=>{if(!closeReviewActive(reviewState()))manualRefreshRequested=true;}}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}</div>
+        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={()=>{if(!closeReviewActive(reviewState()))manualRefreshRequested=true;}}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}{#if page==='workspace'}<div class="lt-play-tools" role="group" aria-label="Play tools"><F3InspectorPanel view={f3View} /><CoordinatePastePanel selectedSlot={active} /></div>{/if}</div>
       </header>
       {#if issueKey!==null||connectionIssueKey!==null}
         <div class="lt-alert" role="alert">
@@ -888,11 +908,11 @@
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{available&&binding?.configured?runningCount+' of 5 running':'Session status unavailable'}</p></div>{:else if !active}<div class="lt-empty"><span>LT</span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lt-empty"><span class="lt-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
-        <div class="lt-games-heading"><span>Your games</span><span>{#if available&&binding?.configured}{runningCount} of 5 running{#if attentionCount > 0} · {attentionCount} need attention{/if}{:else}Session status unavailable{/if}</span></div>
+        <div class="lt-games-heading"><span>Your games</span><span>{#if available&&binding?.configured}{observedRunningCount} of 5 reported running{#if startingCount > 0} · {startingCount} starting{/if}{#if attentionCount > 0} · {attentionCount} need attention{/if}{:else}Session status unavailable{/if}</span></div>
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
           {separateSlots} unresolvedRecovery={uncertainWindowSlots}
           {available} bindingConfigured={!!binding?.configured} {busy}

@@ -17,6 +17,8 @@ previews. Starting the app does not automatically start Minecraft.
 
 **Current source and contracts:**
 
+- [Visual identity and UX consistency](visual-identity-and-ui-ux.md) — standalone
+  Lazy Tester brand, semantic UI tokens and read-only acceptance matrix.
 - [Unified workspace](unified-workspace.md) — active first section
   defines operator actions, profile identity, native windows, recovery
   and data preservation. Sections explicitly labeled historical

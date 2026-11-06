@@ -1,5 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="48" fill="#bac2ff"/>
-  <path d="M48 64H76V166H116V192H48Z" fill="#18203a"/>
-  <path d="M112 64H216V92H178V192H150V92H112Z" fill="#18203a"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Lazy Tester">
+  <title>Lazy Tester</title>
+  <!-- Focused Workspace: one chosen window, one retained background window. -->
+  <rect width="256" height="256" rx="52" fill="#BAC2FF"/>
+  <rect x="45" y="73" width="129" height="136" rx="21" fill="none" stroke="#18203A" stroke-width="15"/>
+  <rect x="84" y="46" width="128" height="136" rx="21" fill="#BAC2FF" stroke="#18203A" stroke-width="15"/>
+  <path d="M108 91H185" stroke="#18203A" stroke-width="14" stroke-linecap="round"/>
+  <rect x="108" y="117" width="78" height="40" rx="9" fill="#18203A"/>
 </svg>

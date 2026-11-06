@@ -164,13 +164,8 @@
   function resetOnClose(event: Event): void {
     if (!(event.currentTarget as HTMLDetailsElement).open) {
       ++loadTicket;
-      raw = '';
-      mode = 'XYZ';
-      output = '';
-      invalid = false;
-      bookmarkName = '';
-      worldLabel = '';
-      dimension = 'Unknown';
+      // Closing a disclosure is not a discard request. Retain unsaved manual text
+      // only in this mounted UI; clear the slot-specific saved list and pending review.
       saved = [];
       savedStatus = '';
       deleteReview = null;
@@ -190,6 +185,7 @@
   <div class="lt-coordinate-popup" role="group" aria-label="Manual coordinate formatter">
     <strong>Manual coordinates</strong>
     <small class="lt-coordinate-status">User-pasted · Unverified</small>
+    <p class="lt-coordinate-help">Closing this panel keeps your unsaved text until the app closes. Check the selected launcher label before saving.</p>
     <p id="lt-coordinate-input-hint">In Minecraft Education, enable Settings > Show Coordinates. If your version provides Creator > Enable Copy Coordinate UI, press Ctrl+Alt+C in Minecraft and Ctrl+V here. Education 26.33 copy-shortcut support remains unverified. Otherwise type XYZ manually. This tool never reads the clipboard or identifies a player/world.</p>
     <label for="lt-coordinate-input">XYZ coordinates</label>
     <textarea
