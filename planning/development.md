@@ -33,16 +33,14 @@ NOT_VERIFIED.
   then action admission and independently verified background delivery.
   Keep Minecraft native game input separate and **NOT_VERIFIED**.
 - **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
-  blocked; P65 synthetic counter; P66-P68 native 4/5-client cohort
-  cleanup and MCP recovery; P69+ C++ OGLES root, rejected-epoch,
-  input-isolation and buffered Raw Input thread integrity.
-  Latest source hardening adds a lightweight last native-publication
-  fence after keyboard diagnostics: virtual async key press cursors
-  roll back if neutral/replacement wins; KeyState and KeyboardState
-  zero a stale held mask. Full native target/focus verification still
-  happens via currentPacket, while the final recheck uses only v4
-  atomics and uptime rather than another Win32 HWND lookup.
-  Rust controller and ABI unchanged; C++ assertions AUTHORED_NOT_EXECUTED.
+  blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
+  cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
+  isolation, Raw Input owner-thread and keyboard final-read guards.
+  Latest owner-local C++ correction retains over-limit virtual cursor
+  deltas as bounded prefixes instead of losing them, and rechecks native
+  publication before cursor consumption. No new writer, driver, ABI
+  or default build; C++ constexpr fixtures AUTHORED_NOT_EXECUTED.
+
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
   upstream Cua Driver source pinned there. No REA binary session, no
@@ -86,6 +84,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Virtual cursor bounded backlog | Per-poll cursor move limited to ±32767 without dropping remaining accumulated look; same native revision can deliver its unconsumed prefix after exact publication revalidation | C++ compile-time negative boundary assertions AUTHORED_NOT_EXECUTED; compile-OFF |
 | Win32 last native-write fence | Additional lightweight v4 publication check after keyboard diagnostics; rollback tentative async press cursor on lost native publication, zero held KeyState and scrub KeyboardState | C++ constexpr negatives authored NOT_EXECUTED; compile-OFF |
 | Win32 virtual polling final-read gate | Preserve publication revision with initial virtual input; recheck full target/focus/TTL before returning keyboard masks, committing async press counts, or consuming camera delta; scrub GetKeyboardState on late neutral | C++ negative constexpr fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Raw Input pinned-thread revalidation | Same original OGLES HWND and game-thread owner are checked before and after provisional prefix copy; on observed replacement the copied records are scrubbed and read cursors stay unchanged; release-only still permits hidden original root | C++ constexpr negatives AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -213,14 +212,15 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Review the original per-process virtual cursor return-time contract**
-for a demonstrable stale-camera state after a concurrent native
-ReleaseAll. Pin fresh `Local`, inspect the existing C++ cursor/Raw
-Input consumers against the retained Rust v4 writer and the latest
-native-publication fence. Correct only an owner-local bug with bounded
-source-only negative fixtures; preserve human MC01 physical input,
-zero-word pending key-up/mouse-up, exact PID/birth/HWND/session, no
-new controller, driver or game action route. Strict Cua Invoke remains
-`BACKGROUND_UNAVAILABLE`. Native input remains compile-OFF; no
-Node/Rust/C++ test, build, CI, Windows or Minecraft execution without
-separate operator approval.
+**Source-only inspect cursor recentering and latest native packet
+admission in the original C++ input consumer.** Pin fresh `Local`.
+Check `observedSetCursor` and `observedCursor` against the
+controller-owned cursor epoch, the new bounded cumulative-look read
+cursor and the original ReleaseAll. If a proven stale/cross-thread
+cursor problem exists, correct it in the current owner with bounded
+source-only fixtures; otherwise retain the existing code and move to
+the next unfinished native integration contract. Do not add a new
+driver, controller, global input route, backend, status ledger or
+package. Cua Invoke-only remains `BACKGROUND_UNAVAILABLE`;
+experimental native input stays compile-OFF. Node/Rust/C++ tests,
+builds, CI, Windows and Minecraft remain NOT_EXECUTED/NOT_VERIFIED.

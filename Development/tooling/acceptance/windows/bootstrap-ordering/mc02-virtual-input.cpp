@@ -11,6 +11,7 @@
 #include <cstring>
 #include <initializer_list>
 #include <cwchar>
+#include <limits>
 #if defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
 #include <array>
 #endif
@@ -554,32 +555,71 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
     return TRUE;
 
 #if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
+// Do not discard all pending relative look when the original controller
+// has accumulated more than one safe virtual cursor step between polls.
+// Capping the step (not the total) preserves the exact unconsumed suffix.
+// Avoid signed 64-bit subtraction overflow at the ABI saturation limits.
+constexpr std::int64_t boundedVirtualLookStep(std::int64_t target,
+                                             std::int64_t consumed) noexcept {
+    constexpr std::int64_t limit=32767;
+    constexpr auto maximum=std::numeric_limits<std::int64_t>::max();
+    constexpr auto minimum=std::numeric_limits<std::int64_t>::min();
+    if (target>=consumed) {
+        if (consumed<=maximum-limit && target>consumed+limit) return limit;
+    } else if (consumed>=minimum+limit && target<consumed-limit) {
+        return -limit;
+    }
+    return target-consumed;
+}
+static_assert(boundedVirtualLookStep(40000,0)==32767);
+static_assert(boundedVirtualLookStep(40000,32767)==7233);
+static_assert(boundedVirtualLookStep(-40000,0)==-32767);
+static_assert(boundedVirtualLookStep(-40000,-32767)==-7233);
+static_assert(boundedVirtualLookStep(0,0)==0);
+static_assert(boundedVirtualLookStep(
+    std::numeric_limits<std::int64_t>::max(),
+    std::numeric_limits<std::int64_t>::min())==32767);
+static_assert(boundedVirtualLookStep(
+    std::numeric_limits<std::int64_t>::min(),
+    std::numeric_limits<std::int64_t>::max())==-32767);
+
 void applyPendingCursor(std::uint64_t word,std::uint64_t revision) {
     if (!view || !word || !revision ||
         cursorReadBusy.test_and_set(std::memory_order_acquire)) return;
     const auto before=view->cursorRevision.load(std::memory_order_seq_cst);
-    if (before==revision && before!=seenRevision) {
+    if (before==revision) {
         const auto x=view->cursorX.load(std::memory_order_seq_cst);
         const auto y=view->cursorY.load(std::memory_order_seq_cst);
         const auto epoch=view->cursorEpoch.load(std::memory_order_seq_cst);
-        // Reject accumulated look after a late native neutral or an
-        // invalidated source epoch, even when this hook originally saw
-        // a live packet. Only a confirmed same-publication delta advances.
-        if (sameLiveActivePublication(word,revision)) {
-            // Same epoch: take the difference in cumulative totals, even
-            // when multiple fresh commands arrived before one game poll.
-            // New epoch: the previous, expired cursor backlog is dropped.
-            const auto dx=epoch==seenEpoch ? x-seenX : x;
-            const auto dy=epoch==seenEpoch ? y-seenY : y;
-            // Reject implausible arithmetic rather than wrap LONG and
-            // teleport MC02's virtual pointer across the screen.
-            if (dx>=-32767 && dx<=32767 && dy>=-32767 && dy<=32767) {
-                virtualX.fetch_add(static_cast<LONG>(dx),std::memory_order_acq_rel);
-                virtualY.fetch_add(static_cast<LONG>(dy),std::memory_order_acq_rel);
-                if (dx || dy) noteVirtualRead(sawVirtualLook,
+        // A partially consumed large delta must remain eligible even
+        // when the controller has not published another revision.
+        // On a new epoch, discard the earlier expired backlog entirely.
+        const auto baseX=epoch==seenEpoch?seenX:0;
+        const auto baseY=epoch==seenEpoch?seenY:0;
+        if (before!=seenRevision || epoch!=seenEpoch ||
+            x!=baseX || y!=baseY) {
+            // The initial full admission checks the pinned game HWND,
+            // real human focus (hybrid), input expiry and rejected epoch.
+            // Recheck the same native publication after reading totals;
+            // no read cursor is advanced on a late ReleaseAll.
+            if (sameLiveActivePublication(word,revision) &&
+                sameNativePublicationAtReturn(word,revision)) {
+                const auto stepX=boundedVirtualLookStep(x,baseX);
+                const auto stepY=boundedVirtualLookStep(y,baseY);
+                virtualX.fetch_add(static_cast<LONG>(stepX),
+                    std::memory_order_acq_rel);
+                virtualY.fetch_add(static_cast<LONG>(stepY),
+                    std::memory_order_acq_rel);
+                seenEpoch=epoch;
+                seenRevision=before;
+                // Only a delivered bounded prefix is consumed. Remaining
+                // motion stays pending for the next original game poll;
+                // no new shared-memory field or second producer is needed.
+                seenX=baseX+stepX;
+                seenY=baseY+stepY;
+                if (stepX || stepY) noteVirtualRead(sawVirtualLook,
                     L"[LT_MC02_INPUT][VIRTUAL_LOOK_RETURNED]\n");
             }
-            seenEpoch=epoch;seenRevision=before;seenX=x;seenY=y;
         }
     }
     cursorReadBusy.clear(std::memory_order_release);
