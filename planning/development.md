@@ -36,14 +36,13 @@ NOT_VERIFIED.
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
-  Source cursor hardening now fences recentering to the native
-  publication first admitted by the original controller. SetCursorPos
-  rechecks active word+revision before and after the paired virtual
-  coordinate update; on a concurrent native change both axes roll back.
-  Neutral-only menu recenter remains possible only with the SAME stable
-  zero-packet native revision. The existing cursor position mutex,
-  original Rust v4 channel and Raw Input pending releases are unchanged.
-  C++/Rust execution NOT_EXECUTED.
+  Latest source-only hardening keeps pending buffered Raw Input
+  key-up/mouse-up planning valid even at opposite signed i64 camera
+  limits: both cursor consumers now share the same bounded, overflow-
+  safe delta calculation before recording cursor consumption. The
+  original release ordering, native Rust v4 writer, HWND/thread gate,
+  cursor mutex and compile-OFF defaults are unchanged. C++/Rust
+  execution NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -88,6 +87,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Raw Input signed-look bound | Share overflow-safe bounded i64 delta with cursor polling before planning Raw Input; retains pending key-up/mouse-up ordering at extreme cumulative look totals | C++ constexpr boundary assertions AUTHORED_NOT_EXECUTED; feature compile-OFF |
 | Virtual cursor recenter publication fence | SetCursorPos permits live recenter only against original active publication, or stable native zero-packet menu state; a concurrent ReleaseAll/replacement rolls back both virtual axes without touching physical cursor | C++ constexpr negative fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
 | Virtual cursor position interleaving | One short local mutex keeps initial physical sampling, recenter, virtual X/Y reads and camera delta commits coherent; lost ReleaseAll publication rolls back both temporary axes and leaves look backlog unconsumed | Source-only static contract inspection; tests NOT_EXECUTED |
 | Virtual cursor scope correction | Close `observedKeyboard` before the virtual cursor implementation so optional Raw-buffer and default polling branches remain namespace-level functions | Both C++ preprocessor branches statically scope-balanced; MSVC tests/build NOT_EXECUTED |
@@ -219,15 +219,14 @@ and preserve the actual execution gate as NOT_EXECUTED.
 
 ## Single next step
 
-**Source-only review of the existing virtual cursor and Raw Input
-release-time contracts after recenter admission.** Re-pin `Local` and
-inspect the original C++ reader against Rust v4 `release_all`, focusing
-on any unconsumed held-key release or stale look after a neutral
-transition. Correct only demonstrable owner-local errors with bounded
-negative fixtures; if no real source defect remains, retain current
-code rather than adding another controller, driver, transport,
-milestone or retry. Preserve original MC01 physical input, safe
-zero-word Raw Input key-up, default compile-OFF native input and
-`BACKGROUND_UNAVAILABLE` for strict Cua Invoke. C++/Rust/Node
-tests/builds, CI, Windows and Minecraft remain NOT_EXECUTED/
-NOT_VERIFIED until separately authorized.
+**Source-only inspect the original pending Raw Input DOWN→UP
+one-record prefix path and native release transaction for a remaining
+proven correctness defect.** Re-pin `Local`; compare the C++ rawHeldMask,
+press-count and cursor read cursors with the Rust v4 ReleaseAll
+boundary. Preserve original game-thread OGLES ownership, hidden-window
+zero-word release, and no physical input fallback. Fix only a source-
+demonstrable defect; otherwise avoid speculative extra safeguards or
+milestone churn. Original 4/5-client input remains compile-OFF,
+strict Cua Invoke `BACKGROUND_UNAVAILABLE`; C++/Rust/Node tests,
+builds, CI, Windows and Minecraft NOT_EXECUTED/NOT_VERIFIED pending
+separate operator approval.

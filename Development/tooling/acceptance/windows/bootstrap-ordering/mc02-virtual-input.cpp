@@ -591,11 +591,12 @@ BOOL WINAPI observedKeyboard(PBYTE state) {
     return TRUE;
 }
 
-#if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
-// Do not discard all pending relative look when the original controller
-// has accumulated more than one safe virtual cursor step between polls.
-// Capping the step (not the total) preserves the exact unconsumed suffix.
-// Avoid signed 64-bit subtraction overflow at the ABI saturation limits.
+// Both optional camera consumers (virtual GetCursorPos and buffered
+// Raw Input) read the ORIGINAL Rust writer's saturating i64 totals.
+// Cap the next step BEFORE subtracting: x-baseX can overflow a signed
+// i64 at opposite saturation limits. A failure in buffered planning
+// must never prevent already-held key-up/mouse-up transitions.
+// The unconsumed suffix remains available within the current epoch.
 constexpr std::int64_t boundedVirtualLookStep(std::int64_t target,
                                              std::int64_t consumed) noexcept {
     constexpr std::int64_t limit=32767;
@@ -619,7 +620,12 @@ static_assert(boundedVirtualLookStep(
 static_assert(boundedVirtualLookStep(
     std::numeric_limits<std::int64_t>::min(),
     std::numeric_limits<std::int64_t>::max())==-32767);
+static_assert(boundedVirtualLookStep(32768,0)==32767);
+static_assert(boundedVirtualLookStep(32768,32767)==1);
+static_assert(boundedVirtualLookStep(-32768,0)==-32767);
+static_assert(boundedVirtualLookStep(-32768,-32767)==-1);
 
+#if !defined(BOOTSTRAP_MC02_RAW_BUFFER_POLL)
 void applyPendingCursor(std::uint64_t word,std::uint64_t revision) {
     if (!view || !word || !revision ||
         cursorReadBusy.test_and_set(std::memory_order_acquire)) return;
@@ -840,11 +846,12 @@ RawPlan nextRawPlan(std::uint64_t word) {
         plan.epoch=epoch;plan.counts=counts;
         const auto baseX=epoch==rawSeenEpoch?rawSeenX:0;
         const auto baseY=epoch==rawSeenEpoch?rawSeenY:0;
-        const auto dx=x-baseX,dy=y-baseY;
-        // One call cannot move a virtual pointer by an unbounded amount.
-        // Keep the unconsumed remainder for the next buffered poll.
-        const auto moveX=dx>32767?32767:dx< -32767?-32767:dx;
-        const auto moveY=dy>32767?32767:dy< -32767?-32767:dy;
+        // Reuse the polling cursor's overflow-safe bounded delta.
+        // Never evaluate signed x-baseX/y-baseY before the clamp:
+        // the Rust writer can legitimately saturate either total
+        // and RawPlan must still be able to emit held-button releases.
+        const auto moveX=boundedVirtualLookStep(x,baseX);
+        const auto moveY=boundedVirtualLookStep(y,baseY);
         plan.cursorX=baseX+moveX;
         plan.cursorY=baseY+moveY;
         pendingLookX=static_cast<LONG>(moveX);
