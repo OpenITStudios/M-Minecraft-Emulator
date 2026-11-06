@@ -1436,7 +1436,9 @@ export function createHandler(config,{
   // an explicit exact-owner neutral ACK OR a verified new AI game launch.
   // No native requests or game writes occur merely by starting MCP.
   const startupReconcileSlots=new Set();
-  let observedSequenceSlots=null; // one opted-in observed batch at a time
+  // One transient observed-action round; no second native writer or observer.
+  // Carry the exact delivered PNG basis across the asynchronous writer lease.
+  let observedSequence=null;
   const markAiUncertain=slots=>{
     for(const slot of slots) {
       uncertainAiSlots.add(slot);
@@ -1553,11 +1555,11 @@ export function createHandler(config,{
     }
   }
   const revokeObservedRound=slot=>{
-    if(observedSequenceSlots?.includes(slot)) {
+    if(observedSequence?.slots.includes(slot)) {
       // A single missing/revoked captured frame source invalidates
       // the entire SELECTED action round. Never silently proceed with
       // the remaining AI clients or start a retry.
-      markAiUncertain(observedSequenceSlots);
+      markAiUncertain(observedSequence.slots);
       multiSequence?.abort.abort();
     }
   };
@@ -2728,14 +2730,25 @@ export function createHandler(config,{
       // and entering the existing exclusive native action path below.
       // Native lease acquisition still validates its exact original child;
       // this preflight is not atomic Windows/gameplay attestation.
-      const transportStartedAt=new Date().toISOString();
-      observedSequenceSlots=[...schedule.slots];
+      // Acquire can await the original actor while the delivered images
+      // age out or advance. Carry the same exact source-visible baseline
+      // into the active native path, rather than trusting preflight alone.
+      const observedRound={slots:[...schedule.slots],
+        basis:state.frames.map(frame=>frame.baseline),
+        dispatchStartedAtMs:null};
+      observedSequence=observedRound;
       try {
         const receipt=await callTool('run_experimental_multi_client_actions',{
           actions:args.actions,
         });
+        // Do not mislabel pre-lease waiting as action transport time.
+        if(!Number.isSafeInteger(observedRound.dispatchStartedAtMs)) {
+          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+        }
+        const transportStartedAt=new Date(
+          observedRound.dispatchStartedAtMs).toISOString();
         const transportCompletedAt=new Date().toISOString();
-        const prior=state.frames.map(frame=>frame.baseline);
+        const prior=observedRound.basis;
         return {...receipt,mode:config.mode,visualBaseline:prior,
           actionFingerprint:fingerprintActions(config.mode,args.actions),
           transportStartedAt,transportCompletedAt,
@@ -2749,7 +2762,7 @@ export function createHandler(config,{
             requiredInputs:['actions','receipt','after','reviews']},
           note:'Compare newer per-client samples and explicitly review PNGs via read_visual_observation; unchanged or changed PNG bytes alone cannot prove Minecraft movement.'};
       } finally {
-        observedSequenceSlots=null;
+        if(observedSequence===observedRound) observedSequence=null;
       }
     }
     if (name==='run_experimental_multi_client_actions') {
@@ -2789,6 +2802,26 @@ export function createHandler(config,{
         // A visual source could disappear during the await. Do not
         // acquire a lease and then send the already-invalidated action.
         refuseUncertain(schedule.slots);
+        if(observedSequence!==null) {
+          // Reuse the existing observer metadata; never take another
+          // screenshot, start a worker or add a controller. Fail closed
+          // when even one original model-reviewed image has advanced,
+          // expired, changed identity, or lost its delivery proof.
+          const round=observedSequence;
+          if(round.slots.length!==schedule.slots.length ||
+             round.slots.some((slot,i)=>slot!==schedule.slots[i])) {
+            throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+          }
+          verifyTeamObservationBasis(config.mode,schedule.slots,round.basis,
+            schedule.slots.map(slot=>visualObserver.read(slot,{
+              includeImage:false,
+            }).metadata));
+          requireOpen();
+          if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
+          refuseUncertain(schedule.slots);
+          round.dispatchStartedAtMs=Date.now();
+        }
+        // No await between the final source check and native batch request.
         dispatched=true;
         const receipt=await aiMultiBatch(config.executable,schedule.batches,
           {signal:abort.signal,writerId,mode:config.mode,leaseEpoch});

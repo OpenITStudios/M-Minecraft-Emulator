@@ -2993,6 +2993,73 @@ test('observed actions reject a replaced live native window before ANY lease or 
   }
 });
 
+test('observed four/five AI batch refuses an advanced or expired PNG after lease acquire',async()=>{
+  // Authored source fixture ONLY; no Node suite, Windows or Minecraft run.
+  for(const [mode,expiry] of [
+    ['human-plus-four-ai',false],['five-ai',true],
+  ]) {
+    const fixture=teamVisualFixture(mode);
+    let notify,finish,armed=false,batches=0;
+    const entered=new Promise(resolve=>{notify=resolve;});
+    const gate=new Promise(resolve=>{finish=resolve;});
+    const leaseCalls=[];
+    const h=createHandler({...config(mode),
+      experimentalMultiClientInputEnabled:true},{
+      native:fixture.native,
+      visualObserverFactory:fixture.factory,
+      aiLease:async(exe,operation,slots,opts)=>{
+        leaseCalls.push([operation,...slots]);
+        if(armed&&operation==='acquire'&&!opts.neutralOnly) {
+          notify();
+          await gate;
+        }
+        return leaseAck(exe,operation,slots,opts);
+      },
+      aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+        status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+        gameplayObserved:false}),
+      aiMultiBatch:async()=>{
+        batches++;
+        throw Error('STALE_IMAGE_MUST_NOT_DISPATCH');
+      },
+    });
+    await h.callTool('stop_experimental_multi_client_actions',{
+      slots:fixture.slots,
+    });
+    leaseCalls.length=0;
+    const before=await h.callTool('get_multi_client_visual_state',{});
+    fixture.markDelivered();
+    armed=true;
+    const pending=h.callTool('run_experimental_observed_actions',{
+      actions:fixture.slots.map(aiMove),
+      basis:before.frames.map(frame=>frame.baseline),
+    });
+    await entered; // native writer lease ACK has not returned yet
+    const slot=fixture.slots[1];
+    const old=fixture.records.get(slot);
+    fixture.records.set(slot,expiry?
+      {...old,freshFrameAvailable:false,frameAgeMs:5000}:
+      {...old,sequence:old.sequence+1,successfulSamples:old.successfulSamples+1,
+        screenReviewFrameDelivered:false});
+    finish();
+    await assert.rejects(pending,expiry?
+      /TEAM_OBSERVATION_INCOMPLETE/:
+      /TEAM_OBSERVATION_STALE_OR_REPLACED/);
+    assert.equal(batches,0,
+      'a lease ACK cannot dispatch an older visual decision');
+    assert.deepEqual(leaseCalls,[
+      ['acquire',...fixture.slots],
+      ...fixture.slots.map(slot=>['release',slot]),
+    ],'undispatched original leases must be relinquished per slot');
+    const after=await h.callTool('get_multi_client_visual_state',{});
+    assert.deepEqual(after.coordination.pendingReconnectSlots,[]);
+    assert.equal(after.coordination.clients.some(client=>
+      client.blockReason==='UNCERTAIN_NATIVE_INPUT_REQUIRES_EXPLICIT_NEUTRAL'),
+    false,'a pre-dispatch image refusal is not an uncertain game packet');
+    h.shutdown();
+  }
+});
+
 test('a visual frame changed during async native preflight cannot authorize old AI input',async()=>{
   const fixture=teamVisualFixture();
   let mutated=false,leaseMutations=0;

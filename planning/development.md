@@ -49,6 +49,13 @@ NOT_VERIFIED.
   a changed native publication during their owned-window lookup. Their
   final return now reuses the existing same-live-publication gate,
   without new ownership, ABI or enablement. C++ tests NOT_EXECUTED.
+  This continuation closes one MCP source mismatch: the exact model-
+  reviewed PNG basis is now checked AFTER the asynchronous original
+  4/5-AI writer lease ACK and immediately before the native batch.
+  Changed/expired images abort before dispatch and release neutral
+  original leases. The observed receipt now measures transport start
+  at native batch handoff rather than pre-lease admission.
+  Node regression fixture AUTHORED_NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -93,6 +100,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Observed 4/5-AI post-lease PNG fence | The existing MCP round retains the exact delivered frame basis across the native lease wait, rejects stale/advanced images before batch dispatch, and reports the actual native request start time. No second observer or controller | Hybrid four-AI / full five-AI negative fixtures AUTHORED_NOT_EXECUTED; no Minecraft game input proof |
 | Integrated virtual focus return fence | Existing game-local GetForegroundWindow/GetActiveWindow/GetFocus detours now pin original revision and recheck live native packet, OGLES ownership, human foreground and expiry before returning spoofed focus; native ReleaseAll/replacement cannot leave an acknowledged stale focus result after the check | Reuses existing sameActivePublication C++ negative fixtures; compile-OFF; Windows tests NOT_EXECUTED |
 | Integrated exact-content ACK | Node hashes exact ordered native pulse argv; Rust CLI echoes the same SHA-256; mismatch is uncertain and keeps existing 4/5-AI neutral/quarantine | Node/Rust negative fixtures AUTHORED_NOT_EXECUTED |
 | Raw Input size-query admission | Size-only query now reports one RAWINPUT record only for a coherent same-word, even-revision, same original OGLES game-thread plan; stale/torn plans report zero without advancing any press/release cursor | C++ compile-time negative cases AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -256,15 +264,22 @@ The integrated A/B/C source matrix has been reviewed end-to-end:
 exact 4/5-client pulse content and canonical neutral-slot receipt,
 native lease/ReleaseAll, partial-group failure, cancel/timeout,
 explicit MCP recovery, and original C++ Raw Input zero-word pending UP.
-The source-proven late virtual-focus return mismatch was corrected in
-its existing C++ owner, reusing the original live-publication fence.
-No second engine, driver, IPC/ABI migration or default enablement.
+The late virtual-focus return mismatch is corrected in its C++ owner.
+This continuation fixes an observed-action source gap: a delayed native
+writer lease could leave a stale model-reviewed PNG basis eligible for
+dispatch. MCP now rechecks the exact image source/identity/age after
+lease ACK and before the native CLI request, without additional capture
+or OS IPC. Undispatched leases are released by the existing path.
+Transport start now reflects actual batch handoff. No new controller,
+driver, shared-memory ABI, default feature enablement, or background
+dispatch provider was introduced.
 
-**Next evidence boundary:** stop speculative source hardening on this
-completed review. An operator-authorized Windows build / isolated
-source tests must establish compiler, Raw Input and foreground safety
-before Minecraft Education 4/5-client movement and no-user-interruption
-acceptance can be claimed. Until then all source tests, builds, Windows
-runtime and Minecraft gameplay remain NOT_EXECUTED/NOT_VERIFIED;
-strict Cua Invoke-only remains `BACKGROUND_UNAVAILABLE`, GitHub
-Actions CI disabled and `main` unchanged.
+**Single next source action:** review the existing native CLI completion
+and cancellation boundary against MCP transport result and exact-owner
+lease cleanup for a demonstrable post-dispatch mismatch. Fix only if
+the original source proves a concrete issue. Operator preference remains
+CODE FIRST: Node/Rust/C++ tests, builds, Windows installs, native
+game sessions and four/five-client acceptance stay
+NOT_EXECUTED/NOT_VERIFIED until separately authorized.
+Cua strict Invoke-only remains `BACKGROUND_UNAVAILABLE`;
+GitHub Actions CI is disabled and `main` unchanged.
