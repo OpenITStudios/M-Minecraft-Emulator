@@ -598,3 +598,26 @@
 .lt-coordinate-paste[open] > summary{background:var(--lt-selected-bg)}
 .lt-coordinate-paste > summary{scroll-margin:8px}
 .lt-coordinate-popup :is(button,input,textarea,select):focus-visible{scroll-margin:12px}
+
+/* Settings and Storage only: retain readable controls at the application's
+   supported 920px minimum without changing native Play/DWM geometry. */
+.lt-page-loading{
+  flex:none;
+  margin:0 0 12px;
+  padding:8px 12px;
+  border-left:3px solid var(--lt-accent);
+  background:var(--lt-surface-raised);
+  color:var(--lt-text);
+  font-size:13px;
+}
+.lt-settings-layout h1:focus{
+  outline:2px solid var(--lt-accent);outline-offset:4px;border-radius:4px;
+}
+@media (max-width:1050px){
+  .lt-settings-layout .lt-settings-content{min-width:0}
+  .lt-settings-layout .lt-setting{flex-wrap:wrap;align-items:flex-start;gap:10px}
+  .lt-settings-layout .lt-setting > div:first-child{flex:1 1 290px}
+  .lt-settings-layout .lt-setting > button{max-width:100%;white-space:normal;text-align:center}
+  .lt-settings-layout .lt-target,.lt-settings-layout .lt-launcher-heading{flex-wrap:wrap}
+  .lt-settings-layout .lt-launcher-heading select{max-width:100%}
+}

@@ -165,3 +165,27 @@ coordinate drafts. No clipboard operations or unverified game input are added.
 **Evidence:** authored geometry/source fixtures only. Typecheck, Svelte
 runtime, WebView2 compatibility, 920×620 and DPI matrix, scroll/focus
 navigation, native DWM and Minecraft acceptance remain **NOT_EXECUTED**.
+
+## Settings / Storage navigation consistency — source-only update
+
+- The existing `LazyTesterApp.svelte` navigation dispatcher retains route
+  sequencing and native `workspaceSurface.suspend/present` ownership.
+- On explicit navigation into **General** or **Data Storage**, the page heading
+  receives programmatic focus after the Svelte view update. Returning to Play
+  does not redirect focus into its game-facing native viewport.
+- A short, live status announces that current Settings/Storage data is being
+  inspected. It does not claim that current values are game-verified or saved.
+- **Graphics** offers an explicit `Discard draft` operation which resets
+  only the currently selected in-memory graphics choice to the last saved
+  preset. Other profile drafts are unaffected; no Tauri or game IPC is called.
+- **Data Storage** keeps its launcher selector disabled while a cache/settings/
+  deletion review is active. An inline explanation tells users to finish or
+  cancel before switching. Native confirmation tokens and all existing
+  action-admission checks remain unchanged.
+- Below 1050 CSS px, Settings/Storage rows may wrap secondary controls instead
+  of forcing wide rows. The central Play viewport and all five keyed DWM
+  preview tiles retain their original dimensions and ordering.
+
+These are source-only improvements. Visual layout at 920×620, DPI 125–200%,
+keyboard/screen reader focus, WebView2, Svelte typechecking and Minecraft
+runtime remain `NOT_EXECUTED` without separate authorized execution.

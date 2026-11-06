@@ -35,6 +35,12 @@
     if (graphicsPreset !== saved) graphicsDrafts.set(selectedSlot, graphicsPreset);
     else graphicsDrafts.delete(selectedSlot);
   }
+  function discardGraphicsDraft(): void {
+    // A UI draft is not a persisted graphics setting; discard only this profile.
+    graphicsDrafts.delete(selectedSlot);
+    graphicsPreset=settings?.graphicsPresets?.[selectedSlot - 1] ?? 'Preserve';
+    settingsNotice='';
+  }
   function graphicsChoice(slot: ProfileSlot): GraphicsPreset {
     return graphicsDrafts.get(slot) ?? settings?.graphicsPresets?.[slot - 1] ?? 'Preserve';
   }
@@ -60,6 +66,9 @@
   type Page = 'workspace' | 'launchers' | 'storage' | 'settings';
   let page: Page = 'workspace';
   let queuedPage: Page | null = null;
+  // Ephemeral route feedback only; not another session or settings owner.
+  let loadingPage: Page | null = null;
+  let pageHeading: HTMLHeadingElement | undefined;
   let initializing = true, checkingStorage = false, storageCheckedAt = '';
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
   let viewport: HTMLDivElement, stageSpace: HTMLDivElement, observer: ResizeObserver | undefined;
@@ -330,10 +339,13 @@
   async function consumeNavigation() {
     const next = queuedPage; queuedPage = null;
     if (next === null || page === next) return;
-    busy = true; issueKey=null;
+    busy = true; loadingPage = next; issueKey=null;
     try {
       if (next !== 'workspace') await workspaceSurface.suspend();
       page = next; await tick();
+      // Focus content only for Settings/Storage navigation. Do not steal game focus in Play.
+      if (next !== 'workspace' && !disposed && pageHeading?.isConnected)
+        pageHeading.focus({preventScroll:true});
       if (next === 'workspace' && active !== null) await lazyTester.present(active, viewport.getBoundingClientRect());
       if(next==='settings') {
         const snapshot=await lazyTester.settings();profiles=snapshot.profiles;settings=snapshot.settings;available=true;
@@ -350,7 +362,7 @@
       }
       dirty = true;
     } catch (error) { issueKey='workspace'; dirty = true; }
-    finally { busy = false; }
+    finally { loadingPage = null; busy = false; }
   }
   async function refreshPage() {
     if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing) return;
@@ -866,9 +878,12 @@
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1 bind:this={pageHeading} tabindex={page==='workspace'?undefined:-1}>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={()=>{if(!closeReviewActive(reviewState()))manualRefreshRequested=true;}}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}{#if page==='workspace'}<div class="lt-play-tools" role="group" aria-label="Play tools"><F3InspectorPanel view={f3View} /><CoordinatePastePanel selectedSlot={active} /></div>{/if}</div>
       </header>
+      {#if loadingPage===page && page!=='workspace'}
+        <p class="lt-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>
+      {/if}
       {#if issueKey!==null||connectionIssueKey!==null}
         <div class="lt-alert" role="alert">
           {#if issueKey!==null}<p>{userMessage(issueKey)}</p>{/if}
@@ -944,6 +959,7 @@
           {settingsNotice} {performanceNotice} {dataLocation} {locationIssue}
           bindingConfigured={!!binding?.configured}
           onChooseSlot={chooseSlot} onRequestPreset={requestPreset}
+          onDiscardGraphics={discardGraphicsDraft}
           onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}
           onOpenDataFolder={() => loadLocation('Open')}
           onShowDataStorage={() => navigate('storage')}/>

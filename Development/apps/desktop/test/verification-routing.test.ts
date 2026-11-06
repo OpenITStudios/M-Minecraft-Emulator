@@ -35,11 +35,11 @@ describe("Emulator source verification routing", () => {
     expect(ui).toContain("observePreview={image} onSelect={select} onLaunch={launch}");
     expect(ui).toContain("onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}");
     expect(ui).not.toContain('<div class="lt-filmstrip"');
-    expect(rail).toContain('<div class="lt-filmstrip" aria-label="Minecraft launchers">');
+    expect(rail).toContain('<div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">');
     expect(rail).toContain("use:observePreview={profile.slot}");
     expect(rail).toContain("canRequestLaunch(profile)&&onLaunch(profile.slot)");
     expect(rail).toContain("guidedRecoveryAllowed(healthItem, profile, profile.slot,");
-    expect(rail).toContain("onRequestClose(profile.slot)");
+    expect(rail).toContain("onRequestClose(profile.slot,event.currentTarget)");
     expect(rail).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.|\bworkspaceSurface\s*\.|\bsetInterval\s*\(/);
   });
 
@@ -103,9 +103,9 @@ describe("Emulator source verification routing", () => {
     expect(view).toContain("bind:checked={fullAck}");
     expect(view).toContain("bind:open={advanced}");
     expect(view).toContain("on:submit|preventDefault={onClearAllData}");
-    expect(view).toContain("on:click={onCancelFullReview}");
-    expect(view).toContain("on:click={onCancelCacheReview}");
-    expect(view).toContain("on:click={onCancelSettingsReview}");
+    expect(view).toContain("cancelReview(onCancelFullReview)");
+    expect(view).toContain("cancelReview(onCancelCacheReview)");
+    expect(view).toContain("cancelReview(onCancelSettingsReview)");
     expect(view).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
   });
 

@@ -29,6 +29,7 @@
   export let locationIssue: string;
   export let onChooseSlot: (slot: ProfileSlot) => void;
   export let onRequestPreset: () => void;
+  export let onDiscardGraphics: () => void;
   export let onRequestPerformanceSave: () => void;
   export let onSaveAudio: (mode: BackgroundAudio) => void;
   export let onOpenDataFolder: () => void;
@@ -38,7 +39,7 @@
         <div class="lt-settings-content">
           <section class="lt-group"><h2>Graphics</h2><label class="lt-target">Applies to <select value={selectedSlot} disabled={busy||presetQueued} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select></label>
             <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>Choose whether to keep Minecraft's own visuals or apply a legacy preset for this launcher.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||presetQueued||!settings?.graphicsPresets}><option value="Preserve">Preserve Visuals</option><option value="High">High (legacy)</option><option value="Low">Low (legacy)</option></select></div>
-            <div class="lt-actions"><button disabled={busy||presetQueued||!available||!bindingConfigured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={onRequestPreset}>{applyingPreset||presetQueued?'Applying…':graphicsPreset==='Preserve'?'Save preference':'Apply preset'}</button></div>
+            <div class="lt-actions"><button disabled={busy||presetQueued||!available||!bindingConfigured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={onRequestPreset}>{applyingPreset||presetQueued?'Applying…':graphicsPreset==='Preserve'?'Save preference':'Apply preset'}</button>{#if graphicsDirty}<button type="button" class="lt-secondary" disabled={busy||presetQueued} on:click={onDiscardGraphics}>Discard draft</button>{/if}</div>
             <p class="lt-help">{runningCount>0?'Close all Minecraft sessions before saving a graphics preference.':'Saved graphics preferences apply the next time this Minecraft starts.'}</p>
             {#if graphicsDirty}<p class="lt-help" role="status">Unsaved graphics choice. You can switch launchers and return to this draft before closing Lazy Tester; no setting has been written yet.</p>{/if}
             {#if settings?.graphicsPresets && !settings.canApplyPreset && runningCount===0}<p class="lt-help">Graphics changes are unavailable in the latest controller report. Choose Refresh to check again.</p>{/if}
