@@ -2877,6 +2877,15 @@ export function createHandler(config,{
         if(leaseHeld&&released.length!==schedule.slots.length) {
           throw new Error('AI_WRITER_LEASE_RELEASE_UNCONFIRMED');
         }
+        // A Stop/shutdown may arrive AFTER the original batch ACK while
+        // individual native lease releases still await their CLI replies.
+        // A prior successful transport is not a completed MCP transaction
+        // once the operator has cancelled during this final cleanup.
+        // Preserve stronger unconfirmed neutral/lease errors above.
+        if(transportConfirmed&&(closed||abort.signal.aborted)) {
+          markAiUncertain(schedule.slots);
+          throw new Error('AI_SEQUENCE_ABORTED');
+        }
       }
     }
     if (name==='stop_experimental_mc02_actions') {

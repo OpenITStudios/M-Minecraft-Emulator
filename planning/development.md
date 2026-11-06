@@ -55,7 +55,14 @@ NOT_VERIFIED.
   Changed/expired images abort before dispatch and release neutral
   original leases. The observed receipt now measures transport start
   at native batch handoff rather than pre-lease admission.
-  Node regression fixture AUTHORED_NOT_EXECUTED.
+  Node regression fixture AUTHORED_NOT_EXECUTED. A follow-up CLI/MCP
+  completion audit found a post-ACK cancellation race: the original
+  batch could be acknowledged, then Stop/shutdown could arrive during
+  asynchronous per-slot lease release, while MCP still returned a
+  successful action receipt. The original MCP now rechecks cancellation
+  after every lease release attempt, keeps the selected cohort in
+  explicit-recovery quarantine, and never replays it. Four/five-AI
+  late Stop/shutdown fixtures AUTHORED_NOT_EXECUTED.
 
 - **Evidence:** official and open-source macOS/Windows sources in
   [Windows parity research](../docs/system/windows-background-computer-use.md);
@@ -100,6 +107,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Late native ACK cancellation fence | Existing MCP batch completion now refuses stale success if Stop or shutdown arrives during per-slot lease release after native ACK. All original cleanup attempts finish, the affected cohort remains quarantined, and neutral/lease failures keep priority | Four/five-AI late Stop and shutdown negative fixtures AUTHORED_NOT_EXECUTED |
 | Observed 4/5-AI post-lease PNG fence | The existing MCP round retains the exact delivered frame basis across the native lease wait, rejects stale/advanced images before batch dispatch, and reports the actual native request start time. No second observer or controller | Hybrid four-AI / full five-AI negative fixtures AUTHORED_NOT_EXECUTED; no Minecraft game input proof |
 | Integrated virtual focus return fence | Existing game-local GetForegroundWindow/GetActiveWindow/GetFocus detours now pin original revision and recheck live native packet, OGLES ownership, human foreground and expiry before returning spoofed focus; native ReleaseAll/replacement cannot leave an acknowledged stale focus result after the check | Reuses existing sameActivePublication C++ negative fixtures; compile-OFF; Windows tests NOT_EXECUTED |
 | Integrated exact-content ACK | Node hashes exact ordered native pulse argv; Rust CLI echoes the same SHA-256; mismatch is uncertain and keeps existing 4/5-AI neutral/quarantine | Node/Rust negative fixtures AUTHORED_NOT_EXECUTED |
@@ -274,12 +282,20 @@ Transport start now reflects actual batch handoff. No new controller,
 driver, shared-memory ABI, default feature enablement, or background
 dispatch provider was introduced.
 
-**Single next source action:** review the existing native CLI completion
-and cancellation boundary against MCP transport result and exact-owner
-lease cleanup for a demonstrable post-dispatch mismatch. Fix only if
-the original source proves a concrete issue. Operator preference remains
-CODE FIRST: Node/Rust/C++ tests, builds, Windows installs, native
-game sessions and four/five-client acceptance stay
-NOT_EXECUTED/NOT_VERIFIED until separately authorized.
-Cua strict Invoke-only remains `BACKGROUND_UNAVAILABLE`;
-GitHub Actions CI is disabled and `main` unchanged.
+This source pass closes the demonstrated late native-ACK cancellation
+gap. A Stop/shutdown after native transport ACK but during remaining
+original per-slot lease releases now prevents a misleading success
+response. The same native cleanup completes independently per slot;
+stronger neutral/lease failures retain priority, cancellation latches
+the whole selected cohort, and no input is replayed. No second input
+owner, driver, new IPC/ABI, default activation or game test.
+
+**Single next source action:** review the original Rust native writer's
+partial-group failure and CLI-side neutral response only for a
+source-demonstrable gap not covered by existing lease/provenance guards.
+Avoid speculative layers. Operator preference remains CODE FIRST:
+Node/Rust/C++ tests, builds, Windows installs, Minecraft gameplay and
+four/five-client acceptance remain NOT_EXECUTED/NOT_VERIFIED until
+separately approved. Cua strict Invoke-only stays
+`BACKGROUND_UNAVAILABLE`; GitHub Actions CI is disabled and
+`main` stays unchanged.

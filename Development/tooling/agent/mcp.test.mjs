@@ -3781,6 +3781,84 @@ test('P32 active batch cancellation retains exact-owner neutral cleanup',async()
   ]);
 });
 
+test('late stop or shutdown during successful 4/5-AI lease cleanup never returns success',async()=>{
+  // AUTHORED_NOT_EXECUTED. The CLI ACK can precede four/five async
+  // native lease releases. A later Stop cannot leave a success receipt.
+  for(const mode of ['human-plus-four-ai','five-ai']) {
+    const slots=mode==='five-ai'?[1,2,3,4,5]:[2,3,4,5];
+    for(const ending of ['stop','shutdown']) {
+      let notify,resume,hold=false,batches=0;
+      const entered=new Promise(resolve=>{notify=resolve;});
+      const gate=new Promise(resolve=>{resume=resolve;});
+      const leaseCalls=[],neutral=[];
+      const h=createHandler({...config(mode),
+        experimentalMultiClientInputEnabled:true},{
+        aiLease:async(...args)=>{
+          const [_exe,operation,selected]=args;
+          leaseCalls.push([operation,...selected]);
+          if(hold&&operation==='release'&&selected.length===1&&
+             selected[0]===slots[0]) {
+            notify();
+            await gate;
+          }
+          return leaseAck(...args);
+        },
+        aiInput:async(_exe,frame)=>{
+          neutral.push(frame.slot);
+          return {schema:1,slot:frame.slot,
+            status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',
+            gameplayObserved:false};
+        },
+        aiMultiBatch:async(_exe,items)=>{
+          batches++;
+          return {schema:1,slots:items.map(item=>item.slot),
+            status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',
+            gameplayObserved:false};
+        },
+      });
+      await h.callTool('stop_experimental_multi_client_actions',{slots});
+      hold=true;leaseCalls.length=0;neutral.length=0;
+      const pending=h.callTool('run_experimental_multi_client_actions',{
+        actions:slots.map(aiMove),
+      });
+      await entered;
+      if(ending==='stop') {
+        const cancellation=await h.callTool('stop_experimental_multi_client_actions',{
+          slots:[slots.at(-1)],
+        });
+        assert.equal(cancellation.status,'CANCELLATION_REQUESTED_ALL_ACTIVE_AI_SLOTS');
+        assert.deepEqual(cancellation.slots,slots,
+          'partial stop cancels the original entire cohort');
+      } else {
+        h.shutdown();
+      }
+      resume();
+      await assert.rejects(pending,/AI_SEQUENCE_ABORTED/,
+        'late cancellation must override already-ACKed transport success');
+      assert.equal(batches,1,'no automatic native batch replay');
+      assert.deepEqual(neutral,slots,
+        'an injected sender always retains independent native neutral');
+      assert.deepEqual(leaseCalls,[
+        ['acquire',...slots],...slots.map(slot=>['release',slot]),
+      ],'all original lease releases still finish');
+      if(ending==='stop') {
+        const held=await h.callTool('get_multi_client_visual_state',{slots});
+        assert.deepEqual(held.coordination.blockedSlots,slots);
+        await assert.rejects(()=>
+          h.callTool('run_experimental_multi_client_actions',{
+            actions:[aiMove(slots[0])],
+          }),/AI_INPUT_RECOVERY_REQUIRED/);
+        h.shutdown();
+      } else {
+        await assert.rejects(()=>
+          h.callTool('run_experimental_multi_client_actions',{
+            actions:[aiMove(slots[0])],
+          }),/MCP_CONNECTION_CLOSED/);
+      }
+    }
+  }
+});
+
 test('new 4/5 AI MCP connection does not trust any old channel without explicit reconciliation',async()=>{
   for(const [mode,slots] of [
     ['human-plus-four-ai',[2,3,4,5]],
