@@ -809,18 +809,22 @@ impl AiLeaseBook {
             self.legacy_until_ms[(*slot-1) as usize]>now ||
             self.legacy_neutral_pending[(*slot-1) as usize] ||
             self.claims[(*slot-1) as usize].as_ref().is_some_and(|held|
-                // Expiry retires WRITE permission, not the record of an
-                // unconfirmed active input. Even the same writer must use
-                // a NEW recovery-only epoch and native neutral ACK before
-                // it may acquire a normal action lease on this slot.
-                (!held.neutral && !neutral_only) ||
+                // A live action claim must not be silently replaced by
+                // another acquire from the SAME MCP writer, even while
+                // the previous transaction is still neutral. Delayed
+                // acquires can arrive out of order over separate CLI
+                // channels; replacing the epoch would invalidate the
+                // original claim and could authorize the stale caller.
+                // Normal actions therefore require the prior live
+                // claim to be explicitly released. Expired but ACTIVE
+                // claims still require fresh recovery-only neutral.
+                (!neutral_only && (!held.neutral || held.until_ms>now)) ||
+                // Emergency recovery may replace its OWN live claim,
+                // including uncertain input; foreign live owners and
+                // a different original process remain protected.
                 (held.until_ms>now && (
                     held.owner_id!=owner || held.pid!=*pid ||
-                    held.birth!=*birth ||
-                    // A recovery-only epoch cannot become an active
-                    // writer with the very same transaction identifier.
-                    (held.lease_epoch==epoch && held.neutral_only &&
-                     !neutral_only)
+                    held.birth!=*birth
                 )))
         }) {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied,
@@ -1871,10 +1875,19 @@ mod tests {
         book.acquire(&four,&owner,&old,1000,false).unwrap();
         book.forget_slot(2);
         assert!(book.require(2,&owner,&old,902,at+1_000_000,1001).is_err());
-        book.acquire(&replaced_four,&owner,&fresh,1002,false).unwrap();
-        assert!(book.require(2,&owner,&old,902,at+1_000_000,1003).is_err());
-        assert!(book.require(2,&owner,&fresh,902,at+1_000_000,1003).is_ok());
-        assert!(book.release(&[(2,902,at+1_000_000)],&owner,&old,1004).is_err());
+        // Replacing MC02 does NOT authorize stomping still-live
+        // leases of MC03-05 merely because they are neutral and carry
+        // the same MCP writer ID. Those old claims must be released
+        // under their original epoch before a new group is claimed.
+        assert!(book.acquire(&replaced_four,&owner,&fresh,1002,false).is_err());
+        for &(slot,pid,birth) in &four[1..] {
+            assert!(book.require(slot,&owner,&old,pid,birth,1002).is_ok());
+        }
+        book.release(&four[1..],&owner,&old,1003).unwrap();
+        book.acquire(&replaced_four,&owner,&fresh,1004,false).unwrap();
+        assert!(book.require(2,&owner,&old,902,at+1_000_000,1005).is_err());
+        assert!(book.require(2,&owner,&fresh,902,at+1_000_000,1005).is_ok());
+        assert!(book.release(&[(2,902,at+1_000_000)],&owner,&old,1006).is_err());
 
         // Disabled, malformed, stale and far-future epochs fail closed.
         for invalid in [
@@ -1888,6 +1901,53 @@ mod tests {
                 &four).is_err());
         }
         assert!(validate_ai_acquire_epoch(&fresh,at+2_300_000,&[]).is_err());
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn four_five_ai_normal_acquire_cannot_steal_live_same_writer_lease() {
+        // Pure contract only: no native IPC, processes, Minecraft or DLL.
+        // The old CLI may be delayed while a newer same-writer request
+        // is in flight. Neutrality is not permission to replace its
+        // live transaction epoch or extend a replayed acquisition.
+        let writer="a".repeat(32);
+        let first="1".repeat(32);
+        let second="2".repeat(32);
+        let recovery="3".repeat(32);
+        let four=[(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
+        let five=[(1,201,2201),(2,202,2202),(3,203,2203),
+                  (4,204,2204),(5,205,2205)];
+        for cohort in [&four[..],&five[..]] {
+            let mut book=AiLeaseBook::default();
+            book.acquire(cohort,&writer,&first,1000,false).unwrap();
+            for stale in [&first,&second] {
+                assert!(book.acquire(cohort,&writer,stale,1001,false).is_err(),
+                    "a live neutral lease cannot be silently renewed or replaced");
+            }
+            for &(slot,pid,birth) in cohort {
+                assert!(book.require(slot,&writer,&first,pid,birth,1002).is_ok());
+                assert!(book.require(slot,&writer,&second,pid,birth,1002).is_err());
+            }
+            book.release(cohort,&writer,&first,1003).unwrap();
+            book.acquire(cohort,&writer,&second,1004,false).unwrap();
+            let &(slot,pid,birth)=cohort.first().unwrap();
+            book.begin_write(slot,&writer,&second,pid,birth,1005,false).unwrap();
+            assert!(book.acquire(cohort,&writer,&first,1006,false).is_err(),
+                "possible active input blocks every normal same-writer takeover");
+            // The existing SAME-owner emergency route may supersede an
+            // uncertain active claim only with a new recovery-only
+            // epoch, and every slot must then receive a native neutral
+            // acknowledgement before its claim can be released.
+            book.acquire(cohort,&writer,&recovery,1007,true).unwrap();
+            assert!(book.require(slot,&writer,&second,pid,birth,1008).is_err());
+            assert!(book.release(cohort,&writer,&recovery,1008).is_err());
+            for &(slot,pid,birth) in cohort {
+                book.begin_write(slot,&writer,&recovery,pid,birth,1009,true)
+                    .unwrap();
+                book.wrote(slot,&writer,&recovery,pid,birth,1010,true).unwrap();
+            }
+            book.release(cohort,&writer,&recovery,1011).unwrap();
+        }
     }
 
     #[cfg(feature="mc02-native-input")]

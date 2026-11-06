@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Live same-writer native action-lease isolation | The original AiLeaseBook now refuses a second normal acquire while any selected exact-owner action lease is still live, even if its state is neutral and writer ID matches. This prevents a delayed older CLI from replacing the active transaction epoch; existing same-owner recovery-only takeover and explicit neutral ACK remain available | Pure Rust hybrid four-AI and full five-AI fixtures AUTHORED_NOT_EXECUTED; no wire/ABI/feature change |
 | Native lease-refusal provenance fence | The existing Rust CLI recognizes busy/mode actor refusal only when the error KIND and exact message agree. BrokenPipe, timeout, interruption and controller contention may no longer impersonate proven no-write; MCP keeps uncertainty and recovery on such responses | Rust negative actor-versus-transport fixtures AUTHORED_NOT_EXECUTED, no native controller/IPC change |
 | Stale ReleaseAll after newer neutral fence | The original per-slot Rust writer refuses an older neutral issue timestamp after a newer accepted neutral, not only after newer active input. This avoids invalidating v4 cursor revisions/epochs and pending raw key-up reads from replayed old neutral CLI calls; same-tick release remains admitted | Original four/five-client pure Rust boundary fixtures AUTHORED_NOT_EXECUTED; experimental compile-OFF |
 | Final native AI timestamp-group deadline | Original Rust Channel::write now receives the existing group deadline through the retained controller, checking GetTickCount64 before v4 publication after slow Windows HWND/mapping reads; late packets refuse and take existing partial-group neutral/recovery. Direct writes and ReleaseAll remain unchanged, no ABI/IPC migration | Rust hybrid four-AI/full five-AI boundary and CLI error fixtures AUTHORED_NOT_EXECUTED; compile-OFF |
@@ -280,36 +281,30 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-This source pass checked the original 4/5-AI recovery-only lease,
-native writer and CLI neutral ordering. Lease ownership already
-fences obsolete owner/epoch/PID/birth attempts, and the original
-single actor serializes each channel. One source-proven gap remained:
-`Channel::release_all` compared a neutral request only with the
-latest ACTIVE timestamp, allowing a delayed older ReleaseAll to
-republish a second zero-word v4 transaction after a newer release.
-The same original writer now also checks its last accepted neutral
-timestamp before changing cursor revision, epoch or press counters.
-Equal timestamp neutral remains the conservative tie-breaker.
-No extra owner, IPC call, per-frame read, feature activation or
-shared-memory ABI change was introduced.
+The native CLI actor-error review did not find another definitive
+no-mutation code misclassification in its current acquire consumer:
+writer mode mismatch, explicit writer conflict and epoch-stale
+rejections are evaluated before the original lease book mutates.
 
-This continuation traced the original MC02 neutral ACK, mode-bound
-4/5-client lease recovery, authenticated native SessionReply conversion,
-Rust CLI error mapping and the existing MCP
-`definitelyDeniedWriterLease` consumer. Process identity, writer epoch,
-and exact-owner neutral already fail closed. One cross-layer source gap:
-CLI previously trusted the TEXT of writer busy/mode mismatch errors
-without checking io::ErrorKind. A same-text BrokenPipe/timeout could
-be mistaken for definitive no-write, suppressing MCP's uncertain-acquire
-quarantine. The original CLI now requires matching expected actor kinds;
-transport errors remain OUTCOME_UNCERTAIN. It adds no new transport,
-IPC/schema/ABI change or default game input.
+A concrete gap was instead found in the same original lease owner:
+`AiLeaseBook::acquire` allowed a second normal action acquire with the
+SAME writer ID to replace a live neutral claim with a different epoch.
+Distinct CLI children can reach the retained actor out of issuance
+order. That replacement would revoke the already-admitted transaction
+while leaving its new caller unexpectedly authorized. Normal action
+acquire now refuses ANY live existing selected claim; an expired
+confirmed-neutral claim can still be renewed, and the existing
+same-owner recovery-only takeover remains available for uncertain
+active input. One existing relaunch fixture was adjusted to require
+explicit release of unaffected old claims before a new cohort acquire.
+All new Rust tests are AUTHORED_NOT_EXECUTED.
 
-**Single next source action:** inspect any other native CLI error
-classification which could incorrectly assert a definite no-mutation
-outcome before an original 4/5-AI writer lease. Make a change only
-for a concrete source mismatch, not status churn or duplicate state.
-Operator preference remains CODE FIRST. Node/Rust/C++ tests, Windows
-builds, experimental game hooks and Minecraft 4/5-client acceptance
-remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only stays
-`BACKGROUND_UNAVAILABLE`, CI disabled and `main` unchanged.
+**Single next source action:** inspect whether an older normal action
+acquire that arrives AFTER its prior lease was explicitly released
+can be rejected using the existing transaction epoch and original
+native controller identity, without adding a second lease owner or
+silently broadening game input. Avoid speculative new status machinery.
+Operator preference remains CODE FIRST. Rust/Node/C++ tests, Windows
+builds, installed hooks and Minecraft four/five-client gameplay
+remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only remains
+`BACKGROUND_UNAVAILABLE`; GitHub Actions CI disabled; `main` unchanged.
