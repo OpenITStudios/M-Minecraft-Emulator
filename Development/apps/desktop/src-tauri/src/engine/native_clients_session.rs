@@ -734,6 +734,13 @@ pub(crate) fn current_ai_filetime()->io::Result<u64> {
         .map_err(|_|io::Error::other("AI epoch clock out of range"))
 }
 #[cfg(feature="mc02-native-input")]
+fn ai_epoch_issued_filetime(epoch:&str)->Option<u64> {
+    // The original e1 transaction ID carries a 100-ns FILETIME prefix.
+    // It is an issuance/replay fence, not same-user authentication.
+    if !valid_ai_writer_id(epoch)||!epoch.ends_with("e1") {return None;}
+    u64::from_str_radix(&epoch[..16],16).ok().filter(|at|*at!=0)
+}
+#[cfg(feature="mc02-native-input")]
 pub(crate) fn validate_ai_acquire_epoch(
     epoch:&str,now_filetime:u64,targets:&[(u32,u32,u64)]
 )->io::Result<()> {
@@ -741,9 +748,7 @@ pub(crate) fn validate_ai_acquire_epoch(
     // window. One-second clock lead tolerance is fail-closed on larger drift.
     const MAX_AGE_100NS:u64=100_000_000;
     const MAX_FUTURE_100NS:u64=10_000_000;
-    let issued=if valid_ai_writer_id(epoch)&&epoch.ends_with("e1") {
-        u64::from_str_radix(&epoch[..16],16).ok()
-    }else {None};
+    let issued=ai_epoch_issued_filetime(epoch);
     if now_filetime==0||targets.is_empty()||
        !issued.is_some_and(|at|at!=0 &&
            at<=now_filetime.saturating_add(MAX_FUTURE_100NS) &&
@@ -776,6 +781,9 @@ struct AiWriterClaim {
 #[derive(Debug)]
 pub(crate) struct AiLeaseBook {
     claims:[Option<AiWriterClaim>;5],
+    // Retain issued-time high-water even after a neutral lease releases.
+    // Only reaping the original child resets its corresponding watermark.
+    last_admitted_epoch_filetime:[u64;5],
     legacy_until_ms:[u64;5],
     // Packet TTL only bounds virtual polling; it cannot attest that the
     // opted-in game consumed a neutral release. Keep this per-slot
@@ -786,7 +794,8 @@ pub(crate) struct AiLeaseBook {
 #[cfg(feature="mc02-native-input")]
 impl Default for AiLeaseBook {
     fn default()->Self {
-        Self{claims:std::array::from_fn(|_|None),legacy_until_ms:[0;5],
+        Self{claims:std::array::from_fn(|_|None),
+            last_admitted_epoch_filetime:[0;5],legacy_until_ms:[0;5],
             legacy_neutral_pending:[false;5]}
     }
 }
@@ -800,9 +809,17 @@ impl AiLeaseBook {
         owner:&str,epoch:&str,now:u64,neutral_only:bool)->io::Result<()> {
         let slots=targets.iter().map(|(slot,_,_)|*slot).collect::<Vec<_>>();
         validate_ai_lease_slots(&slots,owner)?;
-        if !valid_ai_writer_id(epoch) {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Invalid AI transaction fencing epoch"));
+        let issued=ai_epoch_issued_filetime(epoch).ok_or_else(||
+            io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid AI transaction fencing epoch"))?;
+        // All selected original slots must pass BEFORE any claim changes.
+        // A released transaction must not re-acquire with a replayed,
+        // earlier, or same-FILETIME different-nonce epoch. The actor has
+        // already verified the current time and every child process birth.
+        if targets.iter().any(|(slot,_,_)|
+            issued<=self.last_admitted_epoch_filetime[(*slot-1) as usize]) {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied,
+                "AI transaction predates original game or is stale"));
         }
         if now==0 || targets.iter().any(|(slot,pid,birth)| {
             *pid==0||*birth==0 ||
@@ -845,6 +862,7 @@ impl AiLeaseBook {
                 until_ms:now.saturating_add(AI_WRITER_LEASE_MS),
                 neutral,neutral_only,
             });
+            self.last_admitted_epoch_filetime[index]=issued;
         }
         Ok(())
     }
@@ -929,6 +947,7 @@ impl AiLeaseBook {
     pub(crate) fn forget_slot(&mut self,slot:u32) {
         if (1..=5).contains(&slot) {
             self.claims[(slot-1) as usize]=None;
+            self.last_admitted_epoch_filetime[(slot-1) as usize]=0;
             self.legacy_until_ms[(slot-1) as usize]=0;
             self.legacy_neutral_pending[(slot-1) as usize]=false;
         }
@@ -1433,6 +1452,11 @@ pub(super) fn read_message(input: &mut impl io::BufRead) -> io::Result<Option<St
 mod tests {
     use super::*;
 
+    #[cfg(feature="mc02-native-input")]
+    fn synthetic_ai_epoch(issued:u64)->String {
+        format!("{issued:016x}{}e1","a".repeat(14))
+    }
+
     #[test]
     fn staged_testing_recovery_cas_rejects_stale_or_finalized_slots() {
         // Pure contract fixtures, NOT authenticated operator approval.
@@ -1905,15 +1929,74 @@ mod tests {
 
     #[cfg(feature="mc02-native-input")]
     #[test]
+    fn native_ai_lease_replays_and_old_epochs_refuse_after_release() {
+        let owner="a".repeat(32);
+        let at=134_000_000_000_000_000u64;
+        let token=|offset:u64|synthetic_ai_epoch(at+offset);
+        let old=token(10_000);
+        let earlier=token(15_000);
+        let later=token(30_000);
+        let recovery=token(40_000);
+        let four=[(2,202,at-10_000_000),(3,203,at-10_000_000),
+                  (4,204,at-10_000_000),(5,205,at-10_000_000)];
+        let five=[(1,201,at-10_000_000),(2,202,at-10_000_000),
+                  (3,203,at-10_000_000),(4,204,at-10_000_000),
+                  (5,205,at-10_000_000)];
+        for cohort in [&four[..],&five[..]] {
+            let mut book=AiLeaseBook::default();
+            book.acquire(cohort,&owner,&old,1000,false).unwrap();
+            book.release(cohort,&owner,&old,1001).unwrap();
+            assert!(book.acquire(cohort,&owner,&old,1002,false).is_err(),
+                "released epoch cannot reacquire its old original slot");
+            let same_time_other_nonce=
+                format!("{}{}e1",&old[..16],"b".repeat(14));
+            assert!(book.acquire(cohort,&owner,&same_time_other_nonce,
+                1002,false).is_err(),"same issued time must fail closed");
+            book.acquire(cohort,&owner,&later,1003,false).unwrap();
+            book.release(cohort,&owner,&later,1004).unwrap();
+            assert!(book.acquire(cohort,&owner,&earlier,1005,false).is_err(),
+                "older transaction cannot arrive after newer lease release");
+            // Denying any member must not burn a timestamp on its peers.
+            let mut partial=AiLeaseBook::default();
+            partial.acquire(&cohort[..1],&owner,&later,1000,false).unwrap();
+            assert!(partial.acquire(cohort,&owner,&earlier,1001,false).is_err());
+            partial.acquire(&cohort[1..],&owner,&earlier,1002,false).unwrap();
+            // Recovery-only remains a separately admitted NEW epoch;
+            // it still cannot release without exact native neutral ACK.
+            book.acquire(cohort,&owner,&recovery,1006,true).unwrap();
+            assert!(book.release(cohort,&owner,&recovery,1007).is_err());
+            for &(slot,pid,birth) in cohort {
+                book.begin_write(slot,&owner,&recovery,pid,birth,1008,true)
+                    .unwrap();
+                book.wrote(slot,&owner,&recovery,pid,birth,1009,true).unwrap();
+            }
+            book.release(cohort,&owner,&recovery,1010).unwrap();
+            // Only actual original-child reap forgets per-slot watermark.
+            let &(slot,_,_)=cohort.first().unwrap();
+            let new_birth=at+35_000_000;
+            let next=token(40_000_000);
+            book.forget_slot(slot);
+            assert!(validate_ai_acquire_epoch(&old,at+40_500_000,
+                &[(slot,999,new_birth)]).is_err(),
+                "the existing controller still fences pre-birth epochs");
+            assert!(validate_ai_acquire_epoch(&next,at+40_500_000,
+                &[(slot,999,new_birth)]).is_ok());
+            book.acquire(&[(slot,999,new_birth)],&owner,&next,1011,false)
+                .unwrap();
+        }
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
     fn four_five_ai_normal_acquire_cannot_steal_live_same_writer_lease() {
         // Pure contract only: no native IPC, processes, Minecraft or DLL.
         // The old CLI may be delayed while a newer same-writer request
         // is in flight. Neutrality is not permission to replace its
         // live transaction epoch or extend a replayed acquisition.
         let writer="a".repeat(32);
-        let first="1".repeat(32);
-        let second="2".repeat(32);
-        let recovery="3".repeat(32);
+        let first=synthetic_ai_epoch(1);
+        let second=synthetic_ai_epoch(2);
+        let recovery=synthetic_ai_epoch(3);
         let four=[(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
         let five=[(1,201,2201),(2,202,2202),(3,203,2203),
                   (4,204,2204),(5,205,2205)];
@@ -1956,8 +2039,10 @@ mod tests {
         // Pure Rust source fixture; no Windows, IPC, or Minecraft execution.
         let a="a".repeat(32);
         let b="b".repeat(32);
-        let e1="1".repeat(32);
-        let e2="2".repeat(32);
+        let e1=synthetic_ai_epoch(1);
+        let e2=synthetic_ai_epoch(2);
+        let e3=synthetic_ai_epoch(3);
+        let e4=synthetic_ai_epoch(4);
         let four=vec![(2,102,1002),(3,103,1003),(4,104,1004),(5,105,1005)];
         let mut five=vec![(1,101,1001)];
         five.extend(four.iter().copied());
@@ -1991,8 +2076,10 @@ mod tests {
             book.wrote(slot,&a,&e2,pid,birth,1025,true).unwrap();
         }
         assert!(book.release(&four,&a,&e2,1026).is_ok());
-        assert!(book.acquire(&five,&b,&e1,1030,false).is_ok());
-        assert!(book.require(1,&b,&e1,101,1001,1031).is_ok());
+        assert!(book.acquire(&five,&b,&e1,1030,false).is_err(),
+            "old issue time cannot follow a newer completed recovery");
+        assert!(book.acquire(&five,&b,&e3,1030,false).is_ok());
+        assert!(book.require(1,&b,&e3,101,1001,1031).is_ok());
         // Process exit invalidates an original claim. A freshly claimed
         // replacement uses a DIFFERENT epoch, not a reused owner ID.
         assert!(book.acquire(&[(2,999,1002)],&b,&e2,1032,false).is_err());
@@ -2005,6 +2092,8 @@ mod tests {
         assert!(book.require(2,&b,&e2,999,9002,
             1033+AI_WRITER_LEASE_MS).is_err());
         assert!(book.acquire(&[(2,999,9002)],&a,&e1,
+            1034+AI_WRITER_LEASE_MS,false).is_err());
+        assert!(book.acquire(&[(2,999,9002)],&a,&e4,
             1034+AI_WRITER_LEASE_MS,false).is_ok());
     }
 
@@ -2016,9 +2105,9 @@ mod tests {
         // input mapping, client CLI or Minecraft is created or executed.
         let first="a".repeat(32);
         let second="b".repeat(32);
-        let e1="1".repeat(32);
-        let e2="2".repeat(32);
-        let e3="3".repeat(32);
+        let e1=synthetic_ai_epoch(1);
+        let e2=synthetic_ai_epoch(2);
+        let e3=synthetic_ai_epoch(3);
         let four=vec![(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
         let mut five=vec![(1,201,2201)];
         five.extend(four.iter().copied());
@@ -2069,7 +2158,7 @@ mod tests {
     #[test]
     fn recovery_only_new_claim_never_starts_preconfirmed_neutral() {
         let writer="b".repeat(32);
-        let epoch="2".repeat(32);
+        let epoch=synthetic_ai_epoch(2);
         let target=[(3,303,3303)];
         let mut book=AiLeaseBook::default();
         book.acquire(&target,&writer,&epoch,1000,true).unwrap();
@@ -2087,7 +2176,7 @@ mod tests {
         exited.begin_write(3,&writer,&epoch,303,3303,2001,false).unwrap();
         exited.forget_slot(3);
         assert!(exited.acquire(&[(3,909,9909)],&writer,
-            &"3".repeat(32),2002,false).is_ok());
+            &synthetic_ai_epoch(3),2002,false).is_ok());
         assert!(exited.require(3,&writer,&epoch,909,9909,2003).is_err());
     }
 
@@ -2095,8 +2184,8 @@ mod tests {
     #[test]
     fn interrupted_native_write_remains_non_neutral_and_isolated() {
         let a="a".repeat(32);
-        let e1="1".repeat(32);
-        let e2="2".repeat(32);
+        let e1=synthetic_ai_epoch(1);
+        let e2=synthetic_ai_epoch(2);
         let targets=vec![(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
         let mut book=AiLeaseBook::default();
         book.acquire(&targets,&a,&e1,1000,false).unwrap();
@@ -2114,15 +2203,18 @@ mod tests {
         assert!(book.require(3,&a,&e2,203,2203,
             2001+AI_WRITER_LEASE_MS).is_err());
         assert!(book.acquire(&[(3,203,2203)],&"b".repeat(32),&e1,
-            2002+AI_WRITER_LEASE_MS,true).is_ok());
+            2002+AI_WRITER_LEASE_MS,true).is_err());
+        assert!(book.acquire(&[(3,203,2203)],&"b".repeat(32),
+            &synthetic_ai_epoch(3),2002+AI_WRITER_LEASE_MS,true).is_ok());
     }
 
     #[cfg(feature="mc02-native-input")]
     #[test]
     fn fencing_protocol_rejects_invalid_ids_and_legacy_overlap() {
         let a="a".repeat(32);
-        let e1="1".repeat(32);
-        let e2="2".repeat(32);
+        let e1=synthetic_ai_epoch(1);
+        let e2=synthetic_ai_epoch(2);
+        let e3=synthetic_ai_epoch(3);
         let mut book=AiLeaseBook::default();
         assert!(validate_ai_lease_slots(&[2,3,4,5],&a).is_ok());
         for invalid in ["short".to_owned(),"A".repeat(32),"x".repeat(32)] {
@@ -2149,7 +2241,9 @@ mod tests {
         book.wrote(2,&a,&e2,202,2002,1509,true).unwrap();
         book.release(&[(2,202,2002)],&a,&e2,1510).unwrap();
         book.legacy_wrote(2,1511,true);
-        assert!(book.acquire(&[(2,202,2002)],&a,&e1,1512,false).is_ok());
+        assert!(book.acquire(&[(2,202,2002)],&a,&e1,1512,false).is_err(),
+            "legacy neutral cannot reauthorize an older AI epoch");
+        assert!(book.acquire(&[(2,202,2002)],&a,&e3,1512,false).is_ok());
     }
 
 
@@ -2160,7 +2254,8 @@ mod tests {
         // published when the native API reports an error. No game process,
         // Windows channel, MCP, or test runner is started by this fixture.
         let a="a".repeat(32);
-        let e="1".repeat(32);
+        let e=synthetic_ai_epoch(1);
+        let fresh=synthetic_ai_epoch(2);
         let four=vec![(2,102,1002),(3,103,1003),(4,104,1004),(5,105,1005)];
         let five=vec![(1,101,1001),(2,102,1002),
                       (3,103,1003),(4,104,1004),(5,105,1005)];
@@ -2184,7 +2279,9 @@ mod tests {
         book.legacy_allowed(2,10_001).unwrap();
         book.legacy_begin_write(2,10_001);
         book.legacy_wrote(2,10_002,true);
-        assert!(book.acquire(&four,&a,&e,10_003,false).is_ok());
+        assert!(book.acquire(&four,&a,&e,10_003,false).is_err(),
+            "replay from released MC03 lease cannot claim all four AI");
+        assert!(book.acquire(&four,&a,&fresh,10_003,false).is_ok());
 
         // Explicit successful neutral input is the ONLY early clearance.
         let mut recovered=AiLeaseBook::default();
@@ -2210,7 +2307,8 @@ mod tests {
         // at 500ms but there is no ACK that it received key-up. One legacy
         // MC02 channel is shared with each selected group of AI slots.
         let owner="a".repeat(32);
-        let epoch="1".repeat(32);
+        let epoch=synthetic_ai_epoch(1);
+        let fresh=synthetic_ai_epoch(2);
         let four=vec![(2,202,2202),(3,203,2203),(4,204,2204),(5,205,2205)];
         let mut five=vec![(1,201,2201)];
         five.extend(four.iter().copied());
@@ -2237,8 +2335,10 @@ mod tests {
             book.legacy_begin_write(2,15_004);
             assert!(book.acquire(cohort,&owner,&epoch,16_000,false).is_err());
             book.legacy_wrote(2,16_001,true); // original channel ACK
-            book.acquire(cohort,&owner,&epoch,16_002,false).unwrap();
-            book.release(cohort,&owner,&epoch,16_003).unwrap();
+            assert!(book.acquire(cohort,&owner,&epoch,16_002,false).is_err(),
+                "releasing legacy MC02 does not erase peer epoch history");
+            book.acquire(cohort,&owner,&fresh,16_002,false).unwrap();
+            book.release(cohort,&owner,&fresh,16_003).unwrap();
 
             // Confirmed process reap clears only this slot and does not
             // admit a stale original process identity into a replacement.

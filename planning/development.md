@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Post-release AI epoch replay fence | Original AiLeaseBook stores one per-slot maximum admitted e1 FILETIME even after explicit native release. Older, equal-issue or replayed lease acquisitions refuse before any 4/5-cohort mutation. Only original child reap resets the maximum; source-old epoch cannot pass the existing process-birth admission for a replacement. The same stale error code feeds MCP no-write detection | Existing and new pure four/five AI Rust fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or default-on changes |
 | Live same-writer native action-lease isolation | The original AiLeaseBook now refuses a second normal acquire while any selected exact-owner action lease is still live, even if its state is neutral and writer ID matches. This prevents a delayed older CLI from replacing the active transaction epoch; existing same-owner recovery-only takeover and explicit neutral ACK remain available | Pure Rust hybrid four-AI and full five-AI fixtures AUTHORED_NOT_EXECUTED; no wire/ABI/feature change |
 | Native lease-refusal provenance fence | The existing Rust CLI recognizes busy/mode actor refusal only when the error KIND and exact message agree. BrokenPipe, timeout, interruption and controller contention may no longer impersonate proven no-write; MCP keeps uncertainty and recovery on such responses | Rust negative actor-versus-transport fixtures AUTHORED_NOT_EXECUTED, no native controller/IPC change |
 | Stale ReleaseAll after newer neutral fence | The original per-slot Rust writer refuses an older neutral issue timestamp after a newer accepted neutral, not only after newer active input. This avoids invalidating v4 cursor revisions/epochs and pending raw key-up reads from replayed old neutral CLI calls; same-tick release remains admitted | Original four/five-client pure Rust boundary fixtures AUTHORED_NOT_EXECUTED; experimental compile-OFF |
@@ -281,30 +282,32 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-The native CLI actor-error review did not find another definitive
-no-mutation code misclassification in its current acquire consumer:
-writer mode mismatch, explicit writer conflict and epoch-stale
-rejections are evaluated before the original lease book mutates.
+This source pass closed the gap where an old original AI writer acquire
+could arrive AFTER its earlier lease was released. The retained actor
+already validates the transaction's versioned e1 FILETIME, original
+process birth, mode and current age, but the original AiLeaseBook
+previously erased its entire lease claim after release. A delayed
+request within the ten-second validity window could therefore replay
+an old epoch after a newer completed cohort.
 
-A concrete gap was instead found in the same original lease owner:
-`AiLeaseBook::acquire` allowed a second normal action acquire with the
-SAME writer ID to replace a live neutral claim with a different epoch.
-Distinct CLI children can reach the retained actor out of issuance
-order. That replacement would revoke the already-admitted transaction
-while leaving its new caller unexpectedly authorized. Normal action
-acquire now refuses ANY live existing selected claim; an expired
-confirmed-neutral claim can still be renewed, and the existing
-same-owner recovery-only takeover remains available for uncertain
-active input. One existing relaunch fixture was adjusted to require
-explicit release of unaffected old claims before a new cohort acquire.
-All new Rust tests are AUTHORED_NOT_EXECUTED.
+The original native lease book now remembers the newest ADMITTED
+issue FILETIME per original slot, including after confirmed normal
+release and recovery-only neutral. Admission checks ALL chosen
+4/5-client slots before mutating any claim. Older, identical and
+equal-time-with-different-nonce epochs are refused before mutation,
+reusing the existing definitive `NATIVE_WRITER_EPOCH_STALE` path.
+Failed acquires never advance the watermark; original process reap
+alone resets its corresponding slot. The original pre-birth validation
+protects relaunched children. Source test fixtures were aligned with
+actual e1 epochs and extended with replay, partial-cohort, recovery
+and replacement scenarios; no tests were executed. No new owner,
+IPC schema, game hook, shared ABI or default activation.
 
-**Single next source action:** inspect whether an older normal action
-acquire that arrives AFTER its prior lease was explicitly released
-can be rejected using the existing transaction epoch and original
-native controller identity, without adding a second lease owner or
-silently broadening game input. Avoid speculative new status machinery.
-Operator preference remains CODE FIRST. Rust/Node/C++ tests, Windows
-builds, installed hooks and Minecraft four/five-client gameplay
-remain NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only remains
-`BACKGROUND_UNAVAILABLE`; GitHub Actions CI disabled; `main` unchanged.
+**Single next source action:** review the original legacy-MC02
+ReleaseAll issue-time conversion against the retained native
+lease/replay fence for a specific cross-mode error, if one remains.
+Do not add second controllers or new status machinery. Operator
+preference stays CODE FIRST. Node/Rust/C++ execution, Windows
+builds, Minecraft input and four/five-client acceptance remain
+NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only remains
+`BACKGROUND_UNAVAILABLE`; GitHub Actions disabled; `main` unchanged.
