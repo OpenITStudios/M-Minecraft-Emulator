@@ -141,3 +141,27 @@ This is an authored source contract, **not** an executed Windows accessibility,
 Tauri, keyboard, or screen-reader acceptance result. The existing
 `Development/apps/desktop/test/storage-review-focus.test.ts` source fixtures
 are `AUTHORED_NOT_EXECUTED`.
+
+## Bounded Play disclosures — source-only policy
+
+F3 Inspector, Coordinates & Saves, and optional AI & Testing are HTML
+`details` disclosures in one exclusive `name="lt-play-disclosures"` group.
+Only one opens at a time without another session controller, observer, polling
+loop or timer. HTML `details[name]` requires a compatible WebView2 engine
+(Edge 120+); older installed runtime compatibility is **NOT_VERIFIED**.
+
+The two Play tool panels use one pure UI geometry projection,
+`app/presentation/playToolPopup.ts`, to clamp to available width and height
+below or above the triggering summary at 16px viewport margins. A panel is
+hidden until an open/resize/scroll calculation returns its visible location.
+Popup scroll does not recompute placement. This does not move or resize the
+native 16:9 aperture, five keyed DWM previews, or selected Minecraft window.
+
+Escape from within an active disclosure returns focus to its summary. Keyboard
+focus moving from an open disclosure to another app control collapses it.
+A missing `relatedTarget` does not discard the panel or manually entered
+coordinate drafts. No clipboard operations or unverified game input are added.
+
+**Evidence:** authored geometry/source fixtures only. Typecheck, Svelte
+runtime, WebView2 compatibility, 920×620 and DPI matrix, scroll/focus
+navigation, native DWM and Minecraft acceptance remain **NOT_EXECUTED**.

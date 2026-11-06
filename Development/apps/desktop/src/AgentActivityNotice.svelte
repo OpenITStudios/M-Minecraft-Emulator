@@ -1,11 +1,27 @@
 <script lang="ts">
   import type {ActivityView} from './app/presentation/agentActivity.js';
   export let view:ActivityView;
+  let detailsElement: HTMLDetailsElement | undefined;
+  let summaryElement: HTMLElement | undefined;
+  function closeOnEscape(event: KeyboardEvent): void {
+    if (event.key !== 'Escape' || !detailsElement?.open ||
+        !(event.target instanceof Node) || !detailsElement.contains(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    detailsElement.open = false;
+    summaryElement?.focus({preventScroll: true});
+  }
+  function closeWhenFocusLeaves(event: FocusEvent): void {
+    const next = event.relatedTarget;
+    if (detailsElement?.open && next instanceof Node && !detailsElement.contains(next))
+      detailsElement.open = false;
+  }
 </script>
+<svelte:window on:keydown={closeOnEscape} />
 
 <!-- Positioned out of normal layout: never changes viewport or rail size. -->
-<details class="lt-agent-activity" aria-label="Local AI and Testing activity">
-  <summary aria-label={view.summary} title={view.summary}>{view.summary}</summary>
+<details class="lt-agent-activity" name="lt-play-disclosures" bind:this={detailsElement} on:focusout={closeWhenFocusLeaves} aria-label="Local AI and Testing activity">
+  <summary bind:this={summaryElement} aria-label={view.summary} title={view.summary}>{view.summary}</summary>
   <div class="lt-agent-activity-details">
     <strong>{view.urgent?'Attention required':'Activity overview'}</strong>
     {#each view.lines as item}

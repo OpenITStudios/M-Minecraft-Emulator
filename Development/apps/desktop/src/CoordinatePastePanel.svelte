@@ -3,6 +3,7 @@
   import {formatUserPastedCoordinates, type PastedCoordinateOutput} from './app/coordinates.js';
   import {coordinateBookmarks, type CoordinateBookmark, type BookmarkDimension} from './app/bridge/coordinateBookmarks.js';
   import type {ProfileSlot} from './app/bridge/lazyTester.js';
+  import {playToolPopupStyle} from './app/presentation/playToolPopup.js';
 
   // Selected native launcher is an OPERATOR-ASSIGNED notebook label only.
   // Clipboard, player identity, active world and dimension are never inferred.
@@ -16,6 +17,19 @@
   let outputField: HTMLInputElement | undefined;
   let detailsElement: HTMLDetailsElement | undefined;
   let summaryElement: HTMLElement | undefined;
+  let popupStyle = 'visibility:hidden;';
+
+  function repositionPopup(event?: Event): void {
+    if (!detailsElement?.open || !summaryElement) return;
+    if (event?.type === 'scroll' && event.target instanceof Node && detailsElement.contains(event.target)) return;
+    popupStyle = playToolPopupStyle(summaryElement.getBoundingClientRect(),
+      {width:window.innerWidth,height:window.innerHeight},390) + 'visibility:visible;';
+  }
+  function closeWhenFocusLeaves(event: FocusEvent): void {
+    const next = event.relatedTarget;
+    if (detailsElement?.open && next instanceof Node && !detailsElement.contains(next))
+      detailsElement.open = false;
+  }
   let bookmarkName = '';
   let worldLabel = '';
   let dimension: BookmarkDimension = 'Unknown';
@@ -164,6 +178,7 @@
   function resetOnClose(event: Event): void {
     if (!(event.currentTarget as HTMLDetailsElement).open) {
       ++loadTicket;
+      popupStyle = 'visibility:hidden;';
       // Closing a disclosure is not a discard request. Retain unsaved manual text
       // only in this mounted UI; clear the slot-specific saved list and pending review.
       saved = [];
@@ -173,16 +188,17 @@
       loading = false;
     } else {
       loadedSlot = selectedSlot;
+      repositionPopup();
       void refreshBookmarks();
     }
   }
 </script>
-<svelte:window on:keydown={closeOnEscape} />
+<svelte:window on:keydown={closeOnEscape} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />
 
 <!-- Manual input and explicit notebook actions only. No game command or clipboard access. -->
-<details class="lt-coordinate-paste" bind:this={detailsElement} on:toggle={resetOnClose}>
+<details class="lt-coordinate-paste" name="lt-play-disclosures" bind:this={detailsElement} on:toggle={resetOnClose} on:focusout={closeWhenFocusLeaves}>
   <summary bind:this={summaryElement} aria-label="Open coordinate formatter and saved locations">Coordinates & Saves</summary>
-  <div class="lt-coordinate-popup" role="group" aria-label="Manual coordinate formatter">
+  <div class="lt-coordinate-popup" style={popupStyle} role="group" aria-label="Manual coordinate formatter">
     <strong>Manual coordinates</strong>
     <small class="lt-coordinate-status">User-pasted · Unverified</small>
     <p class="lt-coordinate-help">Closing this panel keeps your unsaved text until the app closes. Check the selected launcher label before saving.</p>

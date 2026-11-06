@@ -8,25 +8,29 @@ const css=readFileSync(new URL('../src/lazy-tester.css',import.meta.url),'utf8')
 describe('optional manual XYZ user-paste UI',()=>{
   it('lives only in the existing Play header without changing five launcher ownership',()=>{
     expect(play).toContain("import CoordinatePastePanel from './CoordinatePastePanel.svelte';");
-    expect(play).toContain("{#if page==='workspace'}<CoordinatePastePanel selectedSlot={active} />{/if}");
+    expect(play).toContain('<CoordinatePastePanel selectedSlot={active} />');
+    expect(play).toContain('class="lt-play-tools"');
     expect(play).toContain('<LauncherRail {profiles} {labels} {healthIssues}');
     expect(play).toContain('<div class="lt-stage-space" bind:this={stageSpace}>');
     expect((play.match(/setInterval\(/g)??[])).toHaveLength(1);
-    expect(css).toContain('.lt-coordinate-popup{position:absolute;');
+    expect(css).toContain('.lt-coordinate-popup{position:fixed;');
     expect(play).not.toContain('<div class="lt-coordinate-popup"');
   });
 
-  it('parses only user input, resets on close, and offers readonly select-to-copy',()=>{
+  it('parses only user input, retains drafts on close, and offers readonly select-to-copy',()=>{
     for(const anchor of [
       'formatUserPastedCoordinates(raw, mode)', 'User-pasted · Unverified',
       'bind:value={raw}', 'maxlength="128"', 'on:toggle={resetOnClose}',
-      "raw = '';", 'readonly', 'disabled={!output}', 'outputField.select()',
+      'readonly', 'disabled={!output}', 'outputField.select()',
       'TELEPORT_POSITION_ONLY', 'No game command is executed.'
     ])expect(panel).toContain(anchor);
   });
 
   it('closes an in-panel Escape, restores summary focus and preserves native toggle reset',()=>{
-    expect(panel).toContain("<svelte:window on:keydown={closeOnEscape} />");
+    expect(panel).toContain("<svelte:window on:keydown={closeOnEscape} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />");
+    expect(panel).toContain('name="lt-play-disclosures"');
+    expect(panel).toContain('on:focusout={closeWhenFocusLeaves}');
+    expect(panel).toContain('style={popupStyle}');
     expect(panel).toContain("bind:this={detailsElement}");
     expect(panel).toContain("bind:this={summaryElement}");
     expect(panel).toContain("event.key !== 'Escape' || !detailsElement?.open");
@@ -35,7 +39,9 @@ describe('optional manual XYZ user-paste UI',()=>{
     expect(panel).toContain("detailsElement.open = false;");
     expect(panel).toContain("summaryElement?.focus({preventScroll: true});");
     expect(panel).toContain("on:toggle={resetOnClose}");
-    expect(panel).toContain("raw = '';");
+    const close = panel.split('function resetOnClose(')[1]?.split('</script>')[0] ?? '';
+    expect(close).not.toContain("raw = ''");
+    expect(close).not.toContain("bookmarkName = ''");
   });
 
   it('links invalid text and readonly output help for screen readers',()=>{
