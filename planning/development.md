@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Legacy MC02 canonical neutral ACK reuse | Original MC02 CLI already releases the channel before successful batch response; MCP no longer launches a redundant, potentially backdated neutral CLI for its exact canonical sender. Failed/aborted/malformed/injected receipts keep independent neutral. Late Stop during cleanup cannot produce false success | Pure Node provenance and late-Stop fixtures AUTHORED_NOT_EXECUTED, no controller/IPC/v4 ABI change |
 | Post-release AI epoch replay fence | Original AiLeaseBook stores one per-slot maximum admitted e1 FILETIME even after explicit native release. Older, equal-issue or replayed lease acquisitions refuse before any 4/5-cohort mutation. Only original child reap resets the maximum; source-old epoch cannot pass the existing process-birth admission for a replacement. The same stale error code feeds MCP no-write detection | Existing and new pure four/five AI Rust fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or default-on changes |
 | Live same-writer native action-lease isolation | The original AiLeaseBook now refuses a second normal acquire while any selected exact-owner action lease is still live, even if its state is neutral and writer ID matches. This prevents a delayed older CLI from replacing the active transaction epoch; existing same-owner recovery-only takeover and explicit neutral ACK remain available | Pure Rust hybrid four-AI and full five-AI fixtures AUTHORED_NOT_EXECUTED; no wire/ABI/feature change |
 | Native lease-refusal provenance fence | The existing Rust CLI recognizes busy/mode actor refusal only when the error KIND and exact message agree. BrokenPipe, timeout, interruption and controller contention may no longer impersonate proven no-write; MCP keeps uncertainty and recovery on such responses | Rust negative actor-versus-transport fixtures AUTHORED_NOT_EXECUTED, no native controller/IPC change |
@@ -282,32 +283,32 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-This source pass closed the gap where an old original AI writer acquire
-could arrive AFTER its earlier lease was released. The retained actor
-already validates the transaction's versioned e1 FILETIME, original
-process birth, mode and current age, but the original AiLeaseBook
-previously erased its entire lease claim after release. A delayed
-request within the ten-second validity window could therefore replay
-an old epoch after a newer completed cohort.
+The original MC02 source route was reviewed through the existing MCP
+wall-clock timestamp, one-shot native CLI age-to-uptime conversion,
+retained controller, Channel::release_all ordering, and the original
+AI lease book. The current conversion backdates delayed CLI startups
+and the original actor/channel reject older active/neutral requests;
+the new per-slot AI lease epoch watermark does not authorize legacy
+MC02 or rewrite its neutral semantics.
 
-The original native lease book now remembers the newest ADMITTED
-issue FILETIME per original slot, including after confirmed normal
-release and recovery-only neutral. Admission checks ALL chosen
-4/5-client slots before mutating any claim. Older, identical and
-equal-time-with-different-nonce epochs are refused before mutation,
-reusing the existing definitive `NATIVE_WRITER_EPOCH_STALE` path.
-Failed acquires never advance the watermark; original process reap
-alone resets its corresponding slot. The original pre-birth validation
-protects relaunched children. Source test fixtures were aligned with
-actual e1 epochs and extended with replay, partial-cohort, recovery
-and replacement scenarios; no tests were executed. No new owner,
-IPC schema, game hook, shared ABI or default activation.
+A specific duplicate-cleanup defect was found: MC02 batch success is
+returned by the original CLI only AFTER its exact-channel neutral
+request succeeds, but MCP always sent a SECOND CLI neutral afterward.
+The second request's reconstructed issued time could be behind the
+newer accepted native neutral, causing a false
+`MC02_RELEASE_UNCONFIRMED` despite an earlier valid native ACK.
+The existing MCP now reuses the native transport neutral only from its
+exact canonical sender and matching completed receipt. Fake,
+malformed, aborted or uncertain responses still take independent
+neutral, and late Stop during fallback cleanup cannot return success.
+Node fixtures AUTHORED_NOT_EXECUTED. No new owner or IPC/v4 ABI change.
 
-**Single next source action:** review the original legacy-MC02
-ReleaseAll issue-time conversion against the retained native
-lease/replay fence for a specific cross-mode error, if one remains.
-Do not add second controllers or new status machinery. Operator
-preference stays CODE FIRST. Node/Rust/C++ execution, Windows
-builds, Minecraft input and four/five-client acceptance remain
-NOT_EXECUTED/NOT_VERIFIED. Cua strict Invoke-only remains
-`BACKGROUND_UNAVAILABLE`; GitHub Actions disabled; `main` unchanged.
+**Single next source action:** examine the original legacy MC02 native
+batch scheduler's cleanup issue timestamp when another opted-in MC02
+one-shot active input may be interleaved, to prevent the older batch
+from canceling a newer separate command. Change source only for a
+confirmed race; do not create another controller or new ownership.
+The operator prefers CODE FIRST: Node/Rust/C++ test runs, Windows
+builds, installed input hooks, Minecraft gameplay and five-client
+acceptance remain NOT_EXECUTED/NOT_VERIFIED. Strict Cua Invoke-only is
+`BACKGROUND_UNAVAILABLE`, CI disabled, `main` unchanged.

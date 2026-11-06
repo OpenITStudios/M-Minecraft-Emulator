@@ -6,7 +6,8 @@ import path from 'node:path';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
   matchesNativeMultiClientBatchReceipt,
-  canReuseVerifiedNativeBatchNeutral} from './mcp.mjs';
+  canReuseVerifiedNativeBatchNeutral,
+  canReuseVerifiedMc02BatchNeutral} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -88,6 +89,64 @@ test('only confirmed canonical 4/5-AI native sender may reuse already-ACKed per-
     assert.equal(canReuseVerifiedNativeBatchNeutral(
       {...verified,gameplayObserved:true},slots,options),false);
   }
+});
+
+test('MC02 native neutral reuse requires the canonical sender and exact completed batch',()=>{
+  // Pure source fixture: no native CLI or game execution.
+  const proof={schema:1,slot:2,gameplayObserved:false,
+    status:'EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED',
+    pulsesAcknowledged:3,
+    neutralState:'NATIVE_NEUTRAL_WRITE_ACKNOWLEDGED_ONLY',
+    inputEffect:'NOT_VERIFIED_IN_MINECRAFT_EDUCATION'};
+  const options={verifiedSender:true,transportConfirmed:true};
+  assert.equal(canReuseVerifiedMc02BatchNeutral(proof,3,options),true);
+  assert.equal(canReuseVerifiedMc02BatchNeutral(proof,3,{
+    ...options,verifiedSender:false}),false);
+  assert.equal(canReuseVerifiedMc02BatchNeutral(proof,3,{
+    ...options,transportConfirmed:false}),false);
+  for(const change of [
+    {schema:2},{slot:3},{pulsesAcknowledged:2},
+    {neutralState:'UNKNOWN'},{inputEffect:'GAME_ACCEPTED'},
+    {gameplayObserved:true},{status:'MC02_SEQUENCE_ABORTED'},
+  ])assert.equal(canReuseVerifiedMc02BatchNeutral(
+    {...proof,...change},3,options),false);
+  for(const count of [0,-1,2,65,NaN,3.5])assert.equal(
+    canReuseVerifiedMc02BatchNeutral(proof,count,options),false);
+});
+
+test('MC02 injected native batch keeps independent neutral and late Stop cancels success',async()=>{
+  const cfg={...config(),experimentalMc02InputEnabled:true};
+  let notifyRelease,resumeRelease;
+  const entered=new Promise(resolve=>{notifyRelease=resolve;});
+  const gate=new Promise(resolve=>{resumeRelease=resolve;});
+  let neutrals=0;
+  const handler=createHandler(cfg,{
+    mc02Batch:async(_exe,pulses)=>({
+      schema:1,slot:2,gameplayObserved:false,
+      status:'EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED',
+      pulsesAcknowledged:pulses.length,
+      neutralState:'NATIVE_NEUTRAL_WRITE_ACKNOWLEDGED_ONLY',
+      inputEffect:'NOT_VERIFIED_IN_MINECRAFT_EDUCATION',
+    }),
+    mc02Input:async(_exe,packet)=>{
+      assert.deepEqual([packet.keys,packet.dx,packet.dy,packet.ttlMs],
+        [0,0,0,1]);
+      neutrals++;
+      notifyRelease();await gate;
+      return {schema:1,slot:2,gameplayObserved:false,
+        status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'};
+    },
+  });
+  const pending=handler.callTool('run_experimental_mc02_actions',{
+    slot:2,actions:[{slot:2,kind:'move_forward',atMs:0,durationMs:320}],
+  });
+  await entered;
+  const stop=await handler.callTool('stop_experimental_mc02_actions',{slot:2});
+  assert.equal(stop.status,'CANCELLATION_REQUESTED');
+  resumeRelease();
+  await assert.rejects(pending,/MC02_SEQUENCE_ABORTED/);
+  assert.equal(neutrals,1,'fake native ACK never bypasses neutral');
+  handler.shutdown();
 });
 
 test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{

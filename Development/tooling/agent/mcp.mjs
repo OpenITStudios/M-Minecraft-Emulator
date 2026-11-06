@@ -610,6 +610,25 @@ export async function sendExperimentalMc02BatchNative(executable,pulses,{signal}
     note:'One native CLI child reused retained controller IPC for every bounded MC02 pulse; no Minecraft gameplay was observed.'};
 }
 
+// The original MC02 batch CLI reports success only AFTER exact-channel
+// native ReleaseAll has been acknowledged. A second neutral CLI may be
+// backdated behind that accepted release, creating a false failure.
+// Only this exact canonical sender may reuse native transport proof.
+// Injected providers, aborts and uncertain results still need the
+// independent original-channel neutral path. No game key-up proof.
+export function canReuseVerifiedMc02BatchNeutral(receipt,pulseCount,{
+  verifiedSender=false,transportConfirmed=false,
+}={}) {
+  return verifiedSender===true && transportConfirmed===true &&
+    Number.isInteger(pulseCount)&&pulseCount>0&&pulseCount<=64 &&
+    receipt?.schema===1 && receipt?.slot===2 &&
+    receipt?.status==='EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED' &&
+    receipt?.pulsesAcknowledged===pulseCount &&
+    receipt?.neutralState==='NATIVE_NEUTRAL_WRITE_ACKNOWLEDGED_ONLY' &&
+    receipt?.inputEffect==='NOT_VERIFIED_IN_MINECRAFT_EDUCATION' &&
+    receipt?.gameplayObserved===false;
+}
+
 // One opaque, ephemeral writer correlation ID per explicitly opted-in MCP.
 // It is not OS authentication or a game credential; the retained controller
 // arbitrates all actual per-original-game input. Never expose it over MCP
@@ -2931,7 +2950,8 @@ export function createHandler(config,{
       inFlight=true;
       const abort=new AbortController();
       mc02SequenceAbort=abort;
-      let dispatched=false,neutralConfirmed=true;
+      let dispatched=false,nativeNeutralConfirmed=false;
+      let neutralConfirmed=false;
       try {
         dispatched=true;
         const result=await mc02Batch(config.executable,batch.pulses,
@@ -2943,13 +2963,18 @@ export function createHandler(config,{
           throw new Error('MC02_INPUT_NATIVE_RESULT_UNVERIFIED');
         }
         if(abort.signal.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
+        nativeNeutralConfirmed=canReuseVerifiedMc02BatchNeutral(
+          result,batch.count,{
+            verifiedSender:mc02Batch===sendExperimentalMc02BatchNative,
+            transportConfirmed:true,
+          });
         return result;
       } finally {
-        // If MCP cancels/kills the bounded native batch child, its
-        // destructor cannot guarantee release. The retained controller
-        // receives an independent exact-MC02 neutral-state request.
-        // Failing this release is NEVER reported as sequence success.
-        if(dispatched) {
+        // A successful original CLI batch has already neutralized MC02.
+        // Do not turn its success into a false error through a second
+        // potentially backdated neutral CLI. Untrusted/aborted batches
+        // retain the existing independent exact-channel cleanup.
+        if(dispatched&&!nativeNeutralConfirmed) {
           try {
             const receipt=await mc02Input(config.executable,{
               keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
@@ -2961,7 +2986,11 @@ export function createHandler(config,{
         }
         if(mc02SequenceAbort===abort)mc02SequenceAbort=null;
         inFlight=false;
-        if(!neutralConfirmed)throw new Error('MC02_RELEASE_UNCONFIRMED');
+        if(dispatched&&!nativeNeutralConfirmed&&!neutralConfirmed)
+          throw new Error('MC02_RELEASE_UNCONFIRMED');
+        // Stop/shutdown may arrive while independent cleanup awaits.
+        // Its ACK cannot make the earlier action successful afterward.
+        if(abort.signal.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
       }
     }
     if (name==='send_experimental_mc02_input') {
