@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Legacy MC02 batch cleanup original-issue fence | The same-image native batch uses its last potentially dispatched pulse's original issue timestamp for ReleaseAll, not a fresh cleanup time. If a newer one-shot or neutral was accepted, original Channel refuses the stale release before shared-memory mutation. Definitive stale/expired actor refusal is exposed as MC02_RELEASE_OBSOLETE; only canonical MCP sender can avoid a dangerous second freshly timed neutral. Other uncertainty retains the original independent fallback | Rust/Node negative fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or feature activation change |
 | Legacy MC02 canonical neutral ACK reuse | Original MC02 CLI already releases the channel before successful batch response; MCP no longer launches a redundant, potentially backdated neutral CLI for its exact canonical sender. Failed/aborted/malformed/injected receipts keep independent neutral. Late Stop during cleanup cannot produce false success | Pure Node provenance and late-Stop fixtures AUTHORED_NOT_EXECUTED, no controller/IPC/v4 ABI change |
 | Post-release AI epoch replay fence | Original AiLeaseBook stores one per-slot maximum admitted e1 FILETIME even after explicit native release. Older, equal-issue or replayed lease acquisitions refuse before any 4/5-cohort mutation. Only original child reap resets the maximum; source-old epoch cannot pass the existing process-birth admission for a replacement. The same stale error code feeds MCP no-write detection | Existing and new pure four/five AI Rust fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or default-on changes |
 | Live same-writer native action-lease isolation | The original AiLeaseBook now refuses a second normal acquire while any selected exact-owner action lease is still live, even if its state is neutral and writer ID matches. This prevents a delayed older CLI from replacing the active transaction epoch; existing same-owner recovery-only takeover and explicit neutral ACK remain available | Pure Rust hybrid four-AI and full five-AI fixtures AUTHORED_NOT_EXECUTED; no wire/ABI/feature change |
@@ -283,32 +284,39 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-The original MC02 source route was reviewed through the existing MCP
-wall-clock timestamp, one-shot native CLI age-to-uptime conversion,
-retained controller, Channel::release_all ordering, and the original
-AI lease book. The current conversion backdates delayed CLI startups
-and the original actor/channel reject older active/neutral requests;
-the new per-slot AI lease epoch watermark does not authorize legacy
-MC02 or rewrite its neutral semantics.
+This source pass found a concrete legacy MC02 cross-CLI ordering race.
+The same-image native batch used a FRESH GetTickCount64 value for
+ReleaseAll after its pulse sequence. If another original MC02 one-shot
+had been accepted between the batch's last attempted pulse and its
+cleanup, the batch's new timestamp appeared newer and could erase
+that unrelated active input. The batch now sends the original
+last attempted pulse's issue time as its bounded native neutral
+timestamp. The original Channel's existing active/neutral timestamp
+fences reject obsolete cleanup before changing cursor/packet state.
 
-A specific duplicate-cleanup defect was found: MC02 batch success is
-returned by the original CLI only AFTER its exact-channel neutral
-request succeeds, but MCP always sent a SECOND CLI neutral afterward.
-The second request's reconstructed issued time could be behind the
-newer accepted native neutral, causing a false
-`MC02_RELEASE_UNCONFIRMED` despite an earlier valid native ACK.
-The existing MCP now reuses the native transport neutral only from its
-exact canonical sender and matching completed receipt. Fake,
-malformed, aborted or uncertain responses still take independent
-neutral, and late Stop during fallback cleanup cannot return success.
-Node fixtures AUTHORED_NOT_EXECUTED. No new owner or IPC/v4 ABI change.
+When the original actor definitively refuses the stale/expired
+batch cleanup, the native CLI now returns
+`MC02_RELEASE_OBSOLETE`, not a false success. MCP skips a second
+freshly timed neutral ONLY for this exact original native sender
+and exact code. A test-injected callback, timeout, process kill,
+malformed response or any other uncertain outcome still takes the
+existing independent neutral path. The explicit operator Stop is
+unchanged. No new controller, Windows hook, native IPC schema or
+96-byte game-shared ABI.
 
-**Single next source action:** examine the original legacy MC02 native
-batch scheduler's cleanup issue timestamp when another opted-in MC02
-one-shot active input may be interleaved, to prevent the older batch
-from canceling a newer separate command. Change source only for a
-confirmed race; do not create another controller or new ownership.
-The operator prefers CODE FIRST: Node/Rust/C++ test runs, Windows
-builds, installed input hooks, Minecraft gameplay and five-client
-acceptance remain NOT_EXECUTED/NOT_VERIFIED. Strict Cua Invoke-only is
-`BACKGROUND_UNAVAILABLE`, CI disabled, `main` unchanged.
+Known limit: the inherited GetTickCount64 issue ordering is
+millisecond-granular. Same-tick independent legacy writers and
+replaced original child provenance are not conclusively isolated
+by timestamp alone. Never claim all cross-process races eliminated
+or Minecraft key-up/gameplay proven. Rust/Node source fixtures are
+AUTHORED_NOT_EXECUTED.
+
+**Single next source action:** audit same-tick and replaced-child
+legacy MC02 cleanup on the existing original process-owned native
+writer, and implement only a demonstrable gap that can be addressed
+without creating a second controller or weakening current 4/5-client
+leased input protection. Operator preference stays CODE FIRST:
+Node/Rust/C++ test execution, Windows builds and live Minecraft
+sessions/acceptance remain NOT_EXECUTED/NOT_VERIFIED.
+Cua strict Invoke-only remains `BACKGROUND_UNAVAILABLE`,
+GitHub Actions CI is disabled, and `main` is unchanged.

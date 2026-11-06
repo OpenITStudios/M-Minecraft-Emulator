@@ -7,7 +7,8 @@ import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coor
   sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
   matchesNativeMultiClientBatchReceipt,
   canReuseVerifiedNativeBatchNeutral,
-  canReuseVerifiedMc02BatchNeutral} from './mcp.mjs';
+  canReuseVerifiedMc02BatchNeutral,
+  confirmedObsoleteMc02BatchCleanup} from './mcp.mjs';
 
 const snapshot=(operation)=>({schema:1,ok:true,operation,profiles:Array.from({length:5},(_,i)=>({slot:i+1,state:i===0?'RUNNING':'STOPPED',responding:i===0,hasWindow:i===0,needsAttention:false}))});
 const config=(mode='human-plus-four-ai')=>({mode,executable:'C:\\App\\lazy-tester.exe',evidenceDirectory:''});
@@ -89,6 +90,44 @@ test('only confirmed canonical 4/5-AI native sender may reuse already-ACKed per-
     assert.equal(canReuseVerifiedNativeBatchNeutral(
       {...verified,gameplayObserved:true},slots,options),false);
   }
+});
+
+test('canonical MC02 obsolete cleanup is distinct from uncertain transport',()=>{
+  // AUTHORED_NOT_EXECUTED. Pure provenance check, no Windows/game.
+  const expected=Error('Native request refused: MC02_RELEASE_OBSOLETE');
+  assert.equal(confirmedObsoleteMc02BatchCleanup(expected,{
+    verifiedSender:true}),true);
+  assert.equal(confirmedObsoleteMc02BatchCleanup(expected,{
+    verifiedSender:false}),false);
+  for(const error of [
+    Error('Native request refused: MC02_RELEASE_UNCONFIRMED'),
+    Error('Native request refused: NATIVE_BUSY'),
+    Error('Native request outcome UNCERTAIN; do not retry blindly'),
+    Error('MC02_SEQUENCE_ABORTED'),null,
+  ])assert.equal(confirmedObsoleteMc02BatchCleanup(error,{
+    verifiedSender:true}),false);
+});
+
+test('injected MC02 obsolete-refusal result still attempts independent neutral',async()=>{
+  const cfg={...config(),experimentalMc02InputEnabled:true};
+  let neutrals=0;
+  const handler=createHandler(cfg,{
+    mc02Batch:async()=>{
+      throw Error('Native request refused: MC02_RELEASE_OBSOLETE');
+    },
+    mc02Input:async(_exe,frame)=>{
+      assert.deepEqual([frame.keys,frame.dx,frame.dy,frame.ttlMs],
+        [0,0,0,1]);
+      neutrals++;
+      return {schema:1,slot:2,gameplayObserved:false,
+        status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED'};
+    },
+  });
+  await assert.rejects(()=>handler.callTool('run_experimental_mc02_actions',{
+    slot:2,actions:[{slot:2,kind:'move_forward',atMs:0,durationMs:320}],
+  }),/MC02_RELEASE_OBSOLETE/);
+  assert.equal(neutrals,1,'fake no-write result cannot skip native cleanup');
+  handler.shutdown();
 });
 
 test('MC02 native neutral reuse requires the canonical sender and exact completed batch',()=>{

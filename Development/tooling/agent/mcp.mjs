@@ -629,6 +629,18 @@ export function canReuseVerifiedMc02BatchNeutral(receipt,pulseCount,{
     receipt?.gameplayObserved===false;
 }
 
+// If the original MC02 native batch explicitly reports that its
+// cleanup was refused BEFORE v4 publication (a newer one-shot owns
+// the timestamp or the earlier 350-ms TTL is expired), do not spawn
+// a newer neutral CLI that could clear another command. Fake callbacks
+// and all ambiguous errors must retain independent cleanup.
+export function confirmedObsoleteMc02BatchCleanup(error,{
+  verifiedSender=false,
+}={}) {
+  return verifiedSender===true &&
+    error?.message==='Native request refused: MC02_RELEASE_OBSOLETE';
+}
+
 // One opaque, ephemeral writer correlation ID per explicitly opted-in MCP.
 // It is not OS authentication or a game credential; the retained controller
 // arbitrates all actual per-original-game input. Never expose it over MCP
@@ -2951,7 +2963,7 @@ export function createHandler(config,{
       const abort=new AbortController();
       mc02SequenceAbort=abort;
       let dispatched=false,nativeNeutralConfirmed=false;
-      let neutralConfirmed=false;
+      let cleanupObsolete=false,neutralConfirmed=false;
       try {
         dispatched=true;
         const result=await mc02Batch(config.executable,batch.pulses,
@@ -2969,12 +2981,20 @@ export function createHandler(config,{
             transportConfirmed:true,
           });
         return result;
+      } catch(error) {
+        // Native proof of an obsolete, NEVER-published cleanup cannot
+        // be replaced by a later fresh neutral without canceling an
+        // unrelated writer. This is an error, not a success or key-up ACK.
+        cleanupObsolete=confirmedObsoleteMc02BatchCleanup(error,{
+          verifiedSender:mc02Batch===sendExperimentalMc02BatchNative,
+        });
+        throw error;
       } finally {
-        // A successful original CLI batch has already neutralized MC02.
-        // Do not turn its success into a false error through a second
-        // potentially backdated neutral CLI. Untrusted/aborted batches
-        // retain the existing independent exact-channel cleanup.
-        if(dispatched&&!nativeNeutralConfirmed) {
+        // Confirmed canonical success already neutralized MC02; proven
+        // obsolete cleanup belongs to an earlier timeline. Otherwise
+        // retain independent exact-channel neutral for uncertain/killed,
+        // malformed or injected senders.
+        if(dispatched&&!nativeNeutralConfirmed&&!cleanupObsolete) {
           try {
             const receipt=await mc02Input(config.executable,{
               keys:0,dx:0,dy:0,ttlMs:1,requestedAtMs:Date.now(),
@@ -2986,10 +3006,11 @@ export function createHandler(config,{
         }
         if(mc02SequenceAbort===abort)mc02SequenceAbort=null;
         inFlight=false;
-        if(dispatched&&!nativeNeutralConfirmed&&!neutralConfirmed)
+        if(dispatched&&!nativeNeutralConfirmed&&!neutralConfirmed&&!cleanupObsolete)
           throw new Error('MC02_RELEASE_UNCONFIRMED');
-        // Stop/shutdown may arrive while independent cleanup awaits.
-        // Its ACK cannot make the earlier action successful afterward.
+        // A proven obsolete cleanup is still a rejected action, never
+        // a successful native batch or gameplay key-up observation.
+        // A late Stop also cannot be converted into earlier success.
         if(abort.signal.aborted)throw new Error('MC02_SEQUENCE_ABORTED');
       }
     }

@@ -109,6 +109,24 @@ struct Mc02BatchPulse {
     at_ms:u32,keys:u32,dx:i32,dy:i32,ttl_ms:u32,
 }
 
+// The original Channel::release_all rejects these exact conditions
+// BEFORE publishing v4 shared state. A stale/expired batch cleanup must
+// never retry with a newly minted timestamp and erase another MC02
+// command. This is a proven actor refusal, not Minecraft key-up proof.
+// SessionReply maps original controller InvalidData into ErrorKind::Other.
+#[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+fn mc02_batch_cleanup_error(error:&io::Error)->&'static str {
+    if matches!(error.kind(),io::ErrorKind::Other|io::ErrorKind::InvalidData) &&
+       matches!(error.to_string().as_str(),
+           "MC02 release predates newer active input" |
+           "MC02 release predates newer neutral release" |
+           "MC02 release request expired before native delivery") {
+        return "MC02_RELEASE_OBSOLETE";
+    }
+    "MC02_RELEASE_UNCONFIRMED"
+}
+
 // Stable for one MCP stdio process, supplied privately to its short-lived
 // native CLI children. The controller owns all actual slot lease authority.
 // This identifier is NOT a secret, security boundary, or game credential.
@@ -241,7 +259,10 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
     // publish nothing during the preceding delay; no synthetic neutral
     // pulse or process restart is required at time zero.
     let started=unsafe{GetTickCount64()};
-    let mut may_have_sent=false;
+    // Timestamp of the last pulse which MAY have reached the original
+    // native actor. A later cleanup must not claim it was issued after
+    // another CLI's more recent one-shot command.
+    let mut last_attempted_issue_ms=None;
     let result=(||->Result<(),&'static str>{
         for pulse in &pulses {
             let deadline=started.saturating_add(u64::from(pulse.at_ms));
@@ -252,10 +273,11 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
             if unsafe{GetTickCount64()}.saturating_sub(deadline)>150 {
                 return Err("MC02_SEQUENCE_DEADLINE");
             }
-            // An uncertain native IPC acknowledgement may still mean the
-            // original controller wrote a packet. Always attempt release.
-            may_have_sent=true;
+            // An uncertain native reply can follow shared-state publish.
+            // Pin the ORIGINAL issue time immediately before native IPC,
+            // including a pulse whose acknowledgement may be lost.
             let issued_at_ms=unsafe{GetTickCount64()};
+            last_attempted_issue_ms=Some(issued_at_ms);
             let snapshot=native_clients_session::request(SessionRequest::Mc02Input{
                 slot:2,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,
                 ttl_ms:pulse.ttl_ms,issued_at_ms,
@@ -275,16 +297,18 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
         }
         Ok(())
     })();
-    // The MCP bridge also attempts an independent neutral write after
-    // this subprocess exits/aborts. The native TTL is the final fallback
-    // on process termination or a failed authenticated release.
-    if may_have_sent {
+    // The native writer compares requested issue times, not CLI
+    // completion order. Reuse the last attempted pulse's timestamp for
+    // cleanup; a later one-shot accepted by another CLI can then veto
+    // this old ReleaseAll BEFORE cursor/packet publication.
+    // If this stamp is already expired, native refuses it rather than
+    // silently changing ownership. Virtual TTL is still bounded.
+    if let Some(issued_at_ms)=last_attempted_issue_ms {
         let released=native_clients_session::request(SessionRequest::Mc02Input{
-            slot:2,keys:0,dx:0,dy:0,ttl_ms:1,
-            issued_at_ms:unsafe{GetTickCount64()},
+            slot:2,keys:0,dx:0,dy:0,ttl_ms:1,issued_at_ms,
         });
-        if released.is_err() {
-            return Err("MC02_RELEASE_UNCONFIRMED");
+        if let Err(error)=released {
+            return Err(mc02_batch_cleanup_error(&error));
         }
     }
     result?;
@@ -858,6 +882,35 @@ pub fn maybe_run() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(all(windows,target_arch="x86_64",
+          feature="lazy-tester-package",feature="mc02-native-input"))]
+    #[test]
+    fn obsolete_legacy_mc02_batch_cleanup_requires_proven_actor_refusal() {
+        // Pure authored Rust fixture; never executes controller or game.
+        use std::io::{Error,ErrorKind};
+        for reason in [
+            "MC02 release predates newer active input",
+            "MC02 release predates newer neutral release",
+            "MC02 release request expired before native delivery",
+        ] {
+            for kind in [ErrorKind::Other,ErrorKind::InvalidData] {
+                assert_eq!(mc02_batch_cleanup_error(&Error::new(kind,reason)),
+                    "MC02_RELEASE_OBSOLETE");
+            }
+            for kind in [
+                ErrorKind::BrokenPipe,ErrorKind::TimedOut,
+                ErrorKind::Interrupted,ErrorKind::WouldBlock,
+                ErrorKind::PermissionDenied,
+            ] {
+                assert_eq!(mc02_batch_cleanup_error(&Error::new(kind,reason)),
+                    "MC02_RELEASE_UNCONFIRMED",
+                    "transport uncertainty cannot impersonate stale actor refusal");
+            }
+        }
+        assert_eq!(mc02_batch_cleanup_error(&Error::other(
+            "other original controller refusal")),"MC02_RELEASE_UNCONFIRMED");
+    }
+
     #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
     #[test]
