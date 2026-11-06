@@ -55,6 +55,18 @@ fn admit_native_release_order(
     Ok(())
 }
 
+// The old unleased CLI request contains only an MC02 slot, not the
+// original child's PID/birth. If that child is reaped and relaunched
+// during the 500-ms request lifetime, target equality against the
+// NEW Channel is not proof that this command belongs to the new game.
+// Use one monotonic per-child bind witness (NOT part of v4 shared ABI)
+// to refuse older and equal-millisecond ambiguous issue times before
+// reading/writing shared state. Same-tick independent writers AFTER
+// binding still need source identity and remain unresolved.
+fn issued_after_original_channel_bind(issued_at_ms:u64,bound_at_ms:u64)->bool {
+    bound_at_ms!=0 && issued_at_ms>bound_at_ms
+}
+
 pub(super) const INPUT_ENV: &str = "MIVUBI_EDUCATION_MC02_INPUT_SECTION";
 const MAGIC: u32 = 0x4c544932; // LTI2 (MC02 only)
 const VERSION: u32 = 4;
@@ -119,6 +131,8 @@ pub(super) struct Channel {
     slot: u32,
     mode: AgentControlMode,
     target: Option<(u32,u64,u32)>,
+    // Original child-only binding witness, not shared with game code.
+    bound_at_ms:u64,
     sequence: AtomicU8,
     // Controller-local, NOT part of the inherited 96-byte game ABI.
     // An already-issued active pulse must never re-arm MC02 after a
@@ -141,7 +155,7 @@ impl Channel {
         Ok(Some(Self {
             section:Configuration::create_sized(std::mem::size_of::<SharedInput>() as u32)?,
             slot,mode,
-            target:None,
+            target:None,bound_at_ms:0,
             sequence:AtomicU8::new(0),
             last_release_issued_at_ms:AtomicU64::new(0),
             last_active_issued_at_ms:AtomicU64::new(0),
@@ -180,6 +194,13 @@ impl Channel {
         if unsafe{SetHandleInformation(self.reader(),HANDLE_FLAG_INHERIT,0)}==0 {
             return Err(io::Error::last_os_error());
         }
+        // One-time bind occurs with exact original process ownership
+        // while the child has not resumed normal Minecraft gameplay.
+        let bound_at_ms=unsafe{GetTickCount64()};
+        if bound_at_ms==0 {
+            return Err(invalid("Original MC02 input channel binding time unavailable"));
+        }
+        self.bound_at_ms=bound_at_ms;
         self.target=Some((pid,birth,session));
         Ok(())
     }
@@ -192,6 +213,9 @@ impl Channel {
                               issued_at_ms:u64)->io::Result<()> {
         if self.target!=Some((pid,birth,session)) {
             return Err(invalid("MC02 release target does not match owned process"));
+        }
+        if !issued_after_original_channel_bind(issued_at_ms,self.bound_at_ms) {
+            return Err(invalid("MC02 input predates original channel binding"));
         }
         let view=self.mapped()?;
         let now=unsafe{GetTickCount64()};
@@ -262,6 +286,9 @@ impl Channel {
             (self.mode==AgentControlMode::FiveAi && human_hwnd!=0) ||
             self.target!=Some((pid,birth,session)) {
             return Err(invalid("Unbound, expired or invalid MC02 input command"));
+        }
+        if !issued_after_original_channel_bind(issued_at_ms,self.bound_at_ms) {
+            return Err(invalid("MC02 input predates original channel binding"));
         }
         let view=self.mapped()?;
         // The only authoritative expiry check is immediately before the
@@ -371,7 +398,24 @@ impl Channel {
 #[cfg(test)]
 mod rising_edge_counter_tests {
     use super::{checked_rising_press_counts,active_group_write_in_time,
-        admit_native_release_order};
+        admit_native_release_order,issued_after_original_channel_bind};
+
+    #[test]
+    fn delayed_legacy_mc02_command_cannot_adopt_relaunched_child() {
+        // Pure authored source fixture, no mapped section or live game.
+        // Applies to a per-original-game channel in either 4/5-AI mode.
+        for cohort in [&[2,3,4,5][..],&[1,2,3,4,5][..]] {
+            for _slot in cohort {
+                assert!(!issued_after_original_channel_bind(1999,2000),
+                    "an old still-fresh CLI command cannot bind new child");
+                assert!(!issued_after_original_channel_bind(2000,2000),
+                    "same-tick child origin remains ambiguous; refuse");
+                assert!(issued_after_original_channel_bind(2001,2000));
+                assert!(!issued_after_original_channel_bind(2001,0));
+                assert!(!issued_after_original_channel_bind(0,2000));
+            }
+        }
+    }
 
     #[test]
     fn stale_release_all_does_not_republish_a_newer_neutral_epoch() {

@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Original MC02 child-bind timestamp fence | Original per-process native Channel now records its single monotonic bind time after exact child identity binding and refuses both active and ReleaseAll requests issued before or at that time, before v4 memory is mapped. Native batch cleanup classifies this known pre-publication refusal as MC02_RELEASE_OBSOLETE so the verified MCP sender cannot neutralize the newly launched game with another fresh CLI. This is a bounded old-child refusal; same-tick cross-CLI command origin after bind remains unknown | Pure Rust four/five-cohort and CLI error-kind fixtures AUTHORED_NOT_EXECUTED, no private IPC/ABI/enablement change |
 | Legacy MC02 batch cleanup original-issue fence | The same-image native batch uses its last potentially dispatched pulse's original issue timestamp for ReleaseAll, not a fresh cleanup time. If a newer one-shot or neutral was accepted, original Channel refuses the stale release before shared-memory mutation. Definitive stale/expired actor refusal is exposed as MC02_RELEASE_OBSOLETE; only canonical MCP sender can avoid a dangerous second freshly timed neutral. Other uncertainty retains the original independent fallback | Rust/Node negative fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or feature activation change |
 | Legacy MC02 canonical neutral ACK reuse | Original MC02 CLI already releases the channel before successful batch response; MCP no longer launches a redundant, potentially backdated neutral CLI for its exact canonical sender. Failed/aborted/malformed/injected receipts keep independent neutral. Late Stop during cleanup cannot produce false success | Pure Node provenance and late-Stop fixtures AUTHORED_NOT_EXECUTED, no controller/IPC/v4 ABI change |
 | Post-release AI epoch replay fence | Original AiLeaseBook stores one per-slot maximum admitted e1 FILETIME even after explicit native release. Older, equal-issue or replayed lease acquisitions refuse before any 4/5-cohort mutation. Only original child reap resets the maximum; source-old epoch cannot pass the existing process-birth admission for a replacement. The same stale error code feeds MCP no-write detection | Existing and new pure four/five AI Rust fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI or default-on changes |
@@ -284,39 +285,40 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
-This source pass found a concrete legacy MC02 cross-CLI ordering race.
-The same-image native batch used a FRESH GetTickCount64 value for
-ReleaseAll after its pulse sequence. If another original MC02 one-shot
-had been accepted between the batch's last attempted pulse and its
-cleanup, the batch's new timestamp appeared newer and could erase
-that unrelated active input. The batch now sends the original
-last attempted pulse's issue time as its bounded native neutral
-timestamp. The original Channel's existing active/neutral timestamp
-fences reject obsolete cleanup before changing cursor/packet state.
+This pass inspected the legacy-MC02 original game Channel::bind,
+the retained reaping/relaunch lifecycle, private one-shot Mc02Input
+request shape, and Channel::release_all/active write admission.
+An already-issued CLI packet carries slot + timestamp but not the
+prior game's PID/birth. After an original child exits and a fresh
+MC02 process binds, checking the NEW channel's PID/birth could
+wrongly treat that old request as intended for the new process.
 
-When the original actor definitively refuses the stale/expired
-batch cleanup, the native CLI now returns
-`MC02_RELEASE_OBSOLETE`, not a false success. MCP skips a second
-freshly timed neutral ONLY for this exact original native sender
-and exact code. A test-injected callback, timeout, process kill,
-malformed response or any other uncertain outcome still takes the
-existing independent neutral path. The explicit operator Stop is
-unchanged. No new controller, Windows hook, native IPC schema or
-96-byte game-shared ABI.
+The same existing per-process Channel now pins one private monotonic
+bind watermark at the end of its original child binding. Both active
+and neutral writes refuse issued_at_ms at/before that new binding
+BEFORE mapping or changing game shared-memory bytes. The original
+CLI maps only the exact corresponding native refusal to
+`MC02_RELEASE_OBSOLETE` during batch cleanup; canonical MCP
+then avoids an unsafe newly timed fallback on the replacement game.
+The human MC01 remains protected, 4/5-client leased paths are not
+replaced, and v4/IPC schemas and compile-OFF state remain unchanged.
 
-Known limit: the inherited GetTickCount64 issue ordering is
-millisecond-granular. Same-tick independent legacy writers and
-replaced original child provenance are not conclusively isolated
-by timestamp alone. Never claim all cross-process races eliminated
-or Minecraft key-up/gameplay proven. Rust/Node source fixtures are
-AUTHORED_NOT_EXECUTED.
+This is NOT full cross-process provenance. Two different commands
+issued AFTER bind within the same GetTickCount64 millisecond remain
+indistinguishable in the current legacy request. A batch that remains
+alive and mints a NEW pulse AFTER process replacement also cannot
+prove it belongs to its original child using only issue timestamps.
+Fixing those requires an explicitly designed exact-process binding
+in the existing controller contract; do not claim them solved from
+source inspection. All fixtures are AUTHORED_NOT_EXECUTED.
 
-**Single next source action:** audit same-tick and replaced-child
-legacy MC02 cleanup on the existing original process-owned native
-writer, and implement only a demonstrable gap that can be addressed
-without creating a second controller or weakening current 4/5-client
-leased input protection. Operator preference stays CODE FIRST:
-Node/Rust/C++ test execution, Windows builds and live Minecraft
-sessions/acceptance remain NOT_EXECUTED/NOT_VERIFIED.
-Cua strict Invoke-only remains `BACKGROUND_UNAVAILABLE`,
-GitHub Actions CI is disabled, and `main` is unchanged.
+**Single next source action:** examine whether the existing native
+profile identity snapshot can be used to bind the legacy batch to
+its original child without a second controller, new public IPC
+surface, or per-pulse expensive target lookups. If source does not
+prove a safe same-owner solution, preserve the blocked state and
+focus on existing bounded work rather than speculative input paths.
+Operator preference CODE FIRST; Rust/Node/C++ tests, Windows build
+and Minecraft 4/5-client gameplay remain NOT_EXECUTED/NOT_VERIFIED.
+Cua strict Invoke-only is `BACKGROUND_UNAVAILABLE`;
+GitHub Actions disabled and `main` remains unchanged.

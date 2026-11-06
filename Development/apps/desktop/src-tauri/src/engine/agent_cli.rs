@@ -121,7 +121,8 @@ fn mc02_batch_cleanup_error(error:&io::Error)->&'static str {
        matches!(error.to_string().as_str(),
            "MC02 release predates newer active input" |
            "MC02 release predates newer neutral release" |
-           "MC02 release request expired before native delivery") {
+           "MC02 release request expired before native delivery" |
+           "MC02 input predates original channel binding") {
         return "MC02_RELEASE_OBSOLETE";
     }
     "MC02_RELEASE_UNCONFIRMED"
@@ -892,6 +893,7 @@ mod tests {
             "MC02 release predates newer active input",
             "MC02 release predates newer neutral release",
             "MC02 release request expired before native delivery",
+            "MC02 input predates original channel binding",
         ] {
             for kind in [ErrorKind::Other,ErrorKind::InvalidData] {
                 assert_eq!(mc02_batch_cleanup_error(&Error::new(kind,reason)),
