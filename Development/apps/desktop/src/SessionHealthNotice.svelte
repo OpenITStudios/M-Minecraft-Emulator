@@ -19,9 +19,12 @@
     class={item.kind === 'preview' ? 'lt-error lt-preview-slot-issue' : 'lt-error lt-session-slot-issue'}
     role="status"
     aria-label={accessibleName}
+    aria-describedby={'lt-health-guidance-'+item.slot}
+    tabindex="0"
+    title={item.title+' — '+item.guidance}
   >
     <strong>{item.title}</strong>
-    <span>{item.guidance}</span>
+    <span id={'lt-health-guidance-'+item.slot}>{item.guidance}</span>
   </div>
   <button
     type="button"

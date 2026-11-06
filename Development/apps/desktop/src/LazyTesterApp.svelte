@@ -138,6 +138,13 @@
     previewsVisible: page === 'workspace' && !detached,
   });
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
+  // Keep complete last-native-observation text in DOM while only the visual
+  // line ellipsizes on narrow windows. This is not gameplay readiness.
+  $: gamesStatusSummary = available && binding?.configured
+    ? observedRunningCount + ' of 5 reported running' +
+      (startingCount > 0 ? ' · ' + startingCount + ' starting' : '') +
+      (attentionCount > 0 ? ' · ' + attentionCount + ' need attention' : '')
+    : 'Session status unavailable';
   // Only reuse original Play-owner in-flight decisions; never create
   // another controller, poller or mutable native session identity.
   $: f3ActionPending = busy || closeReviewPending || queued !== null ||
@@ -885,7 +892,7 @@
         <p class="lt-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>
       {/if}
       {#if issueKey!==null||connectionIssueKey!==null}
-        <div class="lt-alert" role="alert">
+        <div class="lt-alert" role="alert" tabindex="0">
           {#if issueKey!==null}<p>{userMessage(issueKey)}</p>{/if}
           {#if connectionIssueKey!==null}<p>{userMessage(connectionIssueKey)}</p>{/if}
           <details class="lt-feedback-reference">
@@ -896,13 +903,13 @@
         </div>
       {/if}
       {#if uncertainWindowSlots.size > 0}
-        <section class="lt-exit-recovery" role="status" aria-label="Window recovery unconfirmed">
+        <section class="lt-exit-recovery" role="status" tabindex="0" aria-label="Window recovery unconfirmed">
           <h2>Window recovery needs attention</h2>
           <p>{recoveryLabels(uncertainWindowSlots)}: Window restoration is unconfirmed. Check accessible game windows before another close. Refresh checks session status, not window restoration.</p>
         </section>
       {/if}
       {#if closeFailure}
-        <section class="lt-exit-recovery" role="status" aria-label="Exit recovery">
+        <section class="lt-exit-recovery" role="status" tabindex="0" aria-label="Exit recovery">
           <h2>Exit was not completed</h2>
           <p>Some Minecraft sessions may still be running. Your remaining sessions were preserved. Choose a responsive Minecraft below to return to Play, or finish an open game dialog normally.</p>
           <div class="lt-actions"><button class="lt-secondary" on:click={()=>{closeFailure='';void refresh();}}>Dismiss and refresh</button></div>
@@ -911,15 +918,15 @@
       {/if}
 
       {#if nativeBackend===null&&!initializing}
-        <section class="lt-binding" aria-label="Backend capability unavailable">
+        <section class="lt-binding" tabindex="0" aria-label="Backend capability unavailable">
           <div><strong>Backend capability could not be verified</strong><p>{bindingIssue||'Native support check failed. No Minecraft operation was attempted.'}</p></div>
           <div class="lt-actions"><button disabled={busy} on:click={()=>void initializeLaunchers()}>Retry backend check</button></div>
         </section>
       {:else if nativeBackend==='Unsupported'&&!initializing}
-        <section class="lt-binding" aria-label="Unsupported platform">
+        <section class="lt-binding" tabindex="0" aria-label="Unsupported platform">
           <div><strong>Minecraft backend unavailable</strong><p>{bindingIssue}</p></div>
         </section>
-      {:else if !binding?.configured&&!initializing}<section class="lt-binding" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
+      {:else if !binding?.configured&&!initializing}<section class="lt-binding" tabindex="0" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
@@ -927,7 +934,7 @@
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
-        <div class="lt-games-heading"><span>Your games</span><span>{#if available&&binding?.configured}{observedRunningCount} of 5 reported running{#if startingCount > 0} · {startingCount} starting{/if}{#if attentionCount > 0} · {attentionCount} need attention{/if}{:else}Session status unavailable{/if}</span></div>
+        <div class="lt-games-heading"><span>Your games</span><span class="lt-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span></div>
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
           {separateSlots} unresolvedRecovery={uncertainWindowSlots}
           {available} bindingConfigured={!!binding?.configured} {busy}

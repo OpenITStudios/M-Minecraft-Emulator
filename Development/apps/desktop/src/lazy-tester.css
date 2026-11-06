@@ -688,3 +688,64 @@
   .lt-filmstrip .lt-card small.lt-status-selected{color:CanvasText}
   .lt-app .lt-preview-slot-issue{color:CanvasText!important}
 }
+
+/* Text-only overflow treatment: leave the five native DWM preview targets,
+   16:9 aperture and keyed launcher grid geometry unchanged. */
+.lt-filmstrip .lt-card strong,
+.lt-filmstrip .lt-card small{
+  display:block;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+.lt-games-heading{min-width:0;gap:10px}
+.lt-games-heading > span:first-child{flex:none}
+.lt-games-heading .lt-games-count{
+  min-width:0;
+  flex:1 1 auto;
+  text-align:right;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+/* Each bounded recovery message retains its full authored text and a
+   keyboard focus target so users can scroll without a pointing device. */
+.lt-app .lt-health-notice :is(.lt-preview-slot-issue,.lt-session-slot-issue){
+  display:block;
+  min-width:0;
+  max-height:38px;
+  overflow:auto;
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+  font-size:12px;
+  line-height:1.35;
+}
+.lt-app .lt-health-notice [tabindex="0"]:focus-visible,
+.lt-app .lt-layout main > :is(.lt-alert,.lt-binding,.lt-exit-recovery):focus-visible{
+  outline:2px solid var(--lt-accent);
+  outline-offset:-2px;
+  border-radius:5px;
+}
+.lt-app .lt-layout main > .lt-alert{
+  max-height:min(160px,28dvh);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.lt-app .lt-layout main > .lt-exit-recovery{
+  max-height:min(180px,30dvh);
+  overflow-y:auto;
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+}
+.lt-app .lt-layout main > .lt-binding{
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+}
+@media (forced-colors:active){
+  .lt-app .lt-health-notice [tabindex="0"]:focus-visible,
+  .lt-app .lt-layout main > :is(.lt-alert,.lt-binding,.lt-exit-recovery):focus-visible{
+    outline:2px solid Highlight;
+  }
+}

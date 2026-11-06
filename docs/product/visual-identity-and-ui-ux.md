@@ -255,3 +255,39 @@ aligned with the current source contract, without changing product behavior.
 `AUTHORED_NOT_EXECUTED`. Svelte/TypeScript, native Windows visual
 accessibility, screen reader, 920x620 and DPI scaling, DWM preview geometry,
 and five-client Minecraft acceptance remain `NOT_EXECUTED`.
+
+## Long-copy and mixed-status launcher readability — source-only update
+
+- Keep all five launcher cards in their current keyed storage-identity order.
+  The existing native DWM preview targets and 16:9 center aperture are not
+  moved, replaced, virtualized, hidden or reparented.
+- Each card derives one observed `statusLabel` for its visible status,
+  hover title and accessible action name. A process/window `RUNNING` state
+  does not assert a playable, signed-in or authenticated Minecraft world.
+  A blocked or unobserved card never announces an available Launch action.
+- At narrow effective widths, the launcher name and status use a single
+  visual line with an ellipsis. Full text remains in DOM, hover title and
+  the accessible button name, without making one card taller than others.
+- `Your games` uses one presentation-only full summary of the original
+  `RUNNING`, `STARTING` and action-required observations. It is visually
+  constrained to one line but the complete text remains exposed for
+  screen-reader reading and mouse hover. It is never a second process
+  counter, telemetry owner or gameplay certification.
+- The existing per-card recovery message is bounded to 38px. Both preview
+  and window/session guidance remain scrollable, now also keyboard-focusable
+  with a clear focus ring and `aria-describedby` pointing to the exact
+  authored guidance. The status message and any offered original recovery
+  action remain distinct: native Refresh/Select admission is unchanged.
+- Main Play's authored error, original binding recovery and uncertain
+  window-restoration notices are keyboard-focusable when long. Alert and
+  exit-recovery content has an explicitly bounded scrolling region so long
+  copy does not indefinitely obscure the game viewport. No raw native
+  exception text becomes visible and no modal/game-keyboard owner is added.
+- The source-only fixture covers card labeling, full summary exposure,
+  keyboard-readable recovery and unchanged preview boundaries.
+
+**Evidence boundary:** verified only through exact GitHub blob, reference
+and consumer review. New and updated fixtures are
+`AUTHORED_NOT_EXECUTED`; WebView2/Svelte compatibility, live screen reader,
+Windows 920x620 at 100/125/150/200% DPI, native DWM, five mixed licensed
+sessions and Minecraft gameplay acceptance remain `NOT_EXECUTED`.
