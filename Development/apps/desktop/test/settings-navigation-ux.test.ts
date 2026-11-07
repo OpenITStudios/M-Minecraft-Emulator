@@ -56,14 +56,13 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(css).toContain('.lt-coordinate-saved-buttons button{font-size:12px;');
     expect(css).not.toContain('.lt-coordinate-popup .lt-coordinate-help,\n.lt-f3-popup .lt-f3-disclaimer,');
   });
-  it('offers one existing General configuration selector for the workspace, not gameplay settings',()=>{
+  it('does not distract General Settings with a redundant workspace mode selector',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
-    expect(settings).toContain('aria-labelledby="lt-workspace-layout-section"');
-    expect(settings).toContain('for="workspace-layout"');
-    expect(settings).toContain('aria-describedby="lt-workspace-layout-help"');
-    expect(settings).toContain("onChooseWorkspaceLayout(event.currentTarget.value as 'focus' | 'monitor')");
-    expect(app).toContain('{workspaceLayout} {layoutPersistenceIssue} onChooseWorkspaceLayout={chooseWorkspaceLayout}');
+    expect(settings).toContain('<div class="lt-settings-content">\n          <section class="lt-group" aria-labelledby="lt-graphics-section">');
+    expect(settings).not.toContain('workspace-layout');
+    expect(settings).not.toContain('onChooseWorkspaceLayout');
+    expect(app).not.toContain('workspaceLayout');
     expect(settings).not.toContain('invokeRuntime(');
   });
   it('wraps only settings and storage rows without changing the game viewport',()=>{

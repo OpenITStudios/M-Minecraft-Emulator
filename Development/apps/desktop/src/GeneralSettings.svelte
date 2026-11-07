@@ -7,9 +7,6 @@
   export let selectedSlot: ProfileSlot;
   export let settings: SettingsReport | null;
   export let graphicsPreset: GraphicsPreset;
-  export let workspaceLayout: 'focus' | 'monitor';
-  export let layoutPersistenceIssue: boolean;
-  export let onChooseWorkspaceLayout: (mode: 'focus' | 'monitor') => void;
   export let activeFps: number | undefined;
   export let backgroundFps: number | undefined;
   export let busy: boolean;
@@ -74,22 +71,6 @@
 </script>
 
         <div class="lt-settings-content">
-          <section class="lt-group" aria-labelledby="lt-workspace-layout-section">
-            <h2 id="lt-workspace-layout-section">Workspace layout</h2>
-            <div class="lt-setting">
-              <div><h3><label for="workspace-layout">Workspace layout</label></h3>
-                <p>Choose the balance between the game you're playing and the background previews.</p>
-              </div>
-              <select id="workspace-layout" value={workspaceLayout}
-                aria-describedby="lt-workspace-layout-help"
-                on:change={event=>onChooseWorkspaceLayout(event.currentTarget.value as 'focus' | 'monitor')}>
-                <option value="focus">Gameplay Focus (recommended)</option>
-                <option value="monitor">Monitoring (larger previews)</option>
-              </select>
-            </div>
-            <p id="lt-workspace-layout-help" class="lt-help">Changes only Lazy Tester layout, not Minecraft graphics or FPS. The preference is kept on this device when storage is available.</p>
-            {#if layoutPersistenceIssue}<p class="lt-field-error" role="status">Layout changed for this session, but could not be saved on this device.</p>{/if}
-          </section>
           <section class="lt-group" aria-labelledby="lt-graphics-section"><h2 id="lt-graphics-section" bind:this={graphicsHeading} tabindex="-1">Graphics</h2><label class="lt-target">Applies to <select value={selectedSlot} disabled={busy||presetQueued} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select></label>
             <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>Choose whether to keep Minecraft's own visuals or apply a legacy preset for this launcher.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||presetQueued||!settings?.graphicsPresets}><option value="Preserve">Preserve Visuals</option><option value="High">High (legacy)</option><option value="Low">Low (legacy)</option></select></div>
             <div class="lt-actions"><button disabled={busy||presetQueued||!available||!bindingConfigured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={saveGraphicsWithFocus}>{applyingPreset||presetQueued?'Applying…':graphicsPreset==='Preserve'?'Save preference':'Apply preset'}</button>{#if graphicsDirty}<button type="button" class="lt-secondary" disabled={busy||presetQueued} on:click={onDiscardGraphics}>Discard draft</button>{/if}</div>

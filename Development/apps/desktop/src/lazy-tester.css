@@ -472,10 +472,9 @@
 .lt-app .lt-window-close:hover{background:var(--lt-danger-hover);color:var(--lt-on-danger)}
 .lt-window-control svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1}
 .lt-app{color-scheme:dark;border:1px solid var(--lt-line)}
-/* Use each card's width instead of capping live previews at 100px high. */
+/* Five stable native thumbnails; the active Play-only width budget below
+   replaces older broad and short-window preview-size overrides. */
 .lt-filmstrip{width:min(100%,1600px);gap:12px}
-.lt-card-picture{width:min(100%,calc(clamp(80px,16vh,180px) * 16 / 9));max-height:none}
-@media(max-height:700px){.lt-card-picture{width:min(100%,calc(82px * 16 / 9))}.lt-filmstrip .lt-card{padding:8px;gap:5px}}
 
 .lt-delete-confirm {display:grid;gap:12px;justify-items:start}
 .lt-delete-confirm h3,.lt-delete-confirm p {margin:0}
@@ -911,8 +910,8 @@
   }
 }
 
-/* Gameplay Focus default: presentation-only density within existing Play.
-   Preserve the native 16:9 aperture and all five keyed DWM targets. */
+/* One adaptive Play layout, not selectable modes. The game occupies the
+   remaining 16:9 stage; five keyed DWM previews use a bounded 16:9 size. */
 .lt-app main.lt-play-main{padding:10px 16px 12px;overflow-x:hidden}
 .lt-play-main .lt-play-header{gap:10px;margin-bottom:7px;align-items:center}
 .lt-play-main .lt-play-header > div:first-child{min-width:0}
@@ -926,7 +925,7 @@
   min-height:32px;line-height:32px;padding-right:36px;font-size:13px;
 }
 .lt-play-main .lt-card-picture{
-  width:min(100%,calc(clamp(68px,10vh,96px) * 16 / 9));
+  width:min(100%,calc(clamp(72px,11vh,108px) * 16 / 9));
   max-height:none;
 }
 .lt-play-main .lt-filmstrip .lt-card small{font-size:13px}
@@ -948,12 +947,3 @@
   .lt-play-main .lt-games-heading{margin-top:4px;margin-bottom:4px}
 }
 
-/* Larger passive monitoring tiles are opt-in; selected native viewport retains
-   the same 16:9 fit and the five original keyed DWM destinations. */
-.lt-play-main.lt-workspace-monitoring .lt-card-picture{
-  width:min(100%,calc(clamp(96px,15vh,136px) * 16 / 9));
-}
-.lt-settings-layout #workspace-layout{
-  min-height:var(--lt-control-min-height);
-  max-width:100%;
-}

@@ -62,7 +62,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
   });
   it('compacts the default Play view while preserving five native preview targets',()=>{
     const app=source('LazyTesterApp.svelte'),rail=source('LauncherRail.svelte'),css=source('lazy-tester.css');
-    expect(app).toContain("workspaceLayout==='monitor'?'lt-play-main lt-workspace-monitoring':'lt-play-main'");
+    expect(app).toContain("<main class={page==='workspace'?'lt-play-main':undefined}>");
     expect(app).toContain('hidden={active!==null&&!detached}');
     expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}>Separate window");
     expect(rail).toContain('aria-hidden="true">×</span></button>');
@@ -70,29 +70,28 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(rail).toContain('use:observePreview={profile.slot}');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
     expect(css).toContain('.lt-app main.lt-play-main{padding:10px 16px 12px;overflow-x:hidden}');
-    expect(css).toContain('clamp(68px,10vh,96px)');
+    expect(css).toContain('clamp(72px,11vh,108px)');
     expect(css).toContain('min-height:32px;line-height:32px;padding-right:36px;');
     expect(css).toContain('.lt-play-main .lt-health-notice{display:flex;');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
   });
-  it('offers exactly two clear density modes without changing Minecraft's engine settings',()=>{
+  it('uses one adaptive workspace without mode controls or a second stored state',()=>{
     const app=source('LazyTesterApp.svelte'),settings=source('GeneralSettings.svelte'),css=source('lazy-tester.css');
-    expect(app).toContain("type WorkspaceLayout = 'focus' | 'monitor';");
-    expect(app).toContain("const workspaceLayoutKey = 'lazy-tester.workspace-layout.v1';");
-    expect(app).toContain("let workspaceLayout: WorkspaceLayout = 'focus';");
-    expect(app).toContain("window.localStorage.setItem(workspaceLayoutKey, next)");
-    expect(app).toContain("const saved = window.localStorage.getItem(workspaceLayoutKey);");
-    expect(app).toContain("workspaceLayout = saved === 'monitor' ? 'monitor' : 'focus';");
-    expect(app).toContain("onChooseWorkspaceLayout={chooseWorkspaceLayout}");
-    expect(settings).toContain('<select id="workspace-layout" value={workspaceLayout}');
-    expect(settings).toContain('<option value="focus">Gameplay Focus (recommended)</option>');
-    expect(settings).toContain('<option value="monitor">Monitoring (larger previews)</option>');
-    expect(settings).toContain('Layout changed for this session, but could not be saved');
-    expect(css).toContain('.lt-play-main.lt-workspace-monitoring .lt-card-picture{');
-    expect(css).toContain('clamp(96px,15vh,136px)');
-    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
+    expect(app).toContain("<main class={page==='workspace'?'lt-play-main':undefined}>");
+    expect(css).toContain('clamp(72px,11vh,108px)');
+    expect(css).toContain('aspect-ratio:16/9;');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
+    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
+    expect(app).not.toContain('workspaceLayout');
+    expect(app).not.toContain('layoutPersistenceIssue');
+    expect(app).not.toContain('window.localStorage');
+    expect(app).not.toContain('lt-workspace-monitoring');
+    expect(settings).not.toContain('id="workspace-layout"');
+    expect(settings).not.toContain('onChooseWorkspaceLayout');
+    expect(css).not.toContain('lt-workspace-monitoring');
+    expect(css).not.toContain('clamp(96px,15vh,136px)');
+    expect(css).not.toContain('clamp(80px,16vh,180px)');
   });
   it('limits new density and status CSS to presentation owners',()=>{
     const css=source('lazy-tester.css');

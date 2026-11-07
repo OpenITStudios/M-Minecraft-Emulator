@@ -31,7 +31,7 @@ the same visible "Refresh" wording in the toolbar and per-launcher recovery.
 A failed native preview offers "Select game" only when window response is
 positively observed; otherwise the safe offered action is "Refresh".
 
-The five-card rail retains its original fixed profile identities and native live preview nodes. Operator-approved Gameplay Focus may compact the card chrome and place the existing Close action in each card's reserved title band without changing native DWM target ownership.
+The five-card rail retains its original fixed profile identities and native live preview nodes. The single adaptive Play layout compacts card chrome, reserves the original Close control in each card title band and automatically balances the game viewport against readable previews. No display-density selector or additional native DWM target is needed.
 A selected-game Close review still uses the original native CloseOne admission;
 its UI defaults keyboard focus to Cancel, supports Escape dismissal, and returns
 focus to the invoking Close game button without scrolling the rail. No implicit

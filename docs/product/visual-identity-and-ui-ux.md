@@ -1005,34 +1005,38 @@ are **AUTHORED_NOT_EXECUTED**. Actual Windows/WebView2 scroll,
 920×620/1280×900 and 125–200% DPI behavior, long warnings,
 screen-reader output and native DWM placement remain **NOT_EXECUTED**.
 
-## Gameplay Focus Play density — operator-approved (7 November 2026)
+## Single adaptive gameplay workspace — operator simplification (7 November 2026)
 
-**Source phase 1:** The selected 16:9 native viewport, not surrounding
-controls, owns remaining stage space. Use Play-only padding/heading
-reductions; visually suppress redundant "choose below" text and the
-generic help hint when a game is selected. Shorten visible Separate
-window text but preserve its accessible action label.
+**One layout only:** the selected 16:9 native Minecraft viewport uses
+the largest valid fit in the existing main stage; exactly five fixed
+MC01–MC05 keyed DWM preview targets remain in the bottom rail.
+The Play header and card chrome stay compact; generic hints are visually
+hidden while a selected game is shown. The original 32px normal CloseOne
+action stays in a reserved card title band, outside preview pixels,
+and keeps its explicit native confirmation and keyboard focus rules.
 
-Maintain MC01–MC05 fixed keyed `use:observePreview` targets. Bound
-each 16:9 thumbnail with a `clamp(68px,10vh,96px)` height budget.
-The original **32px CloseOne** action sits in a reserved 32px title
-band, never above preview pixels. Preserve its accessible name,
-normal-close confirmation, Cancel focus and original native admission.
-Keep long session errors keyboard-readable in a compact row.
+The only active preview-height budget is the Play-scoped CSS
+`clamp(72px,11vh,108px)` applied with the existing 16:9 aspect ratio and
+available card width. At 620px CSS viewport height the requested budget
+is about 72px; at 900px it is about 99px, with an upper limit of 108px.
+These are CSS design targets, **not** measured Windows/WebView2/native DWM
+rectangles. The game remains the priority while background monitoring
+stays visible. Long recovery guidance remains scrollable and truthful.
 
-**Source phase 2 — implementation added:** General settings now offers
-exactly two UI density options: Gameplay Focus (default) and Monitoring
-(larger passive thumbnails). This does not change Minecraft Graphics
-Preset, FPS, profiles or game state. The one existing Svelte parent owns
-the mode and stores a small namespaced UI-only preference in the WebView
-localStorage, with a safe Gameplay Focus fallback and visible warning
-if saving is unavailable. This is not a second process/data owner.
-Changing Settings suspends the original native presentation; returning
-to Play relies on the existing ResizeObserver/native layout gate.
-Actual persistence on installed Windows WebView2 is NOT_VERIFIED.
+The earlier two-choice Gameplay Focus/Monitoring selector is **retired**.
+Do not show a mode selector, create a second UI preference, or add an
+independent preview owner. The one-off legacy WebView localStorage key
+`lazy-tester.workspace-layout.v1` is no longer read or written; it is
+left untouched rather than deleting any existing user preferences.
+Minecraft Graphics Preset, FPS and audio controls remain independent.
+Window arrangement outside the manager is a separate native capability,
+not a substitute for or a mandatory setup step in this workspace.
 
-**Proof ceiling:** Source and synthetic browser fixtures
-AUTHORED_NOT_EXECUTED. Validate true 920×620 and 1280×900 layout,
-100/125/150/200% DPI, five mixed launcher states, native DWM
-pixel/click freshness, selected-game HUD, card Close overlap, and
-focus. Windows/Minecraft acceptance is NOT_EXECUTED.
+**Consistency and acceptance:** one thumbnail-sizing contract, stable
+five-slot order and accessible status names, one original native
+CloseOne confirmation, never an overlay covering active game pixels,
+and no loss of keyboard reachability in short-window/error states.
+Source and browser regression fixtures are AUTHORED_NOT_EXECUTED.
+Actual 920×620/1280×900, Windows 100/125/150/200% DPI, WebView2
+text zoom, native DWM freshness/placement, HUD, focus, Narrator and
+five-client gameplay remain NOT_EXECUTED and must not be called PASS.
