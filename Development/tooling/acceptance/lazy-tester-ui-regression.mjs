@@ -549,11 +549,10 @@ try {
       const node=document.querySelector(selector);
       return node?Number.parseFloat(getComputedStyle(node).fontSize):0;
     };
-    return {help:size('.lt-settings-layout .lt-help'),
-      dataPath:size('.lt-settings-layout .lt-data-path')};
+    return {help:size('.lt-settings-layout .lt-help')};
   });
-  assert.ok(settingsCopy.help>=13&&settingsCopy.dataPath>=13,
-    'Settings instructions and long data paths must stay readable at the supported CSS viewport');
+  assert.ok(settingsCopy.help>=13,
+    'Settings instructions remain readable; data paths belong only to Data Storage');
   const presetExplanation=page.locator('details.lt-settings-explanation');
   assert.equal(await presetExplanation.getAttribute('open'),null,
     'Technical preset explanations stay out of the default Settings path');
@@ -562,25 +561,41 @@ try {
     'Advanced graphics explanation remains accessible on demand');
   await page.getByLabel('While playing',{exact:true}).fill('60');await page.getByLabel('In the background',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
-  await page.getByText('At least 1.0 MB',{exact:true}).waitFor();
+  await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
+  assert.match(await page.locator('[aria-labelledby="lt-storage-overview-section"] .lt-help').textContent()??'',
+    /Last storage report received:/,
+    'UI report receipt time is not presented as a native measurement timestamp');
+  assert.ok(await page.locator('.lt-data-path').first().evaluate(node=>
+    Number.parseFloat(getComputedStyle(node).fontSize)>=13),
+    'Long data paths remain readable within the one Data Storage owner');
+  const storageOrder=await page.evaluate(()=>{
+    const loc=document.querySelector('.lt-location-options');
+    const danger=document.querySelector('.lt-danger-zone');
+    return loc&&danger&&Boolean(loc.compareDocumentPosition(danger)&Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+  assert.equal(storageOrder,true,
+    'Connect/locate must appear before the final permanent-delete danger zone');
   await section('General').click();assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
-  await page.getByRole('button',{name:'Save changes',exact:true}).click();
+  await page.getByRole('button',{name:'Save FPS limits',exact:true}).click();
   await page.getByText('Saved. New limits apply when each Minecraft profile next starts.').waitFor();
   assert.equal(await page.locator('#lt-frame-limits-section').evaluate(
     node=>document.activeElement===node),true,
-    'A completed Save changes must retain focus on its persistent Frame Limits heading');
-  assert.equal(await page.getByRole('button',{name:'Save changes',exact:true}).isDisabled(),true,
+    'A completed FPS limits save must retain focus on its persistent Frame Limits heading');
+  assert.equal(await page.getByRole('button',{name:'Save FPS limits',exact:true}).isDisabled(),true,
     'The now-clean settings Save button must remain disabled; focus must not make it actionable');
   // Component-to-parent bindings: draft preset and Discard share one state owner.
-  await page.getByRole('button',{name:'Use 120 / 5',exact:true}).click();
+  await page.getByLabel('While playing',{exact:true}).fill('120');
+  await page.getByLabel('In the background',{exact:true}).fill('5');
   assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'120');
   assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
+  assert.equal(await page.getByRole('button',{name:'Use 120 / 5',exact:true}).count(),0,
+    'An unsaved quick preset must not masquerade as a Save action');
   await page.getByRole('button',{name:'Discard',exact:true}).click();
   assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
   assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
   await page.getByLabel('Graphics preset',{exact:true}).selectOption('High');
-  await page.getByRole('button',{name:'Apply preset',exact:true}).click();
-  await page.getByText(/High saved and applied/).waitFor();
+  await page.getByRole('button',{name:'Save graphics preference',exact:true}).click();
+  await page.getByText(/High graphics preference saved/).waitFor();
   assert.equal(await page.locator('#lt-graphics-section').evaluate(
     node=>document.activeElement===node),true,
     'A completed graphics preset save must retain focus on Graphics, not a disabled button');
@@ -682,7 +697,7 @@ try {
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await heading('Starting Minecraft - 1').first().waitFor();await nav('Settings').click();
   await page.evaluate(()=>{window.__runningSlots=[1,2];});await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  assert.equal(await page.getByRole('button',{name:'Apply preset',exact:true}).isDisabled(),true);
+  assert.equal(await page.getByRole('button',{name:'Save graphics preference',exact:true}).isDisabled(),true);
   // Current Play contract: release ONE selected Minecraft window, preserving
   // the other running peer. The next verified game becomes the selected view.
   await nav('Play').click();

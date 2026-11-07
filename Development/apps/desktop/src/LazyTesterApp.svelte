@@ -69,11 +69,11 @@
   let headerRefreshButton: HTMLButtonElement | undefined;
   // Keyboard-only Refresh focus continuity, not a new status or native action.
   let headerRefreshFocusPage: Page | null = null;
-  let initializing = true, checkingStorage = false, storageCheckedAt = '';
+  let initializing = true, checkingStorage = false, storageReportReceivedAt = '';
   // A clock time alone is ambiguous after an overnight/open-window session.
   // The timestamp describes the last UI-received storage report, not a live
   // native filesystem measurement or a verified game/world state.
-  function measuredStorageAt(): string {
+  function storageReportReceivedTime(): string {
     return new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
   }
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
@@ -360,7 +360,7 @@
       }
       if(next==='storage'&&binding?.configured) {
         const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;
-        storageCheckedAt=measuredStorageAt();
+        storageReportReceivedAt=storageReportReceivedTime();
       }
       dirty = true;
     } catch (error) { issueKey='workspace'; dirty = true; }
@@ -391,7 +391,7 @@
         if(!binding?.configured)await checkBinding();
         try{dataLocation=await lazyTester.dataLocation();locationIssue='';}
         catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;throw error;}
-        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageCheckedAt=measuredStorageAt();available=true;connectionIssueKey=null;}
+        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageReportReceivedAt=storageReportReceivedTime();available=true;connectionIssueKey=null;}
       }catch(error){issueKey='storage';storage=null;}
       finally{checkingStorage=false;busy=false;}
     } else {
@@ -438,8 +438,8 @@
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
       graphicsDrafts.delete(request.slot);
       settingsNotice=request.preset==='Preserve'
-        ? 'Minecraft - '+request.slot+': Preserve Visuals saved. Lazy Tester will leave Minecraft graphics options unchanged on future launches; existing edits are not automatically undone.'
-        : 'Minecraft - '+request.slot+': '+request.preset+' saved and applied. This preset is reapplied at launch.';
+        ? 'Minecraft - '+request.slot+': Preserve Visuals preference saved. Future launches leave Minecraft graphics options unchanged; existing edits are not undone.'
+        : 'Minecraft - '+request.slot+': '+request.preset+' graphics preference saved. This preset takes effect at the next launch.';
     }catch(error){
       // An unconfirmed controller receipt must not erase the user's pending
       // choice. Keep a UI-only draft until a later Settings refresh can
@@ -669,7 +669,7 @@
     try {
       const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage;
       available = true; connectionIssueKey=null;
-      storageCheckedAt = measuredStorageAt();
+      storageReportReceivedAt = storageReportReceivedTime();
     }
     catch (error) { issueKey='storage'; storage = null; }
     finally { checkingStorage = false; busy = false; }
@@ -754,7 +754,7 @@
     try {
       const snapshot = await lazyTester.clearCache(slot);
       profiles = snapshot.profiles; storage = snapshot.storage;
-      storageCheckedAt = measuredStorageAt();
+      storageReportReceivedAt = storageReportReceivedTime();
       storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
       issueKey='cache'; storage = null;
@@ -782,7 +782,7 @@
           ? await lazyTester.disableImprovedInputResponse(pending.slot)
           : await lazyTester.recoverSettings(pending.slot,pending.action);
       profiles=snapshot.profiles;storage=snapshot.storage;
-      storageCheckedAt=measuredStorageAt();
+      storageReportReceivedAt=storageReportReceivedTime();
       storageNotice=pending.action==='EnableTextureStreaming'
         ? 'Minecraft - '+pending.slot+': Texture Streaming enabled in saved options. Restart normally; GPU and system RAM benefits remain unverified. The previous settings are backed up.'
         : pending.action==='DisableTextureStreaming'
@@ -818,7 +818,7 @@
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
       profiles=snapshot.profiles;storage=snapshot.storage;
-      storageCheckedAt=measuredStorageAt();
+      storageReportReceivedAt=storageReportReceivedTime();
       storageNotice=`Minecraft - ${pending.slot}: local data cleared. Its next launch uses an empty profile. Other launchers, the Minecraft installation and app preferences are kept.`;
     } catch(error) {issueKey='clearData';storage=null;}
     finally {busy=false;clearingData=false;}
@@ -1016,16 +1016,15 @@
           presetQueued={queuedPreset!==null} performanceQueued={queuedPerformance!==null}
           audioQueued={queuedAudio!==null} {applyingPreset} {savingPerformance}
           {graphicsDirty} {performanceDirty} {performanceValid} {runningCount}
-          {settingsNotice} {performanceNotice} {dataLocation} {locationIssue}
+          {settingsNotice} {performanceNotice}
           bindingConfigured={!!binding?.configured}
           onChooseSlot={chooseSlot} onRequestPreset={requestPreset}
           onDiscardGraphics={discardGraphicsDraft}
           onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}
-          onOpenDataFolder={() => loadLocation('Open')}
           onShowDataStorage={() => navigate('storage')}/>
       {:else if page==='storage'}
         <DataStorage {profiles} {selectedSlot} {selectedProfile} {selectedStorage} {selectedPath}
-          {labels} {storage} {storageCheckedAt} {storageNotice}
+          {labels} {storage} {storageReportReceivedAt} {storageNotice}
           {busy} {refreshing} {resizing} {available}
           bindingConfigured={!!binding?.configured}
           bind:advanced bind:fullName bind:fullAck

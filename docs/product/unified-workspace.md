@@ -39,10 +39,15 @@ A selected-game Close review still uses the original native CloseOne admission;
 its UI defaults keyboard focus to Cancel, supports Escape dismissal, and returns
 focus to the invoking Close game button without scrolling the rail. No implicit
 game exit, forced termination, or new window manager is introduced. General
-Settings keeps the graphics control but discloses legacy preset details only
-on request. Data Storage surfaces size, cache, disk space and folder actions
-before expandable read-only resource-pack diagnostics. Full profile deletion
-and recovery actions retain their existing review/confirmation gates.
+Settings keeps graphics preferences per launcher, global FPS limits, and
+background audio with explicit save timing and scope; legacy graphics details
+remain collapsed. Data management in General links to a single Data Storage
+owner, rather than repeating folder actions. Data Storage reports byte units
+honestly (B/KiB/MiB/GiB), distinguishes zero from unavailable and incomplete
+measurements, and labels the UI receipt time rather than claiming an exact
+native measurement timestamp. Connect/locate, resource pack details, and
+recovery precede the final full-data-delete danger zone. Original native
+confirmation, profile data and game-world safety gates remain unchanged.
 
 An optional source-only MCP activity projection can describe local
 observation, unverified experimental input requests/recovery, and original

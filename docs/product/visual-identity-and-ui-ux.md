@@ -325,10 +325,13 @@ gameplay readiness indicator, or new alarm mechanism. No preview/card
 height or width is altered.
 
 General Settings receives explicit section names for Graphics, Frame
-Limits, App behavior and Installation & data. Data Storage groups its
-existing three measurements under **Storage overview** and exposes the
-original destructive section with an accessible heading. No metrics,
-permissions, profile data or automatic observations are added.
+Limits, App behavior and Data management. The latter only navigates to
+Data Storage, which exclusively owns data folders and storage operations.
+Data Storage groups three last-inspected measurements under **Storage
+overview** and exposes the original destructive section last with an
+accessible heading. The app never claims world-by-world backups or a live
+disk measurement. No new metrics, permissions or native observations are
+added.
 
 Settings/Storage action buttons have one shared 36px minimum height,
 13px label size, and control radius; hover/review styling is scoped only
@@ -810,7 +813,7 @@ execution; none is a current PASS.
 
 ## Settings saves and Storage review completion — transient focus continuity
 
-A previously focused **Save preference / Apply preset / Save changes**
+A previously focused **Save graphics preference / Save FPS limits**
 control can be disabled during a pending operation and remain disabled
 after a successful save because there is no longer a dirty change.
 The checkbox for **Mute background games** is likewise temporarily
@@ -1030,3 +1033,43 @@ All earlier desktop F3/Coordinates UI paragraphs and preview
 illustrations in this file are **superseded**, not live requirements.
 This revision is REMOTE_GITHUB SOURCE_PREPARED only, with
 browser/Windows/DWM/Minecraft execution NOT_EXECUTED.
+
+## Unified General and Data Storage presentation — source-only (7 November 2026)
+
+The operator requested one coherent, comfortable desktop UI without
+invented Minecraft features or redundant settings. The original parent
+`LazyTesterApp.svelte` continues to own all native admission, receipts
+and session state; `GeneralSettings.svelte` and `DataStorage.svelte`
+remain presentation-only.
+
+**General:** keep Graphics per selected launcher, Frame Limits for
+all launchers, Background audio as a confirmation-bound immediate
+change, and App behavior. Graphics exposes one **Save graphics
+preference** action, with its next-start effect stated plainly.
+Frame Limits exposes **Save FPS limits** and, when dirty, **Discard**.
+The unsaved `Use 120 / 5` shortcut was retired: selecting numerical
+draft values must not be mistaken for a completed Save. Per-launcher
+selectors use visible MC01–MC05 names; destructive confirmation still
+uses the full exact `Minecraft - N` identity. General's Data
+management section links to Data Storage, rather than duplicating
+paths and folder buttons.
+
+**Data Storage:** present safe integer byte quantities as **B/KiB/MiB/GiB**
+(and TiB as needed), never round a few bytes to `0.0 MB`. Values that
+have not been inspected say **Not measured**, a measured zero says
+**0 B**, and incomplete counters say **At least**. Show the time Lazy
+Tester received the native storage report, **not** a fabricated
+filesystem-measurement timestamp. The overview does not claim
+per-world backup management. Move Connect/locate into the normal data
+area and keep permanent **Clear all data** and its typed-name,
+acknowledgement, confirmed native token, Cancel and failure handling
+as the last section.
+
+The pure `storageSize.ts` formatter does not read folders or affect
+saved data. Browser/source contracts now inspect exact copy, readonly
+sizes, the reordered danger zone, saved/dirty controls, 920×620/large
+layout, five keyed previews and unchanged 16:9 main viewport. Tests
+are **AUTHORED_NOT_EXECUTED**; actual Svelte, Windows WebView2,
+DPI/Narrator, Minecraft gameplay and storage/destructive runtime
+acceptance remain **NOT_EXECUTED**. No data deletion or new world
+backup/export feature was performed.

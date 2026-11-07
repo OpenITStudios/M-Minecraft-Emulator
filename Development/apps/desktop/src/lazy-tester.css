@@ -917,3 +917,13 @@
     margin-bottom:6px;
   }
 }
+
+/* Settings/Storage measurement values use predictable number spacing.
+   This scope must never affect native Minecraft viewports or DWM previews. */
+.lt-settings-layout [aria-labelledby="lt-storage-overview-section"] .lt-setting > :is(strong,span){
+  font-variant-numeric:tabular-nums;
+  text-align:right;
+}
+.lt-settings-layout :is(.lt-target select,.lt-launcher-heading select){
+  font-variant-numeric:tabular-nums;
+}

@@ -79,7 +79,7 @@ describe('Lazy Tester Settings/Storage transient focus source contract',()=>{
     expect(css).toContain('outline-color:Highlight;');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
-    expect(script).toContain('A completed Save changes must retain focus on its persistent Frame Limits heading');
+    expect(script).toContain('A completed FPS limits save must retain focus on its persistent Frame Limits heading');
     expect(script).toContain('A completed graphics preset save must retain focus on Graphics');
     expect(script).toContain('Cancel must still return focus to the original cache review trigger');
     expect(script).not.toContain("await fullReview.getByRole('button',{name:'Permanently clear data'}).click()");

@@ -4,6 +4,7 @@
   import {tick} from 'svelte';
   import type {DataLocation, ProfileSession, ProfileSlot, ProfileStorage} from './app/bridge/lazyTester.js';
   import {userMessage} from './app/presentation/sessionFeedback.js';
+  import {formatStorageBytes, formatStorageExtent} from './app/presentation/storageSize.js';
 
   type StorageSettingsAction = 'Reset' | 'Restore' | 'DisableInputResponse' |
     'EnableTextureStreaming' | 'DisableTextureStreaming';
@@ -15,7 +16,7 @@
   export let selectedPath: string | undefined;
   export let labels: Record<ProfileSession['state'], string>;
   export let storage: ProfileStorage[] | null;
-  export let storageCheckedAt: string;
+  export let storageReportReceivedAt: string;
   export let storageNotice: string;
   export let busy: boolean;
   export let refreshing: boolean;
@@ -131,7 +132,7 @@
 <svelte:window on:keydown={onReviewEscape}/>
 
         <div class="lt-settings-content">
-          <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lt-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+          <p>Local profile data, cache and saved game settings. World files are included in total profile size, but individual world backups are not managed here.</p><div class="lt-launcher-heading"><select value={selectedSlot} disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lt-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>MC0{p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
           {#if clearSlot!==null||recovery!==null||fullReview!==null}<p id="lt-storage-review-guidance" class="lt-help" role="status">Finish or cancel the current review before changing pages or choosing another Minecraft profile.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
           {#if storage===null}
@@ -139,12 +140,27 @@
           {:else if !selectedStorage}
             <p class="lt-storage-feedback" role="status">No measurement is available for this selected profile. Choose Refresh before making storage decisions.</p>
           {:else if !available}
-            <p class="lt-storage-feedback" role="status">Session status is unavailable. The sizes below are from the last storage inspection, not a live measurement.</p>
+            <p class="lt-storage-feedback" role="status">Session status is unavailable. These sizes are from the last storage report, not a live measurement.</p>
           {/if}
-          <section class="lt-group" aria-labelledby="lt-storage-overview-section"><h2 id="lt-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Storage overview</h2><div class="lt-setting"><h3>Profile data</h3><strong>{selectedStorage?(selectedStorage.partial?'At least ':'')+(selectedStorage.bytes/1048576).toFixed(1)+' MB':'Not measured'}</strong></div><div class="lt-setting"><h3>Web cache</h3><span>{selectedStorage&&!selectedStorage.cache.partial?(selectedStorage.cache.bytes/1048576).toFixed(1)+' MB':'Unavailable'}</span></div><div class="lt-setting"><h3>Available disk space</h3><span>{selectedStorage?.disk?(selectedStorage.disk.availableBytes/1073741824).toFixed(1)+' GB':'Unavailable'}</span></div><p class="lt-help">{storage?'Last measured at '+storageCheckedAt+'. Web cache is included in profile data.':'Use Refresh to measure storage. World sizes are not separately classified.'}</p></section>
+          <section class="lt-group" aria-labelledby="lt-storage-overview-section">
+            <h2 id="lt-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Storage overview</h2>
+            <div class="lt-setting"><h3>Profile data</h3>
+              <strong>{selectedStorage ? formatStorageExtent(selectedStorage.bytes,selectedStorage.partial) : 'Not measured'}</strong>
+            </div>
+            <div class="lt-setting"><h3>Web cache</h3>
+              <span>{selectedStorage ? formatStorageExtent(selectedStorage.cache.bytes,selectedStorage.cache.partial) : 'Not measured'}</span>
+            </div>
+            <div class="lt-setting"><h3>Available disk space</h3>
+              <span>{selectedStorage?.disk ? formatStorageBytes(selectedStorage.disk.availableBytes) : 'Not measured'}</span>
+            </div>
+            <p class="lt-help">{storage
+              ? 'Last storage report received: '+(storageReportReceivedAt||'time unavailable')+'. These are previous inspection values, not live usage. Profile data includes web cache and world files; individual worlds are not measured. Partial values are minimums.'
+              : 'Use Refresh to inspect storage. An unmeasured size is not zero.'}</p>
+          </section>
           <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove recognized web cache. Accounts, worlds and game settings are kept.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lt-help">Cache cleanup is unavailable after the latest check. Choose Refresh to check again.</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></section>
           {#if clearSlot===selectedSlot}<section class="lt-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts and settings are kept. Other launchers are unchanged.</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>commitCacheReview(selectedSlot)}>Clear web cache</button><button class="lt-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview(onCancelCacheReview)}>Cancel</button></div></section>{/if}
           <section class="lt-setting"><div><h3>Data folder</h3><p class="lt-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!bindingConfigured} on:click={()=>onOpenFolder(selectedSlot)}>Open folder</button></section>
+          <details class="lt-location-options"><summary>Connect or locate launcher data</summary><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not migrate or delete existing accounts and worlds.</p></details>
           <details class="lt-storage-packs">
             <summary><strong>Resource pack details</strong><small>{selectedStorage?.resourcePacks?(selectedStorage.resourcePacks.partial?'Incomplete':selectedStorage.resourcePacks.manifested+' on disk'):'Not inspected'} · read-only</small></summary>
             <div class="lt-storage-packs-body">
@@ -202,5 +218,4 @@
               <div class="lt-actions"><button type="submit" class="lt-danger" disabled={busy||refreshing||resizing||!fullAck||fullName!==`Minecraft - ${fullReview.slot}`||!selectedStorage?.fullClear?.canClear||selectedStorage?.fullClear?.confirmationToken!==fullReview.token}>Permanently clear data</button><button type="button" class="lt-secondary" disabled={busy} on:click={()=>cancelReview(onCancelFullReview)}>Cancel</button></div>
             </form>
           {/if}
-          <details class="lt-location-options"><summary>Connect or locate launcher data</summary><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not migrate or delete existing accounts and worlds.</p></details>
         </div>

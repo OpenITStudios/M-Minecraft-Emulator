@@ -39,8 +39,46 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(storage).toContain('storage===null');
     expect(storage).toContain('!selectedStorage');
     expect(storage).toContain('an unmeasured size does not mean a profile is empty');
-    expect(storage).toContain('The sizes below are from the last storage inspection');
-    expect(storage).toContain('Last measured at');
+    expect(storage).toContain('These sizes are from the last storage report, not a live measurement.');
+    expect(storage).toContain('Last storage report received:');
+    expect(storage).toContain('formatStorageExtent(selectedStorage.bytes,selectedStorage.partial)');
+    expect(storage).toContain('formatStorageExtent(selectedStorage.cache.bytes,selectedStorage.cache.partial)');
+    expect(storage).toContain('formatStorageBytes(selectedStorage.disk.availableBytes)');
+    expect(storage).not.toContain('(selectedStorage.bytes/1048576).toFixed(1)');
+    expect(storage).not.toContain('Last measured at');
+  });
+  it('keeps Settings save scopes clear and local data management in one destination',()=>{
+    const app=source('LazyTesterApp.svelte');
+    const settings=source('GeneralSettings.svelte');
+    const storage=source('DataStorage.svelte');
+    expect(settings).toContain('Save graphics preference');
+    expect(settings).toContain('Save FPS limits');
+    expect(settings).toContain('Applies to');
+    expect(settings).toContain('All launchers');
+    expect(settings).toContain('Save graphics preference');
+    expect(settings).not.toContain('Use 120 / 5');
+    expect(settings).not.toContain('onOpenDataFolder');
+    expect(settings).not.toContain('dataLocation?.path');
+    expect(settings).toContain('onShowDataStorage}>Open Data Storage</button>');
+    expect(app).toContain('storageReportReceivedAt=storageReportReceivedTime()');
+    expect(storage).toContain('storageReportReceivedAt');
+    expect(storage).not.toContain('storageCheckedAt');
+    expect(settings).not.toContain('onChooseWorkspaceLayout');
+    expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');
+  });
+  it('keeps full data deletion after connect/locate and recovery without bypassing its confirmation',()=>{
+    const storage=source('DataStorage.svelte');
+    const location=storage.indexOf('<details class="lt-location-options">');
+    const packs=storage.indexOf('<details class="lt-storage-packs">');
+    const advanced=storage.indexOf('<details class="lt-advanced"');
+    const danger=storage.indexOf('class="lt-danger-zone"');
+    expect(location).toBeGreaterThan(-1);
+    expect(packs).toBeGreaterThan(location);
+    expect(advanced).toBeGreaterThan(packs);
+    expect(danger).toBeGreaterThan(advanced);
+    expect(storage).toContain('confirmationToken!==fullReview.token');
+    expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
+    expect(storage).toContain('!fullAck||fullName!==`Minecraft - ${fullReview.slot}`');
   });
   it('keeps responsive rules scoped away from the five native game surfaces',()=>{
     const css=source('lazy-tester.css');
