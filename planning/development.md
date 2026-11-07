@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-**Updated:** 6 November 2026. **Branch:** `Local` only; `main` is
+**Updated:** 7 November 2026. **Branch:** `Local` only; `main` is
 release-reserved and GitHub Actions CI remains disabled. This file owns
 the ONE active development handoff, proof ceiling, and next action.
 Always pin the actual `Local` HEAD. Historical detail through P46 is
@@ -116,6 +116,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Minimal Professional UI readability (7 November) | Increased dense Settings/Storage and scrollable Play disclosure text to 13px, and launcher recovery target to 28px while offsetting the previous 4px margin. Preserved five fixed native preview slots, original header control geometry, controller admission and 16:9 viewport. Source/browser fixtures and UX contract updated; see `docs/product/visual-identity-and-ui-ux.md` | REMOTE_GITHUB source preparation; all source test execution, Windows/WebView2/DWM, DPI/Narrator and Minecraft NOT_EXECUTED; existing Codex CUA single-next-step remains unchanged |
 | Final native actor/CLI/MCP no-write integrity review | The last source audit confirmed exact busy/mode/stale writer lease statuses from original actor-compatible errors and conservative uncertain-IPC recovery. It found the legacy fence rollback missed exact InvalidData window/foreground/mode refusals returned BEFORE Channel::write. These are now allowlisted alongside proven original Channel pre-v4 rejects; generic Win32/Unmap-after-write/transport errors remain quarantined. Prior pending state is preserved | Expanded native Rust error-kind fixtures AUTHORED_NOT_EXECUTED; no new owner, status code, IPC/game ABI or feature enablement |
 | Original legacy pre-publication fence rollback | The retained actor restores the exact previous legacy 500-ms/pending state only when its original Channel returns a known InvalidData refusal BEFORE v4 packet/cursor publication. An old unresolved pulse remains fenced, and unknown/Unmap-after-publish/transport errors never roll back. A definitive stale/wrong-publisher native refusal therefore does not unnecessarily quarantine a clean MC02 for all future 4/5-AI acquisitions | Pure four/five-cohort AiLeaseBook and actor error-kind negative fixtures AUTHORED_NOT_EXECUTED; no IPC/ABI/second controller change |
 | Expired MC02 batch native neutral recovery | The original Channel now compares the batch's original issued_at_ms and exact authenticated last-publisher PID/birth before deciding neutral admission. If 350ms pulse TTL and 500ms request age expire but the batch is STILL the last publisher, it may publish an exact original-child ReleaseAll using the current native commit time. If newer active/Stop or another sender exists, release is denied before publication and canonical MCP never sends a dangerous fresh fallback. Explicit Stop retains its original 500ms age admission | Pure Rust 4/5-cohort TTL/ack-loss negative fixtures AUTHORED_NOT_EXECUTED; no IPC/v4 ABI/second worker change |

@@ -16,12 +16,15 @@ describe('Launcher recovery action target and accessibility source contracts',()
     expect(health).toContain("item.action === 'open' ? 'Select game' : 'Refresh'");
   });
 
-  it('guarantees a 24px recovery target while retaining the original disabled guard',()=>{
+  it('guarantees a 28px recovery target without expanding the default rail footprint',()=>{
     const health=load('SessionHealthNotice.svelte');
     const rail=load('LauncherRail.svelte');
     const css=load('lazy-tester.css');
-    expect(health).toContain('box-sizing: border-box; min-height: 24px;');
-    expect(health).toContain('margin-top: 4px; padding: 3px 6px;');
+    expect(health).toContain('box-sizing: border-box; min-height: 28px;');
+    expect(health).toContain('margin-top: 0; padding: 3px 6px;');
+    expect(health).toContain('.lt-health-notice { min-width: 0; font-size: 13px;');
+    expect(css).toContain('max-height:38px;');
+    expect(css).toContain('font-size:13px;\n  line-height:1.35;');
     expect(health).toContain('disabled={disabled}');
     expect(health).toContain('on:click={requestAction}');
     expect(health).toContain('onAction(item.slot,item.action);');
@@ -48,7 +51,8 @@ describe('Launcher recovery action target and accessibility source contracts',()
     const css=load('lazy-tester.css');
     expect(journey).toContain("await checkHealth.getAttribute('aria-describedby')");
     expect(journey).toContain('recoveryTargets.refresh.width>=24');
-    expect(journey).toContain('recoveryTargets.refresh.height>=24');
+    expect(journey).toContain('recoveryTargets.refresh.height>=28');
+    expect(journey).toContain('recoveryTargets.refreshMargin===0');
     expect(journey).toContain('recoveryTargets.close.height>=32');
     expect(journey).toContain('Native DWM preview target must remain allocated independently');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');

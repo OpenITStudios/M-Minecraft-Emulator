@@ -74,15 +74,15 @@
 </div>
 
 <style>
-  .lt-health-notice { min-width: 0; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+  .lt-health-notice { min-width: 0; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
   strong { display: block; font-weight: 600; }
   span { display: block; }
   .lt-health-action {
-    /* A genuine 24px target. The 4px top margin offsets the former 6px
-       margin to avoid increasing the fixed five-card rail's footprint. */
+    /* A 28px pointer target with the same 28px base vertical footprint
+       as the prior 24px control plus 4px margin. Keep five-slot DWM geometry. */
     display: inline-flex; align-items: center;
-    box-sizing: border-box; min-height: 24px;
-    margin-top: 4px; padding: 3px 6px;
+    box-sizing: border-box; min-height: 28px;
+    margin-top: 0; padding: 3px 6px;
     border: 0; border-radius: 4px;
     background: transparent; color: var(--lt-accent);
     font: inherit; font-weight: 600; text-align: left; cursor: pointer;

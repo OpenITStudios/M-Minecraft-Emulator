@@ -41,6 +41,25 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(storage).toContain('confirmationToken!==fullReview.token');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
   });
+  it('improves dense explanations inside scrollable settings and Play disclosures',()=>{
+    const css=source('lazy-tester.css');
+    expect(css).toContain('.lt-help{\\n');
+    expect(css).toContain('font-size:13px!important}');
+    expect(css).toContain('.lt-data-path{');
+    expect(css).toContain('.lt-agent-activity-details p{margin:8px 0;font-size:13px;');
+    expect(css).toContain('.lt-agent-testing-summary dl{display:grid;');
+    expect(css).toContain('.lt-coordinate-popup p{font-size:13px;');
+    expect(css).toContain('.lt-coordinate-popup label{display:block;font-size:13px;');
+    expect(css).toContain('.lt-f3-data{display:grid;');
+    expect(css).toContain('margin:4px 0;font-size:13px;line-height:1.45}');
+    expect(css).toContain('.lt-coordinate-saved-text code{font-family:Consolas,"Cascadia Mono",monospace;font-size:13px;');
+    expect(css).toContain('max-height:calc(100dvh - 176px)');
+    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
+    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
+    // Collapsed Play disclosure trigger size stays unchanged: no new topbar row.
+    expect(css).toContain('.lt-coordinate-paste>summary{display:block;cursor:pointer;white-space:nowrap;');
+    expect(css).toContain('font-size:12px;line-height:normal}');
+  });
   it('limits new density and status CSS to presentation owners',()=>{
     const css=source('lazy-tester.css');
     expect(css).toContain('--lt-control-min-height:36px');

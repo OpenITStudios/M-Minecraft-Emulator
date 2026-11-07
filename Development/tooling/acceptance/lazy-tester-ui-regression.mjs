@@ -596,6 +596,16 @@ try {
   assert.ok(settingsTargets.filter(item=>['#graphics-preset','#active-fps','#background-fps']
     .includes(item.selector)).every(({height})=>height>=36),
     'Settings form inputs should use the shared 36px control height');
+  const settingsCopy=await page.evaluate(()=>{
+    const size=selector=>{
+      const node=document.querySelector(selector);
+      return node?Number.parseFloat(getComputedStyle(node).fontSize):0;
+    };
+    return {help:size('.lt-settings-layout .lt-help'),
+      dataPath:size('.lt-settings-layout .lt-data-path')};
+  });
+  assert.ok(settingsCopy.help>=13&&settingsCopy.dataPath>=13,
+    'Settings instructions and long data paths must stay readable at the supported CSS viewport');
   const presetExplanation=page.locator('details.lt-settings-explanation');
   assert.equal(await presetExplanation.getAttribute('open'),null,
     'Technical preset explanations stay out of the default Settings path');
@@ -930,13 +940,21 @@ try {
         const rect=node.getBoundingClientRect();
         return {width:rect.width,height:rect.height};
       };
+      const refresh=entry.querySelector('.lt-health-action');
       return {refresh:measure('.lt-health-action'),
+        refreshMargin:refresh?Number.parseFloat(getComputedStyle(refresh).marginTop):null,
+        healthFont:entry.querySelector('.lt-health-notice')?
+          Number.parseFloat(getComputedStyle(entry.querySelector('.lt-health-notice')).fontSize):null,
         close:measure('.lt-close-launcher'),
         preview:measure('.lt-card-picture')};
     });
-  assert.ok(recoveryTargets.refresh&&recoveryTargets.refresh.width>=24&&
-    recoveryTargets.refresh.height>=24,
-    'Read-only recovery action must expose at least a 24x24 CSS-pixel target');
+  assert.ok(recoveryTargets.refresh&&recoveryTargets.refresh.width>=28&&
+    recoveryTargets.refresh.height>=28,
+    'Read-only recovery action must expose at least a 28x28 CSS-pixel target');
+  assert.equal(recoveryTargets.refreshMargin,0,
+    'Larger recovery click target replaces the old top margin, not the five-slot rail footprint');
+  assert.ok(recoveryTargets.healthFont>=13,
+    'Long recovery guidance uses a legible 13px line within its existing scrollable bound');
   assert.ok(recoveryTargets.close&&recoveryTargets.close.width>=24&&
     recoveryTargets.close.height>=32,
     'Normal Close game review must keep its original distinct 32px-or-taller target');

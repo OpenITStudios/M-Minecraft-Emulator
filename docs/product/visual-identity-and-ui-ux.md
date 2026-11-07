@@ -75,13 +75,13 @@ supports it. Do not treat these as release approval.
 | P0 | Unsafe Launch / Close / Clear with stale native state | Existing native/controller gates retained | Actual original-process and token admission; no second client launched |
 | P0 | Five native viewport and preview identities | Existing owner retained | 920×620 and 1280×900, mixed five-slot HWND/DWM snapshots and stable coordinates |
 | P1 | Incomplete loading, offline and stale profile observations | Existing status projection; source-only confidence | Startup loss/retry with visible Disabled/Unavailable states, zero false readiness |
-| P1 | Long messages, varied card states and error overflow | SOURCE_PREPARED: keyboard-readable bounded notices, 24px recovery actions and per-slot accessible guidance | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
+| P1 | Long messages, varied card states and error overflow | SOURCE_PREPARED: keyboard-readable 13px bounded notices, 28px recovery actions and per-slot accessible guidance | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
 | P1 | F3 / Coordinates popup placement and exclusivity | Source geometry + HTML details group | WebView2 named-details compatibility, overlap/scroll/resize at minimum window |
 | P1 | Optional AI & Testing header crowding on narrow/high-DPI view | SOURCE_PREPARED: flex summary within fixed-height topbar; only expanded details overlay | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
 | P1 | Keyboard Escape, Cancel and ephemeral focus restoration | SOURCE_PREPARED: same-slot notices, transient header actions and scoped Settings/Storage save/review focus anchors, no native-focus takeover | Focus trace, game keyboard unaffected, nested, disabled-control and offline-refresh cases |
 | P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
-| P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, Settings controls, 24px launcher recovery actions and 32px Close game review targets | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
+| P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, Settings controls, 28px launcher recovery actions and 32px Close game review targets | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
 | P1 | Narrow Settings/Storage and zoom/reflow | Responsive source scopes present | No hidden controls/dual-axis text scrolling at supported Windows scales |
 | P1 | Browser regression previously sent reversed profile order rejected by parser | SOURCE_PREPARED: valid inventory journey plus separate rejection fixture | Authorized synthetic browser suite and original parser tests |
 | P2 | App icon quality and independent visual identity | One SVG source and app title retained | Native Taskbar 16/24/32/48px, Win10/11 dark/light/forced-color review |
@@ -944,3 +944,35 @@ WebView2 or Windows PASS. Actual native drag, double-click behavior,
 focus order, titlebar at high DPI, Narrator and five Minecraft sessions
 remain **NOT_EXECUTED**. The previously recorded UX-F02 and UX-A01
 acceptance gates remain open.
+
+## Bounded readability and recovery target sizing — source only (7 November 2026)
+
+The existing Play and Settings presentation owners now prefer **13px**
+for dense help copy, Storage paths/status, F3/Coordinates/AI disclosure
+content and launcher health guidance. This does **not** increase the
+fixed Play header summary labels, reposition native previews, replace
+the five keyed cards or enlarge the native 16:9 viewport.
+
+The per-launcher read-only Refresh/Select recovery action increases its
+base pointer target from **24px** to **28px** while removing its earlier
+**4px** top margin. The normal single-line base footprint is therefore
+28px in both states; the health message keeps its existing **38px
+scrollable maximum**. On unusually narrow cards, multi-line wrapping
+may still grow the entry and must be checked rather than assumed safe.
+All existing disabled/action admission, focus restoration and per-slot
+guidance remain owned by the original components.
+
+The dense Play disclosure content already scrolls within fixed,
+viewport-bounded popups. Increasing the content font may change scroll
+length, not the width/height of the underlying DWM game targets.
+Settings and Storage are separately scrollable and keep responsive
+wrapping. The authored source fixtures and optional synthetic browser
+journey now check the 13px text scale and 28px recovery target; the
+source assertions were inspected but **NOT_EXECUTED**.
+
+**Acceptance still open:** verify five mixed states at 920x620 and
+1280x900, 100/125/150/200% Windows DPI, effective zoom/narrow
+width, text enlargement, forced colors, Narrator, popup scroll/Tab
+access, exact native DWM bounds and game focus. Existing UX-V01,
+UX-V02, UX-V03 and UX-A01 remain **NOT_EXECUTED**. This change
+is `SOURCE_PREPARED`, not a Windows usability PASS.
