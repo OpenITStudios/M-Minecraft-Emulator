@@ -39,7 +39,7 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(css).toContain('overflow-y:auto;');
     expect(css).toContain('overflow-wrap:anywhere;');
     expect(css).toContain('.lt-app .lt-viewport .lt-empty:focus-visible{');
-    expect(css).toContain('.lt-app .lt-viewport .lt-empty:focus-visible{\\n    outline-color:Highlight;');
+    expect(css).toContain('.lt-app .lt-viewport .lt-empty:focus-visible{\n    outline-color:Highlight;');
     expect(browser).toContain('const emptyStatus=page.getByRole(\'region\',{name:\'Minecraft workspace status\'});');
     expect(browser).toContain('emptyStatusScrollable.scrollOffset>0');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
