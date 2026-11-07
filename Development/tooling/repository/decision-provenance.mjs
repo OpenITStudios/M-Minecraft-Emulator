@@ -115,11 +115,20 @@ export function readDecisionHistory(root,{
     return {status:'GIT_READ_UNAVAILABLE',proofBoundary:HISTORY_CEILING,
       commits:[],note:'No Git history was inspected; do not infer absence of decisions.'};
   }
+  let worktreeStatus='UNVERIFIED';
+  try{
+    const changed=gitRead(root,['status','--porcelain','--untracked-files=normal']);
+    worktreeStatus=changed.trim()?'DIRTY':'CLEAN_AT_READ_TIME';
+  }catch{
+    worktreeStatus='UNVERIFIED';
+  }
   const parsed=parseGitLog(raw);
   const candidates=work===undefined?parsed.entries:
     parsed.entries.filter(x=>x.work===work);
   const selected=candidates.slice(0,limit);
   const commits=[],gaps=[...parsed.issues];
+  if(worktreeStatus==='UNVERIFIED')gaps.push('WORKTREE_CLEANLINESS_NOT_VERIFIED');
+  if(worktreeStatus==='DIRTY')gaps.push('WORKTREE_DIFFERS_FROM_PINNED_HEAD');
   for(const record of selected){
     let change;
     try{change=limitedChangedFiles(root,record.sha,gitRead);}
@@ -136,7 +145,7 @@ export function readDecisionHistory(root,{
   return {
     schemaVersion:1,mode:'GIT_DECISION_PROVENANCE',
     status:gaps.length?'PARTIAL_GIT_EVIDENCE':'HISTORY_BOUNDED',
-    branch:'Local',head,
+    branch:'Local',head,worktreeStatus,
     query:sourcePath?{kind:'EXACT_SOURCE_PATH',value:sourcePath}:
       {kind:'EXACT_WORK_ID',value:work},
     scope:{maxCommits,limit,scanned:countRaw,
@@ -154,7 +163,8 @@ export function decisionHistoryMarkdown(result){
     'Status: **'+result.status+'**',
     'Evidence ceiling: '+tick+result.proofBoundary+tick,
     'Current branch/HEAD: '+tick+(result.branch??'UNKNOWN')+
-      ' / '+(result.head??'UNVERIFIED')+tick,'',
+      ' / '+(result.head??'UNVERIFIED')+tick,
+    'Working-tree alignment: '+tick+(result.worktreeStatus??'UNVERIFIED')+tick,'',
     'A commit trailer is historical author testimony, not current authority or runtime proof.',''];
   for(const entry of result.commits){
     lines.push('## '+tick+entry.sha+tick,'',
