@@ -29,6 +29,22 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(bar).toContain("on:click={()=>action('toggleMaximize')}");
     expect(bar).toContain("on:click={()=>action('close')}");
   });
+  it('keeps overflowing no-game status text keyboard-scrollable without changing native placement',()=>{
+    const play=asset('src/LazyTesterApp.svelte');
+    const css=asset('src/lazy-tester.css');
+    const browser=readFileSync(new URL('../../../tooling/acceptance/lazy-tester-ui-regression.mjs',import.meta.url),'utf8');
+    expect((play.match(/class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"/g)??[]))
+      .toHaveLength(2);
+    expect(css).toContain('justify-content:safe center;');
+    expect(css).toContain('overflow-y:auto;');
+    expect(css).toContain('overflow-wrap:anywhere;');
+    expect(css).toContain('.lt-app .lt-viewport .lt-empty:focus-visible{');
+    expect(css).toContain('.lt-app .lt-viewport .lt-empty:focus-visible{\\n    outline-color:Highlight;');
+    expect(browser).toContain('const emptyStatus=page.getByRole(\'region\',{name:\'Minecraft workspace status\'});');
+    expect(browser).toContain('emptyStatusScrollable.scrollOffset>0');
+    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
+    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
+  });
   it('keeps occupied-session gates apart from observed running labels',()=>{
     const play=asset('src/LazyTesterApp.svelte');
     expect(play).toContain("['STARTING', 'RUNNING', 'NOT_RESPONDING']");

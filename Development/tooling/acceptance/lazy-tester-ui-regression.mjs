@@ -662,6 +662,40 @@ try {
     const headingWidth=await page.locator('.lt-games-heading').evaluate(node=>node.getBoundingClientRect().width);
     assert.ok(Math.abs(headingWidth-dock.width)<1,'Five-card rail heading and cards must align');
     assert.ok(previews.every(p=>Math.abs(p.width-p.height*16/9)<2),'previews must stay 16:9');
+    if(size.width===920&&size.height===620){
+      // This non-game fixture limits the EMPTY content height only. The parent
+      // native game placement rectangle and all five DWM preview nodes remain fixed.
+      const emptyStatus=page.getByRole('region',{name:'Minecraft workspace status'});
+      assert.equal(await emptyStatus.count(),1,
+        'A no-game viewport status must be a single keyboard-reachable region');
+      await emptyStatus.focus();
+      assert.equal(await emptyStatus.evaluate(node=>document.activeElement===node),true,
+        'Empty status information can receive keyboard focus without activating Minecraft');
+      const emptyStatusScrollable=await emptyStatus.evaluate(node=>{
+        const viewport=node.closest('.lt-viewport');
+        const before=viewport.getBoundingClientRect();
+        const originalHeight=node.style.height;
+        node.style.height='56px';
+        node.scrollTop=0;
+        const scrollable=node.scrollHeight>node.clientHeight;
+        const overflowY=getComputedStyle(node).overflowY;
+        node.scrollTop=node.scrollHeight;
+        const scrollOffset=node.scrollTop;
+        node.style.height=originalHeight;
+        const after=viewport.getBoundingClientRect();
+        return {scrollable,overflowY,scrollOffset,
+          viewportStable:Math.abs(before.width-after.width)<0.01&&
+            Math.abs(before.height-after.height)<0.01};
+      });
+      assert.equal(emptyStatusScrollable.overflowY,'auto',
+        'Only the empty status contents should scroll, not the game aperture');
+      assert.equal(emptyStatusScrollable.scrollable,true,
+        'Height-constrained empty message must expose overflow rather than crop status');
+      assert.ok(emptyStatusScrollable.scrollOffset>0,
+        'Keyboard-focusable empty status has a reachable end when content is long');
+      assert.equal(emptyStatusScrollable.viewportStable,true,
+        'Scrollability must not resize the original native 16:9 viewport');
+    }
     await nav('Settings').click();await section('Data Storage').click();
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   }

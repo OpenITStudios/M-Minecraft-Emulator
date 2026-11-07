@@ -83,6 +83,7 @@ supports it. Do not treat these as release approval.
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
 | P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, Settings controls, 28px launcher recovery actions and 32px Close game review targets | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
 | P1 | Narrow Settings/Storage and zoom/reflow | Responsive source scopes present | No hidden controls/dual-axis text scrolling at supported Windows scales |
+| P1 | Empty Play viewport status clipped at short height/high effective zoom | SOURCE_PREPARED: keyboard-focusable, safe-centered scroll region only when no game is presented | 920×620 and reduced content height, zoom, Tab/scroll reachability; native viewport dimensions unchanged |
 | P1 | Browser regression previously sent reversed profile order rejected by parser | SOURCE_PREPARED: valid inventory journey plus separate rejection fixture | Authorized synthetic browser suite and original parser tests |
 | P2 | App icon quality and independent visual identity | One SVG source and app title retained | Native Taskbar 16/24/32/48px, Win10/11 dark/light/forced-color review |
 | P2 | Repeated raw colors, selector specificity and spacing density | SOURCE_PREPARED: specialized surfaces and action colors tokenized; redundant global button focus rule removed | Token audit + rendered component inventory, consistent states/spacing |
@@ -976,3 +977,30 @@ width, text enlargement, forced colors, Narrator, popup scroll/Tab
 access, exact native DWM bounds and game focus. Existing UX-V01,
 UX-V02, UX-V03 and UX-A01 remain **NOT_EXECUTED**. This change
 is `SOURCE_PREPARED`, not a Windows usability PASS.
+
+## Blank Play viewport status overflow — source-only correction (7 November 2026)
+
+A no-game or detached Play viewport previously projected explanatory
+headings and paragraphs into a non-scrollable centered flex child.
+At a small native stage height or enlarged text, the fixed 16:9
+parent's `overflow:hidden` could clip useful warnings and recovery
+instructions. The child now uses `justify-content:safe center` so
+overflowing content aligns to the scroll start, plus `overflow-y:auto`,
+`overflow-wrap:anywhere` and a visible focus ring. Both mutually
+exclusive empty-state render paths receive the same focusable named
+status region; ordinary keyboard scroll does not need another button.
+
+**Safety boundary:** the native `.lt-viewport` remains the same
+container-sized 16:9 element, and the five fixed keyed DWM cards
+and launcher controls are untouched. This scroll behavior belongs
+only to the conditional `.lt-empty` child, which does **not**
+exist when a game is actively presented. It does not add an
+observer, input handler, synthetic game surface or session state.
+
+The existing source fixture now checks both empty-state branches.
+The optional synthetic browser journey limits the *inner status
+height only*, asserts keyboard focus/scroll reachability and checks
+that the parent viewport rectangle stays constant. Those checks
+are **AUTHORED_NOT_EXECUTED**. Actual Windows/WebView2 scroll,
+920×620/1280×900 and 125–200% DPI behavior, long warnings,
+screen-reader output and native DWM placement remain **NOT_EXECUTED**.
