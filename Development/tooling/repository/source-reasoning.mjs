@@ -170,10 +170,10 @@ export function sourceImpactMarkdown(impact){
   const lines=['# Potential source change impact','','Requested: '+tick+impact.requestedPathOrId+tick,
     'Result: **'+impact.status.status+'**','Proof: '+tick+impact.status.proofBoundary+tick,
     'Depth: '+impact.depth.maxHops+' (truncated: '+impact.depth.depthTruncated+')','','## Selected source',''];
-  for(const r of impact.selected)lines.push('- '+tick+r.path+tick);
+  for(const r of impact.selected)lines.push('- [['+r.path+'|'+r.id+']]');
   lines.push('','## Potentially affected files','','An import/module edge does not establish code execution, affected symbols, or a regression.','');
   for(const i of impact.impacted){
-    lines.push('- '+tick+i.resource.path+tick+' — '+i.distance+' hop(s)'+
+    lines.push('- [['+i.resource.path+'|'+i.resource.id+']] — '+i.distance+' hop(s)'+
       (i.resource.kind==='AUTHORED_TEST_NOT_EXECUTION_PROOF'?' [authored test]':''));
     for(const e of i.pathToSelected){
       for(const site of e.sourceSites.slice(0,4))lines.push('  - '+tick+
@@ -208,7 +208,7 @@ export function sourceTraceMarkdown(trace){
   const lines=['# Source declaration trace','','Result: **'+trace.result+'**',
     'Coverage: '+trace.status.status,
     'Proof: '+tick+trace.status.proofBoundary+tick,'',
-    'From '+tick+trace.from.path+tick+' to '+tick+trace.to.path+tick,''];
+    'From [['+trace.from.path+'|'+trace.from.id+']] to [['+trace.to.path+'|'+trace.to.id+']]',''];
   if(trace.result==='FOUND'){
     lines.push('## Declared source path','');
     for(const e of trace.steps){

@@ -100,6 +100,8 @@ function compilerSites(path,content,ts,svelte){
       }
       fragments.push({text:content.slice(start,end),offset:start});
     }
+    if(!fragments.length && /<script(?:\s|>)/i.test(content))
+      return {sites:[],gaps:[{path,reason:'SVELTE_SCRIPT_NOT_RECOGNIZED'}]};
   }
   const sites=[],gaps=[];
   for(const frag of fragments){

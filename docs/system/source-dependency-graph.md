@@ -21,9 +21,9 @@ an agent, API, controller, daemon, cache, state store or native game hook.
 - **Documentation Router/Catalog/Graph:** [repository knowledge graph](repository-knowledge-graph.md)
   and `Development/tooling/repository/knowledge-graph.mjs`. Its Markdown
   relationships are intentionally **not** source dependencies.
-- **Source declaration index:** `Development/tooling/repository/source-dependencies.mjs`
+- **Source declaration index:** [source-dependencies.mjs](../../Development/tooling/repository/source-dependencies.mjs)
   computes file-level literal declaration edges from current owned source.
-- **Affected-file reasoning:** `Development/tooling/repository/source-reasoning.mjs`
+- **Affected-file reasoning:** [source-reasoning.mjs](../../Development/tooling/repository/source-reasoning.mjs)
   traces forward paths and reverse imports with source witnesses.
 - **Read-only command entry:** existing `Development/tooling/repository/knowledge-query.mjs`.
 - **Canonical implementation owners:** [implementation map](implementation-map.md)

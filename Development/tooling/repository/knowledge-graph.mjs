@@ -21,6 +21,8 @@ export const NAVIGATION_SOURCES = Object.freeze([
   ['source.rules.emulator-development-skill', '.agents/skills/emulator-development/SKILL.md'],
   ['source.tooling.knowledge-graph', 'Development/tooling/repository/knowledge-graph.mjs'],
   ['source.tooling.knowledge-query', 'Development/tooling/repository/knowledge-query.mjs'],
+  ['source.tooling.source-dependencies', 'Development/tooling/repository/source-dependencies.mjs'],
+  ['source.tooling.source-reasoning', 'Development/tooling/repository/source-reasoning.mjs'],
   ['source.tooling.agent-mcp', 'Development/tooling/agent/mcp.mjs'],
   ['source.native.session-controller', 'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs'],
   ['source.native.session-transport', 'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs'],
