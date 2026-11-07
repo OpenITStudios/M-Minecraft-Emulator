@@ -6,10 +6,13 @@ import {createRequire} from 'node:module';
 import {existsSync, lstatSync, readFileSync, readdirSync} from 'node:fs';
 import {dirname, extname, isAbsolute, posix, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {buildTauriContractProjection} from './source-contracts.mjs';
 
 export const SOURCE_ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'../../..');
 const desktopRequire=createRequire(new URL('../../apps/desktop/package.json',import.meta.url));
-const CODE_EXTS=new Set(['.rs','.ts','.tsx','.mts','.cts','.js','.jsx','.mjs','.cjs','.svelte']);
+const CPP_EXTS=new Set(['.cpp','.c','.cc','.cxx','.h','.hpp','.hxx']);
+const CODE_EXTS=new Set(['.rs','.ts','.tsx','.mts','.cts','.js','.jsx','.mjs','.cjs','.svelte',
+  ...CPP_EXTS]);
 const JS_EXTS=['.ts','.tsx','.mts','.cts','.js','.jsx','.mjs','.cjs','.svelte'];
 export const SOURCE_DIRS=Object.freeze([
   'Development/apps/desktop/src',
@@ -73,6 +76,7 @@ function sourceId(path){
 function sourceKind(path){
   if(/(?:^|\/)(?:test|tests|fixtures)\//.test(path)||/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path))
     return 'AUTHORED_TEST_NOT_EXECUTION_PROOF';
+  if(CPP_EXTS.has(extname(path)))return 'CPP_DECLARATION_SOURCE';
   if(path.endsWith('.rs'))return 'RUST_DECLARATION_SOURCE';
   if(path.endsWith('.svelte'))return 'SVELTE_SOURCE';
   return 'JAVASCRIPT_TYPESCRIPT_SOURCE';
@@ -163,7 +167,7 @@ function compilerSites(path,content,ts,svelte){
 
 // Rust lexical tokens skip nested comments, strings and chars. A Rust
 // declaration recorded here is NOT a proof of cfg/feature compilation.
-function rustTokens(content){
+export function rustTokens(content){
   const out=[];
   const push=(kind,value,at)=>out.push({kind,value,at});
   let i=0;
@@ -378,6 +382,52 @@ function rustSites(path,content,known){
   }
   return {sites,gaps};
 }
+function cppSites(path,content,known){
+  // Evidence is limited to preprocessor include declarations. Do not
+  // interpret macro expansions, translation units, linker targets, or
+  // Windows runtime/Detours. Comments are masked to avoid fake edges.
+  const sites=[],gaps=[];
+  let block=false,offset=0;
+  for(const line of content.split(/\r?\n/)){
+    const masked=[...line];
+    for(let i=0;i<line.length;i++){
+      if(block){
+        masked[i]=' ';
+        if(line.startsWith('*/',i)){masked[i+1]=' ';i++;block=false;}
+        continue;
+      }
+      if(line.startsWith('/*',i)){masked[i]=' ';masked[i+1]=' ';i++;block=true;continue;}
+      if(line.startsWith('//',i)){
+        for(let j=i;j<line.length;j++)masked[j]=' ';
+        break;
+      }
+    }
+    const visible=masked.join('');
+    const head=visible.match(/^\s*#\s*include\s*/);
+    if(head){
+      const rest=visible.slice(head[0].length).trim();
+      const at=offset+visible.indexOf('#');
+      const site={path,...lineColumn(content,at),syntax:'CPP_PREPROCESSOR_INCLUDE',
+        specifier:rest,conditional:'CPP_PREPROCESSOR_NOT_EVALUATED'};
+      const quoted=rest.match(/^"([^"]+)"\s*$/);
+      if(quoted){
+        const specifier=quoted[1];
+        const target=posix.normalize(posix.join(posix.dirname(path),specifier));
+        const resolution=(target.startsWith('../')||target.startsWith('/'))?
+          {status:'OUTSIDE_REPOSITORY'}:
+          known.has(target)?{status:'RESOLVED',path:target}:
+          {status:'UNRESOLVED_CPP_LOCAL_INCLUDE'};
+        sites.push({...site,specifier,resolution});
+      }else if(rest.startsWith('<')&&rest.endsWith('>')){
+        sites.push({...site,resolution:{status:'CPP_SYSTEM_INCLUDE'}});
+      }else{
+        sites.push({...site,resolution:{status:'COMPUTED_CPP_INCLUDE'}});
+      }
+    }
+    offset+=line.length+1;
+  }
+  return {sites,gaps};
+}
 function resolveJsImport(from,specifier,known){
   if(!specifier)return {status:'DYNAMIC_COMPUTED'};
   if(!specifier.startsWith('.'))return {status:'EXTERNAL_OR_ALIAS'};
@@ -445,7 +495,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
   root=resolve(root);
   const sourcePaths=listOwnedSourceFiles(root),known=new Set(sourcePaths);
   const resources=sourcePaths.map(path=>({id:sourceId(path),path,class:'SOURCE',
-    domain:path.endsWith('.rs')?'rust':path.endsWith('.svelte')?'svelte':'ts-js',
+    domain:path.endsWith('.rs')?'rust':CPP_EXTS.has(extname(path))?'cpp':path.endsWith('.svelte')?'svelte':'ts-js',
     authority:'CANONICAL',lifecycle:'ACTIVE',kind:sourceKind(path),
     ownerLookup:'docs/system/implementation-map.md'}));
   const byPath=new Map(resources.map(r=>[r.path,r]));
@@ -454,7 +504,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     if(byId.has(r.id))throw new Error('Source ID collision: '+r.id);
     byId.set(r.id,r);
   }
-  const needsTs=resources.some(r=>r.domain!=='rust');
+  const needsTs=resources.some(r=>!['rust','cpp'].includes(r.domain));
   const needsSvelte=resources.some(r=>r.domain==='svelte');
   const tsInfo=needsTs&&typescript===undefined?parser('typescript'):
     {module:typescript,status:typescript?'PROVIDED':'NOT_REQUIRED'};
@@ -470,6 +520,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     }
     const content=readFileSync(full,'utf8');
     const result=path.endsWith('.rs')?rustSites(path,content,known):
+      CPP_EXTS.has(extname(path))?cppSites(path,content,known):
       compilerSites(path,content,tsInfo.module,svInfo.module);
     unparsed.push(...result.gaps);
     for(const site of result.sites){
@@ -477,7 +528,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
       // Preserve the origin file and line even for resolved Rust sites.
       // Spreading target.path into the site silently overwrote its source path.
       const target=site.resolution??resolveJsImport(path,site.specifier,known);
-      if(['EXTERNAL_OR_ALIAS','EXTERNAL_OR_UNQUALIFIED_RUST_USE'].includes(target.status)){
+      if(['EXTERNAL_OR_ALIAS','EXTERNAL_OR_UNQUALIFIED_RUST_USE','CPP_SYSTEM_INCLUDE'].includes(target.status)){
         externalCount++;continue;
       }
       if(target.status==='NON_CODE_RESOURCE'){resourceCount++;continue;}
@@ -503,6 +554,8 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     }
   }
   const cargo=localCargoDependencies(root);
+  const tauri=buildTauriContractProjection({root,resources,byPath,
+    typescript:tsInfo.module,rustTokens});
   const ordered=[...edges.values()].map(e=>{
     e.sourceSites.sort((a,b)=>a.path.localeCompare(b.path)||a.line-b.line||a.column-b.column);
     return {...e,evidence:e.sourceSites[0]};
@@ -512,10 +565,11 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     proofBoundary:SOURCE_PROOF,resources,byPath,byId,edges:ordered,unresolved,
     unparsed,siteCount,externalCount,resourceCount,
     cargoLocalDependencies:cargo.dependencies,cargoUnresolved:cargo.unresolved,
+    tauri,contractEdges:tauri.edges,
     coverage:{indexedSourceFiles:resources.length,
-      excludedLanguageFamilies:['C_CPP_HEADERS','POWERSHELL','CMAKE','RUST_CFG_MACRO_EXPANSION','TAURI_COMMAND_LINKING'],
+      excludedLanguageFamilies:['POWERSHELL','CMAKE','RUST_CFG_MACRO_EXPANSION','CPP_MACRO_EXPANSION','TAURI_PAYLOAD_COMPATIBILITY'],
       completeness:'NOT_PROVEN_COMPLETE'},
     parserAvailability:{typescript:tsInfo.status,svelte:svInfo.status},
     status:unparsed.length?'INCOMPLETE_PARSER_COVERAGE':
-      unresolved.length?'PARTIAL_UNRESOLVED_DECLARATIONS':'STATIC_DECLARATIONS_INDEXED'};
+      unresolved.length||tauri.gaps.length?'PARTIAL_UNRESOLVED_DECLARATIONS':'STATIC_DECLARATIONS_INDEXED'};
 }
