@@ -9,12 +9,16 @@ import {buildSourceDependencyIndex} from './source-dependencies.mjs';
 import {selectSource,sourceImpact,sourceTrace,sourceSummary,sourceGraphProjection,
   sourceDiagram,sourceImpactDiagram,sourceTraceDiagram,sourceImpactMarkdown,
   sourceTraceMarkdown} from './source-reasoning.mjs';
+import {architectureContext,architectureContextMarkdown} from './architecture-reasoning.mjs';
+import {readDecisionHistory,decisionHistoryMarkdown} from './decision-provenance.mjs';
 
 const TICK=String.fromCharCode(96);
 function argumentsFor(argv) {
   const result={format:'json',maxHops:4,limit:12};
   for(let i=0;i<argv.length;i++){
-    const word=argv[i], needsValue=new Set(['--id','--source-id','--impact','--query','--domain','--format','--max-hops','--limit']);
+    const word=argv[i], needsValue=new Set(['--id','--source-id','--impact',
+      '--architecture-context','--decision-history','--query','--domain',
+      '--format','--max-hops','--limit']);
     if(needsValue.has(word)){
       const value=argv[++i];if(!value||value.startsWith('--'))throw new Error(word+' requires a value');
       result[word.slice(2).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=value;continue;
@@ -25,7 +29,8 @@ function argumentsFor(argv) {
         throw new Error(word+' needs two registered IDs or existing source paths');
       result[word==='--trace'?'trace':'sourceTrace']=[from,to];continue;
     }
-    if(['--summary','--graph','--audit','--all','--history','--both-directions','--source-summary','--source-graph'].includes(word)){
+    if(['--summary','--graph','--audit','--all','--history','--both-directions',
+      '--with-decisions','--source-summary','--source-graph'].includes(word)){
       result[word.slice(2).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=true;continue;
     }
     throw new Error('Unknown argument: '+word);
@@ -38,14 +43,18 @@ function argumentsFor(argv) {
     throw new Error('--limit must be 1..30');
   if(!['json','markdown','mermaid'].includes(result.format))throw new Error('--format must be json|markdown|mermaid');
   const operations=['summary','graph','audit','id','trace','query',
-    'sourceSummary','sourceGraph','sourceId','impact','sourceTrace'].filter(k=>result[k]);
-  if(operations.length!==1)throw new Error('Select exactly one documentation or source operation: --summary|--graph|--audit|--id|--trace|--query|--source-summary|--source-graph|--source-id|--impact|--source-trace');
+    'sourceSummary','sourceGraph','sourceId','impact','sourceTrace',
+    'architectureContext','decisionHistory'].filter(k=>result[k]);
+  if(operations.length!==1)throw new Error('Select exactly one documentation, source, or decision operation: --summary|--graph|--audit|--id|--trace|--query|--source-summary|--source-graph|--source-id|--impact|--source-trace|--architecture-context|--decision-history');
   if(result.domain&&!result.query)throw new Error('--domain only applies to --query');
   if(result.all&&!result.query)throw new Error('--all only applies to --query');
   if(result.bothDirections&&!result.trace&&!result.sourceTrace)
     throw new Error('--both-directions only applies to --trace or --source-trace');
   if(result.history && (result.sourceSummary||result.sourceGraph||result.sourceId||
-    result.impact||result.sourceTrace))throw new Error('--history is not a source graph option');
+    result.impact||result.sourceTrace||result.architectureContext||result.decisionHistory))
+    throw new Error('--history is only for documentation navigation');
+  if(result.withDecisions&&!result.architectureContext)
+    throw new Error('--with-decisions requires --architecture-context');
   if(result.format==='mermaid'&&!result.trace&&!result.graph&&!result.impact&&
     !result.sourceTrace&&!result.sourceGraph)
     throw new Error('Mermaid only applies to trace/graph/impact operations');
@@ -80,8 +89,30 @@ function markdownTrace(trace){
     graphAsMermaid(trace.nodes,trace.steps),'~~~','');
   return out.join('\n');
 }
-export function run(argv,root=DEFAULT_ROOT){
+export function run(argv,root=DEFAULT_ROOT,{gitRead}={}){
   const opt=argumentsFor(argv);
+  if(opt.decisionHistory){
+    const history=readDecisionHistory(root,{
+      work:opt.decisionHistory,limit:Math.min(opt.limit,12),
+      ...(gitRead?{gitRead}:{}),
+    });
+    if(opt.format==='markdown')return decisionHistoryMarkdown(history);
+    return JSON.stringify(history,null,2)+'\n';
+  }
+  if(opt.architectureContext){
+    const source=buildSourceDependencyIndex(root);
+    const docs=buildKnowledgeIndex(root);
+    const selected=selectSource(source,opt.architectureContext)[0];
+    const history=opt.withDecisions?readDecisionHistory(root,{
+      sourcePath:selected.path,limit:Math.min(opt.limit,8),
+      ...(gitRead?{gitRead}:{})
+    }):undefined;
+    const context=architectureContext(source,docs,selected.path,{
+      maxHops:opt.maxHops,limit:Math.min(opt.limit,12),history,
+    });
+    if(opt.format==='markdown')return architectureContextMarkdown(context);
+    return JSON.stringify(context,null,2)+'\n';
+  }
   const sourceRequested=opt.sourceSummary||opt.sourceGraph||opt.sourceId||
     opt.impact||opt.sourceTrace;
   if(sourceRequested){
