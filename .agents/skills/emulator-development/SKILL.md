@@ -17,7 +17,7 @@ Applies to system development, refactoring, bug fixes and documentation that cha
    evidence, affected frontend tests and Rust cfg/feature declarations.
    A `NO_PATH` result never certifies no impact. In REMOTE_GITHUB, inspect
    exact current source manually and never claim the CLI executed. The
-   documentation graph remains separate, and seven upstream methods remain
+   documentation graph remains separate, and eight reviewed methods remain
    conditional references, not additional Skills or runtime authority.
    For material design rationale, consult
    [Architecture Reasoning](../../../docs/system/architecture-reasoning.md):
@@ -38,6 +38,30 @@ Applies to system development, refactoring, bug fixes and documentation that cha
 7. Implement one coherent change; keep guest disks, snapshot semantics, installer identity and release policy stable unless explicitly in scope with compatibility proof.
 8. Verify at the lowest sufficient level: exact-head structural and consumer review first; executed tests/builds only when an appropriate environment is actually available. Do not ask for a user PC to finish GitHub-verifiable source work.
 9. Commit to Local, inspect exact new HEAD, update planning/development.md for a meaningful continuation, report proof ceiling and STOP. Do not invoke or reintroduce GitHub Actions: CI was explicitly disabled by the operator. Manual scripts are optional, not a blocking prerequisite.
+
+## Selective Matt Pocock method within this Skill
+
+When a problem involves a repeated bug, ambiguous vocabulary, an unstable
+module interface, a difficult source review, or bloated agent instructions,
+apply the *one relevant method* from
+[Development Discipline](../../../docs/system/development-discipline.md#matt-pocock-engineering-method-adapted).
+Do not run this as a second agent lane or repeat the existing Propose/Probe/
+Compose loop.
+
+| Concrete trigger | Minimal action | Truthful completion |
+| --- | --- | --- |
+| A bug, flaky action, native-session error or performance regression | Find the cheapest evidence that distinguishes the actual symptom from nearby ones; minimize and rank falsifiable causes | Record source contradiction or actually executed red/green evidence; missing Windows/game reproduction stays NOT_EXECUTED |
+| Unclear term, state, ownership or new module seam | Resolve terminology against canonical naming; trace caller, interface, implementation and result; reject speculative abstraction | One existing owner and an explicit interface/consumer impact |
+| Multi-file feature or source change | Define observable acceptance and prohibited scope; complete the narrow owner-to-consumer slice | Both **Standards** and **Spec** review axes against the pinned diff |
+| Documentation, research or next-session handoff | Consult authoritative source, keep only a short context pointer at the root and reuse planning/development.md | One cited current owner and exact unknowns, no duplicate state |
+
+In GitHub Chat, a proposed reproduction/test is NOT_EXECUTED until actually
+run in an authorized environment. The operator's existing hold on local
+tests, source suites, Windows builds and gameplay remains binding. Do not
+clone/install mattpocock/skills, create tickets/worktrees/CI, add a new
+agent runtime or alter the original native controller for this method.
+The [scenarios](../../evals/matt-pocock-method-scenarios.md) are an
+authored, not yet observed, evaluation plan.
 
 ## Canonical owners
 

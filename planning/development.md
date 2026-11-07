@@ -125,6 +125,22 @@ approval was added. Fixtures are AUTHORED_NOT_EXECUTED. The existing
 primary Windows background Computer Use goal and single current next
 action remain unchanged.
 
+## Non-primary Matt Pocock agent-method adaptation — 8 November 2026
+
+The single existing `emulator-development` Skill now conditionally routes
+bug reproduction discipline, deep-module interface reasoning, two-axis
+Standards/Spec code review, domain language, primary-source research and
+low-context agent instructions. The source of truth is
+[Development Discipline](../docs/system/development-discipline.md#matt-pocock-engineering-method-adapted)
+with authored [routing scenarios](../.agents/evals/matt-pocock-method-scenarios.md).
+This is a source-policy change based on pinned mattpocock/skills and a
+comparison with M-Lazy-Developer/Local; no third-party plugin, additional
+Skill, issue tracker, CI, game controller, local-source test, Windows build
+or Minecraft execution was authorized or performed. Static routing-fixture
+tests are AUTHORED_NOT_EXECUTED; actual agent-effectiveness improvement is
+NOT_MEASURED. The primary Windows background Computer Use track and its
+single next action remain unchanged.
+
 ## Product and owners
 
 - **Product:** Lazy Tester, one Windows desktop manager for up to five
