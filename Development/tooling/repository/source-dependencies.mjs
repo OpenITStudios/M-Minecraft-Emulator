@@ -25,6 +25,7 @@ export const SOURCE_DIRS=Object.freeze([
 const EXTRA_FILES=[
   'Development/apps/desktop/src-tauri/build.rs',
   'Development/apps/desktop/vite.config.ts',
+  'Development/tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt',
 ];
 const SKIP=new Set(['node_modules','target','dist','coverage','.git','generated','.svelte-kit',
   'binaries','gen','icons','package-resources','test-results','__snapshots__']);
@@ -76,6 +77,7 @@ function sourceId(path){
 function sourceKind(path){
   if(/(?:^|\/)(?:test|tests|fixtures)\//.test(path)||/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path))
     return 'AUTHORED_TEST_NOT_EXECUTION_PROOF';
+  if(path.endsWith('CMakeLists.txt'))return 'DECLARATIVE_CMAKE_TARGET_SOURCE';
   if(CPP_EXTS.has(extname(path)))return 'CPP_DECLARATION_SOURCE';
   if(path.endsWith('.rs'))return 'RUST_DECLARATION_SOURCE';
   if(path.endsWith('.svelte'))return 'SVELTE_SOURCE';
@@ -428,6 +430,35 @@ function cppSites(path,content,known){
   }
   return {sites,gaps};
 }
+function cmakeSites(path,content,known){
+  // Declarative CMake target source lists only; no generator expression,
+  // variable expansion, if()/option() evaluation or actual target build.
+  const sites=[],gaps=[];
+  const text=content.replace(/#[^\r\n]*/g,match=>' '.repeat(match.length));
+  const statement=/(add_library|add_executable|target_sources)\s*\(([^)]*)\)/g;
+  for(const match of text.matchAll(statement)){
+    const value=match[2],offset=(match.index??0)+match[0].indexOf('(')+1;
+    const pieces=[...value.matchAll(/[^\s]+/g)];
+    for(const piece of pieces){
+      const word=piece[0].replace(/^"|"$/g,'');
+      if(!word||['PRIVATE','PUBLIC','INTERFACE','STATIC','SHARED','MODULE','OBJECT'].includes(word))continue;
+      if(word.includes('$'+'{')||word.includes('$'+'<')){
+        gaps.push({path,reason:'CMAKE_VARIABLE_OR_GENERATOR_SOURCE_UNRESOLVED',
+          ...lineColumn(content,offset+(piece.index??0))});continue;
+      }
+      if(!/\.(?:cpp|cc|cxx|c|h|hpp|hxx)$/i.test(word))continue;
+      const candidate=posix.normalize(posix.join(posix.dirname(path),word));
+      const resolution=candidate.startsWith('../')||candidate.startsWith('/')?
+        {status:'OUTSIDE_REPOSITORY'}:
+        known.has(candidate)?{status:'RESOLVED',path:candidate}:
+        {status:'UNRESOLVED_CMAKE_SOURCE'};
+      sites.push({path,syntax:'CMAKE_TARGET_SOURCE_LITERAL',specifier:word,
+        conditional:'CMAKE_CONDITIONS_NOT_EVALUATED',
+        ...lineColumn(content,offset+(piece.index??0)),resolution});
+    }
+  }
+  return {sites,gaps};
+}
 function resolveJsImport(from,specifier,known){
   if(!specifier)return {status:'DYNAMIC_COMPUTED'};
   if(!specifier.startsWith('.'))return {status:'EXTERNAL_OR_ALIAS'};
@@ -495,7 +526,9 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
   root=resolve(root);
   const sourcePaths=listOwnedSourceFiles(root),known=new Set(sourcePaths);
   const resources=sourcePaths.map(path=>({id:sourceId(path),path,class:'SOURCE',
-    domain:path.endsWith('.rs')?'rust':CPP_EXTS.has(extname(path))?'cpp':path.endsWith('.svelte')?'svelte':'ts-js',
+    domain:path.endsWith('.rs')?'rust':
+      path.endsWith('CMakeLists.txt')?'cmake':
+      CPP_EXTS.has(extname(path))?'cpp':path.endsWith('.svelte')?'svelte':'ts-js',
     authority:'CANONICAL',lifecycle:'ACTIVE',kind:sourceKind(path),
     ownerLookup:'docs/system/implementation-map.md'}));
   const byPath=new Map(resources.map(r=>[r.path,r]));
@@ -504,7 +537,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     if(byId.has(r.id))throw new Error('Source ID collision: '+r.id);
     byId.set(r.id,r);
   }
-  const needsTs=resources.some(r=>!['rust','cpp'].includes(r.domain));
+  const needsTs=resources.some(r=>!['rust','cpp','cmake'].includes(r.domain));
   const needsSvelte=resources.some(r=>r.domain==='svelte');
   const tsInfo=needsTs&&typescript===undefined?parser('typescript'):
     {module:typescript,status:typescript?'PROVIDED':'NOT_REQUIRED'};
@@ -520,6 +553,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     }
     const content=readFileSync(full,'utf8');
     const result=path.endsWith('.rs')?rustSites(path,content,known):
+      path.endsWith('CMakeLists.txt')?cmakeSites(path,content,known):
       CPP_EXTS.has(extname(path))?cppSites(path,content,known):
       compilerSites(path,content,tsInfo.module,svInfo.module);
     unparsed.push(...result.gaps);
@@ -567,7 +601,8 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     cargoLocalDependencies:cargo.dependencies,cargoUnresolved:cargo.unresolved,
     tauri,contractEdges:tauri.edges,
     coverage:{indexedSourceFiles:resources.length,
-      excludedLanguageFamilies:['POWERSHELL','CMAKE','RUST_CFG_MACRO_EXPANSION','CPP_MACRO_EXPANSION','TAURI_PAYLOAD_COMPATIBILITY'],
+      excludedLanguageFamilies:['POWERSHELL','CMAKE_VARIABLE_AND_BUILD_CONDITION_RESOLUTION',
+        'RUST_CFG_MACRO_EXPANSION','CPP_MACRO_EXPANSION','TAURI_PAYLOAD_COMPATIBILITY'],
       completeness:'NOT_PROVEN_COMPLETE'},
     parserAvailability:{typescript:tsInfo.status,svelte:svInfo.status},
     status:unparsed.length?'INCOMPLETE_PARSER_COVERAGE':
