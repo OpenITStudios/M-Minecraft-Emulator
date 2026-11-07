@@ -25,7 +25,10 @@ identity, never native enumeration order, window title, or a claim that an
 account is signed in.
 
 Visible launcher status is based on the most recent native observation, never
-a claim of Minecraft sign-in or gameplay acceptance. The selected card says
+a claim of Minecraft sign-in or gameplay acceptance. Interface copy is
+short, direct English: one message and one next step for normal status,
+with details only on demand. Destructive confirmations retain the
+unambiguous worlds/accounts/backup warnings despite the shorter copy. The selected card says
 "Selected in Play" rather than implying Minecraft is playable. If inspection
 becomes unavailable, the five cards remain visible but their status is
 "Status unavailable"; no stale running count is shown. "Profile data verified"

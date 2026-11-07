@@ -38,8 +38,8 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     const storage=source('DataStorage.svelte');
     expect(storage).toContain('storage===null');
     expect(storage).toContain('!selectedStorage');
-    expect(storage).toContain('an unmeasured size does not mean a profile is empty');
-    expect(storage).toContain('These sizes are from the last storage report, not a live measurement.');
+    expect(storage).toContain('Unknown does not mean empty.');
+    expect(storage).toContain('Showing last reported sizes, not live usage.');
     expect(storage).toContain('Last storage report received:');
     expect(storage).toContain('formatStorageExtent(selectedStorage.bytes,selectedStorage.partial)');
     expect(storage).toContain('formatStorageExtent(selectedStorage.cache.bytes,selectedStorage.cache.partial)');
@@ -97,6 +97,21 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(feedback).toContain('Data cleanup not confirmed');
     expect(app).toContain('await lazyTester.clearData(pending.slot,pending.token,fullName)');
     expect(app).toContain('await lazyTester.launch(slot)');
+  });
+  it('preserves critical deletion and recovery warnings while shortening UI copy',()=>{
+    const storage=source('DataStorage.svelte');
+    const app=source('LazyTesterApp.svelte');
+    expect(storage).toContain('Permanently deletes this launcher');
+    expect(storage).toContain('local accounts, worlds, cache, settings and backups');
+    expect(storage).toContain('no recovery backup is made');
+    expect(storage).toContain('Windows sign-in may remain');
+    expect(storage).toContain('The previous Restore point is replaced with a backup of current settings.');
+    expect(storage).toContain('Restart required.');
+    expect(storage).toContain('Other launchers and Windows sign-in stay.');
+    expect(storage).toContain('confirmationToken!==fullReview.token');
+    expect(app).toContain("fullName!==`Minecraft - ${pending.slot}`");
+    expect(app).toContain('await lazyTester.clearData(pending.slot,pending.token,fullName)');
+    expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
   });
   it('keeps responsive rules scoped away from the five native game surfaces',()=>{
     const css=source('lazy-tester.css');

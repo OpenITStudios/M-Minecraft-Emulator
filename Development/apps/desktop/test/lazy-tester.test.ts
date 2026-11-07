@@ -474,9 +474,9 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
     }
     expect(userFeedback('connection')).toMatchObject({area:'Connection',code:'LT-CON-01'});
     expect(userFeedback('graphicsBlocked').message).toBe(
-      'Graphics preset could not be applied. Close Minecraft sessions and refresh, then try again.');
+      'Close all Minecraft sessions, then Refresh before saving graphics.');
     expect(userFeedback('performanceBlocked').message).toBe(
-      'Frame limits could not be saved. Refresh and try again.');
+      'Refresh before saving FPS limits.');
   });
 
   it('uses specific authored error titles without assuming a failed action retried',()=>{
@@ -497,6 +497,23 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
       expect(title.length).toBeGreaterThan(10);
       expect(title).not.toMatch(/PID|HWND|stack trace|IPC|internal policy|C:\\\\/i);
     }
+  });
+
+  it('keeps authored errors concise without losing safety guidance',()=>{
+    const keys: UserMessageKey[]=['general','backend','binding','connection','launch',
+      'selection','workspace','location','storage','settings','performance','audio','close',
+      'recovery','closeAll','preview','profile','pack','worldPack','cache','clearData',
+      'gameSettings','folder','event','graphicsBlocked','performanceBlocked',
+      'windowControl','windowStatus','windowClose','closeIncomplete','closeRejected'];
+    for(const key of keys){
+      const message=userMessage(key);
+      expect(message.length).toBeLessThanOrEqual(80);
+      expect(message).not.toMatch(/PID|HWND|stack trace|internal policy/i);
+    }
+    expect(userMessage('launch')).toContain('may still be starting');
+    expect(userMessage('recovery')).toContain('not window restoration');
+    expect(userMessage('clearData')).toContain('unfinished');
+    expect(userMessage('binding')).toContain('No game was launched');
   });
 
   it('retains distinct unconfirmed windows until each gets its own positive receipt',()=>{
@@ -576,7 +593,7 @@ describe('Lazy Tester existing-card guidance',()=>{
     expect(launcherCardGuidance({...stopped,state:'NOT_RESPONDING'},false)).toBeNull();
   });
   it('explains uncertain status using the original manual recovery',()=>{
-    expect(launcherCardGuidance({...stopped,state:'STARTING'},true)).toContain('starting');
+    expect(launcherCardGuidance({...stopped,state:'STARTING'},true)).toContain('Starting.');
     expect(launcherCardGuidance({...stopped,state:'NOT_RESPONDING'},true)).toContain('Refresh');
     expect(launcherCardGuidance({...stopped,state:'ATTENTION'},true)).toContain('Refresh');
     expect(launcherCardGuidance({...stopped,process:{pid:9,createdFileTime:'1',sessionId:1,windowHandle:'0x9',responding:true}},true)).toContain('Refresh');
@@ -584,12 +601,12 @@ describe('Lazy Tester existing-card guidance',()=>{
   it('distinguishes a missing game window from an unresponsive window',()=>{
     const noWindow={...stopped,state:'NOT_RESPONDING' as const,issue:'Uncertain original process'};
     const missing=launcherCardGuidance(noWindow,true);
-    expect(missing).toContain('window is unavailable');
+    expect(missing).toContain('Window unavailable');
     expect(missing).not.toContain('Check its window');
     const process={pid:9,createdFileTime:'1',sessionId:1,windowHandle:'0x9',responding:false};
     expect(launcherCardGuidance({...noWindow,process},true)).toContain('Check its window');
     const unconfirmed=launcherCardGuidance({...stopped,state:'STARTING',issue:'Unconfirmed start'},true);
-    expect(unconfirmed).toContain('not confirmed');
+    expect(unconfirmed).toContain('Start unconfirmed');
     expect(unconfirmed).not.toContain('Wait for its window');
   });
   it('never exposes native issue text as guidance',()=>{

@@ -60,7 +60,7 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(play).toContain("if (page==='settings') rememberGraphicsDraft()");
     expect(play).toContain('graphicsPreset=graphicsChoice(selectedSlot)');
     expect(play).toContain('graphicsDrafts.delete(request.slot)');
-    expect(settings).toContain('Unsaved graphics choice.');
+    expect(settings).toContain('Unsaved choice.');
     expect(play).not.toContain('CoordinatePastePanel');
     expect(play).not.toContain('F3InspectorPanel');
     expect(play).not.toContain('projectF3Inspector');

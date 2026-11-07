@@ -421,7 +421,7 @@
     if(busy||!settings?.backgroundAudio)return;
     if(refreshing||resizing){queuedAudio=mode;return;}
     busy=true;issueKey=null;settingsNotice='';
-    try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;profiles=snapshot.profiles;settingsNotice='Background audio saved. Applies to managed Minecraft sessions immediately.';}
+    try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;profiles=snapshot.profiles;settingsNotice='Background audio saved and applied to managed games.';}
     catch(error){issueKey='audio';}
     finally{busy=false;}
   }
@@ -438,8 +438,8 @@
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
       graphicsDrafts.delete(request.slot);
       settingsNotice=request.preset==='Preserve'
-        ? 'Minecraft - '+request.slot+': Preserve Visuals preference saved. Future launches leave Minecraft graphics options unchanged; existing edits are not undone.'
-        : 'Minecraft - '+request.slot+': '+request.preset+' graphics preference saved. This preset takes effect at the next launch.';
+        ? 'Minecraft - '+request.slot+': Preserve Visuals saved. Future launches leave existing graphics unchanged.'
+        : 'Minecraft - '+request.slot+': '+request.preset+' graphics preference saved for next launch.';
     }catch(error){
       // An unconfirmed controller receipt must not erase the user's pending
       // choice. Keep a UI-only draft until a later Settings refresh can
@@ -460,7 +460,7 @@
       const snapshot=await lazyTester.savePerformance(limits.active,limits.background);
       profiles=snapshot.profiles;settings=snapshot.settings;
       activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;
-      performanceNotice='Saved. New limits apply when each Minecraft profile next starts.';
+      performanceNotice='FPS limits saved. Applies when each game next starts.';
     }catch(error){issueKey='performance';}
     finally{savingPerformance=false;busy=false;}
   }
@@ -784,12 +784,12 @@
       profiles=snapshot.profiles;storage=snapshot.storage;
       storageReportReceivedAt=storageReportReceivedTime();
       storageNotice=pending.action==='EnableTextureStreaming'
-        ? 'Minecraft - '+pending.slot+': Texture Streaming enabled in saved options. Restart normally; GPU and system RAM benefits remain unverified. The previous settings are backed up.'
+        ? 'Minecraft - '+pending.slot+': Texture Streaming enabled in saved settings. Restart to apply. Memory benefit unverified; settings backed up.'
         : pending.action==='DisableTextureStreaming'
-          ? 'Minecraft - '+pending.slot+': Texture Streaming disabled in saved options. Restart normally; this may increase GPU memory use. The previous settings are backed up.'
+          ? 'Minecraft - '+pending.slot+': Texture Streaming disabled in saved settings. Restart to apply; GPU use may increase. Settings backed up.'
         : pending.action==='DisableInputResponse'
-          ? 'Minecraft - '+pending.slot+': Improved Input Response disabled in saved options. The previous settings are backed up for Restore. Restart this Minecraft normally to apply; RAM savings on Education 26.32 are unverified.'
-          : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Changes apply at the next launch; your saved graphics preset is reapplied. Previous settings are available through Restore settings.`;
+          ? 'Minecraft - '+pending.slot+': Improved Input Response disabled. Restart to apply; RAM benefit unverified. Settings backed up for Restore.'
+          : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Applies next launch with saved graphics preference. Previous settings remain available through Restore.`;
     } catch(error) {issueKey='settings';storage=null;}
     finally {busy=false;}
   }
@@ -819,7 +819,7 @@
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
       profiles=snapshot.profiles;storage=snapshot.storage;
       storageReportReceivedAt=storageReportReceivedTime();
-      storageNotice=`Minecraft - ${pending.slot}: local data cleared. Its next launch uses an empty profile. Other launchers, the Minecraft installation and app preferences are kept.`;
+      storageNotice=`Minecraft - ${pending.slot}: local data cleared. Next launch uses an empty profile. Other launchers, Minecraft installation and app preferences stay.`;
     } catch(error) {issueKey='clearData';storage=null;}
     finally {busy=false;clearingData=false;}
   }
@@ -976,13 +976,13 @@
       {#if uncertainWindowSlots.size > 0}
         <section class="lt-exit-recovery" role="status" tabindex="0" aria-label="Window recovery unconfirmed">
           <h2>Window recovery needs attention</h2>
-          <p>{recoveryLabels(uncertainWindowSlots)}: Window restoration is unconfirmed. Check accessible game windows before another close. Refresh checks session status, not window restoration.</p>
+          <p>{recoveryLabels(uncertainWindowSlots)}: Window restoration unconfirmed. Check game windows before closing again. Refresh checks status only.</p>
         </section>
       {/if}
       {#if closeFailure}
         <section class="lt-exit-recovery" role="status" tabindex="0" aria-label="Exit recovery">
           <h2>Exit was not completed</h2>
-          <p>Some Minecraft sessions may still be running. Your remaining sessions were preserved. Choose a responsive Minecraft below to return to Play, or finish an open game dialog normally.</p>
+          <p>Some games may still be running. Other sessions were preserved. Check open dialogs or select a responsive game below.</p>
           <div class="lt-actions"><button class="lt-secondary" on:click={()=>{closeFailure='';void refresh();}}>Dismiss and refresh</button></div>
           
         </section>
@@ -1001,7 +1001,7 @@
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some Minecraft sessions may still be running and native window recovery is not guaranteed. Review each session before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lt-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Reconnecting saved data automatically. No setup is needed.':nativeBackend==='Unsupported'?'Native Minecraft sessions are not supported by this application build on this OS.':!binding?.configured?'Retry the connection. Your existing accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some games may still be running. Check their windows before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lt-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Checking existing profiles. No setup needed.':nativeBackend==='Unsupported'?'Minecraft session management is not supported on this OS.':!binding?.configured?'Retry connection. Accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
@@ -1015,7 +1015,7 @@
         {#if closeOneSlot!==null}
           <section class="lt-single-close-confirm" aria-label="Confirm one Minecraft close" bind:this={closeOneReviewElement}>
             <h3>Close Minecraft - {closeOneSlot}?</h3>
-            <p>Only this Minecraft session will be asked to exit normally. Other games will keep running. Save any work in Minecraft before continuing. Choose Cancel before switching pages.</p>
+            <p>Only this Minecraft session will close normally. Other games keep running. Save your work first; Cancel before changing pages.</p>
             <div class="lt-actions">
               <button disabled={busy||refreshing||resizing||closeInProgress||nativeExitReview} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
               <button class="lt-secondary" bind:this={closeCancelButton} disabled={busy||closeInProgress||nativeExitReview} on:click={cancelCloseOne}>Cancel</button>
@@ -1023,7 +1023,7 @@
           </section>
         {/if}
         {#if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>{/if}
-        <p class="lt-help" hidden={active!==null&&!detached}>{!binding?.configured?'Saved launcher data is checked automatically.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
+        <p class="lt-help" hidden={active!==null&&!detached}>{!binding?.configured?'Saved profiles are checked automatically.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
         {#if previewIssue}<details class="lt-preview-details"><summary>Preview unavailable</summary><p>{previewIssue}</p></details>{/if}
         {/if}
       </section>

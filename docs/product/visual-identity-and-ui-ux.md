@@ -1113,3 +1113,30 @@ details, error visibility in Settings, and updated text in the
 synthetic browser journey. **AUTHORED_NOT_EXECUTED**; installed
 WebView2, 920×620 and 100–200% DPI, keyboard/Narrator, real native
 errors, filesystem operations and gameplay remain **NOT_EXECUTED**.
+
+## Concise user-facing text — operator final instruction (7 November 2026)
+
+Use **short, direct, familiar English** in Lazy Tester. Every
+operation-specific global error has an existing authored heading,
+one actionable explanation (at most 80 characters), the original
+safe **Refresh status** action where available, and collapsed
+**Error codes**. A status refresh never replays a failed launch,
+close, settings save, restoration or data deletion.
+
+Use one short help sentence per ordinary field. Explain only the
+scope, effective time and necessary next action. Do not repeat
+a section title in the next sentence. Keep technical details under
+existing collapsible sections, not on Play or in new dashboards.
+Five launcher health notices stay short and correctly tied to their
+original native observation; preview failure is never game stoppage.
+
+**Safety exceptions:** do not shorten away uncertainty about a game
+still running, the current/previous Restore backup point, restart
+requirements, permanent deletion of worlds/account data, absence of
+a recovery backup or Windows-managed sign-in remaining. Preserve the
+exact original typed name/acknowledgement/token admission and Cancel.
+These details belong in the existing confirmation UI, not a new page.
+
+The UI, copy and pure test fixtures were revised at source-only
+scope; Vitest, browser rendering, installed WebView2, native Windows
+DWM, Minecraft gameplay and data operations are **NOT_EXECUTED**.

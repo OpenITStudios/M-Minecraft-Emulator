@@ -41,14 +41,14 @@ export function projectSessionHealth(observation: SessionHealthObservation): Ses
         slot, kind: 'window',
         title: profile.process ? 'Window not responding' : 'Game window unavailable',
         guidance: profile.process
-          ? 'The game may still be running. Check its window, then choose Refresh.'
-          : 'Minecraft may still be running. Do not launch it again yet; choose Refresh.',
+          ? 'The game may still be running. Check its window, then Refresh.'
+          : 'Game may still be running. Refresh before launching again.',
         action: 'refresh',
       });
     } else if (profile.state === 'STARTING' && profile.issue !== null) {
       issues.push({
         slot, kind: 'launch', title: 'Start not confirmed',
-        guidance: 'Minecraft may still be starting. Choose Refresh before another launch.',
+        guidance: 'Game may still be starting. Refresh before another launch.',
         action: 'refresh',
       });
     } else if (profile.state === 'ATTENTION' || profile.issue !== null) {
@@ -66,8 +66,8 @@ export function projectSessionHealth(observation: SessionHealthObservation): Ses
       issues.push({
         slot, kind: 'preview', title: 'Preview unavailable',
         guidance: responding
-          ? 'The game window is responding, but its preview is unavailable. Select game to view it.'
-          : 'The preview is unavailable and window response is unconfirmed. Choose Refresh.',
+          ? 'Window responds, but preview is unavailable. Select game.'
+          : 'Preview unavailable; window response unconfirmed. Refresh.',
         action: responding ? 'open' : 'refresh',
       });
     }
@@ -83,14 +83,14 @@ export function launcherCardGuidance(profile: ProfileSession, observed: boolean)
   if (!observed) return null;
   switch (profile.state) {
     case 'STARTING': return profile.issue === null
-      ? 'Minecraft is starting. Wait for its window before trying again.'
-      : 'Minecraft start is not confirmed. Choose Refresh before another attempt.';
+      ? 'Starting. Wait for the game window.'
+      : 'Start unconfirmed. Refresh before trying again.';
     case 'NOT_RESPONDING': return profile.process === null
-      ? 'Game window is unavailable. Choose Refresh before trying another launch.'
-      : 'Minecraft is not responding. Check its window, then choose Refresh.';
-    case 'ATTENTION': return 'Choose Refresh to check this launcher before another launch.';
+      ? 'Window unavailable. Refresh before trying again.'
+      : 'Game not responding. Check its window, then Refresh.';
+    case 'ATTENTION': return 'Refresh before launching again.';
     case 'STOPPED': return profile.process !== null || profile.issue !== null
-      ? 'The previous session is not fully verified. Refresh before trying again.'
+      ? 'Previous session unverified. Refresh before trying again.'
       : null;
     default: return null;
   }

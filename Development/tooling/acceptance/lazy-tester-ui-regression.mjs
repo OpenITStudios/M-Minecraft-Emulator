@@ -562,7 +562,7 @@ try {
   assert.equal(await presetExplanation.getAttribute('open'),null,
     'Technical preset explanations stay out of the default Settings path');
   await presetExplanation.locator('summary').click();
-  assert.match(await presetExplanation.textContent(),/simulation distance stays unchanged/,
+  assert.match(await presetExplanation.textContent(),/simulation distance is unchanged/,
     'Advanced graphics explanation remains accessible on demand');
   await page.getByLabel('While playing',{exact:true}).fill('60');await page.getByLabel('In the background',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
@@ -582,7 +582,7 @@ try {
     'Connect/locate must appear before the final permanent-delete danger zone');
   await section('General').click();assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
   await page.getByRole('button',{name:'Save FPS limits',exact:true}).click();
-  await page.getByText('Saved. New limits apply when each Minecraft profile next starts.').waitFor();
+  await page.getByText('FPS limits saved. Applies when each game next starts.').waitFor();
   assert.equal(await page.locator('#lt-frame-limits-section').evaluate(
     node=>document.activeElement===node),true,
     'A completed FPS limits save must retain focus on its persistent Frame Limits heading');
@@ -798,7 +798,7 @@ try {
   assert.equal(await packDetails.getAttribute('open'),null,
     'Read-only resource pack diagnostics start collapsed');
   await packDetails.locator('summary').click();
-  assert.match(await packDetails.textContent(),/Manifest-containing folders/,
+  assert.match(await packDetails.textContent(),/pack folders with manifests/,
     'Existing resource pack evidence remains accessible under the disclosure');
   assert.equal(await page.locator('.lt-storage-packs-body button').count(),0,
     'Viewing pack diagnostics must not expose an invented mutation control');

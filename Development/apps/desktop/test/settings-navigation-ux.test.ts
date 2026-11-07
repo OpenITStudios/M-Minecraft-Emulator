@@ -83,8 +83,8 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(general).toContain('About legacy graphics presets');
     expect(general).toContain('both set 12 chunks and MSAA 1');
     expect(general).toContain('not guaranteed FPS improvements');
-    expect(general).toContain('FPS means frames per second.');
-    expect(general).toContain('These are caps, not measured FPS.');
+    expect(general).toContain('FPS limits: 5–1000.');
+    expect(general).toContain('These are caps, not measured FPS; they apply at the next launch.');
     expect(storage).toContain('<summary>Find existing profile data</summary>');
     expect(storage).toContain('<strong>Advanced recovery</strong>');
     expect(general).toContain('Save graphics preference');
