@@ -64,16 +64,24 @@ function metadata(text, path) {
   if (!DOC_ID.test(data.id) || data.class !== 'DOCUMENT' ||
       !/^[a-z0-9-]+$/.test(data.domain) || !/^[A-Z_]+$/.test(data.role) ||
       !['CANONICAL','REFERENCE','WORKING','DERIVED','HISTORICAL'].includes(data.authority) ||
-      !['ACTIVE','HISTORICAL','RETIRED'].includes(data.lifecycle)) {
+      !['ACTIVE','SOURCE_ONLY','DRAFT','HISTORICAL','RETIRED'].includes(data.lifecycle)) {
     throw new Error(path + ': unsupported document metadata');
   }
-  // Legacy WORKING does not imply CANONICAL. Historical records cannot
-  // become active by following a link from current documentation.
-  const authority = data.lifecycle !== 'ACTIVE' ? 'HISTORICAL'
+  // Emulator metadata has SOURCE_ONLY and DRAFT in addition to ACTIVE
+  // and HISTORICAL. SOURCE_ONLY remains routable with a strict proof
+  // ceiling; DRAFT is non-authoritative, not a retired production design.
+  // Legacy WORKING never becomes CANONICAL.
+  const current = ['ACTIVE','SOURCE_ONLY'].includes(data.lifecycle);
+  const lifecycle = data.lifecycle === 'SOURCE_ONLY' ? 'ACTIVE'
+    : data.lifecycle === 'RETIRED' ? 'HISTORICAL' : data.lifecycle;
+  const authority = !current
+    ? (data.lifecycle === 'DRAFT' ? 'REFERENCE' : 'HISTORICAL')
     : data.authority === 'WORKING' ? 'REFERENCE' : data.authority;
   return {id:data.id, class:'DOCUMENT', domain:data.domain,
     role:data.role, authority, declaredAuthority:data.authority,
-    lifecycle:data.lifecycle, path};
+    lifecycle, declaredLifecycle:data.lifecycle,
+    ...(data.lifecycle === 'SOURCE_ONLY' ? {proofCeiling:'SOURCE_ONLY'} : {}),
+    path};
 }
 
 function maskLine(line, state) {

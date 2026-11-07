@@ -45,14 +45,18 @@ is already known. This tool does not replace the
 | `SOURCE` with `CANONICAL` / `ACTIVE` | Actual file | Source location; correctness still requires code examination |
 | `DOCUMENT` with `REFERENCE` | Reference only | Legacy `WORKING` metadata is **not** silently promoted |
 | `DOCUMENT` with `HISTORICAL` | Historical only | No current launch or implementation authority |
+| `DOCUMENT` with `SOURCE_ONLY` lifecycle | Active source ceiling | May guide source work, never proves game/runtime |
+| `DOCUMENT` with `DRAFT` lifecycle | Draft/reference only | Cannot authorize production behavior |
 | `DOCUMENT` with `DERIVED` | Derived section | Address for retrieval, never independent policy |
 
-Existing Emulator documents use role labels like `REPORT` or `PROCEDURE`,
-legacy `WORKING` authority, and `HISTORICAL` lifecycle. Unlike
-M-Lazy-Developer, these are legitimate migration inputs. The tool keeps
-their declared metadata, normalizes `WORKING` as `REFERENCE` for navigation,
-and always treats non-ACTIVE records as HISTORICAL. It does **not** mass-rewrite
-past documents or infer that an old CI, VMware or Sandboxie instruction is active.
+Existing Emulator documents also use role labels such as `REPORT` and
+`PROCEDURE`, legacy `WORKING` authority, and `SOURCE_ONLY`, `DRAFT`
+or `HISTORICAL` lifecycle. The tool retains declared values. `WORKING`
+normalizes to `REFERENCE`; `SOURCE_ONLY` remains navigable as active
+source-level guidance **without runtime proof**; `DRAFT` is
+non-authoritative; `HISTORICAL` / `RETIRED` remain historical.
+This does **not** mass-rewrite old documents or reactivate old CI, VMware
+or Sandboxie designs.
 
 The repository graph is a derived read-only projection of **authored Markdown
 and exact-path Obsidian wikilinks** plus source-proven H2/H3 hierarchy:

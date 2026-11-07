@@ -67,6 +67,20 @@ test('legacy WORKING is not promoted; historical sources remain excluded',()=>fi
   assert.equal(index.byId.get('document.system.old').authority,'HISTORICAL');
   assert.equal(explainResourcePath(index,'document.docs.router','document.system.old').status,'UNKNOWN_RESOURCE');
 }));
+test('SOURCE_ONLY is current source guidance and DRAFT cannot become current authority',()=>fixture(({root,put})=>{
+  put('docs/system/graph.md',metadata('document.system.graph','system','GUIDE','WORKING','SOURCE_ONLY')+
+    '# Source-only contract\n');
+  put('docs/system/draft.md',metadata('document.system.draft','system','SPECIFICATION','WORKING','DRAFT')+
+    '# Draft work\n');
+  const index=buildKnowledgeIndex(root);
+  const sourceOnly=index.byId.get('document.system.graph');
+  assert.equal(sourceOnly.lifecycle,'ACTIVE');
+  assert.equal(sourceOnly.declaredLifecycle,'SOURCE_ONLY');
+  assert.equal(sourceOnly.proofCeiling,'SOURCE_ONLY');
+  assert.equal(sourceOnly.authority,'REFERENCE');
+  assert.equal(index.byId.get('document.system.draft').authority,'REFERENCE');
+  assert.equal(explainResourcePath(index,'document.docs.router','document.system.draft').status,'UNKNOWN_RESOURCE');
+}));
 test('missing targets cannot create fabricated graph edges',()=>fixture(({root,put})=>{
   put('docs/system/graph.md',metadata('document.system.graph','system')+
     '# Graph\n\n[missing](missing.md)\n');
