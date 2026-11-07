@@ -53,6 +53,6 @@ describe('Data Storage keyboard review source contract', ()=>{
     expect(storage).toContain('!selectedStorage.gameSettings.canReset && !selectedStorage.gameSettings.canRestore');
     expect(settings).toContain('!settings.canApplyPreset && runningCount===0');
     expect(settings).toContain('performanceDirty && !available');
-    expect(storage).toContain('disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear}');
+    expect(storage).toContain('disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.cache.canClear}');
   });
 });

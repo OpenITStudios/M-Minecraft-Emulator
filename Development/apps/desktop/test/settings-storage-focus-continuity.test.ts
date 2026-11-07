@@ -37,15 +37,16 @@ describe('Lazy Tester Settings/Storage transient focus source contract',()=>{
   it('keeps background audio focused context while preserving original native admission',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
-    expect(settings).toContain('function changeAudioWithFocus(event: Event): void');
+    expect(settings).toContain('async function changeAudioWithFocus(event: Event): Promise<void>');
     expect(settings).toContain('input instanceof HTMLInputElement');
     expect(settings).toContain('document.activeElement === input');
     expect(settings).toContain('audioHeading?.focus({preventScroll:true})');
-    expect(settings).toContain("onSaveAudio(input.checked?'Mute':'Keep')");
+    expect(settings).toContain('await onSaveAudio(intended)');
+    expect(settings).toContain("input.checked = settings?.backgroundAudio === 'Mute'");
     expect(settings).toContain('on:change={changeAudioWithFocus}');
     expect(settings).toContain('bind:this={audioHeading} tabindex="-1"');
     expect(app).toContain("await lazyTester.saveAudio(mode)");
-    expect(settings).toContain('disabled={busy||audioQueued||!settings?.backgroundAudio}');
+    expect(settings).toContain('disabled={busy||audioQueued||refreshing||resizing||!available||!settings?.backgroundAudio}');
   });
 
   it('retains Storage cache/settings review semantics and protects full-clear admission',()=>{

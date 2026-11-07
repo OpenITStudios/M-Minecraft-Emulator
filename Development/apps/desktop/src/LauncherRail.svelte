@@ -17,6 +17,7 @@
   export let available: boolean;
   export let bindingConfigured: boolean;
   export let busy: boolean;
+  export let reviewPending: boolean;
   export let closeInProgress: boolean;
   export let nativeExitReview: boolean;
   export let guidedRecoveryBlocked: boolean;
@@ -71,7 +72,7 @@
         aria-pressed={observedSlot&&profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
         aria-label={cardActionName(profile, statusLabel)}
         aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
-        disabled={busy||!observedSlot||!available||!bindingConfigured||
+        disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
         <!-- Compact visual identity, full Minecraft slot stays in accessible names and dialogs. -->
@@ -101,7 +102,7 @@
         <button class="lt-secondary lt-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}
           title={'Close Minecraft - '+profile.slot+' normally'}
-          disabled={busy||closeInProgress||nativeExitReview||!available||!bindingConfigured}
+          disabled={busy||reviewPending||closeInProgress||nativeExitReview||!available||!bindingConfigured}
           on:click={event=>onRequestClose(profile.slot,event.currentTarget)}><span aria-hidden="true">×</span></button>
       {/if}
     </div>

@@ -1,5 +1,6 @@
 <script lang="ts">
   // Presentation only; parent owns state, saved settings, admission and native IPC.
+  import {tick} from 'svelte';
   import type {BackgroundAudio, GraphicsPreset, ProfileSession, ProfileSlot, SettingsReport} from './app/bridge/lazyTester.js';
   import {userMessage} from './app/presentation/sessionFeedback.js';
 
@@ -29,7 +30,7 @@
   export let onRequestPreset: () => void;
   export let onDiscardGraphics: () => void;
   export let onRequestPerformanceSave: () => void;
-  export let onSaveAudio: (mode: BackgroundAudio) => void;
+  export let onSaveAudio: (mode: BackgroundAudio) => Promise<void>;
 
   // Preserve a deliberate user's keyboard context when an existing save
   // disables its own control. These headings remain outside the Tab order;
@@ -49,12 +50,20 @@
       frameHeading?.focus({preventScroll:true});
     onRequestPerformanceSave();
   }
-  function changeAudioWithFocus(event: Event): void {
+  async function changeAudioWithFocus(event: Event): Promise<void> {
     const input = event.currentTarget;
     if (!(input instanceof HTMLInputElement)) return;
+    // A native failure or lost receipt cannot leave a visually toggled
+    // checkbox claiming that the new audio preference was applied.
+    const intended = input.checked?'Mute':'Keep';
     if (document.hasFocus() && document.activeElement === input)
       audioHeading?.focus({preventScroll:true});
-    onSaveAudio(input.checked?'Mute':'Keep');
+    try {
+      await onSaveAudio(intended);
+    } finally {
+      await tick();
+      if (input.isConnected) input.checked = settings?.backgroundAudio === 'Mute';
+    }
   }
 
   // Field feedback only; original performanceValid and native admission own Save.
@@ -89,5 +98,5 @@
             {#if performanceDirty && !available}<p class="lt-help" role="status">Session status unavailable. Refresh before saving.</p>{/if}
             <div class="lt-actions"><button type="submit" disabled={busy||performanceQueued||!available||!performanceDirty||!performanceValid}>{savingPerformance||performanceQueued?'Saving…':'Save FPS limits'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy||performanceQueued} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}</div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
-          <section class="lt-group" aria-labelledby="lt-app-behavior-section"><h2 id="lt-app-behavior-section">App behavior</h2><div class="lt-setting"><div><h3>When LazyTester closes</h3><p>On exit, LazyTester closes managed games normally and waits.</p></div></div><p class="lt-help">If a game needs attention, LazyTester stays open. Other Minecraft apps are unaffected.</p><div class="lt-setting"><div><h3 bind:this={audioHeading} tabindex="-1">Background game audio</h3><p>Applies immediately after saving. Existing mute and volume settings stay.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Audio control is unavailable in this controller.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||audioQueued||!settings?.backgroundAudio} aria-label="Mute background games" on:change={changeAudioWithFocus}/>Mute background games</label></div></section>
+          <section class="lt-group" aria-labelledby="lt-app-behavior-section"><h2 id="lt-app-behavior-section">App behavior</h2><div class="lt-setting"><div><h3>When LazyTester closes</h3><p>On exit, LazyTester closes managed games normally and waits.</p></div></div><p class="lt-help">If a game needs attention, LazyTester stays open. Other Minecraft apps are unaffected.</p><div class="lt-setting"><div><h3 bind:this={audioHeading} tabindex="-1">Background game audio</h3><p>Applies immediately after saving. Existing mute and volume settings stay.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Audio control is unavailable in this controller.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||audioQueued||refreshing||resizing||!available||!settings?.backgroundAudio} aria-label="Mute background games" on:change={changeAudioWithFocus}/>Mute background games</label></div></section>
         </div>

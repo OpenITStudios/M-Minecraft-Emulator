@@ -243,7 +243,13 @@
       manualRefreshRequested = true; // Original manual Refresh path.
     }
   }
-  function select(slot: ProfileSlot) { closeOneSlot=null;closeOneTrigger=null; requested = null; queued = slot; }
+  function select(slot: ProfileSlot) {
+    // Only explicit Cancel ends a game/storage confirmation. Card selection
+    // must not silently discard a pending review or replace navigation.
+    if (closeReviewActive(reviewState()) || navigationReviewOpen || busy ||
+        queuedPage !== null) return;
+    requested = null; queued = slot;
+  }
   async function consumeSelection() {
     const slot = queued; queued = null;
     if (slot === null || !available || profiles.find(profile => profile.slot === slot)?.state !== 'RUNNING') return;
@@ -314,7 +320,7 @@
   async function launch(slot: ProfileSlot) {
     // Read the current observed slot again; queued or stale card clicks do
     // not grant permission to launch an ATTENTION/uncertain profile.
-    if (closeInProgress || busy || !binding?.configured ||
+    if (closeInProgress || navigationReviewOpen || busy || !binding?.configured ||
         !canRequestLaunch(profiles.find(profile => profile.slot === slot))) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
     busy = true; issueKey=null; requested = slot;
@@ -367,7 +373,7 @@
     finally { loadingPage = null; busy = false; }
   }
   function requestHeaderRefresh(event: MouseEvent): void {
-    if (closeReviewActive(reviewState())) return;
+    if (navigationReviewOpen) return;
     // A keyboard-triggered click (detail=0) would disable its own button.
     // Move focus first to the existing page heading; a user Tab/Shift+Tab
     // choice from there always supersedes our eventual restoration.
@@ -381,7 +387,8 @@
   async function refreshPage() {
     const keyboardOrigin = headerRefreshFocusPage;
     headerRefreshFocusPage = null;
-    if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing) return;
+    if (nativeBackend !== 'WindowsNative' || navigationReviewOpen ||
+        busy || refreshing || resizing) return;
     manualRefreshing=true;
     try {
     issueKey=null;
@@ -418,7 +425,7 @@
     }
   }
   async function saveAudio(mode:'Keep'|'Mute') {
-    if(busy||!settings?.backgroundAudio)return;
+    if(busy||!available||!settings?.backgroundAudio)return;
     if(refreshing||resizing){queuedAudio=mode;return;}
     busy=true;issueKey=null;settingsNotice='';
     try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;profiles=snapshot.profiles;settingsNotice='Background audio saved and applied to managed games.';}
@@ -484,14 +491,16 @@
     cancelCloseOne();
   }
   function requestCloseOne(slot: ProfileSlot, trigger: HTMLButtonElement) {
-    if (closeInProgress || nativeExitReview || busy || closingOneSlot !== null) return;
+    if (closeInProgress || nativeExitReview || busy || closingOneSlot !== null ||
+        closeOneSlot !== null) return;
     const profile=profiles.find(item=>item.slot===slot);
     if (!profile || !['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)) return;
     // Keep the user's confirmation available while an old Inspect finishes,
     // but never allow that result to overwrite state after review began.
     observationEpoch++;
-    if (queuedLaunch===slot) queuedLaunch=null;
-    if (queued===slot) queued=null;
+    // A confirmation supersedes any uncommitted UI intent. Do not replay
+    // another slot's queued launch/selection after the user presses Cancel.
+    queuedLaunch=null;queued=null;queuedPage=null;
     closeOneTrigger=trigger;closeOneSlot=slot;
     // Cancel is the safe initial keyboard choice. Do not reselect/launch games.
     void tick().then(()=>{
@@ -574,7 +583,7 @@
   }
 
   async function release() {
-    if (busy || refreshing || resizing) return;
+    if (navigationReviewOpen || busy || refreshing || resizing) return;
     const slot=active;
     const target=profiles.find(profile=>profile.slot===slot)?.process;
     if(slot===null||!target)return;
@@ -795,12 +804,13 @@
   }
   function reviewFullClear() {
     const status=selectedStorage?.fullClear;
-    if(busy||!status?.canClear||!status.confirmationToken)return;
+    if(busy||navigationReviewOpen||!status?.canClear||!status.confirmationToken)return;
     recovery=null;clearSlot=null;fullName='';fullAck=false;
     fullReview={slot:selectedSlot,token:status.confirmationToken,pending:status.pending};
     void tick().then(()=>document.getElementById('full-clear-name')?.focus());
   }
   function reviewSettings(action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming'|'DisableTextureStreaming') {
+    if(navigationReviewOpen||busy||refreshing||resizing||!available)return;
     fullReview=null;clearSlot=null;recovery={slot:selectedSlot,action};
   }
   async function clearAllData() {
@@ -931,10 +941,10 @@
         <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions">
           <button class="lt-secondary" bind:this={headerRefreshButton}
-            disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'}
+            disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
             on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>
           {#if page==='workspace'&&active!==null}
-            <button class="lt-secondary" disabled={busy||refreshing||resizing}
+            <button class="lt-secondary" disabled={busy||navigationReviewOpen||refreshing||resizing}
               title={'Open only Minecraft - '+active+' in its own window'}
               aria-label={'Open Minecraft - '+active+' in a window'}
               on:click={release}>Separate window</button>
@@ -961,7 +971,7 @@
           <div class="lt-alert-footer">
             {#if nativeBackend==='WindowsNative'}
               <button class="lt-secondary lt-alert-refresh" type="button"
-                disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'}
+                disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
                 title="Checks current status only; does not repeat the failed action."
                 on:click={requestHeaderRefresh}>Refresh status</button>
             {/if}
@@ -1010,6 +1020,7 @@
           {separateSlots} unresolvedRecovery={uncertainWindowSlots}
           {available} bindingConfigured={!!binding?.configured} {busy}
           {closeInProgress} {nativeExitReview} {guidedRecoveryBlocked}
+          reviewPending={closeReviewPending}
           observePreview={image} onSelect={select} onLaunch={launch}
           onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}/>
         {#if closeOneSlot!==null}
@@ -1048,7 +1059,7 @@
           {clearSlot} {recovery} {fullReview} {clearingData}
           {dataLocation} {locationIssue} {runningCount}
           onChooseSlot={chooseSlot}
-          onReviewCache={() => {fullReview=null;recovery=null;clearSlot=selectedSlot;}}
+          onReviewCache={() => {if (!navigationReviewOpen && !busy && !refreshing && !resizing) {fullReview=null;recovery=null;clearSlot=selectedSlot;}}}
           onClearCache={clearCache}
           onCancelCacheReview={() => {clearSlot=null;}}
           onOpenFolder={openFolder} onReviewSettings={reviewSettings}

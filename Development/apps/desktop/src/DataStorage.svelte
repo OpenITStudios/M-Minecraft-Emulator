@@ -57,11 +57,15 @@
   let cacheCancelButton: HTMLButtonElement | undefined;
   let settingsCancelButton: HTMLButtonElement | undefined;
 
+  // Keep one storage review in place until native confirmation or Cancel.
+  $: storageReviewOpen = clearSlot !== null || recovery !== null || fullReview !== null;
+
   // Presentation-only input feedback; native data-clear admission is unchanged.
   $: typedFullClearNameIncorrect = fullReview !== null && fullName.length > 0 &&
     fullName !== `Minecraft - ${fullReview.slot}`;
 
   function showCacheReview(trigger: HTMLButtonElement): void {
+    if (storageReviewOpen || busy || refreshing || resizing) return;
     reviewTrigger = trigger;
     const slot = selectedSlot;
     onReviewCache();
@@ -72,6 +76,7 @@
   }
 
   function showSettingsReview(action: StorageSettingsAction, trigger: HTMLButtonElement): void {
+    if (storageReviewOpen || busy || refreshing || resizing) return;
     reviewTrigger = trigger;
     const slot = selectedSlot;
     onReviewSettings(action);
@@ -83,6 +88,7 @@
   }
 
   function showFullReview(trigger: HTMLButtonElement): void {
+    if (storageReviewOpen || busy || refreshing || resizing) return;
     reviewTrigger = trigger;
     // The parent already focuses the typed identity confirmation field.
     onReviewFullClear();
@@ -157,10 +163,10 @@
               ? 'Last storage report received: '+(storageReportReceivedAt||'time unavailable')+'. Not live. Includes cache and world files, but not per-world sizes. Partial values are minimums.'
               : 'Refresh to inspect storage. Not measured does not mean empty.'}</p>
           </section>
-          <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove temporary web cache. Accounts, worlds and settings stay.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lt-help">Cache cleanup unavailable. Refresh to check again.</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></section>
+          <section class="lt-setting"><div><h3>Clear cache</h3><p>Remove temporary web cache. Accounts, worlds and settings stay.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lt-help">Cache cleanup unavailable. Refresh to check again.</p>{/if}</div><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></section>
           {#if clearSlot===selectedSlot}<section class="lt-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts, settings and other launchers stay.</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>commitCacheReview(selectedSlot)}>Clear web cache</button><button class="lt-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview(onCancelCacheReview)}>Cancel</button></div></section>{/if}
-          <section class="lt-setting"><div><h3>Data folder</h3><p class="lt-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!bindingConfigured} on:click={()=>onOpenFolder(selectedSlot)}>Open folder</button></section>
-          <details class="lt-location-options"><summary>Find existing profile data</summary><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
+          <section class="lt-setting"><div><h3>Data folder</h3><p class="lt-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured} on:click={()=>onOpenFolder(selectedSlot)}>Open folder</button></section>
+          <details class="lt-location-options"><summary>Find existing profile data</summary><p class="lt-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lt-error">{locationIssue}</p>{/if}<div class="lt-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing||storageReviewOpen} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
           <details class="lt-storage-packs">
             <summary><strong>Resource pack details</strong><small>{selectedStorage?.resourcePacks?(selectedStorage.resourcePacks.partial?'Incomplete':selectedStorage.resourcePacks.manifested+' on disk'):'Not inspected'} · read-only</small></summary>
             <div class="lt-storage-packs-body">
@@ -176,27 +182,27 @@
             </div>
           </details>
           <details class="lt-advanced" bind:open={advanced}>
-            <summary><span><strong>Advanced recovery</strong><small>Reset and restore saved settings for this launcher</small></span><span aria-hidden="true">{advanced?'−':'+'}</span></summary>
+            <summary aria-disabled={recovery!==null} title={recovery!==null?'Finish or cancel this recovery review first.':undefined} on:click={event=>{if(recovery!==null)event.preventDefault();}}><span><strong>Advanced recovery</strong><small>Reset and restore saved settings for this launcher</small></span><span aria-hidden="true">{advanced?'−':'+'}</span></summary>
             <div class="lt-advanced-body">
               {#if selectedStorage?.gameSettings?.textureStreamingEnabled===false}
                 <p class="lt-help" role="status">Texture Streaming is off. Memory savings in Education are unverified.</p>
-                <div class="lt-setting"><div><h3>Reduce texture memory</h3><p>Enable for this stopped launcher. May change texture loading. Settings are backed up; restart required.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={event=>showSettingsReview('EnableTextureStreaming',event.currentTarget)}>Review texture streaming…</button></div>
+                <div class="lt-setting"><div><h3>Reduce texture memory</h3><p>Enable for this stopped launcher. May change texture loading. Settings are backed up; restart required.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={event=>showSettingsReview('EnableTextureStreaming',event.currentTarget)}>Review texture streaming…</button></div>
               {:else if selectedStorage?.gameSettings?.textureStreamingEnabled===true}
                 <p class="lt-help">Texture Streaming is on. Memory savings in Education are unverified.</p>
-                <div class="lt-setting"><div><h3>Disable Texture Streaming</h3><p>Disable for this stopped launcher. May increase GPU memory use. Settings are backed up; restart required.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={event=>showSettingsReview('DisableTextureStreaming',event.currentTarget)}>Review disable Texture Streaming…</button></div>
+                <div class="lt-setting"><div><h3>Disable Texture Streaming</h3><p>Disable for this stopped launcher. May increase GPU memory use. Settings are backed up; restart required.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={event=>showSettingsReview('DisableTextureStreaming',event.currentTarget)}>Review disable Texture Streaming…</button></div>
               {:else}
                 <p class="lt-help">Texture Streaming state unknown. No change will be made.</p>
               {/if}
               {#if selectedStorage?.gameSettings?.improvedInputResponseEnabled===true}
                 <p class="lt-help" role="status">Improved Input Response is on. Older versions reported high RAM use; impact here is unverified.</p>
-                <div class="lt-setting"><div><h3>Input-response setting</h3><p>Disable for this stopped launcher. May change input latency. Settings are backed up; restart required.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={event=>showSettingsReview('DisableInputResponse',event.currentTarget)}>Review input setting…</button></div>
+                <div class="lt-setting"><div><h3>Input-response setting</h3><p>Disable for this stopped launcher. May change input latency. Settings are backed up; restart required.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.gameSettings?.canReset||selectedProfile?.state!=='STOPPED'} on:click={event=>showSettingsReview('DisableInputResponse',event.currentTarget)}>Review input setting…</button></div>
               {:else if selectedStorage?.gameSettings?.improvedInputResponseEnabled===false}
                 <p class="lt-help">Improved Input Response is off. RAM savings are unverified.</p>
               {:else}
                 <p class="lt-help">Improved Input Response state unknown. No change assumed.</p>
               {/if}
-              <div class="lt-setting"><div><h3>Reset game settings</h3><p>Back up and reset settings for next launch. Accounts, worlds and cache stay.</p><p class="lt-help">Preserve Visuals does not overwrite Minecraft graphics options.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canReset} on:click={event=>showSettingsReview('Reset',event.currentTarget)}>Reset settings…</button></div>
-              <div class="lt-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified backup. Current settings are backed up first.':'No verified backup yet. Reset creates one.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||!available||!selectedStorage?.gameSettings?.canRestore} on:click={event=>showSettingsReview('Restore',event.currentTarget)}>Restore settings…</button></div>
+              <div class="lt-setting"><div><h3>Reset game settings</h3><p>Back up and reset settings for next launch. Accounts, worlds and cache stay.</p><p class="lt-help">Preserve Visuals does not overwrite Minecraft graphics options.</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.gameSettings?.canReset} on:click={event=>showSettingsReview('Reset',event.currentTarget)}>Reset settings…</button></div>
+              <div class="lt-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified backup. Current settings are backed up first.':'No verified backup yet. Reset creates one.'}</p></div><button class="lt-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.gameSettings?.canRestore} on:click={event=>showSettingsReview('Restore',event.currentTarget)}>Restore settings…</button></div>
               {#if selectedStorage?.gameSettings?.issue}<p class="lt-help">{userMessage('gameSettings')}</p>{:else if !selectedStorage?.gameSettings}<p class="lt-help">Refresh to check recovery options.</p>{:else if !selectedStorage.gameSettings.canReset && !selectedStorage.gameSettings.canRestore}<p class="lt-help">Recovery unavailable. Close this game normally, then Refresh.</p>{/if}
               {#if recovery?.slot===selectedSlot}
                 <section class="lt-cache-confirm" aria-label="Confirm game settings change" bind:this={settingsReviewElement}><h3>{recovery.action==='EnableTextureStreaming'?'Enable Texture Streaming':recovery.action==='DisableTextureStreaming'?'Disable Texture Streaming':recovery.action==='DisableInputResponse'?'Disable Improved Input Response':recovery.action+' settings'} for Minecraft - {recovery.slot}?</h3><p>{recovery.action==='EnableTextureStreaming'?'Enables Texture Streaming for this launcher. May reduce GPU memory, but Education results are unverified. The previous Restore point is replaced with a backup of current settings. Restart required. Accounts, worlds and other launchers stay.':recovery.action==='DisableTextureStreaming'?'Disables Texture Streaming for this launcher. May increase GPU memory use. Current settings are backed up; restart required. Accounts, worlds and other launchers stay.':recovery.action==='DisableInputResponse'?'Disables Improved Input Response for this launcher. Input latency may change; RAM savings are unverified. The previous Restore point is replaced with a backup of current settings. Restart required. Accounts, worlds and other launchers stay.':'Only this launcher’s game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.'}</p><div class="lt-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='EnableTextureStreaming'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.textureStreamingEnabled===false&&selectedProfile?.state==='STOPPED':recovery.action==='DisableTextureStreaming'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.textureStreamingEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='DisableInputResponse'?selectedStorage?.gameSettings?.canReset&&selectedStorage?.gameSettings?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED':recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={commitSettingsReview}>{recovery.action==='EnableTextureStreaming'?'Enable saved option':recovery.action==='DisableTextureStreaming'?'Disable saved option':recovery.action==='DisableInputResponse'?'Disable saved option':recovery.action+' settings'}</button><button class="lt-secondary" bind:this={settingsCancelButton} disabled={busy} on:click={()=>cancelReview(onCancelSettingsReview)}>Cancel</button></div></section>
@@ -204,7 +210,7 @@
             </div>
           </details>
           {#if clearingData}<p class="lt-alert" role="status">Clearing profile data… Keep LazyTester open.</p>{/if}
-          <section class="lt-danger-zone" aria-labelledby="lt-clear-data-heading"><div><h3 id="lt-clear-data-heading" tabindex="-1">Clear all data</h3><p>Permanently deletes this launcher's local accounts, worlds, cache, settings and backups. Minecraft and app preferences stay.</p><p>Export worlds first: no recovery backup is made. Windows sign-in may remain. External backups stay.</p>{#if selectedStorage?.fullClear?.pending}<p>Cleanup is pending. This launcher cannot start until it finishes.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{userMessage('clearData')}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lt-secondary lt-danger" disabled={busy||refreshing||resizing||!available||!selectedStorage?.fullClear?.canClear} on:click={event=>showFullReview(event.currentTarget)}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear all data…'}</button></section>
+          <section class="lt-danger-zone" aria-labelledby="lt-clear-data-heading"><div><h3 id="lt-clear-data-heading" tabindex="-1">Clear all data</h3><p>Permanently deletes this launcher's local accounts, worlds, cache, settings and backups. Minecraft and app preferences stay.</p><p>Export worlds first: no recovery backup is made. Windows sign-in may remain. External backups stay.</p>{#if selectedStorage?.fullClear?.pending}<p>Cleanup is pending. This launcher cannot start until it finishes.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{userMessage('clearData')}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lt-secondary lt-danger" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.fullClear?.canClear} on:click={event=>showFullReview(event.currentTarget)}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear all data…'}</button></section>
           {#if fullReview?.slot===selectedSlot}
             <form class="lt-cache-confirm lt-delete-confirm" aria-label="Confirm full launcher data deletion" bind:this={fullReviewElement} on:submit|preventDefault={onClearAllData}>
               <h3>{fullReview.pending?'Finish clearing':'Clear all data for'} Minecraft - {fullReview.slot}?</h3>

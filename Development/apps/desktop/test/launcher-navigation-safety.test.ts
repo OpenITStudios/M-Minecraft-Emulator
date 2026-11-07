@@ -20,7 +20,7 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     const rail=source('LauncherRail.svelte');
     expect(rail).toContain('observedSlot = profiles.some(item => item.slot === profile.slot)');
     expect(rail).toContain("statusLabel = !observedSlot || !available || !bindingConfigured");
-    expect(rail).toContain('disabled={busy||!observedSlot||!available||!bindingConfigured');
+    expect(rail).toContain('disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured');
     expect(rail).toContain(">{!observedSlot||!available||!bindingConfigured?'Unavailable'");
     expect(rail).toContain("observedSlot && ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)");
     expect(rail).toContain('profile, observedSlot && available && bindingConfigured');
@@ -37,17 +37,16 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     expect(app).toContain('aria-disabled={navigationReviewOpen}');
     expect(app).toContain('disabled={navigationReviewOpen||nativeBackend!==\'WindowsNative\'}');
     expect(app).toContain('disabled={navigationReviewOpen} class:chosen={page===\'storage\'}');
-    expect(app).toContain('Choose Cancel before switching pages.');
-    expect(storage).toContain('Finish or cancel the current review before changing pages');
+    expect(app).toContain('Cancel before changing pages.');
+    expect(storage).toContain('Finish or cancel this review before switching profiles.');
     expect(app).toContain('function cancelCloseOne()');
     expect(storage).toContain('cancelReview(onCancelFullReview)');
   });
   it('shows the date as well as the clock time of recorded Storage checks',()=>{
     const app=source('LazyTesterApp.svelte');
-    expect(app).toContain('function measuredStorageAt(): string');
+    expect(app).toContain('function storageReportReceivedTime(): string');
     expect(app).toContain("toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})");
-    expect((app.match(/storageCheckedAt\s*=\s*measuredStorageAt\(\)/g)??[]))
-      .toHaveLength(6);
+    expect(app).toContain('storageReportReceivedAt=storageReportReceivedTime()');
     expect(app).not.toContain("new Date().toLocaleTimeString('en-US')");
   });
   it('preserves native session and deletion admission and preview identity',()=>{

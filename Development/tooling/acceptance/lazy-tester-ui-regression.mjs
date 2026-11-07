@@ -806,8 +806,15 @@ try {
   await page.getByRole('button',{name:'Clear cache…',exact:true}).click();
   const cacheReview=page.getByRole('region',{name:'Confirm cache cleanup'});
   await cacheReview.waitFor();
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
+    'Refresh cannot invalidate a pending Storage confirmation');
+  assert.equal(await page.getByRole('button',{name:'Clear all data…',exact:true}).isDisabled(),true,
+    'A second destructive review cannot replace cache confirmation');
+  assert.equal(await page.getByRole('button',{name:'Open folder',exact:true}).isDisabled(),true,
+    'Unrelated Storage controls stay blocked until explicit Cancel');
   await cacheReview.getByRole('button',{name:'Cancel'}).click();
   await cacheReview.waitFor({state:'detached'});
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isEnabled(),true);
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true})
     .evaluate(node=>document.activeElement===node),true,
     'Cancel must still return focus to the original cache review trigger');
@@ -819,6 +826,10 @@ try {
   await page.getByRole('button',{name:'Clear all data…',exact:true}).click();
   const fullReview=page.getByRole('form',{name:'Confirm full launcher data deletion'});
   await fullReview.waitFor();
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
+    'Permanent deletion review blocks refresh until cancellation');
+  assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
+    'An unrelated cache action cannot replace the typed confirmation');
   assert.equal(await nav('Play').isDisabled(),true,
     'Full data-clear review prevents silent page navigation');
   assert.equal(await section('General').isDisabled(),true,
@@ -1129,6 +1140,11 @@ try {
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   const closeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
   await page.waitForFunction(()=>document.activeElement?.textContent?.trim()==='Cancel');
+  const otherLauncher=page.getByRole('button',{name:/^Launch Minecraft - 1 · /});
+  assert.equal(await otherLauncher.isDisabled(),true,
+    'Another launcher cannot start and discard the pending CloseOne review');
+  assert.equal(await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).isDisabled(),true,
+    'CloseOne cannot be retriggered while its confirmation remains open');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Manual Refresh is unavailable while the selected-game confirmation is open');
   // Review navigation is disabled; Escape on an unrelated still-focusable
@@ -1153,6 +1169,8 @@ try {
     'Escape cancels the review and returns focus to its original launcher');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isEnabled(),true,
     'Cancel restores Refresh without sending a game-close request');
+  assert.equal(await otherLauncher.isEnabled(),true,
+    'Cancel restores other launcher actions without requesting a game-close');
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='lazy_tester_close_one').length),0,
     'Canceling CloseOne must not close any Minecraft session');
