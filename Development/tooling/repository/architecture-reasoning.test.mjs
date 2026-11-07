@@ -92,7 +92,9 @@ test('architectural context includes impact, source owner, invariants and no aut
   assert.equal(context.decisionReadiness,'MANUAL_SOURCE_REVIEW_REQUIRED');
   assert.ok(context.potentialImpact.impacted.some(x=>x.resource.path===IMPORTER));
   assert.ok(context.obligations.includes('SOURCE_GRAPH_INCOMPLETE_NEVER_ASSUME_NO_IMPACT'));
-  assert.match(architectureContextMarkdown(context),/Current canonical invariant text/);
+  const markdown=architectureContextMarkdown(context);
+  assert.match(markdown,/Current canonical invariant text/);
+  assert.match(markdown,/\[\[Development\/apps\/desktop\/src\/app\/bridge\/lazyTester\.ts/);
 }));
 test('no owner or Git read never creates invented authority or decision',()=>fixture(({root,put})=>{
   const docs=buildKnowledgeIndex(root),source=fakeSource();
@@ -105,6 +107,7 @@ test('no owner or Git read never creates invented authority or decision',()=>fix
   assert.ok(context.obligations.includes('DIRECT_CANONICAL_OWNER_ROW_NOT_FOUND'));
   assert.ok(context.obligations.includes('HISTORICAL_GIT_EVIDENCE_INCOMPLETE'));
   assert.equal(context.history.commits.length,0);
+  assert.match(architectureContextMarkdown(context),/Git branch\/HEAD: .*UNVERIFIED/);
 }));
 test('CLI architecture context remains read-only and preserves unresolved history',()=>fixture(({root})=>{
   const payload=JSON.parse(run(['--architecture-context',SELECTED,'--with-decisions'],

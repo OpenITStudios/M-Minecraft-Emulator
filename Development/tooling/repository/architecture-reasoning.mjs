@@ -131,7 +131,7 @@ export function architectureContext(sourceIndex,knowledgeIndex,selection,{
 export function architectureContextMarkdown(context){
   const tick=String.fromCharCode(96);
   const lines=['# Architecture source context','',
-    'Source: '+tick+context.selected.path+tick,
+    'Source: [['+context.selected.path+'|'+context.selected.id+']]',
     'Readiness: **'+context.decisionReadiness+'**',
     'Proof ceiling: '+tick+context.proofBoundary+tick,'',
     '## Authored owner references','',
@@ -163,7 +163,14 @@ export function architectureContextMarkdown(context){
   lines.push('','## Historical decisions','');
   if(context.history.status==='NOT_REQUESTED')lines.push('NOT_REQUESTED (opt in with --with-decisions).');
   else {
-    lines.push('Status: '+context.history.status,'');
+    lines.push('Status: '+context.history.status,
+      'Git branch/HEAD: '+tick+(context.history.branch??'UNVERIFIED')+
+        ' / '+(context.history.head??'UNVERIFIED')+tick,
+      'Worktree: '+tick+(context.history.worktreeStatus??'UNVERIFIED')+tick,'');
+    if(context.history.scope?.mayHaveOlderHistory)
+      lines.push('Historical search reached its cap; older decisions may exist.','');
+    for(const gap of (context.history.gaps??[]).slice(0,12))
+      lines.push('- Git evidence gap: '+tick+gap+tick);
     for(const entry of context.history.commits??[]){
       lines.push('- '+tick+entry.sha+tick+' Work '+tick+entry.work+
         tick+'; state '+tick+entry.state+tick+
