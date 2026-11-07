@@ -62,8 +62,9 @@ and default `Development/apps/desktop/src-tauri/target/` developer
 outputs even before `App/` is staged, placing all runtime state under
 the checkout's own `Data/`. If a previous developer version left a
 `Data/` directory beside its built executable, startup refuses to silently
-switch roots. Preserve that directory for explicit review; never move,
-merge, delete, reparse-link or reset it automatically.
+switch roots **even when a staged `App/` folder exists**. Preserve that
+directory for explicit review; never move, merge, delete, reparse-link or
+reset it automatically.
 
 **Installed layout is separate by design.** A new approved per-user NSIS
 install defaults to `%USERPROFILE%\Lazy Tester\App\` with

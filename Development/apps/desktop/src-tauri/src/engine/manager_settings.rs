@@ -101,11 +101,10 @@ pub(crate) fn application_root(executable: &std::path::Path) -> io::Result<PathB
     }
     for ancestor in folder.ancestors() {
         if !ancestor.join("Development/package.json").is_file() { continue; }
-        // Preserve previously supported source checkouts with staged App/.
-        if ancestor.join("App").is_dir() { return Ok(ancestor.to_path_buf()); }
-        // On a fresh checkout, dev builds are inside workspace/target (or the
-        // default Tauri target) BEFORE App exists. Do not create a second
-        // Data/ tree beneath the compiler output.
+        // Check the official dev output BEFORE the staged App/ shortcut.
+        // Once App/ exists, an older build-local Data must still block a
+        // silent switch of profile/account/world roots.
+        // Build output is never a second project Data/ authority.
         let source_checkout = ancestor.join("DEV.cmd").is_file()
             && ancestor.join("Development/apps/desktop/src-tauri/tauri.lazy-tester.conf.json").is_file();
         let developer_owned_target =
@@ -122,6 +121,9 @@ pub(crate) fn application_root(executable: &std::path::Path) -> io::Result<PathB
             }
             return Ok(ancestor.to_path_buf());
         }
+        // Existing staged source layouts that were not built at the official
+        // dev target retain their previous checkout-root resolution.
+        if ancestor.join("App").is_dir() { return Ok(ancestor.to_path_buf()); }
     }
     // Preserve the non-project / legacy flat-install fallback as before.
     Ok(folder.to_path_buf())
@@ -244,6 +246,13 @@ mod tests {
         let staged=root.join("App");
         fs::create_dir(&staged).unwrap();
         assert_eq!(application_root(&staged.join("lazy-tester.exe")).unwrap(),root);
+        assert_eq!(application_root(&exe).unwrap(),root);
+        // Recreating legacy dev-local data AFTER App staging still blocks
+        // accidental root switching and preserves the existing bytes.
+        fs::create_dir(&old_data).unwrap();
+        fs::write(old_data.join("preserved-world"),b"keep-again").unwrap();
+        assert_eq!(application_root(&exe).unwrap_err().kind(),io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(old_data.join("preserved-world")).unwrap(),b"keep-again");
         fs::remove_dir_all(root).unwrap();
     }
     #[test]

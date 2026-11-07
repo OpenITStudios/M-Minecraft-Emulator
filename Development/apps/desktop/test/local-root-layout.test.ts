@@ -10,6 +10,9 @@ describe('Single-root developer storage admission — source-only',()=>{
     expect(rust).toContain('Development/apps/desktop/src-tauri/target');
     expect(rust).toContain('if ancestor.join("App").is_dir()');
     expect(rust).toContain('if source_checkout && developer_owned_target');
+    expect(rust.indexOf('if source_checkout && developer_owned_target'))
+      .toBeLessThan(rust.indexOf('if ancestor.join("App").is_dir()'));
+    expect(rust).toContain('fs::write(old_data.join("preserved-world"),b"keep-again")');
     expect(rust).toContain('fs::symlink_metadata(folder.join("Data"))');
     expect(rust).toContain('io::ErrorKind::AlreadyExists');
     expect(rust).toContain('Ok(folder.to_path_buf())');
