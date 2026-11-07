@@ -1071,3 +1071,28 @@ DOM text and restores it; it does not interact with Minecraft.
 browser fixtures. The exact visual viewport size, Windows 100–200% DPI,
 WebView2 scroll/focus, mixed five-client statuses, native DWM bounds,
 warning readability and actual gameplay remain NOT_EXECUTED.
+
+## Single Tools disclosure for Play chrome — source only (7 November 2026)
+
+The main Play heading now exposes **Refresh** continuously plus one
+keyboard-operable **Tools** disclosure. The existing Separate window
+action (only for a selected game), read-only F3 Inspector and manual
+Coordinates & Saves utilities are grouped inside it without changing
+their ownership or adding a new native game action. The Tools summary
+does not create a new persistent user setting, status poller or IPC.
+
+Its panel is positioned outside normal document flow so the optional
+controls no longer force header wrapping at 920px. Child F3/Coordinates
+retain their original HTML details, popup projection and scoped Escape.
+Escape on the parent summary closes only Tools. Normal Tab/Shift+Tab
+and focus leaving the menu dismiss the parent without redirecting game
+focus; native WebView blur also collapses it. Only user-initiated opening
+can display the secondary panel above the main stage.
+
+The browser regression fixture now explicitly opens Tools before
+accessing nested disclosures and the Separate window action, and
+authors focus/blur, parent/child Escape and native-input non-mutation
+checks. Frontend/browser tests are AUTHORED_NOT_EXECUTED;
+Windows/WebView2/real Minecraft focus behavior and preview visibility
+remain NOT_VERIFIED. Keep the app navigation, five DWM previews, exact
+16:9 viewport, native CloseOne gates and all data storage unchanged.

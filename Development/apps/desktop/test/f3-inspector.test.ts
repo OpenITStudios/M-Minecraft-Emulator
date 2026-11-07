@@ -121,6 +121,7 @@ describe('F3 Inspector presentation-only integration', () => {
     expect(app).toContain("<F3InspectorPanel view={f3View} />");
     expect(app).toContain("<CoordinatePastePanel selectedSlot={active} />");
     expect(app).toContain('class="lt-play-tools"');
+    expect(app).toContain('class="lt-play-utilities"');
     expect(app).toContain('<LauncherRail {profiles} {labels} {healthIssues}');
     expect(css).toContain('.lt-f3-data{');
   });

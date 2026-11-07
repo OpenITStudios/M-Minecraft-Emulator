@@ -967,3 +967,39 @@
     margin-bottom:6px;
   }
 }
+
+/* One optional Tools disclosure replaces three always-visible Play controls.
+   Refresh stays visible. Overlaying the menu on demand does not change the
+   selected 16:9 viewport or the five fixed DWM preview node rectangles. */
+.lt-play-utilities{position:relative;z-index:20;flex:none;min-width:0}
+.lt-play-utilities > summary{
+  display:flex;align-items:center;justify-content:center;
+  min-height:32px;padding:7px 11px;
+  border:1px solid var(--lt-control-outline);
+  border-radius:var(--lt-radius-control);
+  background:var(--lt-surface-raised);color:var(--lt-text);
+  cursor:pointer;list-style:none;font-size:12px;white-space:nowrap;
+}
+.lt-play-utilities > summary::-webkit-details-marker{display:none}
+.lt-play-utilities > summary:hover{background:var(--lt-control-hover)}
+.lt-play-utilities[open] > .lt-play-tools{
+  position:absolute;right:0;top:calc(100% + 6px);z-index:21;
+  display:flex;flex-direction:column;align-items:stretch;gap:4px;
+  min-width:188px;width:max-content;max-width:calc(100vw - 24px);
+  padding:7px;border:1px solid var(--lt-control-outline);
+  border-left:1px solid var(--lt-control-outline);
+  border-radius:8px;background:var(--lt-panel);
+  box-shadow:0 12px 28px var(--lt-popup-shadow);
+}
+.lt-play-utilities[open] > .lt-play-tools{padding-left:7px}
+.lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste{width:100%;flex:none}
+.lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste > summary{
+  width:100%;text-align:left;
+}
+.lt-play-utilities[open] > .lt-play-tools > button.lt-separate-window{
+  min-height:32px;text-align:left;
+}
+@media (forced-colors:active){
+  .lt-play-utilities > summary{border-color:ButtonText}
+  .lt-play-utilities[open] > .lt-play-tools{border-color:ButtonText}
+}

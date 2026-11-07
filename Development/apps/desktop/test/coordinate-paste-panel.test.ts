@@ -10,6 +10,7 @@ describe('optional manual XYZ user-paste UI',()=>{
     expect(play).toContain("import CoordinatePastePanel from './CoordinatePastePanel.svelte';");
     expect(play).toContain('<CoordinatePastePanel selectedSlot={active} />');
     expect(play).toContain('class="lt-play-tools"');
+    expect(play).toContain('class="lt-play-utilities"');
     expect(play).toContain('<LauncherRail {profiles} {labels} {healthIssues}');
     expect(play).toContain('<div class="lt-stage-space" bind:this={stageSpace}>');
     expect((play.match(/setInterval\(/g)??[])).toHaveLength(1);

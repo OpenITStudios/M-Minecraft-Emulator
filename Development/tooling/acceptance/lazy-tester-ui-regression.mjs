@@ -238,6 +238,16 @@ try {
   // disclosure summaries/fields. Only in-panel Escape returns to the
   // opener; external focus and WebView blur must never pull game focus.
   // Synthetic browser DOM evidence, NOT a Windows keyboard/DWM PASS.
+  const toolsMenu=page.locator('details.lt-play-utilities');
+  const toolsSummary=toolsMenu.locator(':scope > summary');
+  const openTools=async()=>{
+    if(await toolsMenu.getAttribute('open')===null)await toolsSummary.click();
+  };
+  assert.equal(await toolsMenu.getAttribute('open'),null,
+    'Optional Play actions are collapsed by default; Refresh stays visible');
+  await openTools();
+  assert.equal(await toolsMenu.getAttribute('open'),'',
+    'Tools menu is keyboard-focusable without replacing the original disclosures');
   const f3Details=page.locator('details.lt-f3-inspector');
   const coordinateDetails=page.locator('details.lt-coordinate-paste:not(.lt-f3-inspector)');
   const f3Trigger=f3Details.locator('summary');
@@ -282,23 +292,36 @@ try {
     'Focus outside Coordinates closes it without stealing the new control focus');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true})
     .evaluate(node=>document.activeElement===node),true);
+  await openTools();
   await coordinateTrigger.focus();
   await page.keyboard.press('Enter');
   await coordinateInput.focus();
   await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+  assert.equal(await toolsMenu.getAttribute('open'),null,
+    'Native focus blur also collapses the optional Tools menu');
   assert.equal(await coordinateDetails.getAttribute('open'),null,
     'WebView blur closes Coordinates without replaying Escape into Minecraft');
+  await openTools();
   await f3Trigger.focus();
   await page.keyboard.press('Enter');
   await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
   assert.equal(await f3Details.getAttribute('open'),null,
     'WebView blur also closes read-only F3 without a new game/input owner');
+  await openTools();
   await f3Trigger.focus();
   await page.keyboard.press('Enter');
   await page.keyboard.press('Escape');
   assert.equal(await f3Details.getAttribute('open'),null);
   assert.equal(await f3Trigger.evaluate(node=>document.activeElement===node),true,
     'F3 Escape restores its own summary focus and does not trap the next Tab');
+  assert.equal(await toolsMenu.getAttribute('open'),'',
+    'Closing the nested F3 panel leaves the parent Tools menu intact');
+  await toolsSummary.focus();
+  await page.keyboard.press('Escape');
+  assert.equal(await toolsMenu.getAttribute('open'),null,
+    'Escape on Tools closes the optional menu without affecting Minecraft');
+  assert.equal(await toolsSummary.evaluate(node=>document.activeElement===node),true,
+    'Closing Tools returns keyboard focus to its original summary');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     ['Launch','CloseOne','ClearProfileData'].includes(call.args?.request?.operation))),false,
     'Disclosure focus traversal must not start or modify any Minecraft session');
@@ -749,8 +772,10 @@ try {
     'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 2 · /}).getAttribute('aria-pressed'),'false',
     'Other running profiles must remain explicitly unselected');
+  await page.locator('details.lt-play-utilities > summary').click();
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).click();
   await heading('Minecraft - 2').waitFor();
+  await page.locator('details.lt-play-utilities > summary').click();
   assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).isEnabled(),true,
     'Releasing one game must keep the other Minecraft usable');
   await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).click();
@@ -777,6 +802,7 @@ try {
   assert.ok(closeBounds.close&&closeBounds.close.width>=32&&closeBounds.close.height>=32&&
     closeBounds.close.right<=closeBounds.cardRight+1&&closeBounds.close.bottom<=closeBounds.pictureTop,
     'Close game must stay outside and above the preserved native DWM thumbnail');
+  await page.locator('details.lt-play-utilities > summary').click();
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).waitFor();
   await page.waitForTimeout(200);
   const placement=await page.evaluate(()=>{

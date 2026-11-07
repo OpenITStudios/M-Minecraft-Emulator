@@ -70,6 +70,41 @@
   let loadingPage: Page | null = null;
   let pageHeading: HTMLHeadingElement | undefined;
   let headerRefreshButton: HTMLButtonElement | undefined;
+  // One native HTML disclosure for optional Play tools. The original F3,
+  // Coordinates and separate-window owners keep their own actions and guards.
+  let playToolsElement: HTMLDetailsElement | undefined;
+  let playToolsSummary: HTMLElement | undefined;
+  function closePlayToolsOnFocusOut(event: FocusEvent): void {
+    if (!playToolsElement?.open) return;
+    const next = event.relatedTarget;
+    if (next instanceof Node) {
+      if (!playToolsElement.contains(next)) playToolsElement.open = false;
+      return;
+    }
+    // Native focus transfers may report a null target. Never reclaim game focus.
+    void tick().then(() => {
+      if (!playToolsElement?.open) return;
+      const focused = document.activeElement;
+      if (!document.hasFocus() || !(focused instanceof Node) ||
+          !playToolsElement.contains(focused)) playToolsElement.open = false;
+    });
+  }
+  function closePlayToolsOnBlur(): void {
+    if (playToolsElement?.open) playToolsElement.open = false;
+  }
+  function closePlayToolsOnEscape(event: KeyboardEvent): void {
+    if (event.key !== 'Escape' || !playToolsElement?.open ||
+        !(event.target instanceof Node) || !playToolsElement.contains(event.target)) return;
+    // Nested F3/Coordinates own their original Escape and focus restoration.
+    // Even if a child closes during this event, don't close both levels.
+    if (event.target instanceof Element &&
+        event.target.closest('details.lt-coordinate-paste')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    playToolsElement.open = false;
+    if (document.hasFocus() && playToolsSummary?.isConnected)
+      playToolsSummary.focus({preventScroll:true});
+  }
   // Keyboard-only Refresh focus continuity, not a new status or native action.
   let headerRefreshFocusPage: Page | null = null;
   let initializing = true, checkingStorage = false, storageCheckedAt = '';
@@ -934,6 +969,7 @@
 </script>
 <svelte:head><title>Lazy Tester</title></svelte:head>
 <svelte:window on:keydown={closeReviewKeydown}/>
+<svelte:window on:blur={closePlayToolsOnBlur} />
 <div class="lt-app">
   <WindowTitlebar backendSupport={nativeBackend} />
   <header class="lt-topbar">
@@ -949,7 +985,28 @@
     <main class={page==='workspace'?'lt-play-main':undefined}>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
-        <div class="lt-header-actions"><button class="lt-secondary" bind:this={headerRefreshButton} disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release} aria-label={'Open Minecraft - '+active+' in a window'}>Separate window</button>{/if}{#if page==='workspace'}<div class="lt-play-tools" role="group" aria-label="Play tools"><F3InspectorPanel view={f3View} /><CoordinatePastePanel selectedSlot={active} /></div>{/if}</div>
+        <div class="lt-header-actions">
+          <button class="lt-secondary" bind:this={headerRefreshButton}
+            disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'}
+            on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>
+          {#if page==='workspace'}
+            <details class="lt-play-utilities" bind:this={playToolsElement}
+              on:focusout={closePlayToolsOnFocusOut} on:keydown={closePlayToolsOnEscape}>
+              <summary bind:this={playToolsSummary} aria-label="Open Play tools and window actions">Tools</summary>
+              <div class="lt-play-tools" role="group" aria-label="Play tools">
+                {#if active!==null}
+                  <button class="lt-secondary lt-separate-window"
+                    disabled={busy||refreshing||resizing}
+                    title={'Open only Minecraft - '+active+' in its own window'}
+                    aria-label={'Open Minecraft - '+active+' in a window'}
+                    on:click={()=>{if(playToolsElement)playToolsElement.open=false;void release();}}>Separate window</button>
+                {/if}
+                <F3InspectorPanel view={f3View} />
+                <CoordinatePastePanel selectedSlot={active} />
+              </div>
+            </details>
+          {/if}
+        </div>
       </header>
       {#if loadingPage===page && page!=='workspace'}
         <p class="lt-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>

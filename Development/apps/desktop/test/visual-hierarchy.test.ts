@@ -65,7 +65,9 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     const app=source('LazyTesterApp.svelte'),rail=source('LauncherRail.svelte'),css=source('lazy-tester.css');
     expect(app).toContain("<main class={page==='workspace'?'lt-play-main':undefined}>");
     expect(app).toContain('hidden={active!==null&&!detached}');
-    expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}>Separate window");
+    expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
+    expect(app).toContain('class="lt-play-utilities"');
+    expect(app).toContain('aria-label="Open Play tools and window actions">Tools</summary>');
     expect(rail).toContain('aria-hidden="true">×</span></button>');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('use:observePreview={profile.slot}');
@@ -93,6 +95,27 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).not.toContain('lt-workspace-monitoring');
     expect(css).not.toContain('clamp(96px,15vh,136px)');
     expect(css).not.toContain('clamp(80px,16vh,180px)');
+  });
+  it('keeps Refresh visible while placing optional tools behind one keyboard disclosure',()=>{
+    const app=source('LazyTesterApp.svelte');
+    const css=source('lazy-tester.css');
+    const refresh=app.indexOf('bind:this={headerRefreshButton}');
+    const tools=app.indexOf('class="lt-play-utilities"');
+    const f3=app.lastIndexOf('<F3InspectorPanel view={f3View} />');
+    const coord=app.lastIndexOf('<CoordinatePastePanel selectedSlot={active} />');
+    expect(refresh).toBeGreaterThan(-1);
+    expect(tools).toBeGreaterThan(refresh);
+    expect(f3).toBeGreaterThan(tools);
+    expect(coord).toBeGreaterThan(f3);
+    expect(app).toContain('on:focusout={closePlayToolsOnFocusOut} on:keydown={closePlayToolsOnEscape}');
+    expect(app).toContain('<svelte:window on:blur={closePlayToolsOnBlur} />');
+    expect(app).toContain("event.target.closest('details.lt-coordinate-paste')");
+    expect(app).toContain('playToolsElement.open = false;');
+    expect(css).toContain('.lt-play-utilities[open] > .lt-play-tools{');
+    expect(css).toContain('position:absolute;right:0;top:calc(100% + 6px);z-index:21;');
+    expect(css).toContain('.lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste{width:100%;flex:none}');
+    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
+    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });
   it('limits new density and status CSS to presentation owners',()=>{
     const css=source('lazy-tester.css');
