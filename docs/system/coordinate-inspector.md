@@ -7,7 +7,16 @@ authority: WORKING
 lifecycle: SOURCE_ONLY
 ---
 
-# F3-style Coordinate Inspector — bounded source-only foundation
+# F3-style Coordinate Inspector — historical research
+
+> **Superseded desktop UI (7 November 2026).** F3 Inspector and
+> Coordinates & Saves were removed from Lazy Tester by explicit user
+> instruction. This document records earlier research, **not** an
+> authorized desktop feature or current UI requirement. Former Svelte
+> components, popup helpers and browser tests were retired. Pure
+> coordinate computations and existing native Saved Locations records
+> are preserved; no in-game HUD, waypoint, or command was installed.
+> Education native-HUD experiments remain source-only and unverified.
 
 ## Purpose and scope
 

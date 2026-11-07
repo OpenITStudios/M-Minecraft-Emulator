@@ -234,96 +234,17 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
 
-  // Nonmodal Play tools: native Tab/Shift+Tab traverses the existing
-  // disclosure summaries/fields. Only in-panel Escape returns to the
-  // opener; external focus and WebView blur must never pull game focus.
-  // Synthetic browser DOM evidence, NOT a Windows keyboard/DWM PASS.
-  const toolsMenu=page.locator('details.lt-play-utilities');
-  const toolsSummary=toolsMenu.locator(':scope > summary');
-  const openTools=async()=>{
-    if(await toolsMenu.getAttribute('open')===null)await toolsSummary.click();
-  };
-  assert.equal(await toolsMenu.getAttribute('open'),null,
-    'Optional Play actions are collapsed by default; Refresh stays visible');
-  await openTools();
-  assert.equal(await toolsMenu.getAttribute('open'),'',
-    'Tools menu is keyboard-focusable without replacing the original disclosures');
-  const f3Details=page.locator('details.lt-f3-inspector');
-  const coordinateDetails=page.locator('details.lt-coordinate-paste:not(.lt-f3-inspector)');
-  const f3Trigger=f3Details.locator('summary');
-  const coordinateTrigger=coordinateDetails.locator('summary');
-  await f3Trigger.focus();
-  await page.keyboard.press('Enter');
-  assert.equal(await f3Details.getAttribute('open'),'',
-    'F3 disclosure is keyboard-operable without a separate controller');
-  await page.keyboard.press('Tab');
-  assert.equal(await coordinateTrigger.evaluate(node=>document.activeElement===node),true,
-    'Tab from read-only F3 must reach the next native Play tool');
-  assert.equal(await f3Details.getAttribute('open'),null,
-    'F3 focusout must close its former popup without reclaiming Tab focus');
-  await page.keyboard.press('Enter');
-  assert.equal(await coordinateDetails.getAttribute('open'),'',
-    'Coordinates expands through the native summary, not an artificial dialog');
-  const coordinateInput=coordinateDetails.locator('#lt-coordinate-input');
-  await page.keyboard.press('Tab');
-  assert.equal(await coordinateInput.evaluate(node=>document.activeElement===node),true,
-    'Tab into Coordinates must reach editable XYZ in DOM order');
-  await page.keyboard.press('Shift+Tab');
-  assert.equal(await coordinateTrigger.evaluate(node=>document.activeElement===node),true,
-    'Shift+Tab within Coordinates returns to its summary without trapping focus');
-  assert.equal(await coordinateDetails.getAttribute('open'),'');
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Escape');
-  assert.equal(await coordinateDetails.getAttribute('open'),null);
-  assert.equal(await coordinateTrigger.evaluate(node=>document.activeElement===node),true,
-    'Escape from inside Coordinates closes only its disclosure and restores its trigger');
-  await page.keyboard.press('Enter');
-  await coordinateInput.focus();
-  await page.evaluate(()=>{
-    const field=document.querySelector('#lt-coordinate-input');
-    field?.dispatchEvent(new FocusEvent('focusout',{bubbles:true,relatedTarget:null}));
-  });
-  // Allow the component's deferred null-relatedTarget recheck to finish.
-  await page.waitForTimeout(0);
-  assert.equal(await coordinateDetails.getAttribute('open'),'',
-    'A null focusout must not close an internally focused field by itself');
-  await page.getByRole('button',{name:'Refresh',exact:true}).focus();
-  assert.equal(await coordinateDetails.getAttribute('open'),null,
-    'Focus outside Coordinates closes it without stealing the new control focus');
-  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true})
-    .evaluate(node=>document.activeElement===node),true);
-  await openTools();
-  await coordinateTrigger.focus();
-  await page.keyboard.press('Enter');
-  await coordinateInput.focus();
-  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
-  assert.equal(await toolsMenu.getAttribute('open'),null,
-    'Native focus blur also collapses the optional Tools menu');
-  assert.equal(await coordinateDetails.getAttribute('open'),null,
-    'WebView blur closes Coordinates without replaying Escape into Minecraft');
-  await openTools();
-  await f3Trigger.focus();
-  await page.keyboard.press('Enter');
-  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
-  assert.equal(await f3Details.getAttribute('open'),null,
-    'WebView blur also closes read-only F3 without a new game/input owner');
-  await openTools();
-  await f3Trigger.focus();
-  await page.keyboard.press('Enter');
-  await page.keyboard.press('Escape');
-  assert.equal(await f3Details.getAttribute('open'),null);
-  assert.equal(await f3Trigger.evaluate(node=>document.activeElement===node),true,
-    'F3 Escape restores its own summary focus and does not trap the next Tab');
-  assert.equal(await toolsMenu.getAttribute('open'),'',
-    'Closing the nested F3 panel leaves the parent Tools menu intact');
-  await page.keyboard.press('Escape');
-  assert.equal(await toolsMenu.getAttribute('open'),null,
-    'Escape on Tools closes the optional menu without affecting Minecraft');
-  assert.equal(await toolsSummary.evaluate(node=>document.activeElement===node),true,
-    'Closing Tools returns keyboard focus to its original summary');
+  // The operator rejected F3 and Coordinates as desktop features.
+  // Play must expose neither the retired popup menu nor those controls.
+  assert.equal(await page.locator('details.lt-play-utilities').count(),0);
+  assert.equal(await page.locator('details.lt-f3-inspector').count(),0);
+  assert.equal(await page.locator('details.lt-coordinate-paste').count(),0);
+  assert.equal(await page.locator('.lt-header-actions button').count(),1,
+    'Before a game is selected only Refresh is visible in the Play header');
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),1);
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     ['Launch','CloseOne','ClearProfileData'].includes(call.args?.request?.operation))),false,
-    'Disclosure focus traversal must not start or modify any Minecraft session');
+    'Removing the retired desktop tools cannot operate on a Minecraft session');
 
   // The native activity indicator is sparse and never claims game control.
   await page.goto('http://lazy-tester.test/?agent-status=1');
@@ -771,10 +692,10 @@ try {
     'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 2 · /}).getAttribute('aria-pressed'),'false',
     'Other running profiles must remain explicitly unselected');
-  await page.locator('details.lt-play-utilities > summary').click();
+  assert.equal(await page.locator('.lt-header-actions button').count(),2,
+    'Selected game shows Refresh and one contextual Separate window action');
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).click();
   await heading('Minecraft - 2').waitFor();
-  await page.locator('details.lt-play-utilities > summary').click();
   assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).isEnabled(),true,
     'Releasing one game must keep the other Minecraft usable');
   await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).click();
@@ -801,7 +722,6 @@ try {
   assert.ok(closeBounds.close&&closeBounds.close.width>=32&&closeBounds.close.height>=32&&
     closeBounds.close.right<=closeBounds.cardRight+1&&closeBounds.close.bottom<=closeBounds.pictureTop,
     'Close game must stay outside and above the preserved native DWM thumbnail');
-  await page.locator('details.lt-play-utilities > summary').click();
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).waitFor();
   await page.waitForTimeout(200);
   const placement=await page.evaluate(()=>{

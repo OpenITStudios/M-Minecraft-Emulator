@@ -48,13 +48,12 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(app).toContain('status.confirmationToken!==pending.token');
     expect(storage).not.toContain('invokeRuntime(');
   });
-  it('retains readable Play tool copy at the original component rules',()=>{
+  it('retains readable support and settings copy without retired game HUD selectors',()=>{
     const css=load('lazy-tester.css');
-    expect(css).toContain('.lt-coordinate-popup .lt-coordinate-help{font-size:13px;');
-    expect(css).toContain('.lt-f3-popup .lt-f3-disclaimer{font-size:13px;');
-    expect(css).toContain('.lt-coordinate-saved-header button{font-size:12px;');
-    expect(css).toContain('.lt-coordinate-saved-buttons button{font-size:12px;');
-    expect(css).not.toContain('.lt-coordinate-popup .lt-coordinate-help,\n.lt-f3-popup .lt-f3-disclaimer,');
+    expect(css).toContain('.lt-agent-activity-details p{margin:8px 0;font-size:13px;');
+    expect(css).toContain('.lt-settings-layout .lt-setting{flex-wrap:wrap;');
+    expect(css).not.toContain('.lt-coordinate-popup');
+    expect(css).not.toContain('.lt-f3-popup');
   });
   it('does not distract General Settings with a redundant workspace mode selector',()=>{
     const settings=load('GeneralSettings.svelte');

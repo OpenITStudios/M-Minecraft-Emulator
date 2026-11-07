@@ -42,32 +42,28 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(storage).toContain('confirmationToken!==fullReview.token');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
   });
-  it('improves dense explanations inside scrollable settings and Play disclosures',()=>{
+  it('keeps dense Settings/agent copy readable without desktop game-HUD controls',()=>{
     const css=source('lazy-tester.css');
     expect(css).toContain('.lt-help{');
     expect(css).toContain('font-size:13px!important}');
     expect(css).toContain('.lt-data-path{');
     expect(css).toContain('.lt-agent-activity-details p{margin:8px 0;font-size:13px;');
     expect(css).toContain('.lt-agent-testing-summary dl{display:grid;');
-    expect(css).toContain('.lt-coordinate-popup p{font-size:13px;');
-    expect(css).toContain('.lt-coordinate-popup label{display:block;font-size:13px;');
-    expect(css).toContain('.lt-f3-data{display:grid;');
-    expect(css).toContain('margin:4px 0;font-size:13px;line-height:1.45}');
-    expect(css).toContain('.lt-coordinate-saved-text code{font-family:Consolas,"Cascadia Mono",monospace;font-size:13px;');
-    expect(css).toContain('max-height:calc(100dvh - 176px)');
+    expect(css).not.toContain('.lt-coordinate-popup');
+    expect(css).not.toContain('.lt-f3-popup');
+    expect(css).not.toContain('.lt-play-utilities');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
-    // Collapsed Play disclosure trigger size stays unchanged: no new topbar row.
-    expect(css).toContain('.lt-coordinate-paste>summary{display:block;cursor:pointer;white-space:nowrap;');
-    expect(css).toContain('font-size:12px;line-height:normal}');
   });
   it('compacts the default Play view while preserving five native preview targets',()=>{
     const app=source('LazyTesterApp.svelte'),rail=source('LauncherRail.svelte'),css=source('lazy-tester.css');
     expect(app).toContain("<main class={page==='workspace'?'lt-play-main':undefined}>");
     expect(app).toContain('hidden={active!==null&&!detached}');
     expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
-    expect(app).toContain('class="lt-play-utilities"');
-    expect(app).toContain('aria-label="Open Play tools and window actions">Tools</summary>');
+    expect(app).not.toContain('class="lt-play-utilities"');
+    expect(app).not.toContain('F3InspectorPanel');
+    expect(app).not.toContain('CoordinatePastePanel');
+    expect(app).toContain('on:click={release}>Separate window</button>');
     expect(rail).toContain('aria-hidden="true">×</span></button>');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('use:observePreview={profile.slot}');
@@ -96,24 +92,24 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).not.toContain('clamp(96px,15vh,136px)');
     expect(css).not.toContain('clamp(80px,16vh,180px)');
   });
-  it('keeps Refresh visible while placing optional tools behind one keyboard disclosure',()=>{
+  it('keeps only Refresh and selected Separate window in the Play header',()=>{
     const app=source('LazyTesterApp.svelte');
     const css=source('lazy-tester.css');
     const refresh=app.indexOf('bind:this={headerRefreshButton}');
-    const tools=app.indexOf('class="lt-play-utilities"');
-    const f3=app.lastIndexOf('<F3InspectorPanel view={f3View} />');
-    const coord=app.lastIndexOf('<CoordinatePastePanel selectedSlot={active} />');
+    const separate=app.indexOf('on:click={release}>Separate window</button>');
     expect(refresh).toBeGreaterThan(-1);
-    expect(tools).toBeGreaterThan(refresh);
-    expect(f3).toBeGreaterThan(tools);
-    expect(coord).toBeGreaterThan(f3);
-    expect(app).toContain('on:focusout={closePlayToolsOnFocusOut} on:keydown={closePlayToolsOnEscape}');
-    expect(app).toContain('<svelte:window on:blur={closePlayToolsOnBlur} />');
-    expect(app).toContain("event.target.closest('details.lt-coordinate-paste[open]')");
-    expect(app).toContain('playToolsElement.open = false;');
-    expect(css).toContain('.lt-play-utilities[open] > .lt-play-tools{');
-    expect(css).toContain('position:absolute;right:0;top:calc(100% + 6px);z-index:21;');
-    expect(css).toContain('.lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste{width:100%;flex:none}');
+    expect(separate).toBeGreaterThan(refresh);
+    expect(app).toContain("{#if page==='workspace'&&active!==null}");
+    expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
+    expect(app).not.toContain('F3InspectorPanel');
+    expect(app).not.toContain('CoordinatePastePanel');
+    expect(app).not.toContain('playToolsElement');
+    expect(app).not.toContain('projectF3Inspector');
+    expect(app).not.toContain('on:blur={closePlayToolsOnBlur}');
+    expect(css).not.toContain('.lt-play-tools');
+    expect(css).not.toContain('.lt-play-utilities');
+    expect(css).not.toContain('.lt-coordinate-paste');
+    expect(css).not.toContain('.lt-f3-popup');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });

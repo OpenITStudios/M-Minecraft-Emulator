@@ -543,51 +543,9 @@
 .lt-agent-testing-summary dt{color:var(--lt-muted)}
 .lt-agent-testing-summary dd{min-width:0;margin:0;overflow-wrap:anywhere}
 
-/* Optional, manual-only coordinate text utility. Five native DWM cards remain intact. */
-.lt-coordinate-paste{position:relative;z-index:14;flex:none;font-size:12px}
-.lt-coordinate-paste>summary{display:block;cursor:pointer;white-space:nowrap;border:1px solid var(--lt-line);background:var(--lt-surface-raised);color:inherit;border-radius:6px;padding:7px 11px;font-size:12px;line-height:normal}
-.lt-coordinate-paste>summary:hover{background:var(--lt-control-hover)}
-.lt-coordinate-paste>summary:focus-visible{outline:2px solid var(--lt-accent);outline-offset:3px}
-.lt-coordinate-popup{position:fixed;left:16px;top:160px;right:auto;bottom:auto;width:min(390px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100vh - 176px);max-height:calc(100dvh - 176px);visibility:hidden;overflow:auto;border:1px solid var(--lt-line);border-radius:9px;background:var(--lt-panel);padding:15px;box-shadow:0 12px 28px var(--lt-popup-shadow);display:grid;gap:9px;text-align:left}
-.lt-coordinate-popup strong{font-size:14px;line-height:1.25}
-.lt-coordinate-popup .lt-coordinate-status{color:var(--lt-accent);font-size:13px}
-.lt-coordinate-popup p{font-size:13px;line-height:1.45;margin:0}
-.lt-coordinate-popup label{display:block;font-size:13px;color:var(--lt-muted);font-weight:600}
-.lt-coordinate-popup textarea,.lt-coordinate-popup select,.lt-coordinate-popup input{width:100%;min-width:0;font:inherit;font-size:13px;border:1px solid var(--lt-control-outline);background:var(--lt-bg);color:inherit;border-radius:6px;padding:8px 10px}
-.lt-coordinate-popup textarea{resize:vertical;min-height:52px;max-height:100px;overflow:auto}
-.lt-coordinate-popup textarea:focus-visible,.lt-coordinate-popup select:focus-visible,.lt-coordinate-popup input:focus-visible{outline:2px solid var(--lt-accent);outline-offset:2px}
-.lt-coordinate-popup input[readonly]{font-family:Consolas,"Cascadia Mono",monospace}
-.lt-coordinate-popup .lt-coordinate-error{color:var(--lt-danger);font-size:13px}
-.lt-coordinate-output{display:flex;align-items:center;gap:8px;min-width:0}
-.lt-coordinate-output input{flex:1}
-.lt-coordinate-popup .lt-coordinate-output button{flex:none;font-size:13px;padding:8px}
-.lt-coordinate-popup .lt-coordinate-help{font-size:13px;line-height:1.45;color:var(--lt-muted)}
+/* Native Play-header reflow only; no desktop F3 or coordinate popups. */
 @media(max-width:1080px){.lt-play-header{flex-wrap:wrap}.lt-play-header .lt-header-actions{margin-left:auto}}
-
-/* Read-only custom F3 Inspector, using the same collapsed Play-header
-   disclosure as Paste XYZ. No game viewport/DWM geometry changes. */
-.lt-f3-popup{width:min(420px,calc(100vw - 32px))}
-.lt-f3-popup .lt-f3-summary{font-size:13px;line-height:1.45;color:var(--lt-accent)}
-.lt-f3-data{display:grid;grid-template-columns:minmax(110px,38%) minmax(0,1fr);gap:8px 10px;margin:4px 0;font-size:13px;line-height:1.45}
-.lt-f3-data dt{color:var(--lt-muted)}
-.lt-f3-data dd{margin:0;min-width:0;overflow-wrap:anywhere}
-.lt-f3-popup .lt-f3-disclaimer{font-size:13px;line-height:1.45;color:var(--lt-muted);border-top:1px solid var(--lt-line);padding-top:10px}
-@media(max-width:650px){.lt-f3-popup{max-width:calc(100vw - 48px)}.lt-play-header .lt-header-actions{flex-wrap:wrap;justify-content:flex-end}}
-
-/* User-initiated local coordinate notes within the existing Play disclosure.
-   No additional viewport, DWM layer, HUD, or native game interaction. */
-.lt-coordinate-notes{border-top:1px solid var(--lt-line);padding-top:12px;margin-top:4px;display:grid;gap:9px}
-.lt-coordinate-notes>.lt-coordinate-note-owner{font-weight:650;color:var(--lt-accent)}
-.lt-coordinate-notes>button{justify-self:start}
-.lt-coordinate-saved-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.lt-coordinate-saved-header button{font-size:12px;padding:6px 9px}
-.lt-coordinate-saved-list{margin:0;padding:0;list-style:none;display:grid;gap:8px}
-.lt-coordinate-saved-list li{border:1px solid var(--lt-line);border-radius:6px;padding:9px;display:grid;gap:8px;min-width:0}
-.lt-coordinate-saved-text{display:grid;gap:3px;overflow-wrap:anywhere;font-size:13px}
-.lt-coordinate-saved-text small{color:var(--lt-muted)}
-.lt-coordinate-saved-text code{font-family:Consolas,"Cascadia Mono",monospace;font-size:13px;user-select:text}
-.lt-coordinate-saved-buttons{display:flex;flex-wrap:wrap;gap:6px}
-.lt-coordinate-saved-buttons button{font-size:12px;padding:6px 9px}
+@media(max-width:650px){.lt-play-header .lt-header-actions{flex-wrap:wrap;justify-content:flex-end}}
 
 /* Standalone Lazy Tester identity: reuse the bundle icon rather than duplicating
    logo geometry in Tauri, the titlebar, and the empty Play surface. */
@@ -601,9 +559,8 @@
 .lt-brand > .lt-brand-mark{width:29px;height:29px;border-radius:7px}
 .lt-window-drag > span.lt-window-mark:first-child{width:18px;height:18px;border-radius:4px}
 .lt-empty > .lt-empty-mark{width:56px;height:56px;margin-bottom:12px}
-.lt-play-tools{display:flex;align-items:center;gap:6px;padding-left:8px;border-left:1px solid var(--lt-line)}
 .lt-app .lt-play-header .lt-header-actions{flex-wrap:wrap;justify-content:flex-end}
-.lt-app .lt-coordinate-paste > summary,.lt-app .lt-agent-activity summary{
+.lt-app .lt-agent-activity summary{
   border-color:var(--lt-control-outline);
 }
 .lt-app :is(button,a,input,textarea,select,summary):focus-visible{
@@ -625,13 +582,6 @@
     scroll-behavior:auto!important;
   }
 }
-
-/* Only a visible Play disclosure has an anchored, viewport-clamped popup.
-   This never changes the native aperture, DWM tiles, or launcher layout. */
-.lt-coordinate-popup{overscroll-behavior:contain;overflow-wrap:anywhere}
-.lt-coordinate-paste[open] > summary{background:var(--lt-selected-bg)}
-.lt-coordinate-paste > summary{scroll-margin:8px}
-.lt-coordinate-popup :is(button,input,textarea,select):focus-visible{scroll-margin:12px}
 
 /* Settings and Storage only: retain readable controls at the application's
    supported 920px minimum without changing native Play/DWM geometry. */
@@ -966,38 +916,4 @@
     padding:8px 12px;
     margin-bottom:6px;
   }
-}
-
-/* One optional Tools disclosure replaces three always-visible Play controls.
-   Refresh stays visible. Overlaying the menu on demand does not change the
-   selected 16:9 viewport or the five fixed DWM preview node rectangles. */
-.lt-play-utilities{position:relative;z-index:20;flex:none;min-width:0}
-.lt-play-utilities > summary{
-  display:flex;align-items:center;justify-content:center;
-  min-height:32px;padding:7px 11px;
-  border:1px solid var(--lt-control-outline);
-  border-radius:var(--lt-radius-control);
-  background:var(--lt-surface-raised);color:var(--lt-text);
-  cursor:pointer;list-style:none;font-size:12px;white-space:nowrap;
-}
-.lt-play-utilities > summary::-webkit-details-marker{display:none}
-.lt-play-utilities > summary:hover{background:var(--lt-control-hover)}
-.lt-play-utilities[open] > .lt-play-tools{
-  position:absolute;right:0;top:calc(100% + 6px);z-index:21;
-  display:flex;flex-direction:column;align-items:stretch;gap:4px;
-  min-width:188px;width:max-content;max-width:calc(100vw - 24px);
-  padding:7px;border:1px solid var(--lt-control-outline);
-  border-radius:8px;background:var(--lt-panel);
-  box-shadow:0 12px 28px var(--lt-popup-shadow);
-}
-.lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste{width:100%;flex:none}
-.lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste > summary{
-  width:100%;text-align:left;
-}
-.lt-play-utilities[open] > .lt-play-tools > button.lt-separate-window{
-  min-height:32px;text-align:left;
-}
-@media (forced-colors:active){
-  .lt-play-utilities > summary{border-color:ButtonText}
-  .lt-play-utilities[open] > .lt-play-tools{border-color:ButtonText}
 }

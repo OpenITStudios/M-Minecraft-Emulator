@@ -13,7 +13,10 @@ The approved product is one central application controlling five stable Minecraf
 profiles. Users explicitly open each desired profile; app startup launches no game.
 One large viewport contains the selected game surface. All five Minecraft
 profiles (MC01-MC05) stay in a single fixed-order lower rail, including the
-selected profile. Selecting changes the main viewport and the card highlight,
+selected profile. F3 Inspector and Coordinates & Saves have been removed
+from the desktop application by explicit operator decision. They were not
+requested as launcher UI features. Selecting changes the main viewport
+and the card highlight,
 but never moves or removes its lower card. Up to four other eligible running
 sessions retain their original native DWM preview targets in that same rail.
 A failed preview is not proof that the game stopped. Next/previous navigation

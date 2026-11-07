@@ -53,20 +53,18 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(play).toContain('startingCount');
     expect(play).toContain('{runningCount}');
   });
-  it('preserves only ephemeral user drafts while maintaining native admission',()=>{
+  it('retains graphics drafts without any in-app F3 or coordinate feature',()=>{
     const play=asset('src/LazyTesterApp.svelte');
-    const coordinates=asset('src/CoordinatePastePanel.svelte');
     const settings=asset('src/GeneralSettings.svelte');
     expect(play).toContain('graphicsDrafts = new Map<ProfileSlot, GraphicsPreset>()');
     expect(play).toContain("if (page==='settings') rememberGraphicsDraft()");
     expect(play).toContain('graphicsPreset=graphicsChoice(selectedSlot)');
     expect(play).toContain('graphicsDrafts.delete(request.slot)');
     expect(settings).toContain('Unsaved graphics choice.');
-    const close=coordinates.split('function resetOnClose(')[1]?.split('</script>')[0]??'';
-    expect(close).not.toContain("raw = ''");
-    expect(close).not.toContain("bookmarkName = ''");
-    expect(coordinates).toContain('Unsaved text and manual labels stay separate for each launcher');
-    expect(coordinates).not.toContain('navigator.clipboard');
+    expect(play).not.toContain('CoordinatePastePanel');
+    expect(play).not.toContain('F3InspectorPanel');
+    expect(play).not.toContain('projectF3Inspector');
+    expect(settings).not.toContain('Coordinates & Saves');
   });
   it('keeps functional focus and contrast tokens within the existing UI owner',()=>{
     const css=asset('src/lazy-tester.css');

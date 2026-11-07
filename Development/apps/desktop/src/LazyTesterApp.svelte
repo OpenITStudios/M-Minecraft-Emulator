@@ -7,9 +7,6 @@
   import WindowTitlebar from './WindowTitlebar.svelte';
   import LauncherRail from './LauncherRail.svelte';
   import AgentActivityNotice from './AgentActivityNotice.svelte';
-  import CoordinatePastePanel from './CoordinatePastePanel.svelte';
-  import F3InspectorPanel from './F3InspectorPanel.svelte';
-  import {projectF3Inspector} from './app/presentation/f3Inspector.js';
   import {presentAgentActivity} from './app/presentation/agentActivity.js';
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
@@ -70,41 +67,6 @@
   let loadingPage: Page | null = null;
   let pageHeading: HTMLHeadingElement | undefined;
   let headerRefreshButton: HTMLButtonElement | undefined;
-  // One native HTML disclosure for optional Play tools. The original F3,
-  // Coordinates and separate-window owners keep their own actions and guards.
-  let playToolsElement: HTMLDetailsElement | undefined;
-  let playToolsSummary: HTMLElement | undefined;
-  function closePlayToolsOnFocusOut(event: FocusEvent): void {
-    if (!playToolsElement?.open) return;
-    const next = event.relatedTarget;
-    if (next instanceof Node) {
-      if (!playToolsElement.contains(next)) playToolsElement.open = false;
-      return;
-    }
-    // Native focus transfers may report a null target. Never reclaim game focus.
-    void tick().then(() => {
-      if (!playToolsElement?.open) return;
-      const focused = document.activeElement;
-      if (!document.hasFocus() || !(focused instanceof Node) ||
-          !playToolsElement.contains(focused)) playToolsElement.open = false;
-    });
-  }
-  function closePlayToolsOnBlur(): void {
-    if (playToolsElement?.open) playToolsElement.open = false;
-  }
-  function closePlayToolsOnEscape(event: KeyboardEvent): void {
-    if (event.key !== 'Escape' || !playToolsElement?.open ||
-        !(event.target instanceof Node) || !playToolsElement.contains(event.target)) return;
-    // Nested F3/Coordinates own their original Escape and focus restoration.
-    // Even if a child closes during this event, don't close both levels.
-    if (event.target instanceof Element &&
-        event.target.closest('details.lt-coordinate-paste[open]')) return;
-    event.preventDefault();
-    event.stopPropagation();
-    playToolsElement.open = false;
-    if (document.hasFocus() && playToolsSummary?.isConnected)
-      playToolsSummary.focus({preventScroll:true});
-  }
   // Keyboard-only Refresh focus continuity, not a new status or native action.
   let headerRefreshFocusPage: Page | null = null;
   let initializing = true, checkingStorage = false, storageCheckedAt = '';
@@ -194,23 +156,6 @@
       (startingCount > 0 ? ' · ' + startingCount + ' starting' : '') +
       (attentionCount > 0 ? ' · ' + attentionCount + ' need attention' : '')
     : 'Session status unavailable';
-  // Only reuse original Play-owner in-flight decisions; never create
-  // another controller, poller or mutable native session identity.
-  $: f3ActionPending = busy || closeReviewPending || queued !== null ||
-    queuedPage !== null || queuedLaunch !== null || requested !== null ||
-    manualRefreshRequested || manualRefreshing;
-  // Last matching native observation only, not continuously verified gameplay.
-  $: f3View = projectF3Inspector({
-    selectedSlot: active,
-    profile: active === null ? undefined : profiles.find(profile => profile.slot === active),
-    actionPending: f3ActionPending,
-    currentSelection: nativeBackend === 'WindowsNative' && page === 'workspace' &&
-      !initializing && available && binding?.configured === true && !detached &&
-      !f3ActionPending && !closeInProgress && !nativeExitReview && active !== null &&
-      !uncertainWindowSlots.has(active) && selectedIdentity !== '' &&
-      selectedIdentity === identity(profiles.find(profile => profile.slot === active)),
-    settings: settings ?? null,
-  });
   // UI-only admission: pending selections and launches must finish before
   // another manual recovery action can replace their queued destination.
   $: guidedRecoveryBlocked = nativeBackend !== 'WindowsNative' || page !== 'workspace' ||
@@ -969,7 +914,6 @@
 </script>
 <svelte:head><title>Lazy Tester</title></svelte:head>
 <svelte:window on:keydown={closeReviewKeydown}/>
-<svelte:window on:blur={closePlayToolsOnBlur} />
 <div class="lt-app">
   <WindowTitlebar backendSupport={nativeBackend} />
   <header class="lt-topbar">
@@ -989,22 +933,11 @@
           <button class="lt-secondary" bind:this={headerRefreshButton}
             disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'}
             on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>
-          {#if page==='workspace'}
-            <details class="lt-play-utilities" bind:this={playToolsElement}
-              on:focusout={closePlayToolsOnFocusOut} on:keydown={closePlayToolsOnEscape}>
-              <summary bind:this={playToolsSummary} aria-label="Open Play tools and window actions">Tools</summary>
-              <div class="lt-play-tools" role="group" aria-label="Play tools">
-                {#if active!==null}
-                  <button class="lt-secondary lt-separate-window"
-                    disabled={busy||refreshing||resizing}
-                    title={'Open only Minecraft - '+active+' in its own window'}
-                    aria-label={'Open Minecraft - '+active+' in a window'}
-                    on:click={()=>{if(playToolsElement)playToolsElement.open=false;void release();}}>Separate window</button>
-                {/if}
-                <F3InspectorPanel view={f3View} />
-                <CoordinatePastePanel selectedSlot={active} />
-              </div>
-            </details>
+          {#if page==='workspace'&&active!==null}
+            <button class="lt-secondary" disabled={busy||refreshing||resizing}
+              title={'Open only Minecraft - '+active+' in its own window'}
+              aria-label={'Open Minecraft - '+active+' in a window'}
+              on:click={release}>Separate window</button>
           {/if}
         </div>
       </header>
