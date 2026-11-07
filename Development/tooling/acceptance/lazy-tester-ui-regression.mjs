@@ -457,6 +457,22 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_previews').length===window.__previewBaseline),true,'unchanged polling must not reapply native geometry');
   await page.evaluate(()=>window.__stableObserver.disconnect());
   await nav('Settings').click();await heading('General').waitFor();
+  // Source-authored browser geometry; does not prove native DPI, screen
+  // reader, high contrast or game-window behavior until actually executed.
+  const settingsTargets=await page.evaluate(()=>{
+    const selectors=['#graphics-preset','#active-fps','#background-fps',
+      '.lt-audio-toggle','.lt-sidebar nav button',
+      '.lt-settings-explanation > summary'];
+    return selectors.map(selector=>{
+      const element=document.querySelector(selector);
+      return {selector,height:element?.getBoundingClientRect().height??0};
+    });
+  });
+  assert.ok(settingsTargets.every(({height})=>height>=24),
+    'Settings control and disclosure targets must provide at least 24 CSS px height');
+  assert.ok(settingsTargets.filter(item=>['#graphics-preset','#active-fps','#background-fps']
+    .includes(item.selector)).every(({height})=>height>=36),
+    'Settings form inputs should use the shared 36px control height');
   const presetExplanation=page.locator('details.lt-settings-explanation');
   assert.equal(await presetExplanation.getAttribute('open'),null,
     'Technical preset explanations stay out of the default Settings path');

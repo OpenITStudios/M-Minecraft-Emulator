@@ -30,6 +30,19 @@
           --lt-danger-hover:#c42b1c;
           --lt-control-min-height:36px;
           --lt-radius-control:6px;
+          /* Semantic interactive surfaces and non-text distinctions. */
+          --lt-advanced-outline:#6e7b9a;
+          --lt-expanded-surface:#252d43;
+          --lt-preview-empty:#252c3a;
+          --lt-alert-outline:#aa785a;
+          --lt-alert-surface:#342721;
+          --lt-danger-surface:#943641;
+          --lt-danger-outline:#b34a56;
+          --lt-on-danger:#fff;
+          --lt-control-hover:#303a48;
+          --lt-accent-hover:#d0d7ff;
+          --lt-overlay-shadow:#0006;
+          --lt-popup-shadow:#0009;
           display:flex;
           flex-direction:column;
           height:100vh;
@@ -48,7 +61,7 @@
               flex-shrink:0}
               .lt-app button:disabled{
                 cursor:default;
-                opacity:.5}
+                opacity:.68}
                 .lt-app button.lt-secondary{
                   background:var(--lt-surface-raised);
                   color:inherit;
@@ -250,7 +263,7 @@
                                                                                                           font-size:12px;
                                                                                                           color:var(--lt-muted)}
                                                                                                           .lt-advanced{
-                                                                                                            border:1px solid #53618c;
+                                                                                                            border:1px solid var(--lt-advanced-outline);
                                                                                                             border-radius:9px;
                                                                                                             background:var(--lt-panel);
                                                                                                             margin:25px 0 0}
@@ -271,7 +284,7 @@
                                                                                                                     font-size:23px}
                                                                                                                     .lt-advanced[open] summary{
                                                                                                                       border-bottom:1px solid var(--lt-line);
-                                                                                                                      background:#252d43;
+                                                                                                                      background:var(--lt-expanded-surface);
                                                                                                                       border-radius:9px 9px 0 0}
                                                                                                                       .lt-advanced-body{
                                                                                                                         padding:0 18px}
@@ -369,7 +382,7 @@
                                                                                                                                                               width:min(100%,calc(clamp(48px,9vh,100px) * 16 / 9));
                                                                                                                                                               margin-inline:auto;
                                                                                                                                                               border-radius:5px;
-                                                                                                                                                              background:#252c3a;
+                                                                                                                                                              background:var(--lt-preview-empty);
                                                                                                                                                               color:var(--lt-muted);
                                                                                                                                                               font-size:16px;
                                                                                                                                                               font-weight:400}
@@ -388,8 +401,8 @@
                                                                                                                                                                     margin-bottom:15px;
                                                                                                                                                                     flex-shrink:0}
                                                                                                                                                                     .lt-alert{
-                                                                                                                                                                      border-color:#aa785a;
-                                                                                                                                                                      background:#342721;
+                                                                                                                                                                      border-color:var(--lt-alert-outline);
+                                                                                                                                                                      background:var(--lt-alert-surface);
                                                                                                                                                                       max-height:100px;
                                                                                                                                                                       overflow:auto;
                                                                                                                                                                       overflow-wrap:anywhere}
@@ -440,9 +453,8 @@
 .lt-window-drag>span:first-child{display:grid;place-items:center;background:var(--lt-accent);color:var(--lt-on-accent);border-radius:4px;width:18px;height:18px;font-size:10px;font-weight:700}
 .lt-app .lt-window-control{display:grid;place-items:center;width:46px;padding:0;border:0;border-radius:0;background:transparent;color:var(--lt-text)}
 .lt-app .lt-window-control:hover{background:var(--lt-line)}
-.lt-app .lt-window-close:hover{background:var(--lt-danger-hover);color:#fff}
+.lt-app .lt-window-close:hover{background:var(--lt-danger-hover);color:var(--lt-on-danger)}
 .lt-window-control svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1}
-.lt-app button:focus-visible{outline:2px solid var(--lt-accent);outline-offset:-3px}
 .lt-app{color-scheme:dark;border:1px solid var(--lt-line)}
 /* Use each card's width instead of capping live previews at 100px high. */
 .lt-filmstrip{width:min(100%,1600px);gap:12px}
@@ -454,9 +466,9 @@
 .lt-delete-confirm input[type="text"] {width:100%;max-width:320px}
 .lt-delete-ack {display:flex;gap:10px;align-items:flex-start;line-height:1.5}
 .lt-delete-ack input[type="checkbox"] {flex:0 0 auto;width:18px;height:18px;padding:0;margin:2px 0 0;accent-color:var(--lt-accent)}
-.lt-delete-confirm button.lt-danger {background:#943641;color:#fff;border-color:#b34a56}
+.lt-delete-confirm button.lt-danger {background:var(--lt-danger-surface);color:var(--lt-on-danger);border-color:var(--lt-danger-outline)}
 .lt-audio-toggle { display:flex; align-items:center; gap:8px; white-space:nowrap; cursor:pointer; }
-.lt-audio-toggle input { width:18px; height:18px; accent-color:#bfc3ff; }
+.lt-audio-toggle input { width:18px; height:18px; accent-color:var(--lt-accent); }
 
 /* Normal-exit failure is a session-recovery state, not a second launcher manager. */
 .lt-exit-recovery{flex:none;border:1px solid var(--lt-line);border-radius:8px;background:var(--lt-surface-raised);padding:11px 14px;margin-bottom:12px;font-size:13px}
@@ -496,7 +508,7 @@
 .lt-agent-activity{position:relative;right:auto;top:auto;z-index:12;flex:0 1 192px;width:192px;min-width:0;max-width:192px;font-size:12px}
 .lt-agent-activity summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;padding:8px 10px;border:1px solid var(--lt-line);border-radius:6px;background:var(--lt-surface-raised);color:var(--lt-accent)}
 .lt-agent-activity summary:focus-visible{outline:2px solid var(--lt-accent);outline-offset:2px}
-.lt-agent-activity-details{position:absolute;right:0;top:38px;width:min(310px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:min(260px,calc(100dvh - 102px));overflow:auto;padding:14px;border:1px solid var(--lt-line);border-radius:8px;background:var(--lt-panel);color:var(--lt-text);box-shadow:0 6px 24px #0006}
+.lt-agent-activity-details{position:absolute;right:0;top:38px;width:min(310px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:min(260px,calc(100dvh - 102px));overflow:auto;padding:14px;border:1px solid var(--lt-line);border-radius:8px;background:var(--lt-panel);color:var(--lt-text);box-shadow:0 6px 24px var(--lt-overlay-shadow)}
 .lt-agent-activity-details strong{display:block;font-size:13px}
 .lt-agent-activity-details p{margin:8px 0;font-size:12px;line-height:1.4}
 .lt-agent-activity-details small{display:block;margin-top:10px;color:var(--lt-muted);line-height:1.4}
@@ -512,9 +524,9 @@
 /* Optional, manual-only coordinate text utility. Five native DWM cards remain intact. */
 .lt-coordinate-paste{position:relative;z-index:14;flex:none;font-size:12px}
 .lt-coordinate-paste>summary{display:block;cursor:pointer;white-space:nowrap;border:1px solid var(--lt-line);background:var(--lt-surface-raised);color:inherit;border-radius:6px;padding:7px 11px;font-size:12px;line-height:normal}
-.lt-coordinate-paste>summary:hover{background:#303a48}
+.lt-coordinate-paste>summary:hover{background:var(--lt-control-hover)}
 .lt-coordinate-paste>summary:focus-visible{outline:2px solid var(--lt-accent);outline-offset:3px}
-.lt-coordinate-popup{position:fixed;left:16px;top:160px;right:auto;bottom:auto;width:min(390px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100vh - 176px);max-height:calc(100dvh - 176px);visibility:hidden;overflow:auto;border:1px solid var(--lt-line);border-radius:9px;background:var(--lt-panel);padding:15px;box-shadow:0 12px 28px #0009;display:grid;gap:9px;text-align:left}
+.lt-coordinate-popup{position:fixed;left:16px;top:160px;right:auto;bottom:auto;width:min(390px,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100vh - 176px);max-height:calc(100dvh - 176px);visibility:hidden;overflow:auto;border:1px solid var(--lt-line);border-radius:9px;background:var(--lt-panel);padding:15px;box-shadow:0 12px 28px var(--lt-popup-shadow);display:grid;gap:9px;text-align:left}
 .lt-coordinate-popup strong{font-size:14px;line-height:1.25}
 .lt-coordinate-popup .lt-coordinate-status{color:var(--lt-accent);font-size:12px}
 .lt-coordinate-popup p{font-size:12px;line-height:1.45;margin:0}
@@ -784,4 +796,42 @@
   .lt-topbar{gap:8px;padding-inline:8px}
   .lt-topbar nav{gap:8px}
   .lt-topbar .lt-connection{flex-basis:100px;min-width:58px}
+}
+
+/* Consistent pointer and keyboard affordances for existing Settings/Storage.
+   Only settings controls gain target height; Play/DWM geometry is untouched. */
+.lt-app button.lt-secondary:hover:not(:disabled){background:var(--lt-control-hover)}
+.lt-settings-layout .lt-actions > button:not(.lt-secondary):not(.lt-danger):hover:not(:disabled){
+  background:var(--lt-accent-hover);
+}
+.lt-settings-layout .lt-delete-confirm button.lt-danger:hover:not(:disabled){
+  background:var(--lt-danger-hover);
+  color:var(--lt-on-danger);
+}
+.lt-settings-layout :is(.lt-audio-toggle,.lt-delete-ack){
+  min-height:32px;
+}
+.lt-settings-layout :is(.lt-settings-explanation,.lt-location-options) > summary{
+  /* Keep the native disclosure marker while enlarging the pointer target. */
+  display:list-item;
+  min-height:32px;
+  padding-block:6px;
+}
+.lt-settings-layout :is(.lt-settings-explanation,.lt-location-options) > summary:hover{
+  text-decoration:underline;
+}
+.lt-settings-layout :is(.lt-target select,.lt-launcher-heading select,#graphics-preset,.lt-fps input){
+  min-height:var(--lt-control-min-height);
+}
+.lt-settings-layout .lt-sidebar nav button{min-height:var(--lt-control-min-height)}
+@media (forced-colors:active){
+  .lt-settings-layout .lt-delete-confirm button.lt-danger{
+    border-color:ButtonText;
+    color:ButtonText;
+    background:Canvas;
+  }
+  .lt-settings-layout .lt-delete-confirm button.lt-danger:hover:not(:disabled){
+    background:Highlight;
+    color:HighlightText;
+  }
 }

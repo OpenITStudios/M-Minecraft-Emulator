@@ -81,11 +81,11 @@ supports it. Do not treat these as release approval.
 | P1 | Keyboard Escape, Cancel and ephemeral focus restoration | Source handlers present | Focus trace, game keyboard unaffected, nested and expired-report cases |
 | P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
-| P1 | Accessible contrast, non-color state and hit target sizing | Tokens/forced-colors/reduced-motion source present | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
+| P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, numeric contrast fixture, Settings control target dimensions and forced-colors states | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
 | P1 | Narrow Settings/Storage and zoom/reflow | Responsive source scopes present | No hidden controls/dual-axis text scrolling at supported Windows scales |
 | P1 | Browser regression previously sent reversed profile order rejected by parser | SOURCE_PREPARED: valid inventory journey plus separate rejection fixture | Authorized synthetic browser suite and original parser tests |
 | P2 | App icon quality and independent visual identity | One SVG source and app title retained | Native Taskbar 16/24/32/48px, Win10/11 dark/light/forced-color review |
-| P2 | Repeated raw colors, selector specificity and spacing density | OPEN_SOURCE_RISK: cascade partially consolidated | Token audit + rendered component inventory, consistent states/spacing |
+| P2 | Repeated raw colors, selector specificity and spacing density | SOURCE_PREPARED: specialized surfaces and action colors tokenized; redundant global button focus rule removed | Token audit + rendered component inventory, consistent states/spacing |
 | P2 | Consistent naming, help and disclosure discoverability | Source wording partially unified | English copy review with representative first-time and expert users |
 
 The highest-priority source risks must be resolved before calling this
@@ -599,3 +599,73 @@ Windows display-scale results.
 **Unresolved:** Svelte typecheck, synthetic-browser execution, WebView2,
 screen reader, Windows 100/125/150/200% DPI, native DWM coordinates,
 and actual Minecraft runtime are all `NOT_EXECUTED`.
+
+## Semantic control tokens, pointer states and source contrast audit — 7 November 2026
+
+The active Minimal Professional stylesheet continues to own **one** dark
+semantic palette within `.lt-app`. Previous literal colors for the
+advanced outline and expanded surface, preview placeholder, alert
+surface/outline, destructive button/border/foreground, hover and the two
+overlay shadows are now named custom properties within that owner.
+The named surfaces keep their previous colors (including the existing
+red destructive button), with two deliberate exceptions: the Advanced
+options outline changes from #53618c to #6e7b9a to improve functional
+boundary contrast, and the background-audio checkbox reuses the main
+accent token instead of a slightly different violet.
+
+### Interactive-state policy
+
+- **Primary actions:** Settings/Storage primary buttons have a readable
+  accent hover; disabled buttons retain the existing native admission
+  and show a less-faded 0.68 opacity rather than 0.5.
+- **Secondary actions:** original secondary buttons use a restrained
+  shared hover surface. Existing Settings-specific hover rules retain
+  their higher specificity.
+- **Destructive actions:** full-profile deletion retains its warning
+  color and exact native confirmation-token gate. Its hover uses the
+  existing danger-hover token with readable light text; forced-colors
+  mode uses Windows system colors rather than an unrecognizable dark red.
+- **Keyboard:** the redundant early button-only focus rule was removed.
+  The later common `:focus-visible` rule remains the canonical visible
+  focus ring for buttons, anchors, summaries, fields and selectors.
+  Error inputs retain their dedicated invalid border state.
+- **Targets:** in Settings/Storage only, graphic/FPS selectors and the
+  sidebar navigation use the already-established 36px control minimum.
+  The audio and deletion acknowledgement labels have a minimum 32px
+  clickable label height. Text-only configuration disclosures have a
+  32px minimum target and an explicit hover indicator. These do **not**
+  change the Play controls, five card previews, 16:9 aperture or DWM
+  positioning.
+
+### Contrast calculation and evidence ceiling
+
+From the authored opaque hex tokens, static sRGB relative luminance
+calculations yield representative contrasts:
+
+| Pair | Calculated contrast | Intended check |
+| --- | ---: | --- |
+| Main text / canvas | 15.72:1 | Normal text >=4.5:1 |
+| Muted text / panel | 8.79:1 | Normal text >=4.5:1 |
+| Accent text / selected panel | 6.50:1 | Normal text >=4.5:1 |
+| Warning text / standard panel | 8.24:1 | Normal text >=4.5:1 |
+| Control outline / standard panel | 3.39:1 | Functional non-text >=3:1 |
+| Advanced outline / standard panel | 3.85:1 | Functional non-text >=3:1 |
+| Advanced outline / expanded surface | 3.23:1 | Functional non-text >=3:1 |
+| White destructive text / red action | 7.33:1 | Normal text >=4.5:1 |
+| White destructive text / red hover | 5.66:1 | Normal text >=4.5:1 |
+
+The new `design-token-accessibility.test.ts` provides a **source-authored,
+unexecuted** contrast calculation against actual CSS token declarations,
+plus controls for hover, focus, disabled and target-source rules. The
+optional existing browser regression also has authored target-height
+checks (minimum 24 CSS px, Settings form controls 36 CSS px).
+This is based on [WCAG 2.2 Non-text Contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast)
+and [WCAG 2.2 Target Size Minimum](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum);
+small controls may qualify through the official spacing and other
+exceptions, which have **not** been audited empirically here.
+
+**Not yet accepted:** rendered contrast, outline clipping, actual
+pointer bounds, Windows 100/125/150/200% scaling, Narrator, screen-reader
+output, forced-colors, 920x620 navigation, Svelte compilation, DWM
+placements and Minecraft gameplay all remain `NOT_EXECUTED`.
+These rows are `SOURCE_PREPARED`, **not** accessible UI PASS.
