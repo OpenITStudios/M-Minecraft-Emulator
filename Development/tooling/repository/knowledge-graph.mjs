@@ -131,14 +131,20 @@ export function* proseLines(markdown) {
   }
 }
 
+function escapedAt(line,index){
+  let count=0;
+  for(let i=index-1;i>=0 && line[i]==='\\';i--)count++;
+  return count%2===1;
+}
+
 export function* authoredLinks(markdown) {
   for(const row of proseLines(markdown)){
     for(const m of row.text.matchAll(MARKDOWN_LINK)){
-      if(m.index>0 && row.text[m.index-1]==='!') continue;
+      if(escapedAt(row.text,m.index) || (m.index>0 && row.text[m.index-1]==='!'))continue;
       yield {target:m[2],syntax:'MARKDOWN_INLINE',line:row.line};
     }
     for(const m of row.text.matchAll(WIKI_LINK)){
-      if(m[1]==='!') continue;
+      if(m[1]==='!' || escapedAt(row.text,m.index)) continue;
       yield {target:m[2].split('|')[0].trim(),syntax:'OBSIDIAN_WIKILINK',line:row.line};
     }
   }
@@ -260,7 +266,7 @@ export function buildKnowledgeIndex(root=DEFAULT_ROOT){
   }
   edges.sort((a,b)=>(a.from+'|'+a.type+'|'+a.to).localeCompare(b.from+'|'+b.type+'|'+b.to));
   unresolved.sort((a,b)=>a.path.localeCompare(b.path)||a.line-b.line);
-  return {schemaVersion:1,resources,edges,unresolved,byId,
+  return {schemaVersion:1,resources,edges,unresolved,byId,contents,
     proofBoundary:'STATIC_AUTHORED_NAVIGATION_ONLY_NOT_SOURCE_DEPENDENCY_OR_RUNTIME_PROOF'};
 }
 
@@ -299,10 +305,25 @@ export function findResources(index,query,{domain,all=false,includeHistorical=fa
   return index.resources.filter(r=>(all||r.domain===domain)&&
     (includeHistorical||r.lifecycle==='ACTIVE')&&r.authority!=='DERIVED')
     .map(r=>{
-      const field=[r.id,r.path,r.role||'',r.domain].join(' ').toLowerCase();
-      const hits=tokens.filter(t=>field.includes(t)).length;
-      return {resource:r,score:hits};
-    }).filter(x=>x.score===tokens.length)
+      const identity=[r.id,r.path,r.role||'',r.domain].join(' ').toLowerCase();
+      // Search scoped, authored document prose; code fences and comments
+      // cannot cause phantom retrieval evidence. Lexical ranking is NOT
+      // semantic similarity, module usage, or source dependency proof.
+      const lines=index.contents?.has(r.path)
+        ? [...proseLines(index.contents.get(r.path))] : [];
+      const matched=[];
+      for(const token of tokens){
+        if(identity.includes(token)){
+          matched.push({term:token,kind:'RESOURCE_IDENTITY'});continue;
+        }
+        const site=lines.find(line=>line.text.toLowerCase().includes(token));
+        if(!site)return undefined;
+        matched.push({term:token,kind:'DOCUMENT_PROSE',path:r.path,
+          line:site.line,excerpt:site.text.trim().slice(0,180)});
+      }
+      return {resource:r,score:matched.reduce((n,m)=>n+(m.kind==='RESOURCE_IDENTITY'?3:1),0),
+        matched};
+    }).filter(Boolean)
     .sort((a,b)=>b.score-a.score||a.resource.id.localeCompare(b.resource.id))
     .slice(0,Math.min(30,limit));
 }
@@ -318,5 +339,7 @@ export function graphSummary(index){
     lifecycles:count(index.resources,r=>r.lifecycle),
     edgeTypes:count(index.edges,e=>e.type),edges:index.edges.length,
     unresolvedLinkCount:index.unresolved.length,
+    sourceOnlyDocuments:index.resources.filter(r=>r.proofCeiling==='SOURCE_ONLY').length,
+    draftDocuments:index.resources.filter(r=>r.lifecycle==='DRAFT').length,
     unresolved:index.unresolved.slice(0,30)};
 }

@@ -84,7 +84,7 @@ export function run(argv,root=DEFAULT_ROOT){
     const summary=graphSummary(index);
     const missing=index.unresolved.filter(x=>x.reason==='MISSING_OR_UNSAFE');
     output={...summary,mode:'DOCUMENTATION_GRAPH_AUDIT',
-      status:missing.length?'NEEDS_REVIEW':'SOURCE_STRUCTURE_VALID',
+      status:missing.length?'NEEDS_REVIEW':'NO_MISSING_OR_UNSAFE_LINKS_DETECTED',
       missingOrUnsafe:missing,
       note:'NOT_CATALOGED references do not assert absent files. No runtime or test execution.'};
   }

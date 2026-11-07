@@ -23,7 +23,7 @@ Task/intent
   -> domain README (one canonical concern)
   -> Resource Catalog (stable document ID, location and authority)
   -> Graph (explicit authored navigation + witness)
-  -> scoped Retrieval / section selection
+  -> scoped lexical Retrieval / section selection
   -> source owner via implementation-map.md
   -> Context (source vs history vs unknown distinguished)
   -> decision / optional change / proof ceiling / STOP

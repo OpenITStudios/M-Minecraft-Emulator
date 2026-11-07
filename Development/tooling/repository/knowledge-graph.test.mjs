@@ -40,6 +40,8 @@ test('authored links exclude code fences, code spans, comments and image links',
     '<!-- [comment](system/bad3.md) -->',
     '![image](system/bad4.md)',
     '[[docs/system/README.md|System]]',
+    '\\[escaped](system/bad5.md)',
+    '\\[[docs/system/bad6.md]]',
   ].join('\n');
   const links=[...authoredLinks(input)].map(x=>x.target);
   assert.deepEqual(links,['system/README.md','docs/system/README.md']);
@@ -53,7 +55,11 @@ test('catalog identity, route trace, section derivation and source provenance',(
   assert.ok(index.byId.has('document.system.graph.section.trust-boundary'));
   assert.equal(explainResourcePath(index,'document.system.graph','source.rules.agent-policy').status,'FOUND');
   assert.equal(graphSummary(index).unresolvedLinkCount,0);
-  assert.equal(findResources(index,'graph',{domain:'system'}).length,1);
+  assert.ok(findResources(index,'graph',{domain:'system'})
+    .some(item=>item.resource.id==='document.system.graph'));
+  assert.ok(findResources(index,'trust',{domain:'system'})
+    .some(item=>item.matched.some(match=>match.kind==='DOCUMENT_PROSE' &&
+      match.path==='docs/system/graph.md' && match.line>0)));
   assert.throws(()=>findResources(index,'graph'),/Choose --domain/);
   assert.match(run(['--trace','document.docs.router','document.system.graph','--format','markdown'],root),/\[\[docs\/system\/graph.md/);
   assert.match(run(['--graph','--format','mermaid'],root),/flowchart LR/);
