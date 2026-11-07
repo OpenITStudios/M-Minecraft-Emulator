@@ -43,7 +43,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
   });
   it('improves dense explanations inside scrollable settings and Play disclosures',()=>{
     const css=source('lazy-tester.css');
-    expect(css).toContain('.lt-help{\\n');
+    expect(css).toContain('.lt-help{');
     expect(css).toContain('font-size:13px!important}');
     expect(css).toContain('.lt-data-path{');
     expect(css).toContain('.lt-agent-activity-details p{margin:8px 0;font-size:13px;');

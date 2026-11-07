@@ -50,9 +50,9 @@ describe('Launcher recovery action target and accessibility source contracts',()
     const journey=browser();
     const css=load('lazy-tester.css');
     expect(journey).toContain("await checkHealth.getAttribute('aria-describedby')");
-    expect(journey).toContain('recoveryTargets.refresh.width>=24');
+    expect(journey).toContain('recoveryTargets.refresh.width>=28');
     expect(journey).toContain('recoveryTargets.refresh.height>=28');
-    expect(journey).toContain('recoveryTargets.refreshMargin===0');
+    expect(journey).toContain('assert.equal(recoveryTargets.refreshMargin,0,');
     expect(journey).toContain('recoveryTargets.close.height>=32');
     expect(journey).toContain('Native DWM preview target must remain allocated independently');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
