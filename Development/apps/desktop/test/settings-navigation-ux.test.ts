@@ -76,6 +76,21 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(app).not.toContain('workspaceLayout');
     expect(settings).not.toContain('invokeRuntime(');
   });
+  it('explains unfamiliar graphics and FPS options without changing their native values',()=>{
+    const general=load('GeneralSettings.svelte');
+    const storage=load('DataStorage.svelte');
+    expect(general).toContain('<option value="Preserve">Preserve Visuals (recommended)</option>');
+    expect(general).toContain('About legacy graphics presets');
+    expect(general).toContain('both set 12 chunks and MSAA 1');
+    expect(general).toContain('not guaranteed FPS improvements');
+    expect(general).toContain('FPS means frames per second.');
+    expect(general).toContain('These are caps, not measured FPS.');
+    expect(storage).toContain('<summary>Find existing profile data</summary>');
+    expect(storage).toContain('<strong>Advanced recovery</strong>');
+    expect(general).toContain('Save graphics preference');
+    expect(general).toContain('Save FPS limits');
+    expect(general).not.toContain('Use 120 / 5');
+  });
   it('wraps only settings and storage rows without changing the game viewport',()=>{
     const css=load('lazy-tester.css');
     expect(css).toContain('@media (max-width:1050px)');

@@ -48,6 +48,45 @@ export type UserMessageKey = keyof typeof feedback;
 export function userFeedback(key: UserMessageKey) {return feedback[key];}
 export function userMessage(key: UserMessageKey): string {return feedback[key].message;}
 
+/** Stable, authored headings for existing feedback only; never classify a raw
+ * native exception, infer success/failure, or authorize another operation.
+ */
+export function feedbackHeading(key: UserMessageKey): string {
+  switch (key) {
+    case 'backend': return 'Windows support check unavailable';
+    case 'binding': return 'Launcher profiles not verified';
+    case 'connection':
+    case 'event':
+    case 'windowStatus': return 'Session status unavailable';
+    case 'launch': return 'Game launch not confirmed';
+    case 'selection':
+    case 'workspace':
+    case 'preview':
+    case 'recovery':
+    case 'windowControl': return 'Game display needs attention';
+    case 'location':
+    case 'folder': return 'Data folder needs attention';
+    case 'storage':
+    case 'pack':
+    case 'worldPack': return 'Storage information incomplete';
+    case 'cache': return 'Cache cleanup not confirmed';
+    case 'clearData': return 'Data cleanup not confirmed';
+    case 'settings':
+    case 'performance':
+    case 'audio':
+    case 'gameSettings':
+    case 'graphicsBlocked':
+    case 'performanceBlocked': return 'Settings need attention';
+    case 'close':
+    case 'closeAll':
+    case 'closeIncomplete':
+    case 'closeRejected': return 'Game exit not confirmed';
+    case 'windowClose': return 'App exit not confirmed';
+    case 'profile': return 'Launcher needs attention';
+    default: return 'Action not confirmed';
+  }
+}
+
 // A successful idle Inspect does not prove an active controller, sign-in or gameplay.
 // Binding is only a verified storage identity, never an authenticated Minecraft account.
 export function sessionConnectionLabel(

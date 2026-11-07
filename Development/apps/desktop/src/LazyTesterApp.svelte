@@ -11,7 +11,7 @@
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
-    import {userMessage, userFeedback, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
+    import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
@@ -945,14 +945,32 @@
         <p class="lt-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>
       {/if}
       {#if issueKey!==null||connectionIssueKey!==null}
-        <div class="lt-alert" role="alert" tabindex="0">
-          {#if issueKey!==null}<p>{userMessage(issueKey)}</p>{/if}
-          {#if connectionIssueKey!==null}<p>{userMessage(connectionIssueKey)}</p>{/if}
-          <details class="lt-feedback-reference">
-            <summary>Support reference</summary>
-            {#if issueKey!==null}<p>{userFeedback(issueKey).area} · {userFeedback(issueKey).code}</p>{/if}
-            {#if connectionIssueKey!==null}<p>{userFeedback(connectionIssueKey).area} · {userFeedback(connectionIssueKey).code}</p>{/if}
-          </details>
+        <div class="lt-alert" role="alert" tabindex="0" aria-label="Action needs attention">
+          {#if issueKey!==null}
+            <div class="lt-alert-item">
+              <strong>{feedbackHeading(issueKey)}</strong>
+              <p>{userMessage(issueKey)}</p>
+            </div>
+          {/if}
+          {#if connectionIssueKey!==null}
+            <div class="lt-alert-item">
+              <strong>{feedbackHeading(connectionIssueKey)}</strong>
+              <p>{userMessage(connectionIssueKey)}</p>
+            </div>
+          {/if}
+          <div class="lt-alert-footer">
+            {#if nativeBackend==='WindowsNative'}
+              <button class="lt-secondary lt-alert-refresh" type="button"
+                disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'}
+                title="Checks current status only; does not repeat the failed action."
+                on:click={requestHeaderRefresh}>Refresh status</button>
+            {/if}
+            <details class="lt-feedback-reference">
+              <summary>Error codes</summary>
+              {#if issueKey!==null}<p>{userFeedback(issueKey).area} · {userFeedback(issueKey).code}</p>{/if}
+              {#if connectionIssueKey!==null}<p>{userFeedback(connectionIssueKey).area} · {userFeedback(connectionIssueKey).code}</p>{/if}
+            </details>
+          </div>
         </div>
       {/if}
       {#if uncertainWindowSlots.size > 0}

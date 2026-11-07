@@ -124,7 +124,9 @@ describe("Emulator source verification routing", () => {
     expect(feedback).toContain("export function userFeedback(key: UserMessageKey)");
     expect(ui).toContain("let issueKey: UserMessageKey | null = null");
     expect(ui).toContain("connectionIssueKey: UserMessageKey | null = null");
-    expect(ui).toContain("<summary>Support reference</summary>");
+    expect(ui).toContain("<summary>Error codes</summary>");
+    expect(ui).toContain('{feedbackHeading(issueKey)}');
+    expect(ui).toContain('on:click={requestHeaderRefresh}>Refresh status</button>');
     expect(ui).toContain("userFeedback(issueKey).code");
     expect(ui).toContain("userFeedback(connectionIssueKey).code");
     expect(ui).not.toMatch(/(?<![\w.])issue\s*=\s*userMessage\(/);

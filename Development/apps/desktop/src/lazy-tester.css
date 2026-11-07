@@ -927,3 +927,37 @@
 .lt-settings-layout :is(.lt-target select,.lt-launcher-heading select){
   font-variant-numeric:tabular-nums;
 }
+
+/* Structured, actionable status instead of a raw code-first error banner.
+   Play retains its existing strict vertical bound; Settings/Storage scroll
+   keeps the critical message visible without adding native DWM chrome. */
+.lt-app .lt-alert .lt-alert-item > strong{
+  display:block;font-size:13px;font-weight:650;color:var(--lt-text);
+}
+.lt-app .lt-alert .lt-alert-item > p{
+  margin:4px 0 6px;line-height:1.45;
+}
+.lt-app .lt-alert .lt-alert-item + .lt-alert-item{
+  border-top:1px solid var(--lt-alert-outline);
+  padding-top:8px;margin-top:8px;
+}
+.lt-app .lt-alert .lt-alert-footer{
+  display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:7px;
+}
+.lt-app .lt-alert .lt-alert-refresh{
+  min-height:32px;padding:5px 10px;font-size:12px;
+}
+.lt-app .lt-settings-layout main > .lt-alert{
+  position:sticky;top:0;z-index:9;
+  max-height:min(164px,32dvh);
+  margin-bottom:12px;
+  box-shadow:0 6px 16px var(--lt-overlay-shadow);
+}
+@media(max-height:700px){
+  .lt-app .lt-settings-layout main > .lt-alert{
+    max-height:min(136px,30dvh);
+  }
+}
+@media(forced-colors:active){
+  .lt-app .lt-settings-layout main > .lt-alert{border-color:Highlight}
+}

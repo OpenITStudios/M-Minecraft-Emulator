@@ -81,6 +81,23 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
     expect(storage).toContain('!fullAck||fullName!==`Minecraft - ${fullReview.slot}`');
   });
+  it('keeps one actionable, non-raw error banner without unsafe automatic retries',()=>{
+    const app=source('LazyTesterApp.svelte');
+    const css=source('lazy-tester.css');
+    const feedback=readFileSync(new URL('../src/app/presentation/sessionFeedback.ts',import.meta.url),'utf8');
+    expect(app).toContain('role="alert" tabindex="0" aria-label="Action needs attention"');
+    expect(app).toContain('{feedbackHeading(issueKey)}');
+    expect(app).toContain('{feedbackHeading(connectionIssueKey)}');
+    expect(app).toContain('<summary>Error codes</summary>');
+    expect(app).toContain('title="Checks current status only; does not repeat the failed action."');
+    expect(app).toContain('on:click={requestHeaderRefresh}>Refresh status</button>');
+    expect(css).toContain('.lt-app .lt-settings-layout main > .lt-alert{');
+    expect(css).toContain('position:sticky;top:0;z-index:9;');
+    expect(feedback).toContain('export function feedbackHeading(key: UserMessageKey): string');
+    expect(feedback).toContain('Data cleanup not confirmed');
+    expect(app).toContain('await lazyTester.clearData(pending.slot,pending.token,fullName)');
+    expect(app).toContain('await lazyTester.launch(slot)');
+  });
   it('keeps responsive rules scoped away from the five native game surfaces',()=>{
     const css=source('lazy-tester.css');
     const app=source('LazyTesterApp.svelte');

@@ -31,6 +31,12 @@ becomes unavailable, the five cards remain visible but their status is
 "Status unavailable"; no stale running count is shown. "Profile data verified"
 means validated stored profile identities only. Read-only status rechecks use
 the same visible "Refresh" wording in the toolbar and per-launcher recovery.
+A global operation-specific error has one authored heading, an actionable
+message, a safe **Refresh status** control when native status rechecking is
+available, and collapsed **Error codes** for support. This action only checks
+observed state; it never retries launching, saving, closing, restoring or
+deleting. General/Storage scroll keeps the error banner visible while the
+user inspects the relevant setting. No raw native exception is displayed.
 A failed native preview offers "Select game" only when window response is
 positively observed; otherwise the safe offered action is "Refresh".
 
@@ -41,7 +47,9 @@ focus to the invoking Close game button without scrolling the rail. No implicit
 game exit, forced termination, or new window manager is introduced. General
 Settings keeps graphics preferences per launcher, global FPS limits, and
 background audio with explicit save timing and scope; legacy graphics details
-remain collapsed. Data Storage is reached through the existing Settings sidebar only.
+remain collapsed. Preserve Visuals is visibly recommended, while its saved
+effect and the legacy High/Low compatibility tradeoffs remain explicit.
+Frame Limits explains FPS as limits, not measured game performance. Data Storage is reached through the existing Settings sidebar only.
 General has no duplicate folder actions or navigation section. Data Storage reports byte units
 honestly (B/KiB/MiB/GiB), distinguishes zero from unavailable and incomplete
 measurements, and labels the UI receipt time rather than claiming an exact

@@ -556,6 +556,9 @@ try {
   assert.equal(await page.getByRole('button',{name:'Open Data Storage',exact:true}).count(),0,
     'General does not duplicate the Data Storage sidebar link');
   const presetExplanation=page.locator('details.lt-settings-explanation');
+  assert.equal(await page.locator('#graphics-preset option[value="Preserve"]').textContent(),
+    'Preserve Visuals (recommended)',
+    'The safe default graphics choice should be clearly recommended');
   assert.equal(await presetExplanation.getAttribute('open'),null,
     'Technical preset explanations stay out of the default Settings path');
   await presetExplanation.locator('summary').click();
@@ -765,13 +768,24 @@ try {
   await nav('Settings').click();await section('Data Storage').click();await page.locator('.lt-advanced summary').click();
   await page.screenshot({path:path.join(captures,'data-storage.png')});
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
-  const supportReference=page.getByRole('alert').locator('.lt-feedback-reference');
+  const failureBanner=page.getByRole('alert');
+  assert.equal(await failureBanner.locator('.lt-alert-item > strong').first().textContent(),
+    'Storage information incomplete',
+    'Errors must explain the affected operation before exposing technical codes');
+  assert.equal(await failureBanner.getByRole('button',{name:'Refresh status',exact:true}).count(),1,
+    'Error banner must offer the original read-only Refresh, not a retry/delete');
+  assert.equal(await failureBanner.locator('.lt-feedback-reference').getAttribute('open'),null,
+    'Technical codes start collapsed instead of dominating the error');
+  assert.equal(await failureBanner.evaluate(node=>getComputedStyle(node).position),'sticky',
+    'Settings and Data Storage should keep an active error visible while scrolling');
+  const supportReference=failureBanner.locator('.lt-feedback-reference');
+  assert.equal(await supportReference.locator('summary').textContent(),'Error codes');
   await supportReference.locator('summary').click();
   assert.match(await supportReference.textContent(),/Storage.*LT-STO-02/s,
     'Storage Refresh must show an authored operation code, not native error text');
   const alertText=await page.getByRole('alert').textContent();
   assert.doesNotMatch(alertText,/SYSTEM INSTRUCTION|PID 999|\/Users\/private\/worlds/,
-    'Raw native details must not appear even after expanding Support reference');
+    'Raw native details must not appear even after expanding Error codes');
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Profile data verified');
   // Exercise storage review/cancel without requesting destructive native IPC.
@@ -1288,7 +1302,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import||c.args?.action==='Choose'||c.args?.request?.operation==='Launch')),false);
   await page.goto('http://lazy-tester.test/?broken=1');await heading('Connection needs attention').waitFor();
   await page.getByRole('region',{name:'Launcher recovery'}).getByRole('button',{name:'Data Storage',exact:true}).click();await heading('Data Storage').waitFor();
-  await page.getByText('Connect or locate launcher data',{exact:true}).click();
+  await page.getByText('Find existing profile data',{exact:true}).click();
   const locate=page.locator('.lt-location-options').getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
   await page.evaluate(()=>{window.__locateOutcome='invalid';});await locate.click();await page.getByText('The selected folder does not match the saved profile identities.',{exact:true}).waitFor();
   await page.evaluate(()=>{window.__locateOutcome='valid';});await locate.click();await page.getByText('D:\\Recovered Data',{exact:true}).waitFor();

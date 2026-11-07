@@ -1072,3 +1072,44 @@ are **AUTHORED_NOT_EXECUTED**; actual Svelte, Windows WebView2,
 DPI/Narrator, Minecraft gameplay and storage/destructive runtime
 acceptance remain **NOT_EXECUTED**. No data deletion or new world
 backup/export feature was performed.
+
+## Actionable errors and familiar Settings copy — source only (7 November 2026)
+
+**What the user sees on a global failure:**
+1. An authored, operation-specific title such as **Game launch not
+   confirmed**, **Storage information incomplete** or **Data cleanup
+   not confirmed**. These titles never interpret raw native exceptions
+   or claim that deletion, a retry or a Minecraft launch succeeded.
+2. The existing specific explanation and safe next step. When the
+   platform is Windows Native, the error offers **Refresh status**
+   with a tooltip saying it checks status only; this is the *same*
+   original user-initiated Refresh handler, not another operation owner.
+3. An initially collapsed **Error codes** detail with the original
+   area and `LT-...` support code. No raw paths, PID, HWND, account,
+   private world or arbitrary exception text is added.
+
+Only actual errors display this banner. Within the **Settings/Data
+Storage** scroll surface it remains sticky, scroll-bounded, and
+keyboard-focusable. Play retains its existing stricter bounded height
+so the error cannot claim the central 16:9 game surface. Per-launcher
+preview, nonresponse and restoration warnings remain in their
+original slot or native recovery owner, never interpreted as game
+stoppage or a permission to force-close. A status recheck is not a
+confirmed recovery.
+
+**Simpler Settings language:** visibly mark **Preserve Visuals**
+as the recommended graphics preference; disclose that both legacy
+High/Low presets set the same recorded 12-chunk/MSAA-1 options,
+without promising FPS improvement. The Frame Limits help explains
+FPS, the allowed range and the crucial distinction between an FPS
+cap and a measured FPS report. **Data Storage** uses **Find existing
+profile data** and **Advanced recovery** labels; the latter stays
+collapsed and never deletes user files without the existing native
+confirmation gates.
+
+Source fixtures cover deterministic feedback headings, matching
+error code/message provenance, safe Refresh routing, no raw backend
+details, error visibility in Settings, and updated text in the
+synthetic browser journey. **AUTHORED_NOT_EXECUTED**; installed
+WebView2, 920×620 and 100–200% DPI, keyboard/Narrator, real native
+errors, filesystem operations and gameplay remain **NOT_EXECUTED**.

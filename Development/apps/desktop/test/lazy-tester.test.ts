@@ -4,7 +4,7 @@ import {lazyTester, parseSelectedClose, firstEmbeddedProfile, separateSlotsForCu
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
-import {userMessage, userFeedback, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
+import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
@@ -436,7 +436,7 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
     expect(sessionConnectionLabel(false,null,true,true)).toBe('Status unavailable');
     expect(sessionConnectionLabel(false,'WindowsNative',false,true)).toBe('Profiles unavailable');
     expect(sessionConnectionLabel(false,'WindowsNative',true,false)).toBe('Session status unavailable');
-    expect(sessionConnectionLabel(false,'WindowsNative',true,true)).toBe('Profiles verified');
+    expect(sessionConnectionLabel(false,'WindowsNative',true,true)).toBe('Profile data verified');
   });
 
   it('uses only authored context messages, never untrusted backend paths or prompt text',()=>{
@@ -477,6 +477,26 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
       'Graphics preset could not be applied. Close Minecraft sessions and refresh, then try again.');
     expect(userFeedback('performanceBlocked').message).toBe(
       'Frame limits could not be saved. Refresh and try again.');
+  });
+
+  it('uses specific authored error titles without assuming a failed action retried',()=>{
+    expect(feedbackHeading('binding')).toBe('Launcher profiles not verified');
+    expect(feedbackHeading('launch')).toBe('Game launch not confirmed');
+    expect(feedbackHeading('preview')).toBe('Game display needs attention');
+    expect(feedbackHeading('clearData')).toBe('Data cleanup not confirmed');
+    expect(feedbackHeading('storage')).toBe('Storage information incomplete');
+    expect(feedbackHeading('windowClose')).toBe('App exit not confirmed');
+    const keys:UserMessageKey[]=['general','backend','binding','connection','launch',
+      'selection','workspace','location','storage','settings','performance','audio',
+      'close','recovery','closeAll','preview','profile','pack','worldPack','cache',
+      'clearData','gameSettings','folder','event','graphicsBlocked',
+      'performanceBlocked','windowControl','windowStatus','windowClose',
+      'closeIncomplete','closeRejected'];
+    for(const key of keys){
+      const title=feedbackHeading(key);
+      expect(title.length).toBeGreaterThan(10);
+      expect(title).not.toMatch(/PID|HWND|stack trace|IPC|internal policy|C:\\\\/i);
+    }
   });
 
   it('retains distinct unconfirmed windows until each gets its own positive receipt',()=>{
