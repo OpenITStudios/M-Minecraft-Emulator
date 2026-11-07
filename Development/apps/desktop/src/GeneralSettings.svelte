@@ -30,7 +30,6 @@
   export let onDiscardGraphics: () => void;
   export let onRequestPerformanceSave: () => void;
   export let onSaveAudio: (mode: BackgroundAudio) => void;
-  export let onShowDataStorage: () => void;
 
   // Preserve a deliberate user's keyboard context when an existing save
   // disables its own control. These headings remain outside the Tab order;
@@ -91,5 +90,4 @@
             <div class="lt-actions"><button type="submit" disabled={busy||performanceQueued||!available||!performanceDirty||!performanceValid}>{savingPerformance||performanceQueued?'Saving…':'Save FPS limits'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy||performanceQueued} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}</div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
           <section class="lt-group" aria-labelledby="lt-app-behavior-section"><h2 id="lt-app-behavior-section">App behavior</h2><div class="lt-setting"><div><h3>When Lazy Tester closes</h3><p>All Minecraft sessions started by Lazy Tester close normally first. Lazy Tester waits for them to finish before exiting.</p></div></div><p class="lt-help">If Minecraft is waiting for a dialog or has not finished closing, Lazy Tester stays open. Other Minecraft applications are left alone.</p><div class="lt-setting"><div><h3 bind:this={audioHeading} tabindex="-1">Background game audio</h3><p>Applies to background games immediately after a confirmed save. Existing user mute and volume settings are kept.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Update the running controller to enable audio control.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||audioQueued||!settings?.backgroundAudio} aria-label="Mute background games" on:change={changeAudioWithFocus}/>Mute background games</label></div></section>
-          <section class="lt-group" aria-labelledby="lt-install-data-section"><h2 id="lt-install-data-section">Data management</h2><p>Profile folders, world files, storage measurements and recovery are managed in Data Storage. The Minecraft installation stays separate.</p><div class="lt-actions"><button class="lt-secondary" disabled={busy||refreshing||resizing} on:click={onShowDataStorage}>Open Data Storage</button></div></section>
         </div>

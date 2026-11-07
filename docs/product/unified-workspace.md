@@ -41,8 +41,8 @@ focus to the invoking Close game button without scrolling the rail. No implicit
 game exit, forced termination, or new window manager is introduced. General
 Settings keeps graphics preferences per launcher, global FPS limits, and
 background audio with explicit save timing and scope; legacy graphics details
-remain collapsed. Data management in General links to a single Data Storage
-owner, rather than repeating folder actions. Data Storage reports byte units
+remain collapsed. Data Storage is reached through the existing Settings sidebar only.
+General has no duplicate folder actions or navigation section. Data Storage reports byte units
 honestly (B/KiB/MiB/GiB), distinguishes zero from unavailable and incomplete
 measurements, and labels the UI receipt time rather than claiming an exact
 native measurement timestamp. Connect/locate, resource pack details, and

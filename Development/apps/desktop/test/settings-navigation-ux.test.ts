@@ -55,14 +55,15 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(css).not.toContain('.lt-coordinate-popup');
     expect(css).not.toContain('.lt-f3-popup');
   });
-  it('keeps one Data Storage destination and consistent save wording in General',()=>{
+  it('keeps Data Storage navigation only in the Settings sidebar',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
-    expect(settings).toContain('id="lt-install-data-section">Data management');
-    expect(settings).toContain('onShowDataStorage}>Open Data Storage</button>');
+    expect(settings).not.toContain('lt-install-data-section');
     expect(settings).not.toContain('onOpenDataFolder');
+    expect(settings).not.toContain('onShowDataStorage');
     expect(settings).not.toContain('dataLocation?.path');
-    expect(app).toContain('onShowDataStorage={() => navigate(\'storage\')}');
+    expect(app).toContain('on:click={()=>navigate(\'storage\')}>Data Storage</button>');
+    expect(app).not.toContain('onShowDataStorage={() => navigate(\'storage\')}');
     expect(settings).toContain("?'Saving…':'Save FPS limits'");
     expect(settings).toContain("?'Saving…':'Save graphics preference'");
   });

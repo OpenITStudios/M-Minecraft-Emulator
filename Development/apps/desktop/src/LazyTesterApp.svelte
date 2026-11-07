@@ -1020,8 +1020,7 @@
           bindingConfigured={!!binding?.configured}
           onChooseSlot={chooseSlot} onRequestPreset={requestPreset}
           onDiscardGraphics={discardGraphicsDraft}
-          onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}
-          onShowDataStorage={() => navigate('storage')}/>
+          onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}/>
       {:else if page==='storage'}
         <DataStorage {profiles} {selectedSlot} {selectedProfile} {selectedStorage} {selectedPath}
           {labels} {storage} {storageReportReceivedAt} {storageNotice}

@@ -32,7 +32,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     const settings=source('GeneralSettings.svelte');
     const storage=source('DataStorage.svelte');
     for (const id of ['lt-graphics-section','lt-frame-limits-section',
-      'lt-app-behavior-section','lt-install-data-section']) {
+      'lt-app-behavior-section']) {
       expect(settings).toContain('aria-labelledby="'+id+'"');
       expect(settings).toContain('id="'+id+'"');
     }

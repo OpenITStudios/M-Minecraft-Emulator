@@ -324,9 +324,9 @@ Color is supplementary to the English textual status, not a status source,
 gameplay readiness indicator, or new alarm mechanism. No preview/card
 height or width is altered.
 
-General Settings receives explicit section names for Graphics, Frame
-Limits, App behavior and Data management. The latter only navigates to
-Data Storage, which exclusively owns data folders and storage operations.
+General Settings contains Graphics, Frame Limits and App behavior.
+The Settings sidebar provides the sole navigation to Data Storage,
+which exclusively owns data folders and storage operations.
 Data Storage groups three last-inspected measurements under **Storage
 overview** and exposes the original destructive section last with an
 accessible heading. The app never claims world-by-world backups or a live
@@ -1050,9 +1050,8 @@ Frame Limits exposes **Save FPS limits** and, when dirty, **Discard**.
 The unsaved `Use 120 / 5` shortcut was retired: selecting numerical
 draft values must not be mistaken for a completed Save. Per-launcher
 selectors use visible MC01–MC05 names; destructive confirmation still
-uses the full exact `Minecraft - N` identity. General's Data
-management section links to Data Storage, rather than duplicating
-paths and folder buttons.
+uses the full exact `Minecraft - N` identity. General has no duplicated Data Storage button or folder controls;
+the existing Settings sidebar owns that single navigation destination.
 
 **Data Storage:** present safe integer byte quantities as **B/KiB/MiB/GiB**
 (and TiB as needed), never round a few bytes to `0.0 MB`. Values that

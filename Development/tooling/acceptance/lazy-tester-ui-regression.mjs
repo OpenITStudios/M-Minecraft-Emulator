@@ -553,6 +553,8 @@ try {
   });
   assert.ok(settingsCopy.help>=13,
     'Settings instructions remain readable; data paths belong only to Data Storage');
+  assert.equal(await page.getByRole('button',{name:'Open Data Storage',exact:true}).count(),0,
+    'General does not duplicate the Data Storage sidebar link');
   const presetExplanation=page.locator('details.lt-settings-explanation');
   assert.equal(await presetExplanation.getAttribute('open'),null,
     'Technical preset explanations stay out of the default Settings path');

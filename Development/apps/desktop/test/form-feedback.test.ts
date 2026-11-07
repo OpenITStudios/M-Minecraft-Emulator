@@ -59,7 +59,8 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(settings).not.toContain('Use 120 / 5');
     expect(settings).not.toContain('onOpenDataFolder');
     expect(settings).not.toContain('dataLocation?.path');
-    expect(settings).toContain('onShowDataStorage}>Open Data Storage</button>');
+    expect(settings).not.toContain('onShowDataStorage');
+    expect(settings).not.toContain('Data management</h2>');
     expect(app).toContain('storageReportReceivedAt=storageReportReceivedTime()');
     expect(storage).toContain('storageReportReceivedAt');
     expect(storage).not.toContain('storageCheckedAt');
