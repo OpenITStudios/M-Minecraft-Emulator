@@ -50,6 +50,7 @@ function fixture(fn){
     put(rs+'engine/mod.rs',[
       'pub mod first;',
       'pub mod second;',
+      '#[path = "relocated.rs"] mod renamed;',
     ].join('\n'));
     put(rs+'engine/first.rs',[
       'use crate::engine::second::Type;',
@@ -58,7 +59,15 @@ function fixture(fn){
       'const CODE: &str = "use crate::engine::phantom;";',
       'pub fn first() {}',
     ].join('\n'));
-    put(rs+'engine/second.rs','pub struct Type;\n');
+    put(rs+'engine/second.rs','pub struct Type;\ninclude!("fragment.rs");\n');
+    put(rs+'engine/fragment.rs','pub fn source_fragment() {}\n');
+    put(rs+'engine/relocated.rs','pub fn relocated() {}\n');
+    put('Development/apps/desktop/src-tauri/Cargo.toml',[
+      '[dependencies]',
+      'virtual-clients-core = { package = "m-bedrock-virtual-clients-core", path = "../../../engine/runtime-core" }',
+    ].join('\n'));
+    put('Development/engine/runtime-core/Cargo.toml','[package]\nname = "m-bedrock-virtual-clients-core"\n');
+    put('Development/engine/runtime-core/src/lib.rs','pub fn core_contract() {}\n');
     put('Development/tooling/agent/runner.mjs','import {answer} from "../../apps/desktop/src/lib.js";\n');
     put('Development/tooling/agent/runner.test.mjs','import "./runner.mjs";\n');
     put('Development/tooling/agent/ignored.cpp','#include "../danger"\n');
@@ -82,6 +91,11 @@ test('AST TS/Svelte and Rust module/use source witnesses, without comment ghosts
   assert.ok(!index.unresolved.some(x=>/ghost|fake|phantom/.test(x.specifier)));
   assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_MOD'&&s.path===rs+'main.rs')));
   assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_USE'&&s.path===rs+'engine/first.rs')));
+  assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_INCLUDE_LITERAL')));
+  assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_MOD'&&
+    s.specifier==='renamed')&&e.to===index.byPath.get(rs+'engine/relocated.rs').id));
+  assert.equal(index.cargoLocalDependencies.length,1);
+  assert.equal(index.cargoLocalDependencies[0].packageAlias,'virtual-clients-core');
   assert.equal(index.edges.some(e=>e.to.includes('ghost')),false);
   assert.equal(index.unparsed.length,0);
 }));
@@ -97,11 +111,15 @@ test('source impact traverses real importer chain and retains line evidence',()=
   assert.equal(trace.result,'FOUND');
   assert.ok(trace.steps[0].sourceSites.length>0);
   assert.equal(sourceTrace(index,ui+'lib.ts',ui+'main.ts').result,'NO_PATH');
+  const coreImpact=sourceImpact(index,'Development/engine/runtime-core/src/lib.rs');
+  assert.equal(coreImpact.potentialCargoDependents.length,1);
+  assert.match(sourceImpactMarkdown(coreImpact),/Potential Cargo dependent packages/);
 }));
 test('missing selections, traversal, aliases and unknown paths fail closed',()=>fixture(({root,ui})=>{
   const index=buildSourceDependencyIndex(root,parsers());
   assert.throws(()=>sourceImpact(index,'Development/apps/desktop/src/nonexistent.ts'),/No existing indexed/);
   assert.throws(()=>sourceImpact(index,'../outside.ts'),/Invalid repository/);
+  assert.throws(()=>sourceImpact(index,'Development'),/No existing indexed/);
   assert.throws(()=>sourceTrace(index,ui+'main.ts',ui+'nothing.ts'),/No existing indexed/);
   assert.deepEqual(selectSource(index,ui.slice(0,-1),{directory:true}).length>=4,true);
   assert.throws(()=>sourceImpact(index,ui+'main.ts',{maxHops:7}),/maxHops/);

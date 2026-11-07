@@ -1,3 +1,4 @@
+import {SOURCE_DIRS} from './source-dependencies.mjs';
 // Conservative SOURCE_GRAPH reasoning only; no execution or source writes.
 // Stable file IDs and exact paths are derived from active source, not another
 // owner registry. Consult docs/system/implementation-map.md for semantics.
@@ -10,7 +11,7 @@ export function selectSource(index,input,{directory=false}={}){
   if(byId)return [byId];
   const path=input.replace(/\/+$/,'');
   if(index.byPath.has(path))return [index.byPath.get(path)];
-  if(directory){
+  if(directory && SOURCE_DIRS.some(root=>path===root||path.startsWith(root+'/'))){
     const matches=index.resources.filter(r=>r.path.startsWith(path+'/'));
     if(matches.length)return matches;
   }
@@ -59,12 +60,16 @@ export function sourceImpact(index,input,{maxHops=4}={}){
   }
   impacted.sort((a,b)=>a.distance-b.distance||a.resource.path.localeCompare(b.resource.path));
   const relevantIds=new Set([...originals,...impacted.map(item=>item.resource.id)]);
+  const selectedPaths=selected.map(r=>r.path);
+  const potentialCargoDependents=(index.cargoLocalDependencies||[]).filter(dep=>
+    selectedPaths.some(p=>p.startsWith(dep.toManifest.slice(0,-'Cargo.toml'.length))))
+    .map(dep=>({...dep,confidence:'POTENTIAL_PACKAGE_IMPACT_NOT_PER_FILE_DEPENDENCY'}));
   return {
     schemaVersion:1,mode:'SOURCE_FILE_IMPACT',
     requestedPathOrId:input,selected,
     status:graphStatus(index,relevantIds),
     depth:{maxHops,depthTruncated},
-    impacted,
+    impacted,potentialCargoDependents,
     note:'Reverse reachability from literal source imports/mod/use declarations is potential affected-file evidence, NOT a guarantee of changed symbols, successful compilation, test failure or runtime behavior.',
   };
 }
@@ -108,6 +113,8 @@ export function sourceSummary(index){
     schemaVersion:1,mode:'SOURCE_FILE_DEPENDENCY_SUMMARY',
     status:index.status,proofBoundary:index.proofBoundary,
     resourceCount:index.resources.length,
+    cargoLocalDependencies:index.cargoLocalDependencies||[],
+    unresolvedCargoPaths:index.cargoUnresolved||[],
     filesByDomain:counts(index.resources,r=>r.domain),
     sourceEdges:index.edges.length,
     declarationSites:index.siteCount,
@@ -128,7 +135,9 @@ export function sourceSummary(index){
 export function sourceGraphProjection(index){
   return {schemaVersion:1,mode:index.mode,status:index.status,
     proofBoundary:index.proofBoundary,parserAvailability:index.parserAvailability,
-    resources:index.resources,edges:index.edges,unresolved:index.unresolved,unparsed:index.unparsed};
+    resources:index.resources,edges:index.edges,unresolved:index.unresolved,unparsed:index.unparsed,
+    cargoLocalDependencies:index.cargoLocalDependencies||[],
+    cargoUnresolved:index.cargoUnresolved||[]};
 }
 export function sourceDiagram(resources,edges){
   const unique=new Map(resources.map(r=>[r.id,r]));
@@ -174,6 +183,14 @@ export function sourceImpactMarkdown(impact){
     }
   }
   if(!impact.impacted.length)lines.push('No reverse dependency found within the scan; this is NOT proof of no impact.');
+  lines.push('','## Potential Cargo dependent packages (not per-file edges)','');
+  if(!impact.potentialCargoDependents.length)
+    lines.push('No directly affected local Cargo package declaration identified.');
+  for(const dep of impact.potentialCargoDependents){
+    lines.push('- '+tick+dep.fromManifest+tick+' declares dependency on '+
+      tick+dep.toManifest+tick+' at '+tick+dep.evidence.path+':'+
+      dep.evidence.line+tick+'. This is a possible crate-level impact, not a code call.');
+  }
   const relevant=[...impact.status.parserGaps,...impact.status.unresolved];
   lines.push('','## Unresolved coverage and references','');
   if(!relevant.length)lines.push('No parser gaps or unresolved declarations among indexed reachable files.');

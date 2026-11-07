@@ -11,13 +11,13 @@ export const SOURCE_ROOT=resolve(dirname(fileURLToPath(import.meta.url)),'../../
 const desktopRequire=createRequire(new URL('../../apps/desktop/package.json',import.meta.url));
 const CODE_EXTS=new Set(['.rs','.ts','.tsx','.mts','.cts','.js','.jsx','.mjs','.cjs','.svelte']);
 const JS_EXTS=['.ts','.tsx','.mts','.cts','.js','.jsx','.mjs','.cjs','.svelte'];
-const DIRS=[
+export const SOURCE_DIRS=Object.freeze([
   'Development/apps/desktop/src',
   'Development/apps/desktop/src-tauri/src',
   'Development/apps/desktop/scripts',
   'Development/engine/runtime-core/src',
   'Development/tooling',
-];
+]);
 const EXTRA_FILES=['Development/apps/desktop/src-tauri/build.rs'];
 const SKIP=new Set(['node_modules','target','dist','coverage','.git','generated','.svelte-kit',
   'binaries','gen','icons','package-resources','test-results','__snapshots__']);
@@ -56,7 +56,7 @@ export function listOwnedSourceFiles(root=SOURCE_ROOT){
       else if(entry.isFile()&&CODE_EXTS.has(extname(entry.name)))paths.push(path);
     }
   }
-  for(const dir of DIRS)walk(dir);
+  for(const dir of SOURCE_DIRS)walk(dir);
   for(const path of EXTRA_FILES){
     const selected=safeRelative(root,path);
     if(selected && lstatSync(resolve(root,selected)).isFile())paths.push(selected);
@@ -288,16 +288,64 @@ function rustModTarget(path,name,known){
   return matches.length===1?{status:'RESOLVED',path:matches[0]}:
     {status:matches.length?'AMBIGUOUS_RUST_MODULE':'UNRESOLVED_RUST_MODULE'};
 }
+function rustPathAttribute(tokens,index){
+  // Only an immediately adjacent authored #[path = "literal.rs"] is
+  // recognized; complex cfg_attr path selection stays unresolved.
+  let end=index-1;
+  while(tokens[end]?.value===']'){
+    let depth=0,open=-1;
+    for(let i=end;i>=0;i--){
+      if(tokens[i].value===']')depth++;
+      if(tokens[i].value==='['&&--depth===0){open=i;break;}
+    }
+    if(open<=0||tokens[open-1]?.value!=='#')break;
+    const inner=tokens.slice(open+1,end);
+    if(inner[0]?.value==='path'){
+      if(inner[1]?.value==='='&&inner[2]?.kind==='string')
+        return {status:'LITERAL',path:inner[2].value};
+      return {status:'COMPUTED'};
+    }
+    if(inner[0]?.value==='cfg_attr'&&inner.some(x=>x.value==='path'))
+      return {status:'COMPUTED'};
+    end=open-2;
+  }
+  return undefined;
+}
 function rustSites(path,content,known){
   const tokens=rustTokens(content),sites=[],gaps=[];
   for(let i=0;i<tokens.length;i++){
     const t=tokens[i];
     if(t.kind!=='id')continue;
     if(t.value==='mod'&&tokens[i+1]?.kind==='id'&&tokens[i+2]?.value===';'){
-      const target=rustModTarget(path,tokens[i+1].value,known);
+      const attribute=rustPathAttribute(tokens,i);
+      let target;
+      if(attribute){
+        const candidate=attribute.status==='LITERAL'?
+          posix.normalize(posix.join(posix.dirname(path),attribute.path)):undefined;
+        target=attribute.status!=='LITERAL'?
+          {status:'COMPUTED_RUST_MODULE_PATH'}:
+          !candidate||candidate.startsWith('../')||candidate.startsWith('/')?
+          {status:'OUTSIDE_REPOSITORY'}:
+          known.has(candidate)?{status:'RESOLVED',path:candidate}:
+          {status:'UNRESOLVED_RUST_MODULE_PATH'};
+      }else target=rustModTarget(path,tokens[i+1].value,known);
       const at=lineColumn(content,tokens[i+1].at);
       sites.push({path,syntax:'RUST_MOD',specifier:tokens[i+1].value,
-        runtime:false,conditional:'CFG_NOT_EVALUATED',...at,...target});
+        conditional:'CFG_NOT_EVALUATED',...at,...target});
+    }
+    if(t.value==='include'&&tokens[i+1]?.value==='!'&&tokens[i+2]?.value==='('){
+      if(tokens[i+3]?.kind==='string'&&tokens[i+4]?.value===')'){
+        const requested=tokens[i+3].value;
+        const candidate=posix.normalize(posix.join(posix.dirname(path),requested));
+        const target=candidate.startsWith('../')||candidate.startsWith('/')?
+          {status:'OUTSIDE_REPOSITORY'}:
+          known.has(candidate)?{status:'RESOLVED',path:candidate}:
+          {status:'UNRESOLVED_RUST_INCLUDE'};
+        sites.push({path,syntax:'RUST_INCLUDE_LITERAL',specifier:requested,
+          conditional:'CFG_NOT_EVALUATED',
+          ...lineColumn(content,tokens[i+3].at),...target});
+      }else gaps.push({path,reason:'COMPUTED_RUST_INCLUDE_UNTRACED',
+        ...lineColumn(content,t.at)});
     }
     if(t.value==='use'){
       const collected=[];let j=i+1,depth=0;
@@ -316,7 +364,7 @@ function rustSites(path,content,known){
         const target=rustUseTarget(path,segments,known);
         if(target.status==='EXTERNAL_OR_UNQUALIFIED_RUST_USE')continue;
         sites.push({path,syntax:'RUST_USE',specifier:segments.join('::'),
-          runtime:false,conditional:'CFG_NOT_EVALUATED',
+          conditional:'CFG_NOT_EVALUATED',
           ...lineColumn(content,t.at),...target});
       }
       i=j;
@@ -350,6 +398,43 @@ function resolveJsImport(from,specifier,known){
     {status:matched.length?'AMBIGUOUS_SOURCE_TARGET':'UNRESOLVED_SOURCE_TARGET'};
 }
 
+function localCargoDependencies(root){
+  // Small, read-only local path dependency witness. This is not Cargo
+  // feature resolution, lockfile inference or package execution.
+  const manifests=[
+    'Development/apps/desktop/src-tauri/Cargo.toml',
+    'Development/engine/runtime-core/Cargo.toml',
+  ];
+  const registered=new Set(manifests.filter(p=>safeRelative(root,p)));
+  const dependencies=[],unresolved=[];
+  for(const manifest of registered){
+    const lines=readFileSync(resolve(root,manifest),'utf8').split(/\r?\n/);
+    let section='';
+    for(let i=0;i<lines.length;i++){
+      const line=lines[i].split('#',1)[0].trim();
+      if(/^\[[^\]]+\]$/.test(line)){section=line;continue;}
+      if(!section.endsWith('.dependencies]')&&
+         !['[dependencies]','[build-dependencies]'].includes(section))continue;
+      const match=line.match(/^([A-Za-z_][A-Za-z_0-9-]*)\s*=\s*\{([^{}]+)\}/);
+      if(!match)continue;
+      const pathValue=match[2].match(/\bpath\s*=\s*"([^"]+)"/);
+      if(!pathValue)continue;
+      const resolved=posix.normalize(posix.join(posix.dirname(manifest),
+        pathValue[1],'Cargo.toml'));
+      const path=registered.has(resolved)?resolved:undefined;
+      const evidence={path:manifest,line:i+1,target:pathValue[1]};
+      if(!path){
+        unresolved.push({from:manifest,packageAlias:match[1],
+          reason:'UNREGISTERED_LOCAL_CARGO_PATH',evidence});continue;
+      }
+      dependencies.push({fromManifest:manifest,toManifest:path,
+        packageAlias:match[1],type:'CARGO_LOCAL_PATH_DEPENDENCY',
+        basis:'EXTRACTED_MANIFEST_DECLARATION',evidence});
+    }
+  }
+  return {dependencies,unresolved};
+}
+
 export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCompiler}={}){
   root=resolve(root);
   const sourcePaths=listOwnedSourceFiles(root),known=new Set(sourcePaths);
@@ -372,7 +457,12 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
   const edges=new Map(),unresolved=[],unparsed=[];
   let siteCount=0,externalCount=0,resourceCount=0;
   for(const resource of resources){
-    const path=resource.path,content=readFileSync(resolve(root,path),'utf8');
+    const path=resource.path,full=resolve(root,path);
+    if(lstatSync(full).size>2_000_000){
+      unparsed.push({path,reason:'SOURCE_FILE_EXCEEDS_2MB_BOUND'});
+      continue;
+    }
+    const content=readFileSync(full,'utf8');
     const result=path.endsWith('.rs')?rustSites(path,content,known):
       compilerSites(path,content,tsInfo.module,svInfo.module);
     unparsed.push(...result.gaps);
@@ -404,6 +494,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
       edges.set(pair,edge);
     }
   }
+  const cargo=localCargoDependencies(root);
   const ordered=[...edges.values()].map(e=>{
     e.sourceSites.sort((a,b)=>a.path.localeCompare(b.path)||a.line-b.line||a.column-b.column);
     return {...e,evidence:e.sourceSites[0]};
@@ -412,6 +503,7 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
   return {schemaVersion:1,mode:'SOURCE_FILE_DEPENDENCY_PROJECTION',
     proofBoundary:SOURCE_PROOF,resources,byPath,byId,edges:ordered,unresolved,
     unparsed,siteCount,externalCount,resourceCount,
+    cargoLocalDependencies:cargo.dependencies,cargoUnresolved:cargo.unresolved,
     parserAvailability:{typescript:tsInfo.status,svelte:svInfo.status},
     status:unparsed.length?'INCOMPLETE_PARSER_COVERAGE':
       unresolved.length?'PARTIAL_UNRESOLVED_DECLARATIONS':'STATIC_DECLARATIONS_INDEXED'};
