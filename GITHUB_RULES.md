@@ -45,6 +45,19 @@ game account, stored world or running Minecraft process during source cleanup.
 
 Default work starts with `AGENTS.md` → [Implementation Map](docs/system/implementation-map.md) → one source owner and consumers. Read more only to answer a concrete unresolved question. Relevant source authority outranks stale planning/prose.
 
+### Routed repository knowledge (source-only)
+
+When architecture/documentation context is needed, start at
+[docs/README.md](docs/README.md) -> one domain router -> stable
+frontmatter ID -> explicit link witness -> exact source owner. The
+[repository knowledge graph](docs/system/repository-knowledge-graph.md)
+is a derived, optional read-only view, not runtime verification, an
+execution engine, or a source-dependency call graph. Historical and
+legacy `WORKING` metadata cannot promote old VM/CI designs to active
+authority. Missing links stay UNKNOWN; do not infer relationships from
+similar filenames. Keep the current no-CI and no-source-test-execution
+decision unchanged.
+
 ## 4. Diagnose the first wrong owner
 
 ```text

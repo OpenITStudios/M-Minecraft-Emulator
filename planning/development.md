@@ -83,6 +83,18 @@ NOT_VERIFIED.
 - **Permission boundary:** GitHub source-only; no localtest, build,
   CI, installation, launch, game action, personal data or `main` write.
 
+## Non-primary architecture navigation adaptation — 8 November 2026
+
+The existing repository documentation router remains canonical. A bounded
+source-only navigation layer adapts M-Lazy-Developer's stable Resource
+Catalog, provenance-bearing authored Graph, scoped Retrieval, derived
+sections and Obsidian/Mermaid/Pele views to the Emulator's legacy document
+metadata. It adds no separate agent/runtime manager, code-dependency proof,
+execution, CI, status owner or product change. The primary Windows
+Computer Use continuation and its single next action remain unchanged.
+See [knowledge navigation](../docs/system/repository-knowledge-graph.md).
+Optional Node fixtures are AUTHORED_NOT_EXECUTED.
+
 ## Product and owners
 
 - **Product:** Lazy Tester, one Windows desktop manager for up to five

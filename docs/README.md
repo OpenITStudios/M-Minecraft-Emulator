@@ -20,6 +20,7 @@ Read one relevant owner, not the entire documentation tree:
 | --- | --- |
 | What does the user operate? | [Product](product/README.md) / [current workspace contract](product/unified-workspace.md) |
 | Where is the active source owner? | [Implementation map](system/implementation-map.md) |
+| How do agent rules, Obsidian, Pele, Graphify-style navigation, catalog, graph and retrieval connect? | [Repository knowledge navigation](system/repository-knowledge-graph.md) |
 | What are the runtime safety boundaries? | [Architecture](system/architecture.md) and [data layout](system/data-layout.md) |
 | How do source changes and optional checks work? | [Development operations](system/development-operations.md) |
 | What is actually proven or still untested? | [Validation router](validation/README.md) |

@@ -11,9 +11,10 @@ Applies to system development, refactoring, bug fixes and documentation that cha
 
 1. Read root AGENTS.md and GITHUB_RULES.md; pin M-Minecraft-Emulator/Local HEAD.
 2. Identify the requested product outcome, non-goals, first affected owner and consumers. Use docs/system/implementation-map.md, then fetch only the relevant source.
-3. Separate facts observable in source from unexecuted tests and Windows/VMware/Minecraft acceptance. Existing successful checks at a different SHA are not evidence for the current change.
+3. For documentation/architecture questions, route through [Repository knowledge navigation](../../../docs/system/repository-knowledge-graph.md): document ID -> authored link witness -> one exact owner. Its optional Graph/Obsidian/Pele projection is read-only and not source/runtime dependency proof. The seven upstream methods remain conditional reference guidance, never additional Skills or native runtime authority.
+5. Separate facts observable in source from unexecuted tests and Windows/VMware/Minecraft acceptance. Existing successful checks at a different SHA are not evidence for the current change.
 4. Consider no change, correction of the existing owner, reuse, and only then a new component. Never add a second lifecycle/readiness manager, provider state store, account automation or speculative compatibility alias.
-5. For material changes, follow [evidence-grounded source improvement](../../../docs/system/development-discipline.md#evidence-grounded-source-improvement-harness--deepseek-harness--rea):
+6. For material changes, follow [evidence-grounded source improvement](../../../docs/system/development-discipline.md#evidence-grounded-source-improvement-harness--deepseek-harness--rea):
    Propose alternatives, Probe source/negative cases, then Compose the
    smallest defensible correction. `DEV.cmd review --json` provides an
    optional read-only, exact-Local-SHA checklist through the existing
@@ -21,9 +22,9 @@ Applies to system development, refactoring, bug fixes and documentation that cha
    External Harness², DeepSeek Harness and REA are reference patterns
    only: never run/install them, import them into the product, dispatch game
    input or treat the review plan as PASS. REA requires authorized artifacts.
-6. Implement one coherent change; keep guest disks, snapshot semantics, installer identity and release policy stable unless explicitly in scope with compatibility proof.
-7. Verify at the lowest sufficient level: exact-head structural and consumer review first; executed tests/builds only when an appropriate environment is actually available. Do not ask for a user PC to finish GitHub-verifiable source work.
-8. Commit to Local, inspect exact new HEAD, update planning/development.md for a meaningful continuation, report proof ceiling and STOP. Do not invoke or reintroduce GitHub Actions: CI was explicitly disabled by the operator. Manual scripts are optional, not a blocking prerequisite.
+7. Implement one coherent change; keep guest disks, snapshot semantics, installer identity and release policy stable unless explicitly in scope with compatibility proof.
+8. Verify at the lowest sufficient level: exact-head structural and consumer review first; executed tests/builds only when an appropriate environment is actually available. Do not ask for a user PC to finish GitHub-verifiable source work.
+9. Commit to Local, inspect exact new HEAD, update planning/development.md for a meaningful continuation, report proof ceiling and STOP. Do not invoke or reintroduce GitHub Actions: CI was explicitly disabled by the operator. Manual scripts are optional, not a blocking prerequisite.
 
 ## Canonical owners
 

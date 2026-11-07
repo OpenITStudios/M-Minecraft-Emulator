@@ -39,6 +39,8 @@
     "storage:plan": "node tooling/storage/retention.mjs",
     "check:frontend": "npm --prefix apps/desktop run check:frontend",
     "check:rust": "npm --prefix apps/desktop run check:rust:target && cargo check --locked --target x86_64-pc-windows-msvc --manifest-path engine/runtime-core/Cargo.toml",
-    "storage:cargo": "node tooling/storage/cargo-footprint.mjs"
+    "storage:cargo": "node tooling/storage/cargo-footprint.mjs",
+    "knowledge:query": "node tooling/repository/knowledge-query.mjs",
+    "knowledge:audit": "node tooling/repository/knowledge-query.mjs --audit"
   }
 }
