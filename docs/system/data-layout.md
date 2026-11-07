@@ -9,39 +9,69 @@ lifecycle: ACTIVE
 
 # Lazy Tester project data
 
-The root native Lazy Tester.exe starts only App/lazy-tester.exe, with its working
-directory set to App. It carries the application icon and no independent settings
-or session authority. Desktop/Start Menu shortcuts use the same root entry point.
+The root native `Lazy Tester.exe` starts only `App/lazy-tester.exe`, with its
+working directory set to `App/`. Its two-word filename is a retained
+installation identity; the visible one-word UI brand is **LazyTester**.
+Desktop and Start Menu entries are shortcuts to that same root launcher.
+Neither the shortcut nor the root launcher owns profiles or game sessions.
 Data is resolved from the executable/project location, never the working directory.
 
-```text
-Minecraft-Emulator/
-  Lazy Tester.exe
-  App/                           application, two reviewed DLLs, build receipt
-  Data/
-    Cache/                       WebView data and process-local temporary files
-    Coordinates/
-      bookmarks.json             optional operator-saved unverified XYZ notes (max 100)
-    Diagnostics/                 optional source-only local QA evidence archive
-      runs/<run-id>/
-        manifest.json            final committed run marker, checksums
-        evidence/events.jsonl    full normalized local evidence
-        analysis/issues.json     compact derived issue candidates
+\`\`\`text
+M-Minecraft-Emulator/                 one Local checkout, not several app roots
+  DEV.cmd                             developer actions (authorization required)
+  RUN.cmd                             starts an already prepared root launcher
+  Lazy Tester.exe                     created by approved local packaging only
+  App/                                staged app/executable and reviewed DLLs
+    lazy-tester.exe
+    independent-bootstrap/           reviewed standard native DLL pair
+    build-info.json                  staged artifact receipt
+  Data/                               ignored private runtime files, not source
+    Cache/{WebView,Temp}/             manager WebView and temporary data
     Settings/
-      data-location.json         project-local location pointer
-      performance.json           saved FPS limits
-      graphics.json              five Preserve/High/Low choices (absent = Preserve)
-      desktop-instance.json      exclusive manager marker
-    profiles.json                private user/directory/hive file identities
+      data-location.json             canonical Data pointer
+      performance.json               saved FPS limits
+      graphics.json                  five graphics preferences
+      audio.json                     manager background-audio preference
+      desktop-instance.json          exclusive manager marker
+    profiles.json                    bound profile / hive identities
     Launchers/
       Minecraft-1/
         Roaming/
         Local/Temp/
-        Registry/HKCU.dat        private application hive and Windows sidecars
+        Registry/HKCU.dat            private per-profile hive and sidecars
       Minecraft-2/ ... Minecraft-5/
-  Development/                   canonical source/tooling
-  workspace/                     developer builds, tools, cache and archives
-```
+    Coordinates/bookmarks.json       dormant preserved legacy notes (no UI)
+    Diagnostics/runs/<run-id>/        optional source-only imported evidence
+      manifest.json                  committed after evidence
+      evidence/events.jsonl
+      analysis/issues.json
+  Development/                        canonical source and tool scripts
+  docs/ planning/                     source guidance, never game/account data
+  workspace/                          local developer-only output (ignored)
+    toolchains/ cache/ downloads/ tmp/
+    builds/desktop/target/           dev binaries; NEVER a new Data root
+    packages/lazy-tester/            immutable installer candidates/receipts
+    runs/                             private local-test receipts
+    private/local-app-backups/        retained old App / launcher snapshots
+\`\`\`
+
+**One-root Windows development contract.** On a fresh checkout, `App/`,
+`Data/`, and `Lazy Tester.exe` may not exist yet. The current native root
+resolver recognizes the official `workspace/builds/desktop/target/`
+and default `Development/apps/desktop/src-tauri/target/` developer
+outputs even before `App/` is staged, placing all runtime state under
+the checkout's own `Data/`. If a previous developer version left a
+`Data/` directory beside its built executable, startup refuses to silently
+switch roots. Preserve that directory for explicit review; never move,
+merge, delete, reparse-link or reset it automatically.
+
+**Installed layout is separate by design.** A new approved per-user NSIS
+install defaults to `%USERPROFILE%\\Lazy Tester\\App\\` with
+`%USERPROFILE%\\Lazy Tester\\Data\\` as its sibling; existing install
+locations remain authoritative and are never silently migrated.
+Windows-owned Microsoft sign-in/DPAPI components, licensed Minecraft,
+shortcuts and OS toolchains stay in Windows-managed locations. Do not run
+a new installer against production accounts merely to consolidate roots.
 
 The canonical pointer is `Data/Settings/data-location.json`.
 `App/data-location.json` is a historical flat-install pointer; the native
@@ -52,14 +82,12 @@ local App refresh preserve the legacy pointer. Catalog schema 1 uses
 This compatibility route never grants permission to move, overwrite, copy
 or recreate private account/world data.
 
-The optional Data/Coordinates/bookmarks.json is written only after an
-explicit Save/Delete in the Play Coordinates & Saves disclosure. It is
-project-local manual content, not an authoritative Minecraft world/player
-snapshot or an account profile record. The Rust owner validates a strict
-schema and retains existing files on parse/identity errors; list does not
-create the directory. Manually selected MCxx and typed world/dimension
-labels are NOT a verified game connection. Its contents must never be
-published to an AI or installed into a game automatically.
+The old optional `Data/Coordinates/bookmarks.json` store is **dormant**:
+the operator removed desktop F3 Inspector and Coordinates & Saves on
+7 November 2026. There is no current desktop Save/Delete control.
+Existing manually saved XYZ notes and their native validation code remain
+unchanged to protect user data. Notes do not verify a player/world and
+must not be published to AI or installed in Minecraft automatically.
 
 All runtime files are ignored and never bundled or tracked. The optional
 Data/Diagnostics archive is created only by an explicit local import, not

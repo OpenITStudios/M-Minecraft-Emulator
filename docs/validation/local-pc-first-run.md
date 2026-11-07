@@ -49,6 +49,32 @@ The two native DLLs are not interchangeable with the **separate, unapproved
 AI-input experimental DLL**. Never change source hash policy just to get a
 local build to run.
 
+## Local root and storage consistency (read before first run)
+
+Use one ordinary, writable, nonsynchronized checkout folder for the
+source-only localtest. Source, `DEV.cmd`, `RUN.cmd`, `Development/`,
+`workspace/`, prepared `App/`, and private `Data/` remain siblings
+inside that one checkout. `App/` and `Data/` may be absent on a fresh
+clone; they are not prerequisites for recognizing the approved dev root.
+The reviewed DLL directory still needs its separate explicit environment
+variable and hash check.
+
+The native developer binary may execute from
+`workspace/builds/desktop/target/`, but must resolve the canonical
+`<checkout>\\Data\\`, **never**
+`workspace\\builds\\desktop\\target\\...\\Data\\`.
+If a previous dev run left a build-local Data folder, startup must BLOCK
+rather than hide/copy/migrate private accounts/worlds. Keep the original
+files untouched and report the exact failure. Verify root/data paths using
+read-only metadata only; do not resolve this by `git clean`, deleting a
+directory, symlinking, copying hives or bypassing native identity checks.
+
+An approved standalone NSIS installation has its own `App/` + `Data/`
+under its selected Windows location and must not be mixed with a source
+checkout for the first localtest. Desktop and Start Menu links are OS
+shortcuts, not duplicate installations. Windows-managed Microsoft
+authentication and the licensed game are intentionally outside the repo.
+
 ## 1. Before running any developer command
 
 Use a disposable Windows test environment or back up existing user-owned
@@ -226,6 +252,35 @@ are absent. Navigate via Settings to General and Data Storage using keyboard
 focus. Inspect the selected profile's graphics/FPS labels and read-only
 storage status without saving, clearing, restoring, or changing any game data.
 A native Minecraft coordinate display is not a LazyTester desktop feature.
+
+### 5.1 UI interaction failure checks (manual, same-SHA, no destructive commit)
+
+Before gameplay, check mouse and keyboard navigation on 920×620 and
+1280×900 desktop sizes, then 125–200% Windows DPI. Verify that every
+visible action is either clickable with a truthful result or clearly
+disabled with a reason. Do not treat a synthetic screenshot or a native
+process ID as a functional PASS.
+
+- Open and **Cancel** a running game's CloseOne review. While open,
+  other launcher cards, Close buttons, Refresh, Separate window and
+  page navigation must not replace the review or launch another game.
+  After Cancel, relevant controls and keyboard focus must recover.
+- In Data Storage, open and **Cancel** cache cleanup and full-clear
+  review without submitting a destructive action. Refresh, folder,
+  recovery and other clear actions must be unavailable until Cancel.
+  During an Advanced recovery review, the detail section must not
+  collapse and hide its own Cancel control.
+- Inspect unsaved Graphics/FPS drafts, save/failed-save feedback,
+  invalid FPS limits and background-audio selection. A native refusal
+  must not leave the audio checkbox falsely changed. For actual
+  mutations use only separately approved disposable profiles.
+- Check Tab/Shift+Tab, Enter, Escape, focus return, long errors,
+  high contrast, mixed MC01–MC05 states and unavailable backend.
+  Preserve all original native/IPC guards and stop on any P0 data or
+  process-identity mismatch.
+
+These are **acceptance checks to execute later**, not tests passed
+by this document or the source-only regression fixtures.
 
 ## 6. Optional package and root launcher test — only after steps 1–5
 

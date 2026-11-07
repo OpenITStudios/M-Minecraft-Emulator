@@ -16,6 +16,14 @@ versioned. See the canonical [Artifact and Local-Test Storage Policy](../docs/sy
 | `private/` | Operator-controlled sensitive material, never publish |
 | `evidence/`, `captures/`, `images/`, `runtime/`, `diagnostics/` | Historical local paths: preserve until producers and consumers are reviewed |
 
+The official development binary under `builds/desktop/target/` now resolves
+its private manager/profiles to the checkout's `Data/` even when staged
+`App/` is absent on a fresh clone. A build-local `Data/` left by an
+earlier version is a **fail-closed preservation blocker**, never a
+directory to auto-migrate or clean. See
+[the canonical layout](../docs/system/data-layout.md). Do not mix an NSIS
+installed `App/ + Data/` location with this source checkout.
+
 All project-owned data belongs beneath this single checkout root. Tool-native
 `Development/apps/desktop/node_modules/`, `Development/apps/desktop/dist/`, Rust/Tauri `target/`
 and Tauri staging are already **within** that checkout. Existing compiler

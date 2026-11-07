@@ -93,13 +93,38 @@ impl PerformanceSettings {
     }
 }
 pub(crate) fn application_root(executable: &std::path::Path) -> io::Result<PathBuf> {
-    let folder=executable.parent().ok_or_else(||io::Error::other("Application folder unavailable"))?;
-    if !folder.file_name().is_some_and(|name|name.eq_ignore_ascii_case("App")) {
-        for ancestor in folder.ancestors(){if ancestor.join("Development/package.json").is_file()&&ancestor.join("App").is_dir(){return Ok(ancestor.to_path_buf());}}
+    let folder = executable.parent().ok_or_else(|| io::Error::other("Application folder unavailable"))?;
+    // Installed and prepared applications retain their original App/../Data
+    // contract. Never infer the root from a process working directory.
+    if folder.file_name().is_some_and(|name| name.eq_ignore_ascii_case("App")) {
+        return Ok(folder.parent().ok_or_else(|| io::Error::other("Project folder unavailable"))?.to_path_buf());
     }
-    Ok(if folder.file_name().is_some_and(|name|name.eq_ignore_ascii_case("App")) {
-        folder.parent().ok_or_else(||io::Error::other("Project folder unavailable"))?
-    } else {folder}.to_path_buf())
+    for ancestor in folder.ancestors() {
+        if !ancestor.join("Development/package.json").is_file() { continue; }
+        // Preserve previously supported source checkouts with staged App/.
+        if ancestor.join("App").is_dir() { return Ok(ancestor.to_path_buf()); }
+        // On a fresh checkout, dev builds are inside workspace/target (or the
+        // default Tauri target) BEFORE App exists. Do not create a second
+        // Data/ tree beneath the compiler output.
+        let source_checkout = ancestor.join("DEV.cmd").is_file()
+            && ancestor.join("Development/apps/desktop/src-tauri/tauri.lazy-tester.conf.json").is_file();
+        let developer_owned_target =
+            folder.starts_with(ancestor.join("workspace/builds/desktop/target"))
+            || folder.starts_with(ancestor.join("Development/apps/desktop/src-tauri/target"));
+        if source_checkout && developer_owned_target {
+            // Older dev runs might have placed private data beside the
+            // executable. Refuse a silent root switch; no copy/deletion.
+            match fs::symlink_metadata(folder.join("Data")) {
+                Ok(_) => return Err(io::Error::new(io::ErrorKind::AlreadyExists,
+                    "Legacy developer data exists under the build output. Preserve it and review the root before continuing.")),
+                Err(error) if error.kind()==io::ErrorKind::NotFound => {},
+                Err(error) => return Err(error),
+            }
+            return Ok(ancestor.to_path_buf());
+        }
+    }
+    // Preserve the non-project / legacy flat-install fallback as before.
+    Ok(folder.to_path_buf())
 }
 pub(crate) fn product_settings() -> io::Result<PathBuf> {
     product_directory("Settings")
@@ -190,6 +215,37 @@ fn write_performance(path: &std::path::Path, value: PerformanceSettings) -> io::
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn developer_root_without_app_stays_at_checkout_and_preserves_legacy_data() {
+        use super::*;
+        let root=std::env::temp_dir().join(format!("lazy-root-fixture-{}-{}",
+            std::process::id(),std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        let source=root.join("Development/apps/desktop/src-tauri");
+        let target=root.join("workspace/builds/desktop/target/x86_64-pc-windows-msvc/debug");
+        fs::create_dir_all(&target).unwrap();
+        fs::create_dir_all(&source).unwrap();
+        fs::write(root.join("Development/package.json"),b"{}").unwrap();
+        fs::write(root.join("DEV.cmd"),b"").unwrap();
+        fs::write(source.join("tauri.lazy-tester.conf.json"),b"{}").unwrap();
+        let exe=target.join("lazy-tester.exe");
+        assert!(!root.join("App").exists());
+        assert_eq!(application_root(&exe).unwrap(),root);
+        // Existing build-local worlds must never be silently hidden or moved.
+        let old_data=target.join("Data");
+        fs::create_dir(&old_data).unwrap();
+        fs::write(old_data.join("preserved-world"),b"keep").unwrap();
+        assert_eq!(application_root(&exe).unwrap_err().kind(),io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(old_data.join("preserved-world")).unwrap(),b"keep");
+        fs::remove_dir_all(&old_data).unwrap();
+        let default_target=source.join("target/debug");
+        fs::create_dir_all(&default_target).unwrap();
+        assert_eq!(application_root(&default_target.join("lazy-tester.exe")).unwrap(),root);
+        let staged=root.join("App");
+        fs::create_dir(&staged).unwrap();
+        assert_eq!(application_root(&staged.join("lazy-tester.exe")).unwrap(),root);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn audio_roundtrip_rejects_unknown_and_preserves_bad_preferences() {
         use super::*;

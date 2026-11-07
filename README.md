@@ -88,6 +88,15 @@ Archive/           old investigations; not a runtime fallback
 workspace/         ignored local builds, packages, tools and private material
 ```
 
+**Use a single checkout root for pre-localtest development.** Approved
+`DEV.cmd dev` builds from `workspace/builds/desktop/target/` but
+resolves manager/profile state to the sibling `Data/` under this checkout
+even before `App/` is staged. Do not create a second Data folder inside
+the build target or attempt to merge it into the repo. If a legacy
+build-local Data folder is found, startup blocks and preserves it for
+manual review. Keep installed NSIS application data separate until
+an explicitly approved disposable install/upgrade test.
+
 `App/`, `Data/`, worlds, accounts, private registry hives, local
 compiler artifacts and installer candidates are **not Git source**.
 Do not move, reset or delete them as part of repository cleanup.
