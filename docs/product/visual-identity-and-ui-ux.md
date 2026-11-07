@@ -1004,3 +1004,32 @@ that the parent viewport rectangle stays constant. Those checks
 are **AUTHORED_NOT_EXECUTED**. Actual Windows/WebView2 scroll,
 920×620/1280×900 and 125–200% DPI behavior, long warnings,
 screen-reader output and native DWM placement remain **NOT_EXECUTED**.
+
+## Gameplay Focus Play density — operator-approved (7 November 2026)
+
+**Source phase 1:** The selected 16:9 native viewport, not surrounding
+controls, owns remaining stage space. Use Play-only padding/heading
+reductions; visually suppress redundant "choose below" text and the
+generic help hint when a game is selected. Shorten visible Separate
+window text but preserve its accessible action label.
+
+Maintain MC01–MC05 fixed keyed `use:observePreview` targets. Bound
+each 16:9 thumbnail with a `clamp(68px,10vh,96px)` height budget.
+The original **32px CloseOne** action sits in a reserved 32px title
+band, never above preview pixels. Preserve its accessible name,
+normal-close confirmation, Cancel focus and original native admission.
+Keep long session errors keyboard-readable in a compact row.
+
+**Phase 2 design only (NOT IMPLEMENTED):** Add exactly two UI density
+options in existing General settings: Gameplay Focus (default) and
+Monitoring (larger passive thumbnails). Keep distinct from Minecraft
+Graphics Preset and FPS. Preference persistence needs one reviewed
+compatible UI-setting owner; no new native preview process/worker.
+Changing the mode must use the existing ResizeObserver/native layout
+gate and keep all five targets mounted.
+
+**Proof ceiling:** Source and synthetic browser fixtures
+AUTHORED_NOT_EXECUTED. Validate true 920×620 and 1280×900 layout,
+100/125/150/200% DPI, five mixed launcher states, native DWM
+pixel/click freshness, selected-game HUD, card Close overlap, and
+focus. Windows/Minecraft acceptance is NOT_EXECUTED.

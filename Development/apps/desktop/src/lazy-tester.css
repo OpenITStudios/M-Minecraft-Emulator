@@ -494,9 +494,16 @@
 .lt-exit-recovery summary{cursor:pointer;color:var(--lt-accent)}
 
 /* One launcher card with its own secondary normal-close action. */
-.lt-launcher-entry{display:flex;flex-direction:column;min-width:0;gap:6px}
+.lt-launcher-entry{display:flex;flex-direction:column;min-width:0;gap:4px;position:relative}
 .lt-filmstrip .lt-launcher-entry>.lt-card{flex:1;width:100%}
-.lt-app .lt-close-launcher{width:100%;min-height:32px;padding:6px 8px;font-size:12px;font-weight:500}
+.lt-app .lt-close-launcher{
+  position:absolute;top:5px;right:5px;z-index:1;
+  width:32px;height:32px;min-height:32px;padding:0;
+  display:grid;place-items:center;
+  font-size:19px;line-height:1;font-weight:500;
+  color:var(--lt-muted);background:var(--lt-surface-raised);
+  border:1px solid var(--lt-control-outline);border-radius:6px;
+}
 .lt-app .lt-preview-slot-issue{display:block;min-width:0;max-height:38px;overflow:auto;overflow-wrap:anywhere;font-size:12px;line-height:1.35}
 .lt-single-close-confirm{flex:none;background:var(--lt-panel);border:1px solid var(--lt-line);border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px}
 .lt-single-close-confirm h3,.lt-single-close-confirm p{margin:0 0 6px}
@@ -902,4 +909,41 @@
   ):focus{
     outline-color:Highlight;
   }
+}
+
+/* Gameplay Focus default: presentation-only density within existing Play.
+   Preserve the native 16:9 aperture and all five keyed DWM targets. */
+.lt-app main.lt-play-main{padding:10px 16px 12px;overflow-x:hidden}
+.lt-play-main .lt-play-header{gap:10px;margin-bottom:7px;align-items:center}
+.lt-play-main .lt-play-header > div:first-child{min-width:0}
+.lt-play-main .lt-play-header h1{font-size:18px;line-height:1.3}
+.lt-play-main .lt-play-header p{font-size:12px;line-height:1.3;margin:3px 0}
+.lt-play-main .lt-play-header .lt-header-actions{gap:6px}
+.lt-play-main .lt-play-header .lt-header-actions > button{white-space:nowrap}
+.lt-play-main .lt-games-heading{margin:6px auto 5px}
+.lt-play-main .lt-filmstrip .lt-card{padding:7px;gap:5px}
+.lt-play-main .lt-filmstrip .lt-card strong{
+  min-height:32px;line-height:32px;padding-right:36px;font-size:13px;
+}
+.lt-play-main .lt-card-picture{
+  width:min(100%,calc(clamp(68px,10vh,96px) * 16 / 9));
+  max-height:none;
+}
+.lt-play-main .lt-filmstrip .lt-card small{font-size:13px}
+.lt-play-main .lt-close-launcher:hover:not(:disabled){
+  color:var(--lt-text);background:var(--lt-control-hover);
+}
+.lt-play-main .lt-health-notice{display:flex;align-items:center;gap:5px;max-height:42px}
+.lt-play-main .lt-health-notice :is(.lt-preview-slot-issue,.lt-session-slot-issue){
+  flex:1 1 auto;min-width:0;max-height:38px;
+}
+.lt-play-main .lt-health-action{flex:none}
+@media(max-width:950px){
+  .lt-play-main .lt-play-header{gap:6px}
+  .lt-play-main .lt-play-header .lt-header-actions{gap:5px}
+}
+@media(max-height:700px){
+  .lt-app main.lt-play-main{padding-top:8px;padding-bottom:8px}
+  .lt-play-main .lt-play-header{margin-bottom:5px}
+  .lt-play-main .lt-games-heading{margin-top:4px;margin-bottom:4px}
 }

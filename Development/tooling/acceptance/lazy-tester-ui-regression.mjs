@@ -662,6 +662,10 @@ try {
     const headingWidth=await page.locator('.lt-games-heading').evaluate(node=>node.getBoundingClientRect().width);
     assert.ok(Math.abs(headingWidth-dock.width)<1,'Five-card rail heading and cards must align');
     assert.ok(previews.every(p=>Math.abs(p.width-p.height*16/9)<2),'previews must stay 16:9');
+    if((size.width===920&&size.height===620)||(size.width===1280&&size.height===900)){
+      const slots=await page.locator('.lt-filmstrip .lt-launcher-entry').count();
+      assert.equal(slots,5,'The original five DWM preview slots are retained');
+    }
     if(size.width===920&&size.height===620){
       // This non-game fixture limits the EMPTY content height only. The parent
       // native game placement rectangle and all five DWM preview nodes remain fixed.
@@ -738,6 +742,18 @@ try {
   // Return to the existing Play viewport through the running launcher card.
   await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
   await heading('Minecraft - 1').waitFor();
+  // Real content not used: the synthetic RUNNING card must reserve header
+  // space so its separate normal-Close control never covers DWM pixels.
+  const closeBounds=await page.locator('.lt-launcher-entry[data-slot="1"]').evaluate(entry=>{
+    const close=entry.querySelector('.lt-close-launcher')?.getBoundingClientRect();
+    const picture=entry.querySelector('.lt-card-picture').getBoundingClientRect();
+    const card=entry.querySelector('.lt-card').getBoundingClientRect();
+    return {close:close?{right:close.right,bottom:close.bottom,width:close.width,height:close.height}:null,
+      pictureTop:picture.top,cardRight:card.right};
+  });
+  assert.ok(closeBounds.close&&closeBounds.close.width>=32&&closeBounds.close.height>=32&&
+    closeBounds.close.right<=closeBounds.cardRight+1&&closeBounds.close.bottom<=closeBounds.pictureTop,
+    'Close game must stay outside and above the preserved native DWM thumbnail');
   await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).waitFor();
   await page.waitForTimeout(200);
   const placement=await page.evaluate(()=>{

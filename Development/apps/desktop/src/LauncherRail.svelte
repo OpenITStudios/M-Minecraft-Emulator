@@ -99,8 +99,9 @@
       {#if observedSlot && ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
         <button class="lt-secondary lt-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}
+          title={'Close Minecraft - '+profile.slot+' normally'}
           disabled={busy||closeInProgress||nativeExitReview||!available||!bindingConfigured}
-          on:click={event=>onRequestClose(profile.slot,event.currentTarget)}>Close game</button>
+          on:click={event=>onRequestClose(profile.slot,event.currentTarget)}><span aria-hidden="true">×</span></button>
       {/if}
     </div>
   {/each}

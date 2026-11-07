@@ -60,6 +60,22 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).toContain('.lt-coordinate-paste>summary{display:block;cursor:pointer;white-space:nowrap;');
     expect(css).toContain('font-size:12px;line-height:normal}');
   });
+  it('compacts the default Play view while preserving five native preview targets',()=>{
+    const app=source('LazyTesterApp.svelte'),rail=source('LauncherRail.svelte'),css=source('lazy-tester.css');
+    expect(app).toContain("<main class={page==='workspace'?'lt-play-main':undefined}>");
+    expect(app).toContain('hidden={active!==null&&!detached}');
+    expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}>Separate window");
+    expect(rail).toContain('aria-hidden="true">×</span></button>');
+    expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
+    expect(rail).toContain('use:observePreview={profile.slot}');
+    expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
+    expect(css).toContain('.lt-app main.lt-play-main{padding:10px 16px 12px;overflow-x:hidden}');
+    expect(css).toContain('clamp(68px,10vh,96px)');
+    expect(css).toContain('min-height:32px;line-height:32px;padding-right:36px;');
+    expect(css).toContain('.lt-play-main .lt-health-notice{display:flex;');
+    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
+    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
+  });
   it('limits new density and status CSS to presentation owners',()=>{
     const css=source('lazy-tester.css');
     expect(css).toContain('--lt-control-min-height:36px');
