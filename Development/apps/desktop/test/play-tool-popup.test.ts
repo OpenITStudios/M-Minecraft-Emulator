@@ -20,6 +20,17 @@ describe('nonmodal Play disclosure positioning and keyboard source contract',()=
     expect(css).toContain('top:auto;bottom:73px;');
     expect(css).toContain('max-height:531px;');
   });
+  it('collapses a popup if its opening summary is scrolled outside the viewport',()=>{
+    for(const file of [source('F3InspectorPanel.svelte'),source('CoordinatePastePanel.svelte')]){
+      expect(file).toContain('const anchor = summaryElement.getBoundingClientRect();');
+      expect(file).toContain('anchor.bottom <= 0 || anchor.top >= window.innerHeight');
+      expect(file).toContain('anchor.right <= 0 || anchor.left >= window.innerWidth');
+      expect(file).toContain('detailsElement.open = false;');
+      expect(file).toContain('playToolPopupStyle(anchor,');
+      expect(file).toContain('on:scroll|capture={repositionPopup}');
+      expect(file).not.toContain('setInterval(');
+    }
+  });
   it('shares exclusive native disclosures without creating a second native owner',()=>{
     const f3=source('F3InspectorPanel.svelte');
     const coords=source('CoordinatePastePanel.svelte');

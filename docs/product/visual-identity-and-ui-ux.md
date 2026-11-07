@@ -382,3 +382,57 @@ fixtures only. The exact current SHA must still undergo separately
 authorized Svelte/TypeScript execution, viewport visual inspection,
 WebView2 keyboard/accessibility, Windows DWM and Minecraft acceptance.
 No prior source-only result is promoted to executable PASS.
+
+## Svelte binding and Play-popup lifecycle — source-only correction
+
+The desktop uses **Svelte 5 in legacy component syntax**, with existing
+`export let`, `$:`, `bind:this` and `on:` handlers. This bounded
+correction stays in those existing component owners. It is not a rewrite
+to runes or a new UI/session state manager. Compiler and WebView2
+behavior remain unverified until separately authorized execution.
+
+### Per-launcher Coordinates & Saves drafts
+
+`CoordinatePastePanel.svelte` previously retained its unsaved XYZ text
+and manually entered labels when the selected MC slot changed. The
+underlying `saveBookmark` action already pinned the selected slot at
+request time, but this reuse of input could silently associate an MC01
+draft with MC02.
+
+The original single mounted panel now keeps at most one **ephemeral
+in-memory draft per MC01–MC05 launcher**, plus the optional unassigned
+state. On selecting a different launcher, the panel saves the current
+manual text/format/name/world/dimension to that original draft and
+restores only the new selected slot's draft. New slots start blank.
+Returning to an earlier slot restores its own unfinished text; collapsing
+the disclosure does not discard it. This provides no world or player
+identity verification and never reads the clipboard or sends a game
+command. Stored Saved Locations are still read through the original
+explicit notebook operation and filtered to the requested native slot.
+
+The original save admission remains responsible for validating
+current XYZ and manual labels, and for persisting only through the
+existing explicit saved-location bridge. Drafts are not persisted,
+uploaded, automatically saved, or merged across slots.
+
+### Scrolled-away popup anchor
+
+Both `F3InspectorPanel.svelte` and `CoordinatePastePanel.svelte`
+retain one browser-computed fixed popup derived from the triggering
+`summary` geometry. During a captured window scroll or resize, an
+anchor that has moved entirely outside the visible WebView now closes
+its own existing HTML `details`, rather than leaving a detached
+floating panel over Play or the launcher rail. Internal panel scrolling
+still does not reposition it. The original exclusive HTML disclosure
+group, focus-scoped Escape, five preview targets, viewport dimensions,
+and native ownership stay unchanged.
+
+The source-only fixtures now cover draft isolation on slot switches,
+the existing non-destructive on-close behavior, and both offscreen
+popup guards. The old visual-foundation fixture was updated to reflect
+the accurate per-launcher help copy.
+
+**Proof ceiling:** REMOTE_GITHUB source/blob/consumer check plus
+`AUTHORED_NOT_EXECUTED` fixtures only. No Svelte typecheck, browser
+fixture, WebView2 support/scroll verification, Windows 920×620/DPI
+rendering, DWM preview, or Minecraft session acceptance was executed.

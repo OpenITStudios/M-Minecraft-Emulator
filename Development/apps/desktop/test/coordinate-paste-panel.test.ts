@@ -99,6 +99,20 @@ describe('optional manual XYZ user-paste UI',()=>{
     expect(panel).toContain('loadedSlot !== selectedSlot');
     expect(panel).toContain('loadTicket');
   });
+  it('keeps unsaved XYZ and manual labels isolated per selected launcher',()=>{
+    expect(panel).toContain('type ManualDraft = {');
+    expect(panel).toContain('new Map<ProfileSlot | null, ManualDraft>()');
+    expect(panel).toContain('let draftSlot: ProfileSlot | null = selectedSlot;');
+    expect(panel).toContain('if (draftSlot !== selectedSlot)');
+    expect(panel).toContain('draftsBySlot.set(draftSlot, {');
+    expect(panel).toContain('const draft = draftsBySlot.get(selectedSlot);');
+    expect(panel).toContain("raw = draft?.raw ?? '';");
+    expect(panel).toContain("bookmarkName = draft?.name ?? '';");
+    expect(panel).toContain("worldLabel = draft?.world ?? '';");
+    expect(panel).toContain("dimension = draft?.dimension ?? 'Unknown';");
+    expect(panel).toContain('Unsaved text and manual labels stay separate for each launcher');
+    expect(panel).toContain('coordinateBookmarks.save({slot,name,worldLabel:world,dimension,raw:source})');
+  });
   it('does not read/write clipboard, call the game controller or send commands',()=>{
     for(const forbidden of [
       'navigator.clipboard', 'readText(', 'writeText(', 'execCommand(',

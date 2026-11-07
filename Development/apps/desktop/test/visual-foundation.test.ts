@@ -36,7 +36,7 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     const close=coordinates.split('function resetOnClose(')[1]?.split('</script>')[0]??'';
     expect(close).not.toContain("raw = ''");
     expect(close).not.toContain("bookmarkName = ''");
-    expect(coordinates).toContain('Closing this panel keeps your unsaved text');
+    expect(coordinates).toContain('Unsaved text and manual labels stay separate for each launcher');
     expect(coordinates).not.toContain('navigator.clipboard');
   });
   it('keeps functional focus and contrast tokens within the existing UI owner',()=>{

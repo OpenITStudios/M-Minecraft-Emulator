@@ -11,7 +11,15 @@
   function repositionPopup(event?: Event): void {
     if (!detailsElement?.open || !summaryElement) return;
     if (event?.type === 'scroll' && event.target instanceof Node && detailsElement.contains(event.target)) return;
-    popupStyle = playToolPopupStyle(summaryElement.getBoundingClientRect(),
+    const anchor = summaryElement.getBoundingClientRect();
+    // Close an offscreen nonmodal tool rather than leaving a floating panel
+    // over the five native preview cards or selected Minecraft viewport.
+    if (anchor.bottom <= 0 || anchor.top >= window.innerHeight ||
+        anchor.right <= 0 || anchor.left >= window.innerWidth) {
+      detailsElement.open = false;
+      return;
+    }
+    popupStyle = playToolPopupStyle(anchor,
       {width:window.innerWidth,height:window.innerHeight},420) + 'visibility:visible;';
   }
   function onToggle(): void {

@@ -22,7 +22,15 @@
   function repositionPopup(event?: Event): void {
     if (!detailsElement?.open || !summaryElement) return;
     if (event?.type === 'scroll' && event.target instanceof Node && detailsElement.contains(event.target)) return;
-    popupStyle = playToolPopupStyle(summaryElement.getBoundingClientRect(),
+    const anchor = summaryElement.getBoundingClientRect();
+    // A scrolled-away trigger must not leave a floating panel covering the
+    // native Play view. This closes only this existing HTML disclosure.
+    if (anchor.bottom <= 0 || anchor.top >= window.innerHeight ||
+        anchor.right <= 0 || anchor.left >= window.innerWidth) {
+      detailsElement.open = false;
+      return;
+    }
+    popupStyle = playToolPopupStyle(anchor,
       {width:window.innerWidth,height:window.innerHeight},390) + 'visibility:visible;';
   }
   function closeWhenFocusLeaves(event: FocusEvent): void {
@@ -41,6 +49,30 @@
   let deleteReview: string | null = null;
   let loadedSlot: ProfileSlot | null = null;
   let loadTicket = 0;
+
+  // An unverified manual note must not silently follow MC01 -> MC02. Only
+  // the selected launcher's ephemeral text draft is displayed and saved.
+  // Closing the disclosure preserves that launcher's draft until app exit.
+  type ManualDraft = {
+    raw: string; mode: PastedCoordinateOutput; name: string;
+    world: string; dimension: BookmarkDimension;
+  };
+  const draftsBySlot = new Map<ProfileSlot | null, ManualDraft>();
+  let draftSlot: ProfileSlot | null = selectedSlot;
+
+  $: if (draftSlot !== selectedSlot) {
+    draftsBySlot.set(draftSlot, {
+      raw, mode, name: bookmarkName, world: worldLabel, dimension,
+    });
+    const draft = draftsBySlot.get(selectedSlot);
+    draftSlot = selectedSlot;
+    raw = draft?.raw ?? '';
+    mode = draft?.mode ?? 'XYZ';
+    bookmarkName = draft?.name ?? '';
+    worldLabel = draft?.world ?? '';
+    dimension = draft?.dimension ?? 'Unknown';
+    clearOutputSelection();
+  }
 
   $: if (detailsElement?.open && loadedSlot !== selectedSlot) {
     loadedSlot = selectedSlot;
@@ -201,7 +233,7 @@
   <div class="lt-coordinate-popup" style={popupStyle} role="group" aria-label="Manual coordinate formatter">
     <strong>Manual coordinates</strong>
     <small class="lt-coordinate-status">User-pasted · Unverified</small>
-    <p class="lt-coordinate-help">Closing this panel keeps your unsaved text until the app closes. Check the selected launcher label before saving.</p>
+    <p class="lt-coordinate-help">Unsaved text and manual labels stay separate for each launcher until Lazy Tester closes. Check the selected launcher before saving.</p>
     <p id="lt-coordinate-input-hint">In Minecraft Education, enable Settings > Show Coordinates. If your version provides Creator > Enable Copy Coordinate UI, press Ctrl+Alt+C in Minecraft and Ctrl+V here. Education 26.33 copy-shortcut support remains unverified. Otherwise type XYZ manually. This tool never reads the clipboard or identifies a player/world.</p>
     <label for="lt-coordinate-input">XYZ coordinates</label>
     <textarea
