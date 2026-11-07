@@ -43,7 +43,7 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     const storage=load('DataStorage.svelte');
     expect(storage).toContain('disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null}');
     expect(storage).toContain("aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lt-storage-review-guidance':undefined}");
-    expect(storage).toContain('Finish or cancel the current review');
+    expect(storage).toContain('Finish or cancel this review before switching profiles.');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
     expect(app).toContain('status.confirmationToken!==pending.token');
     expect(storage).not.toContain('invokeRuntime(');
