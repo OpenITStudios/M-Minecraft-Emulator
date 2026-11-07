@@ -90,6 +90,10 @@ test('AST TS/Svelte and Rust module/use source witnesses, without comment ghosts
   assert.ok(index.unresolved.some(x=>x.reason==='DYNAMIC_COMPUTED'));
   assert.ok(!index.unresolved.some(x=>/ghost|fake|phantom/.test(x.specifier)));
   assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_MOD'&&s.path===rs+'main.rs')));
+  assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_MOD'&&s.path===rs+'engine/mod.rs')));
+  assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_USE'&&s.path===rs+'engine/first.rs')));
+  assert.ok(index.edges.every(e=>e.sourceSites.every(site=>site.path===index.byId.get(e.from).path)),
+    'An extracted edge must always retain the importer source path');
   assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_USE'&&s.path===rs+'engine/first.rs')));
   assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_INCLUDE_LITERAL')));
   assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_MOD'&&
@@ -110,7 +114,10 @@ test('source impact traverses real importer chain and retains line evidence',()=
   const trace=sourceTrace(index,ui+'main.ts',ui+'lib.ts');
   assert.equal(trace.result,'FOUND');
   assert.ok(trace.steps[0].sourceSites.length>0);
-  assert.equal(sourceTrace(index,ui+'lib.ts',ui+'main.ts').result,'NO_PATH');
+  const reverse=sourceTrace(index,ui+'lib.ts',ui+'main.ts');
+  assert.equal(reverse.result,'NO_PATH');
+  assert.equal(reverse.status.completeness,'NOT_PROVEN_COMPLETE');
+  assert.equal(reverse.status.noObservedPathMeans,'UNKNOWN_NOT_NO_IMPACT');
   const coreImpact=sourceImpact(index,'Development/engine/runtime-core/src/lib.rs');
   assert.equal(coreImpact.potentialCargoDependents.length,1);
   assert.match(sourceImpactMarkdown(coreImpact),/Potential Cargo dependent packages/);
@@ -131,6 +138,17 @@ test('an unavailable TypeScript/Svelte parser yields explicit incomplete status'
   assert.ok(index.edges.some(e=>e.sourceSites.some(s=>s.syntax==='RUST_MOD')));
   assert.ok(sourceSummary(index).unparsed>0);
   assert.equal(sourceImpact(index,ui+'main.ts').status.status,'PARSER_COVERAGE_INCOMPLETE');
+  assert.equal(sourceImpact(index,'Development/apps/desktop/src-tauri/src/main.rs').status.status,
+    'GLOBAL_PARSER_COVERAGE_INCOMPLETE');
+}));
+test('frontend test directory is scanned and its source import becomes a reverse test impact',()=>fixture(({root,put,ui})=>{
+  put('Development/apps/desktop/test/regression.test.ts',
+    'import {answer} from "../src/lib.js";\n');
+  const index=buildSourceDependencyIndex(root,parsers());
+  const source=ui+'lib.ts';
+  assert.ok(index.resources.some(r=>r.path.endsWith('/test/regression.test.ts')));
+  const impact=sourceImpact(index,source);
+  assert.ok(impact.impacted.some(item=>item.resource.path.endsWith('/test/regression.test.ts')));
 }));
 test('ignored storage and installed packages never enter the scanned graph',()=>fixture(({root,put})=>{
   put('Data/Profiles/MC01/session.ts','import "./secret.ts";\n');

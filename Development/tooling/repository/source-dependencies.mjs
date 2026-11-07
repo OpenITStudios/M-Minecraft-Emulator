@@ -13,12 +13,16 @@ const CODE_EXTS=new Set(['.rs','.ts','.tsx','.mts','.cts','.js','.jsx','.mjs','.
 const JS_EXTS=['.ts','.tsx','.mts','.cts','.js','.jsx','.mjs','.cjs','.svelte'];
 export const SOURCE_DIRS=Object.freeze([
   'Development/apps/desktop/src',
+  'Development/apps/desktop/test',
   'Development/apps/desktop/src-tauri/src',
   'Development/apps/desktop/scripts',
   'Development/engine/runtime-core/src',
   'Development/tooling',
 ]);
-const EXTRA_FILES=['Development/apps/desktop/src-tauri/build.rs'];
+const EXTRA_FILES=[
+  'Development/apps/desktop/src-tauri/build.rs',
+  'Development/apps/desktop/vite.config.ts',
+];
 const SKIP=new Set(['node_modules','target','dist','coverage','.git','generated','.svelte-kit',
   'binaries','gen','icons','package-resources','test-results','__snapshots__']);
 export const SOURCE_PROOF='STATIC_DECLARATION_POTENTIAL_DEPENDENCY_NOT_CALLSITE_BUILD_PLATFORM_OR_RUNTIME_PROOF';
@@ -333,7 +337,7 @@ function rustSites(path,content,known){
       }else target=rustModTarget(path,tokens[i+1].value,known);
       const at=lineColumn(content,tokens[i+1].at);
       sites.push({path,syntax:'RUST_MOD',specifier:tokens[i+1].value,
-        conditional:'CFG_NOT_EVALUATED',...at,...target});
+        conditional:'CFG_NOT_EVALUATED',...at,resolution:target});
     }
     if(t.value==='include'&&tokens[i+1]?.value==='!'&&tokens[i+2]?.value==='('){
       if(tokens[i+3]?.kind==='string'&&tokens[i+4]?.value===')'){
@@ -345,7 +349,7 @@ function rustSites(path,content,known){
           {status:'UNRESOLVED_RUST_INCLUDE'};
         sites.push({path,syntax:'RUST_INCLUDE_LITERAL',specifier:requested,
           conditional:'CFG_NOT_EVALUATED',
-          ...lineColumn(content,tokens[i+3].at),...target});
+          ...lineColumn(content,tokens[i+3].at),resolution:target});
       }else gaps.push({path,reason:'COMPUTED_RUST_INCLUDE_UNTRACED',
         ...lineColumn(content,t.at)});
     }
@@ -367,7 +371,7 @@ function rustSites(path,content,known){
         if(target.status==='EXTERNAL_OR_UNQUALIFIED_RUST_USE')continue;
         sites.push({path,syntax:'RUST_USE',specifier:segments.join('::'),
           conditional:'CFG_NOT_EVALUATED',
-          ...lineColumn(content,t.at),...target});
+          ...lineColumn(content,t.at),resolution:target});
       }
       i=j;
     }
@@ -470,7 +474,9 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     unparsed.push(...result.gaps);
     for(const site of result.sites){
       siteCount++;
-      const target=site.status?site:resolveJsImport(path,site.specifier,known);
+      // Preserve the origin file and line even for resolved Rust sites.
+      // Spreading target.path into the site silently overwrote its source path.
+      const target=site.resolution??resolveJsImport(path,site.specifier,known);
       if(['EXTERNAL_OR_ALIAS','EXTERNAL_OR_UNQUALIFIED_RUST_USE'].includes(target.status)){
         externalCount++;continue;
       }
@@ -506,6 +512,9 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
     proofBoundary:SOURCE_PROOF,resources,byPath,byId,edges:ordered,unresolved,
     unparsed,siteCount,externalCount,resourceCount,
     cargoLocalDependencies:cargo.dependencies,cargoUnresolved:cargo.unresolved,
+    coverage:{indexedSourceFiles:resources.length,
+      excludedLanguageFamilies:['C_CPP_HEADERS','POWERSHELL','CMAKE','RUST_CFG_MACRO_EXPANSION','TAURI_COMMAND_LINKING'],
+      completeness:'NOT_PROVEN_COMPLETE'},
     parserAvailability:{typescript:tsInfo.status,svelte:svInfo.status},
     status:unparsed.length?'INCOMPLETE_PARSER_COVERAGE':
       unresolved.length?'PARTIAL_UNRESOLVED_DECLARATIONS':'STATIC_DECLARATIONS_INDEXED'};

@@ -28,11 +28,21 @@ const adjacency=(edges,key)=>{
 function graphStatus(index, relevantIds){
   const unknown=index.unparsed.filter(item=>relevantIds.has(index.byPath.get(item.path)?.id));
   const unresolved=index.unresolved.filter(item=>relevantIds.has(item.from));
+  const globalParserGaps=index.unparsed.length;
+  const globalUnresolved=index.unresolved.length+(index.cargoUnresolved?.length??0);
   return {
     confidence:'POTENTIAL_STATIC_FILE_REACHABILITY_ONLY',
+    completeness:'NOT_PROVEN_COMPLETE',
+    noObservedPathMeans:'UNKNOWN_NOT_NO_IMPACT',
     status:unknown.length?'PARSER_COVERAGE_INCOMPLETE':
-      unresolved.length?'UNRESOLVED_REFERENCES_REMAIN':'SOURCE_DECLARATIONS_OBSERVED',
+      globalParserGaps?'GLOBAL_PARSER_COVERAGE_INCOMPLETE':
+      unresolved.length?'UNRESOLVED_REFERENCES_REMAIN':
+      globalUnresolved?'GLOBAL_UNRESOLVED_REFERENCES_REMAIN':
+      'BOUNDED_DECLARATIONS_OBSERVED_ONLY',
     parserGaps:unknown,unresolved,
+    globalParserGapCount:globalParserGaps,
+    globalUnresolvedCount:globalUnresolved,
+    outOfScopeLanguageFamilies:index.coverage?.excludedLanguageFamilies??[],
     proofBoundary:index.proofBoundary,
   };
 }
@@ -121,6 +131,8 @@ export function sourceSummary(index){
     externalOrAliasReferencesSkipped:index.externalCount,
     nonCodeResourcesSkipped:index.resourceCount,
     missingOrUnresolved:index.unresolved.length,
+    sourceCoverage:index.coverage,
+    overallCompleteness:'NOT_PROVEN_COMPLETE',
     unparsed:index.unparsed.length,
     parserAvailability:index.parserAvailability,
     diagnostics:{
@@ -136,6 +148,7 @@ export function sourceGraphProjection(index){
   return {schemaVersion:1,mode:index.mode,status:index.status,
     proofBoundary:index.proofBoundary,parserAvailability:index.parserAvailability,
     resources:index.resources,edges:index.edges,unresolved:index.unresolved,unparsed:index.unparsed,
+    coverage:index.coverage,
     cargoLocalDependencies:index.cargoLocalDependencies||[],
     cargoUnresolved:index.cargoUnresolved||[]};
 }
@@ -168,7 +181,7 @@ export function sourceTraceDiagram(trace){
 export function sourceImpactMarkdown(impact){
   const tick=String.fromCharCode(96);
   const lines=['# Potential source change impact','','Requested: '+tick+impact.requestedPathOrId+tick,
-    'Result: **'+impact.status.status+'**','Proof: '+tick+impact.status.proofBoundary+tick,
+    'Result: **'+impact.status.status+'**','Completeness: **NOT_PROVEN_COMPLETE**','Proof: '+tick+impact.status.proofBoundary+tick,
     'Depth: '+impact.depth.maxHops+' (truncated: '+impact.depth.depthTruncated+')','','## Selected source',''];
   for(const r of impact.selected)lines.push('- [['+r.path+'|'+r.id+']]');
   lines.push('','## Potentially affected files','','An import/module edge does not establish code execution, affected symbols, or a regression.','');
@@ -206,7 +219,7 @@ export function sourceImpactMarkdown(impact){
 export function sourceTraceMarkdown(trace){
   const tick=String.fromCharCode(96);
   const lines=['# Source declaration trace','','Result: **'+trace.result+'**',
-    'Coverage: '+trace.status.status,
+    'Coverage: '+trace.status.status+' (global parser gaps: '+trace.status.globalParserGapCount+'; global unresolved: '+trace.status.globalUnresolvedCount+')',
     'Proof: '+tick+trace.status.proofBoundary+tick,'',
     'From [['+trace.from.path+'|'+trace.from.id+']] to [['+trace.to.path+'|'+trace.to.id+']]',''];
   if(trace.result==='FOUND'){
