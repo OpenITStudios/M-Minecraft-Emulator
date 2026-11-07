@@ -30,7 +30,11 @@
   });
 </script>
 <div class="lt-window-bar">
-  <button class="lt-window-drag" data-tauri-drag-region aria-label="Move Lazy Tester window" on:dblclick={()=>action('toggleMaximize')}><span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span><span data-tauri-drag-region>Lazy Tester</span></button>
+  <!-- Tauri owns native drag/double-click; the following window buttons own keyboard actions. -->
+  <div class="lt-window-drag" data-tauri-drag-region>
+    <span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span>
+    <span data-tauri-drag-region>Lazy Tester</span>
+  </div>
   <button class="lt-window-control" aria-label="Minimize" title="Minimize" on:click={()=>action('minimize')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
   <button class="lt-window-control" aria-label={maximized?'Restore down':'Maximize'} title={maximized?'Restore down':'Maximize'} on:click={()=>action('toggleMaximize')}><svg viewBox="0 0 16 16" aria-hidden="true">{#if maximized}<path d="M5 5V3h8v8h-2M3 5h8v8H3Z"/>{:else}<path d="M3 3h10v10H3Z"/>{/if}</svg></button>
   <button class="lt-window-control lt-window-close" disabled={closing} aria-label={backendSupport === 'WindowsNative' ? 'Exit Lazy Tester and all managed Minecraft sessions' : 'Close Lazy Tester'} title={backendSupport === 'WindowsNative' ? 'Exit Lazy Tester and all managed Minecraft sessions' : 'Close Lazy Tester'} on:click={()=>action('close')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>

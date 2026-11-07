@@ -922,3 +922,25 @@ when a native game takes input, Tab/Shift+Tab traversal, focus-ring
 visibility, narrator, real 920×620/high-DPI rendering, native DWM
 and five Minecraft client acceptance remain `NOT_EXECUTED`. The
 `UX-F04` and `UX-F09` rows are `SOURCE_PREPARED`, not PASS.
+
+## Native titlebar semantic keyboard correction — source only (7 November 2026)
+
+The titlebar's branded pointer drag surface is now a **non-focusable**
+`div`, not an unimplemented button named "Move Lazy Tester window".
+`data-tauri-drag-region` remains on the original drag surface **and**
+its two children, respecting Tauri's direct-target drag requirement.
+The redundant custom `dblclick` handler is removed: Tauri's native
+drag-region behavior retains Windows pointer drag/double-click handling.
+The adjacent native Minimize, Maximize/Restore down and Close buttons
+remain actual keyboard controls; original CloseRequested/session exit
+gates, native window geometry and the selected 16:9 DWM viewport remain
+unchanged. No additional keyboard shortcut or native command was added.
+
+The existing visual-foundation source fixture and optional synthetic
+browser journey now reject a fake "Move" button and use **Maximize** as
+the unrelated focus target for a scoped CloseOne/Escape regression.
+These are **AUTHORED_NOT_EXECUTED**, not a Svelte compile, browser,
+WebView2 or Windows PASS. Actual native drag, double-click behavior,
+focus order, titlebar at high DPI, Narrator and five Minecraft sessions
+remain **NOT_EXECUTED**. The previously recorded UX-F02 and UX-A01
+acceptance gates remain open.

@@ -1068,7 +1068,13 @@ try {
   // window control must NOT dismiss the pending game-close review.
   assert.equal(await nav('Play').isDisabled(),true);
   assert.equal(await nav('Settings').isDisabled(),true);
-  await page.getByRole('button',{name:'Move Lazy Tester window'}).focus();
+  // Tauri drag region is pointer-only, not a bogus keyboard button.
+  // Native Maximize remains the real, independently focusable window action.
+  assert.equal(await page.locator('.lt-window-drag[data-tauri-drag-region]').count(),1,
+    'The branded titlebar keeps its original Tauri-native drag region');
+  assert.equal(await page.getByRole('button',{name:'Move Lazy Tester window'}).count(),0,
+    'Pointer-only titlebar drag cannot pollute the keyboard button list');
+  await page.getByRole('button',{name:'Maximize',exact:true}).focus();
   await page.keyboard.press('Escape');
   assert.equal(await closeReview.count(),1,
     'Escape outside the focused CloseOne review must not intercept other UI');

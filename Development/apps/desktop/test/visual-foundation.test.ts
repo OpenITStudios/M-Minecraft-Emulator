@@ -16,6 +16,19 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(bar).toContain('class="lt-window-mark"');
     expect(play).not.toContain('<span>LT</span>');
   });
+  it('does not expose the pointer-only native titlebar drag surface as a keyboard button',()=>{
+    const bar=asset('src/WindowTitlebar.svelte');
+    expect(bar).toContain('<div class="lt-window-drag" data-tauri-drag-region>');
+    expect(bar).toContain('<span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span>');
+    expect(bar).toContain('<span data-tauri-drag-region>Lazy Tester</span>');
+    expect(bar).not.toContain('<button class="lt-window-drag"');
+    expect(bar).not.toContain('Move Lazy Tester window');
+    expect(bar).not.toContain('on:dblclick=');
+    expect(bar).toContain('aria-label="Minimize"');
+    expect(bar).toContain("aria-label={maximized?'Restore down':'Maximize'}");
+    expect(bar).toContain("on:click={()=>action('toggleMaximize')}");
+    expect(bar).toContain("on:click={()=>action('close')}");
+  });
   it('keeps occupied-session gates apart from observed running labels',()=>{
     const play=asset('src/LazyTesterApp.svelte');
     expect(play).toContain("['STARTING', 'RUNNING', 'NOT_RESPONDING']");
