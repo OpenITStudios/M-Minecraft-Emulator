@@ -704,6 +704,28 @@ try {
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   }
   await page.setViewportSize({width:1280,height:900});
+  // Presentation-only two-mode selector: the existing five native preview
+  // targets remain mounted on Play, and monitoring trades room for larger tiles.
+  await section('General').click();await heading('General').waitFor();
+  const workspaceSelect=page.getByLabel('Workspace layout',{exact:true});
+  assert.equal(await workspaceSelect.inputValue(),'focus');
+  await nav('Play').click();
+  const focusPreviewHeight=await page.locator('.lt-card-picture').first().evaluate(node=>node.getBoundingClientRect().height);
+  await nav('Settings').click();await section('General').click();
+  await workspaceSelect.selectOption('monitor');
+  await nav('Play').click();
+  const monitorPreviewHeight=await page.locator('.lt-card-picture').first().evaluate(node=>node.getBoundingClientRect().height);
+  assert.ok(monitorPreviewHeight>focusPreviewHeight,
+    'Monitoring shows larger passive previews than the Gameplay Focus default');
+  assert.equal(await page.locator('.lt-filmstrip .lt-card-picture').count(),5);
+  await nav('Settings').click();await section('General').click();
+  assert.equal(await workspaceSelect.inputValue(),'monitor');
+  await workspaceSelect.selectOption('focus');
+  await nav('Play').click();
+  assert.equal(await page.locator('.lt-filmstrip .lt-card-picture').count(),5,
+    'Switching display density must not replace any of the five preview slots');
+  await nav('Settings').click();await section('Data Storage').click();
+  await page.setViewportSize({width:1280,height:900});
   // Preserve navigation clicks while an inspect is in flight.
   await page.evaluate(()=>{window.__holdInspect=true;});await page.waitForFunction(()=>!!window.__finishInspect);
   await nav('Settings').click();await section('General').click();

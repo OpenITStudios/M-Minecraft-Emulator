@@ -65,6 +65,22 @@
   let fullReview:{slot:ProfileSlot;token:string;pending:boolean}|null=null,fullName='',fullAck=false,clearingData=false;
   type Page = 'workspace' | 'launchers' | 'storage' | 'settings';
   let page: Page = 'workspace';
+  // Presentation-only workspace density. Never a game/process/settings owner.
+  type WorkspaceLayout = 'focus' | 'monitor';
+  const workspaceLayoutKey = 'lazy-tester.workspace-layout.v1';
+  let workspaceLayout: WorkspaceLayout = 'focus';
+  let layoutPersistenceIssue = false;
+  function chooseWorkspaceLayout(next: WorkspaceLayout): void {
+    if (next !== 'focus' && next !== 'monitor') return;
+    workspaceLayout = next;
+    try {
+      window.localStorage.setItem(workspaceLayoutKey, next);
+      layoutPersistenceIssue = false;
+    } catch {
+      // Continue using the new density in this window without claiming a save.
+      layoutPersistenceIssue = true;
+    }
+  }
   let queuedPage: Page | null = null;
   // Ephemeral route feedback only; not another session or settings owner.
   let loadingPage: Page | null = null;
@@ -844,6 +860,12 @@
     finally {busy=false;clearingData=false;}
   }
   onMount(() => {
+    try {
+      const saved = window.localStorage.getItem(workspaceLayoutKey);
+      workspaceLayout = saved === 'monitor' ? 'monitor' : 'focus';
+    } catch {
+      workspaceLayout = 'focus';
+    }
     mounted = true; void initializeLaunchers();
     // Keep a review stable while the user decides; the backend rechecks admission on action.
     // Reuse this observer rather than adding another interval or process watcher.
@@ -946,7 +968,9 @@
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
-    <main class={page==='workspace'?'lt-play-main':undefined}>
+    <main class={page==='workspace'
+      ? workspaceLayout==='monitor'?'lt-play-main lt-workspace-monitoring':'lt-play-main'
+      : undefined}>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions"><button class="lt-secondary" bind:this={headerRefreshButton} disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release} aria-label={'Open Minecraft - '+active+' in a window'}>Separate window</button>{/if}{#if page==='workspace'}<div class="lt-play-tools" role="group" aria-label="Play tools"><F3InspectorPanel view={f3View} /><CoordinatePastePanel selectedSlot={active} /></div>{/if}</div>
@@ -1021,6 +1045,7 @@
       </section>
       {#if page==='settings'}
         <GeneralSettings {profiles} {selectedSlot} {settings}
+          {workspaceLayout} {layoutPersistenceIssue} onChooseWorkspaceLayout={chooseWorkspaceLayout}
           bind:graphicsPreset bind:activeFps bind:backgroundFps
           {busy} {available} {refreshing} {resizing}
           presetQueued={queuedPreset!==null} performanceQueued={queuedPerformance!==null}

@@ -1020,13 +1020,16 @@ band, never above preview pixels. Preserve its accessible name,
 normal-close confirmation, Cancel focus and original native admission.
 Keep long session errors keyboard-readable in a compact row.
 
-**Phase 2 design only (NOT IMPLEMENTED):** Add exactly two UI density
-options in existing General settings: Gameplay Focus (default) and
-Monitoring (larger passive thumbnails). Keep distinct from Minecraft
-Graphics Preset and FPS. Preference persistence needs one reviewed
-compatible UI-setting owner; no new native preview process/worker.
-Changing the mode must use the existing ResizeObserver/native layout
-gate and keep all five targets mounted.
+**Source phase 2 — implementation added:** General settings now offers
+exactly two UI density options: Gameplay Focus (default) and Monitoring
+(larger passive thumbnails). This does not change Minecraft Graphics
+Preset, FPS, profiles or game state. The one existing Svelte parent owns
+the mode and stores a small namespaced UI-only preference in the WebView
+localStorage, with a safe Gameplay Focus fallback and visible warning
+if saving is unavailable. This is not a second process/data owner.
+Changing Settings suspends the original native presentation; returning
+to Play relies on the existing ResizeObserver/native layout gate.
+Actual persistence on installed Windows WebView2 is NOT_VERIFIED.
 
 **Proof ceiling:** Source and synthetic browser fixtures
 AUTHORED_NOT_EXECUTED. Validate true 920×620 and 1280×900 layout,

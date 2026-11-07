@@ -947,3 +947,13 @@
   .lt-play-main .lt-play-header{margin-bottom:5px}
   .lt-play-main .lt-games-heading{margin-top:4px;margin-bottom:4px}
 }
+
+/* Larger passive monitoring tiles are opt-in; selected native viewport retains
+   the same 16:9 fit and the five original keyed DWM destinations. */
+.lt-play-main.lt-workspace-monitoring .lt-card-picture{
+  width:min(100%,calc(clamp(96px,15vh,136px) * 16 / 9));
+}
+.lt-settings-layout #workspace-layout{
+  min-height:var(--lt-control-min-height);
+  max-width:100%;
+}
