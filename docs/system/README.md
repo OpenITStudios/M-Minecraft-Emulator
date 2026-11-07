@@ -17,6 +17,7 @@ Use the smallest current owner relevant to the task:
 | Exact Rust/Tauri/UI/tooling source owner | [Implementation map](implementation-map.md) |
 | Agent Rules, Catalog/Graph/Retrieval, Obsidian and Pele navigation views | [Repository knowledge graph](repository-knowledge-graph.md) |
 | Source import/module declarations, conservative code change impact and trace | [Source Dependency Graph](source-dependency-graph.md) |
+| Why does a design exist, which active constraints apply, and what prior decision is directly evidenced? | [Architecture Reasoning](architecture-reasoning.md) |
 | Current end-to-end desktop / MCP / Skills Probe / diagnostics flow | [Architecture routing](architecture.md#canonical-end-to-end-flow-routing) |
 | Original Skills Probe and map-aware QA proof boundary | [Map-Aware Probe QA](map-aware-probe-qa.md) |
 | Original team source updates | [Team ZIP review](education-team-source-updates.md) |

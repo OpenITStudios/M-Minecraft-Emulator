@@ -44,6 +44,8 @@
     "knowledge:audit": "node tooling/repository/knowledge-query.mjs --audit",
     "knowledge:source-summary": "node tooling/repository/knowledge-query.mjs --source-summary",
     "knowledge:source-impact": "node tooling/repository/knowledge-query.mjs --impact",
-    "knowledge:source-graph": "node tooling/repository/knowledge-query.mjs --source-graph"
+    "knowledge:source-graph": "node tooling/repository/knowledge-query.mjs --source-graph",
+    "knowledge:architecture-context": "node tooling/repository/knowledge-query.mjs --architecture-context",
+    "knowledge:decision-history": "node tooling/repository/knowledge-query.mjs --decision-history"
   }
 }

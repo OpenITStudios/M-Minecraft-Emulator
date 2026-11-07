@@ -74,7 +74,11 @@ links. Missing relationships stay unresolved.
    [Source Dependency Graph](source-dependency-graph.md) uses a separate,
    opt-in AST/lexical source-declaration projection with conservative
    potential-file impact, explicit missing parse coverage and source sites.
-3. **Minecraft/runtime/process graph** — must use original Rust session,
+3. **Architecture/decision explanation** — [Architecture Reasoning](architecture-reasoning.md)
+   joins canonical owner/invariant witnesses with conservative source impact
+   and opt-in, exact Git commit trailers. It is a read-only projection, not
+   a new graph, status authority or Git workflow.
+4. **Minecraft/runtime/process graph** — must use original Rust session,
    identity, IPC and verified Windows/game observations; never derived from
    this repository documentation graph.
 

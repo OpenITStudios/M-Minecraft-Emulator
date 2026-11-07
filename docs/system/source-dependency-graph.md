@@ -89,6 +89,10 @@ The impact/trace status includes **global** parser gaps, unresolved references,
 Cargo path gaps and Tauri binding gaps—even when a missing importer cannot
 appear in a reached graph path. `NOT_PROVEN_COMPLETE` is always preserved.
 An observed `NO_PATH` or empty importer set is **UNKNOWN, not safe**.
+For combining this potential impact with literal current owner/invariant
+witnesses and optional historical Git author claims, consult
+[Architecture Reasoning](architecture-reasoning.md). It does not upgrade
+any source-dependency edge into a semantic or runtime proof.
 No attempt is made to merge the documentation graph, source graph, and
 Minecraft/process/runtime graph into one authority.
 
