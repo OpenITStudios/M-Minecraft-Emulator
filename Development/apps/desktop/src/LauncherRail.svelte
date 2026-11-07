@@ -74,7 +74,8 @@
         disabled={busy||!observedSlot||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
-        <strong title={'Minecraft - '+profile.slot}>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
+        <!-- Compact visual identity, full Minecraft slot stays in accessible names and dialogs. -->
+        <strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
         <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!observedSlot||!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
         <small class={observedSlot&&available&&bindingConfigured
           ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'

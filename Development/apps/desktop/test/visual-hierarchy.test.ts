@@ -22,6 +22,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(rail).toContain('use:observePreview={profile.slot}');
     expect(rail).toContain('lt-status-attention');
     expect(rail).toContain('lt-status-selected');
+    expect(rail).toContain("<strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}");
     expect(rail).toContain("'Selected in Play'");
     expect(css).toContain('.lt-filmstrip .lt-card small.lt-status-attention{color:var(--lt-warning)}');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');

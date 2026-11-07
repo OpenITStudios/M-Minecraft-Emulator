@@ -465,6 +465,11 @@ try {
     .evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('data-slot'))));
   assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
     'Valid native profile results retain fixed MC01-MC05 visual order');
+  assert.deepEqual((await page.locator('.lt-filmstrip .lt-card strong').allTextContents())
+    .map(value=>value.trim()),['MC01','MC02','MC03','MC04','MC05'],
+    'Visual launcher identities must use stable compact MC01–MC05 names');
+  assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).count(),1,
+    'Compact visible names must not reduce the full accessible launcher name');
   await page.setViewportSize({width:1280,height:900});
   await page.evaluate(()=>{window.__runningSlots=[1,2,3,4,5];});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
@@ -1190,6 +1195,35 @@ try {
   assert.equal(await affectedCard.locator('.lt-card').count(),1,
     'Confirmed CloseOne review keeps its original stable launcher focus group');
   await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
+  // Short-window/system-warning stress: all warning content stays reachable
+  // without consuming the entire game stage. Synthetic DOM only, not native DWM.
+  await page.setViewportSize({width:920,height:620});
+  const compactRecovery=await page.evaluate(()=>{
+    const warning=document.querySelector('.lt-exit-recovery[aria-label="Window recovery unconfirmed"]');
+    const message=warning.querySelector('p');
+    const oldText=message.textContent;
+    message.textContent=(oldText+' ').repeat(12);
+    warning.scrollTop=warning.scrollHeight;
+    const warningHeight=warning.getBoundingClientRect().height;
+    const scrollOffset=warning.scrollTop;
+    const stage=document.querySelector('.lt-stage-space').getBoundingClientRect();
+    const game=document.querySelector('.lt-viewport').getBoundingClientRect();
+    const filmstrip=document.querySelector('.lt-filmstrip').getBoundingClientRect();
+    message.textContent=oldText;
+    return {warningHeight,scrollOffset,gameHeight:game.height,
+      withinStage:game.top>=stage.top-1&&game.bottom<=stage.bottom+1,
+      previewCount:document.querySelectorAll('.lt-filmstrip .lt-card-picture').length,
+      railVisible:filmstrip.bottom<=innerHeight+1};
+  });
+  assert.ok(compactRecovery.warningHeight<=89&&compactRecovery.scrollOffset>0,
+    'Play warning must be bounded and keyboard-scrollable at the minimum window height');
+  assert.ok(compactRecovery.gameHeight>=120&&compactRecovery.withinStage,
+    'Play warning must preserve a nonzero, in-bounds native game viewport');
+  assert.equal(compactRecovery.previewCount,5,
+    'Long warning must not drop or reorder the five preview destinations');
+  assert.equal(compactRecovery.railVisible,true,
+    'The five thumbnail rail must remain visible with a long warning');
+  await page.setViewportSize({width:1280,height:900});
   await page.waitForFunction(()=>
     document.querySelectorAll('[aria-label="Refresh status for Minecraft - 2"]').length===0);
   assert.equal(await affectedCard.getAttribute('title'),null,

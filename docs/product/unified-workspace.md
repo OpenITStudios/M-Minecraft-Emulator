@@ -31,7 +31,7 @@ the same visible "Refresh" wording in the toolbar and per-launcher recovery.
 A failed native preview offers "Select game" only when window response is
 positively observed; otherwise the safe offered action is "Refresh".
 
-The five-card rail retains its original fixed profile identities and native live preview nodes. The single adaptive Play layout compacts card chrome, reserves the original Close control in each card title band and automatically balances the game viewport against readable previews. No display-density selector or additional native DWM target is needed.
+The five-card rail retains its original fixed profile identities and native live preview nodes. The single adaptive Play layout compacts card chrome, reserves the original Close control in each card title band and automatically balances the game viewport against readable previews. Visual card labels are always MC01–MC05, with full Minecraft slot names preserved for accessibility and confirmations. Play-only system warnings have bounded keyboard-scrollable content so long recovery messages cannot indefinitely shrink the game stage. No display-density selector or additional native DWM target is needed.
 A selected-game Close review still uses the original native CloseOne admission;
 its UI defaults keyboard focus to Cancel, supports Escape dismissal, and returns
 focus to the invoking Close game button without scrolling the rail. No implicit

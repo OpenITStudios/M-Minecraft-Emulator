@@ -1040,3 +1040,34 @@ Source and browser regression fixtures are AUTHORED_NOT_EXECUTED.
 Actual 920×620/1280×900, Windows 100/125/150/200% DPI, WebView2
 text zoom, native DWM freshness/placement, HUD, focus, Narrator and
 five-client gameplay remain NOT_EXECUTED and must not be called PASS.
+
+## Consistent five-slot labels and bounded Play recovery — 7 November 2026
+
+The five stable lower cards now use compact visual names **MC01–MC05**;
+their original full `Minecraft - N` accessible action names, tooltips,
+per-slot safe admission, verified status wording and selected indicators
+are retained. No source slot is reordered, inferred or given a fake
+gameplay observation. Main headings and destructive confirmation text
+remain descriptive full-name surfaces, not small card labels.
+
+Only when on **Play**, top-level system alert, backend binding/recovery
+and unconfirmed window restoration panels now have a bounded scrollable
+maximum height. The normal ceiling is `min(104px,18dvh)`; at a CSS
+viewport height of 700px or less the ceiling is `min(88px,16dvh)`.
+Warning text and existing actions are **not truncated in the DOM**:
+the original focusable panels retain scrolling, accessible labels,
+support references and their current native admission paths. Settings
+and Data Storage have unchanged warning sizing. Redundant earlier 12px
+preview-health font CSS was removed; the authored 13px per-slot health
+owner remains.
+
+Regression fixture updates check compact visual names versus full
+accessible action names, all five keyed previews, 920×620 bounded
+warning scrolling, thumbnail rail presence and viewport remaining
+in the stage. The long-message test mutates only disposable synthetic
+DOM text and restores it; it does not interact with Minecraft.
+
+**Proof ceiling:** REMOTE_GITHUB source checks and AUTHORED_NOT_EXECUTED
+browser fixtures. The exact visual viewport size, Windows 100–200% DPI,
+WebView2 scroll/focus, mixed five-client statuses, native DWM bounds,
+warning readability and actual gameplay remain NOT_EXECUTED.

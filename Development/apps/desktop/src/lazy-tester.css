@@ -503,7 +503,7 @@
   color:var(--lt-muted);background:var(--lt-surface-raised);
   border:1px solid var(--lt-control-outline);border-radius:6px;
 }
-.lt-app .lt-preview-slot-issue{display:block;min-width:0;max-height:38px;overflow:auto;overflow-wrap:anywhere;font-size:12px;line-height:1.35}
+.lt-app .lt-preview-slot-issue{display:block;min-width:0;max-height:38px;overflow:auto;overflow-wrap:anywhere;line-height:1.35}
 .lt-single-close-confirm{flex:none;background:var(--lt-panel);border:1px solid var(--lt-line);border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px}
 .lt-single-close-confirm h3,.lt-single-close-confirm p{margin:0 0 6px}
 .lt-single-close-confirm .lt-actions{display:flex;flex-wrap:wrap;gap:8px}
@@ -947,3 +947,23 @@
   .lt-play-main .lt-games-heading{margin-top:4px;margin-bottom:4px}
 }
 
+
+/* A system warning must not consume most of the selected game's vertical
+   space. This applies ONLY to Play; original full authored messages and
+   actions remain available through each already-focusable scroll region. */
+.lt-app .lt-layout main.lt-play-main > :is(.lt-alert,.lt-binding,.lt-exit-recovery){
+  flex:none;
+  min-width:0;
+  max-height:min(104px,18dvh);
+  overflow:auto;
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+  margin-bottom:8px;
+}
+@media(max-height:700px){
+  .lt-app .lt-layout main.lt-play-main > :is(.lt-alert,.lt-binding,.lt-exit-recovery){
+    max-height:min(88px,16dvh);
+    padding:8px 12px;
+    margin-bottom:6px;
+  }
+}
