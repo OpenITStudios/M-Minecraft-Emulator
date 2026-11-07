@@ -525,6 +525,11 @@ try {
   await section('General').click();assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
   await page.getByRole('button',{name:'Save changes',exact:true}).click();
   await page.getByText('Saved. New limits apply when each Minecraft profile next starts.').waitFor();
+  assert.equal(await page.locator('#lt-frame-limits-section').evaluate(
+    node=>document.activeElement===node),true,
+    'A completed Save changes must retain focus on its persistent Frame Limits heading');
+  assert.equal(await page.getByRole('button',{name:'Save changes',exact:true}).isDisabled(),true,
+    'The now-clean settings Save button must remain disabled; focus must not make it actionable');
   // Component-to-parent bindings: draft preset and Discard share one state owner.
   await page.getByRole('button',{name:'Use 120 / 5',exact:true}).click();
   assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'120');
@@ -535,6 +540,9 @@ try {
   await page.getByLabel('Graphics preset',{exact:true}).selectOption('High');
   await page.getByRole('button',{name:'Apply preset',exact:true}).click();
   await page.getByText(/High saved and applied/).waitFor();
+  assert.equal(await page.locator('#lt-graphics-section').evaluate(
+    node=>document.activeElement===node),true,
+    'A completed graphics preset save must retain focus on Graphics, not a disabled button');
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='ApplyGraphicsPreset').length),1);
   await section('Data Storage').click();
   assert.equal(await page.getByLabel('Graphics preset',{exact:true}).count(),0);
@@ -658,6 +666,9 @@ try {
   await cacheReview.waitFor();
   await cacheReview.getByRole('button',{name:'Cancel'}).click();
   await cacheReview.waitFor({state:'detached'});
+  assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true})
+    .evaluate(node=>document.activeElement===node),true,
+    'Cancel must still return focus to the original cache review trigger');
   await page.locator('.lt-advanced summary').click();
   await section('General').click();
   await section('Data Storage').click();

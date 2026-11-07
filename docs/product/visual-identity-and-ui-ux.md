@@ -78,7 +78,7 @@ supports it. Do not treat these as release approval.
 | P1 | Long messages, varied card states and error overflow | SOURCE_PREPARED: keyboard-readable bounded notices, 24px recovery actions and per-slot accessible guidance | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
 | P1 | F3 / Coordinates popup placement and exclusivity | Source geometry + HTML details group | WebView2 named-details compatibility, overlap/scroll/resize at minimum window |
 | P1 | Optional AI & Testing header crowding on narrow/high-DPI view | SOURCE_PREPARED: flex summary within fixed-height topbar; only expanded details overlay | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
-| P1 | Keyboard Escape, Cancel and ephemeral focus restoration | SOURCE_PREPARED: same-slot health notices, keyboard Refresh/Tab continuity, focused CloseOne/full-clear handoff; no native-focus takeover | Focus trace, game keyboard unaffected, nested, disabled-control and offline-refresh cases |
+| P1 | Keyboard Escape, Cancel and ephemeral focus restoration | SOURCE_PREPARED: same-slot notices, transient header actions and scoped Settings/Storage save/review focus anchors, no native-focus takeover | Focus trace, game keyboard unaffected, nested, disabled-control and offline-refresh cases |
 | P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
 | P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, Settings controls, 24px launcher recovery actions and 32px Close game review targets | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
@@ -432,6 +432,7 @@ Windows/runtime evidence exists.
 | UX-F05 | Optional AI & Testing report expires while focused | Report disappears on schedule, no stale gameplay claims; focus returns to active nav only when owned by disappearing disclosure | Recorded keyboard focus + native report age; TARGET_WINDOWS |
 | UX-F06 | Keyboard focus on launcher Refresh/notice while native Inspect changes status | Refresh holds focus in authored notice, then returns to enabled same-slot card or named non-Tab fallback on unavailable status; never steals a newer or Minecraft focus | Browser and Windows focus trace + native Inspect receipt; TARGET_WINDOWS |
 | UX-F07 | Keyboard Refresh becomes disabled, or a confirmed CloseOne/full-clear review disappears | Original focused context remains on the page heading, same-slot launcher group, or persistent Storage warning heading; Tab/Shift+Tab user choices always prevail | Synthetic DOM/focus trace and Windows WebView2 focus + native receipts; TARGET_WINDOWS |
+| UX-F08 | Settings graphics/FPS/audio save becomes temporarily disabled; Storage cache/settings review is submitted | Owned WebView focus moves to its persistent section/Storage overview heading only; keyboard traversal continues and Cancel still returns to original trigger; native admission unchanged | Authored browser/source fixtures, Windows Tab/Shift+Tab, failure/success receipts, Narrator; TARGET_WINDOWS |
 | UX-V01 | 920×620 at 100/125/150/200% display scaling | All five keyed MC cards remain ordered, central 16:9 viewport remains positive and fully in bounds; no clipped essential action | Sanitized screenshot + measured DOM/native DWM rectangles; TARGET_WINDOWS |
 | UX-V02 | 1280×900 and expanded desktop window, 5 mixed observed states | Names/status and long errors remain accessible; selected card never moves/reparents, no stale running count | Screenshot, text/accessibility snapshot, native state receipts; TARGET_WINDOWS |
 | UX-V03 | Long connection/recovery messages, narrow effective width | All support references and warnings remain reachable by Tab/scroll; no overlay covers the native game or critical button | Keyboard/scroll video or screenshot; TARGET_WINDOWS |
@@ -817,3 +818,53 @@ compilation, Edge/WebView2 focus and keyboard behavior, screen reader,
 Windows 100–200% DPI and forced colors, native DWM/game-focus
 handoff and Minecraft runtime still require separately authorized
 execution; none is a current PASS.
+
+## Settings saves and Storage review completion — transient focus continuity
+
+A previously focused **Save preference / Apply preset / Save changes**
+control can be disabled during a pending operation and remain disabled
+after a successful save because there is no longer a dirty change.
+The checkbox for **Mute background games** is likewise temporarily
+disabled during the existing native audio request. The original
+callbacks already own all admission and success/failure messages.
+
+The existing `GeneralSettings.svelte` now gives its Graphics and
+Frame Limits section headings and Background game audio heading
+`tabindex="-1"`, with visible focus outlines. Each existing save
+handler first checks that the WebView still has focus and the triggering
+button, form member, or audio checkbox owns focus. Only then does it
+focus that unchanged heading, **before** calling the same original
+callback. A browser-invalid FPS form never submits and therefore does
+not trigger an artificial focus change. Pointer and keyboard events
+reuse the existing actions; no new hotkeys or hidden proxy buttons
+are introduced. The headings do not enter ordinary Tab order.
+
+Cache/settings confirmation actions inside `DataStorage.svelte`
+previously removed their own review surfaces as soon as the existing
+parent submitted the request. When the operator is focused inside
+one of these forms, the child now moves focus to the persistent
+**Storage overview** heading (also `tabindex="-1"`) before forwarding
+the original `onClearCache(slot)` or `onRecoverSettings()` callback.
+No account/world deletion call is added. The original Cancel-first
+review focus, Escape scope, typed full-clear name, acknowledgement,
+confirmation token and Rust admission remain unchanged.
+
+The original stylesheet gains only Settings/Storage-scoped heading
+focus outlines, including Windows system Highlight in forced-colors
+mode. This does **not** change five card previews, any native DWM
+target, the selected 16:9 viewport, or the Tauri action graph.
+
+Source checks and `settings-storage-focus-continuity.test.ts` cover
+native callback retention, conditional ownership checks, review
+Cancel behavior, read-only focus anchors, and CSS geometry invariants.
+The existing optional synthetic browser regression has **authored,
+unexecuted** checks for completed FPS/Graphics saves and Cancel
+returning to the cache trigger. Live background-audio transitions
+and actual completed cache/settings mutations remain untested,
+rather than being simulated as a destructive acceptance PASS.
+
+**Evidence boundary:** `REMOTE_GITHUB` exact-source and blob review
+only. Svelte/TypeScript compilation, Vitest, synthetic browser execution,
+WebView2 keyboard/Tab order, Narrator, High Contrast, Windows DPI and
+native DWM/Minecraft behavior remain `NOT_EXECUTED`. The new
+`UX-F08` row is not accepted until real observations exist.

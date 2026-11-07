@@ -863,3 +863,27 @@
     outline-color:Highlight;
   }
 }
+
+/* A focused Settings save, audio toggle or Storage review can disable or
+   remove its own button. These existing headings are programmatic anchors,
+   not Tab stops, dialogs or new native controller status owners. */
+.lt-settings-layout :is(
+  #lt-graphics-section,
+  #lt-frame-limits-section,
+  #lt-storage-overview-section,
+  .lt-group h3[tabindex="-1"]
+):focus{
+  outline:2px solid var(--lt-accent);
+  outline-offset:4px;
+  border-radius:4px;
+}
+@media (forced-colors:active){
+  .lt-settings-layout :is(
+    #lt-graphics-section,
+    #lt-frame-limits-section,
+    #lt-storage-overview-section,
+    .lt-group h3[tabindex="-1"]
+  ):focus{
+    outline-color:Highlight;
+  }
+}

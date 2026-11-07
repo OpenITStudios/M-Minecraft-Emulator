@@ -84,7 +84,10 @@ describe("Emulator source verification routing", () => {
       expect(child).toContain('id="'+control+'"');
     for(const bound of ['graphicsPreset','activeFps','backgroundFps'])
       expect(child).toContain('bind:value={'+bound+'}');
-    expect(child).toContain("on:submit|preventDefault={onRequestPerformanceSave}");
+    expect(child).toContain("on:submit|preventDefault={savePerformanceWithFocus}");
+    expect(child).toContain("function savePerformanceWithFocus(event: SubmitEvent): void");
+    expect(child).toContain("onRequestPerformanceSave();");
+    expect(child).toContain("frameHeading?.focus({preventScroll:true})");
     expect(child).toContain("on:click={onOpenDataFolder}");
     expect(child).toContain("on:click={onShowDataStorage}");
     expect(child).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
