@@ -99,8 +99,18 @@ architecture work now adds an opt-in, file-level
 TypeScript/Svelte declared parsers, lexical Rust module/use references,
 source-site witnesses and conservative import impact/trace. Unresolved
 parser availability and cfg/feature conditions are never promoted to
-proof. No Windows Computer Use, native controller, product CI, account/world
-data, or current primary next action changed.
+proof. The latest source-only follow-up corrected Rust source-site provenance,
+added 28 existing frontend test files to indexed coverage, conservative
+literal `new URL(..., import.meta.url)` test-source references, C/C++
+local headers, CMake literal target source lists, and a separate exact-name
+Tauri bridge/registration/handler witness projection. All impact/trace
+queries retain `NOT_PROVEN_COMPLETE`, including global gaps and unobserved
+reverse importers; the developer controller and Windows source tests have
+**not** executed this graph. Fixture tests are AUTHORED_NOT_EXECUTED.
+PowerShell calls, full CMake/CFG resolution, semantic Rust/TS call paths and
+runtime behavior remain outside this milestone. No Windows Computer Use,
+native controller, product CI, account/world data, or current primary next
+action changed.
 
 ## Product and owners
 

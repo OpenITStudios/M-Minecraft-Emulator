@@ -61,6 +61,10 @@ records exact source declaration witnesses and bounded potential
 reverse import reachability. Its parser gaps, cfg/feature ambiguity,
 unresolved imports and unscanned languages must remain explicit; an
 absence of edges is **not** safety, no-impact or test PASS proof.
+Require an explicit distinction between observed source declarations,
+global missing-parser/unknown source coverage, Tauri named-command bindings,
+native C/C++ includes, and runtime-verified behavior. A declared Tauri
+name does not prove payload compatibility or successful Windows IPC.
 Consult the original implementation owner before editing. Keep the
 current no-CI and no-source-test-execution decision unchanged.
 

@@ -23,6 +23,7 @@ export const NAVIGATION_SOURCES = Object.freeze([
   ['source.tooling.knowledge-query', 'Development/tooling/repository/knowledge-query.mjs'],
   ['source.tooling.source-dependencies', 'Development/tooling/repository/source-dependencies.mjs'],
   ['source.tooling.source-reasoning', 'Development/tooling/repository/source-reasoning.mjs'],
+  ['source.tooling.source-contracts', 'Development/tooling/repository/source-contracts.mjs'],
   ['source.tooling.agent-mcp', 'Development/tooling/agent/mcp.mjs'],
   ['source.native.session-controller', 'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs'],
   ['source.native.session-transport', 'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs'],

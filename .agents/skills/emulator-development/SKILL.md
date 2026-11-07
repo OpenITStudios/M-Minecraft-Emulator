@@ -13,7 +13,9 @@ Applies to system development, refactoring, bug fixes and documentation that cha
 2. Identify the requested product outcome, non-goals, first affected owner and consumers. Use docs/system/implementation-map.md, then fetch only the relevant source.
 3. For documentation/architecture questions, route through [Repository knowledge navigation](../../../docs/system/repository-knowledge-graph.md): document ID -> authored link witness -> one exact owner. Its optional Graph/Obsidian/Pele projection is read-only and not source/runtime dependency proof. For code changes, consult [Source Dependency Graph](../../../docs/system/source-dependency-graph.md)
    and optionally inspect `--impact` / `--source-trace` source witnesses,
-   parser gaps and conditional Rust declarations. In REMOTE_GITHUB, inspect
+   global parser gaps, unresolved Tauri command names, CMake/C++ conditional
+   evidence, affected frontend tests and Rust cfg/feature declarations.
+   A `NO_PATH` result never certifies no impact. In REMOTE_GITHUB, inspect
    exact current source manually and never claim the CLI executed. The
    documentation graph remains separate, and seven upstream methods remain
    conditional references, not additional Skills or runtime authority.

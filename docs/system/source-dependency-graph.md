@@ -13,7 +13,8 @@ This is an **opt-in, read-only, source-only DERIVED projection** for the
 Emulator's existing repository knowledge navigation. It follows the
 source-dependency/provenance ideas reviewed in M-Lazy-Developer
 `Local` at `0346a09603a9d5e8fc141b6f6be972e8b77e0117` but adapts the
-actual Rust, TypeScript, JavaScript and Svelte codebase. It does not add
+actual Rust, TypeScript, JavaScript, Svelte, native C/C++ source and
+literal CMake declarations. It does not add
 an agent, API, controller, daemon, cache, state store or native game hook.
 
 ## Responsibility and existing source owners
@@ -25,6 +26,11 @@ an agent, API, controller, daemon, cache, state store or native game hook.
   computes file-level literal declaration edges from current owned source.
 - **Affected-file reasoning:** [source-reasoning.mjs](../../Development/tooling/repository/source-reasoning.mjs)
   traces forward paths and reverse imports with source witnesses.
+- **Cross-language Tauri declarations:** [source-contracts.mjs](../../Development/tooling/repository/source-contracts.mjs)
+  links literal `invokeRuntime("command")` sites to exactly named
+  `generate_handler!` registrations and annotated Rust function declarations,
+  with all three source-site witnesses. A name match **does not prove**
+  payload compatibility, permitted execution, or active build feature.
 - **Read-only command entry:** existing `Development/tooling/repository/knowledge-query.mjs`.
 - **Canonical implementation owners:** [implementation map](implementation-map.md)
   and the live source itself. A derived file ID is **not** a replacement
@@ -40,21 +46,29 @@ are identity for this narrow graph. No persistent snapshot is maintained.
 
 | Language | Extracted source declarations | Boundary |
 | --- | --- | --- |
-| TypeScript / JavaScript | AST static imports, re-exports, type imports, literal `import()`, literal `require()` | Uses the already-declared desktop `typescript` devDependency, **only when actually installed** |
+| TypeScript / JavaScript | AST static imports, re-exports, type imports, literal `import()`, literal `require()`, literal source reads via `new URL("...", import.meta.url)` | Uses already-declared desktop `typescript` devDependency; dynamic file-reading paths stay UNKNOWN |
 | Svelte | Script block AST + TypeScript AST imports within scripts | Uses existing `svelte/compiler` and `typescript` dependencies, not markup/DOM usage analysis |
 | Rust | Conservative, comment/string-aware lexical `mod foo;`, literal `#[path]`, `use crate::...` / `use super::...`, and literal `include!` | **Not** a complete Rust AST, macro expansion, feature-gate evaluation or rust-analyzer |
+| C/C++ headers | Literal local quoted `#include` source sites | Does not evaluate macros, include search paths, compiler defines or Windows source execution |
+| CMake | Literal `add_library`, `add_executable` and `target_sources` source-file declarations | No `if()`, target/feature evaluation, generated sources or actual build proof |
+| Tauri–Rust names | Literal frontend command, backend registration and annotated Rust handler | Only declared name compatibility; registration variant/build settings, argument schema and runtime admission remain unverified |
 | Local Cargo path dependencies | Explicit first-party `Cargo.toml` inline-table `path` declarations | Separate **crate-level** potential consumer projection, not function/file call edges or Cargo feature resolution |
-| C++, PowerShell, other Cargo package resolution, assets | Not traversed | No false claim of full repository coverage |
+| PowerShell, external packages, full preprocessor expansion, assets | Not fully traversed | Missing edges must never be read as proof of independence |
 
-The input is limited to tracked-style code under `Development/apps/desktop/src/`,
-`src-tauri/src/`, `apps/desktop/scripts/`, `engine/runtime-core/src/`,
-and `Development/tooling/`, with an explicit source path for the native
-Tauri `build.rs`. The reader does not follow symlinks or inspect ignored
+The input is limited to tracked-style source under `Development/apps/desktop/src/`,
+`Development/apps/desktop/test/`, `src-tauri/src/`, `apps/desktop/scripts/`,
+`engine/runtime-core/src/`, and `Development/tooling/`, plus the explicitly
+selected `src-tauri/build.rs`, `vite.config.ts`, and native
+`bootstrap-ordering/CMakeLists.txt`. The reader does not follow symlinks or inspect ignored
 `App/`, `Data/`, accounts, worlds, credentials, logs, or binaries.
 No additional npm package is introduced, installed or executed.
 
-Each admitted edge is `DEPENDS_ON` with `EXTRACTED_SOURCE_DECLARATION`
-and **path, line, column, literal specifier and syntax** witnesses. Distinguish:
+Ordinary source and C/C++/CMake declarations use `DEPENDS_ON` edges with
+`EXTRACTED_SOURCE_DECLARATION`, and **path, line, column, literal specifier
+and syntax** witnesses. Tauri name-binding edges use distinct
+`TAURI_COMMAND_NAME_BINDING` / `TAURI_COMMAND_REGISTRATION` types and
+frontend, registration and backend witnesses. All are derived, not a source
+authority. Distinguish:
 - observed declaration ≠ function call, used symbol, compiled target, executed code;
 - Rust `#[cfg]` and feature-specific declarations ≠ universally active build path;
 - source fixture ≠ test executed;
@@ -71,7 +85,12 @@ Known first-party Cargo `path` dependencies are separately attached to
 potential package-level impact reports, without manufacturing importer
 relationships to every Rust file. Large source files beyond the read-only
 2 MiB bound remain explicitly unparsed.
-A path with no observed importers is **not** guaranteed safe to change.
+The impact/trace status includes **global** parser gaps, unresolved references,
+Cargo path gaps and Tauri binding gaps—even when a missing importer cannot
+appear in a reached graph path. `NOT_PROVEN_COMPLETE` is always preserved.
+An observed `NO_PATH` or empty importer set is **UNKNOWN, not safe**.
+No attempt is made to merge the documentation graph, source graph, and
+Minecraft/process/runtime graph into one authority.
 
 ## Queries for architecture-first development
 
@@ -87,9 +106,12 @@ node Development/tooling/repository/knowledge-query.mjs --impact Development/app
 node Development/tooling/repository/knowledge-query.mjs --impact Development/tooling/agent --max-hops 4 --format markdown
 node Development/tooling/repository/knowledge-query.mjs --source-trace Development/apps/desktop/src/main.ts Development/apps/desktop/src/LazyTesterApp.svelte --format markdown
 node Development/tooling/repository/knowledge-query.mjs --source-graph --format mermaid
+node Development/tooling/repository/knowledge-query.mjs --impact Development/apps/desktop/src-tauri/src/commands/native_clients.rs --format markdown
+node Development/tooling/repository/knowledge-query.mjs --impact Development/tooling/acceptance/windows/bootstrap-ordering/fps-hud.h --format markdown
 ~~~
 
-`--source-summary` reports parsed file/edge counts, parser availability,
+`--source-summary` reports parsed file/edge counts, bounded Tauri name
+bindings, parser availability,
 unresolved specifiers, omitted languages, and unparsed source diagnostics.
 `--source-id` provides incoming and outgoing declaration witnesses.
 `--impact` starts only from an **existing indexed source file / directory
@@ -99,6 +121,12 @@ depth (1–6 hops) including test fixtures as **AUTHORED_NOT_EXECUTED**.
 locations or `NO_PATH`. A diagram is a Mermaid/Pele-compatible projection
 and Markdown includes optional Obsidian vault-root paths. Nothing writes
 a vault, GitHub file, diagram cache or persistent architecture database.
+
+The graph may suggest which frontend tests and native target sources to
+review, but it cannot decide which tests passed or whether a feature's
+build configuration actually includes those sources. The `SOURCE_GRAPH`
+query is a read-only tool, **not a mandatory executed check**, and its
+absence or unavailability cannot be papered over with an invented PASS.
 
 The TypeScript/Svelte parser dependencies are declared in
 `Development/apps/desktop/package.json`. If a developer environment does
