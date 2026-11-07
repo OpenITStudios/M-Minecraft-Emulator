@@ -179,6 +179,19 @@ test('C++ quoted includes and literal CMake source declarations retain provenanc
   assert.ok(!index.unresolved.some(x=>x.specifier==='not-real.h'));
   assert.ok(index.unparsed.some(x=>x.reason==='CMAKE_VARIABLE_OR_GENERATOR_SOURCE_UNRESOLVED'));
 }));
+test('a literal source URL in a test counts as a source dependency; computed sources stay UNKNOWN',()=>fixture(({root,put,ui})=>{
+  put('Development/apps/desktop/test/fixture-source.test.ts',[
+    'import {readFileSync} from "node:fs";',
+    'const original=readFileSync(new URL("../src/Screen.svelte",import.meta.url),"utf8");',
+    'const dynamic=readFileSync(new URL("../src/"+process.env.UNKNOWN,import.meta.url),"utf8");',
+    'void original; void dynamic;',
+  ].join('\n'));
+  const index=buildSourceDependencyIndex(root,parsers());
+  assert.ok(index.edges.some(e=>e.sourceSites.some(site=>
+    site.syntax==='LOCAL_SOURCE_RESOURCE_URL' &&
+    site.path.endsWith('fixture-source.test.ts'))));
+  assert.ok(index.unresolved.some(e=>e.reason==='DYNAMIC_SOURCE_RESOURCE_NOT_TRACED'));
+}));
 test('unparsed unrelated importer prevents complete-looking impact claims',()=>fixture(({root,put,ui})=>{
   put('Development/apps/desktop/test/broken.test.ts','import { from "../src/lib.js";\n');
   const index=buildSourceDependencyIndex(root,parsers());

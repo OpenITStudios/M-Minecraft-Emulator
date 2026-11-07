@@ -160,6 +160,23 @@ function compilerSites(path,content,ts,svelte){
         node.expression.text==='require'&&node.arguments.length===1&&
         ts.isStringLiteralLike(node.arguments[0]))
         add(node.arguments[0],node.arguments[0].text,'REQUIRE_LITERAL',true);
+      // Authored tests may inspect a source file via readFileSync(new URL(
+      // "../src/App.svelte", import.meta.url)), without importing it. Preserve
+      // this explicit source reference while leaving computed fixture paths
+      // UNKNOWN instead of manufacturing test coverage.
+      if(ts.isNewExpression(node)&&ts.isIdentifier(node.expression)&&
+        node.expression.text==='URL'&&node.arguments?.length===2){
+        const [target,base]=node.arguments;
+        const meta=ts.isPropertyAccessExpression(base)&&base.name.text==='url'&&
+          ts.isMetaProperty(base.expression)&&
+          base.expression.keywordToken===ts.SyntaxKind.ImportKeyword&&
+          base.expression.name.text==='meta';
+        if(meta){
+          if(ts.isStringLiteralLike(target))
+            add(target,target.text,'LOCAL_SOURCE_RESOURCE_URL',false);
+          else add(node,'','DYNAMIC_SOURCE_RESOURCE_NOT_TRACED',false);
+        }
+      }
       ts.forEachChild(node,visit);
     }
     visit(ast);
@@ -561,7 +578,10 @@ export function buildSourceDependencyIndex(root=SOURCE_ROOT,{typescript,svelteCo
       siteCount++;
       // Preserve the origin file and line even for resolved Rust sites.
       // Spreading target.path into the site silently overwrote its source path.
-      const target=site.resolution??resolveJsImport(path,site.specifier,known);
+      const target=site.resolution??
+        (site.syntax==='DYNAMIC_SOURCE_RESOURCE_NOT_TRACED'?
+          {status:'DYNAMIC_SOURCE_RESOURCE_NOT_TRACED'}:
+          resolveJsImport(path,site.specifier,known));
       if(['EXTERNAL_OR_ALIAS','EXTERNAL_OR_UNQUALIFIED_RUST_USE','CPP_SYSTEM_INCLUDE'].includes(target.status)){
         externalCount++;continue;
       }

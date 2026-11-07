@@ -91,17 +91,21 @@ export function run(argv,root=DEFAULT_ROOT){
     let result;
     if(opt.sourceSummary)result=sourceSummary(source);
     if(opt.sourceGraph){
-      if(opt.format==='mermaid')return sourceDiagram(source.resources,source.edges)+'\n';
-      if(opt.format==='markdown')return '# Source declarations only\n\nNo build, runtime, or code-call proof.\n\n~~~mermaid\n'+sourceDiagram(source.resources,source.edges)+'\n~~~\n';
+      const diagramEdges=[...source.edges,...(source.contractEdges??[])];
+      if(opt.format==='mermaid')return sourceDiagram(source.resources,diagramEdges)+'\n';
+      if(opt.format==='markdown')return '# Source declarations and Tauri name bindings only\n\nNo build, payload, runtime or code-call proof.\n\n~~~mermaid\n'+sourceDiagram(source.resources,diagramEdges)+'\n~~~\n';
       result=sourceGraphProjection(source);
     }
     if(opt.sourceId){
       const selected=selectSource(source,opt.sourceId)[0];
+      const allEdges=[...source.edges,...(source.contractEdges??[])];
       result={schemaVersion:1,mode:'SOURCE_FILE_LOOKUP',resource:selected,
-        incoming:source.edges.filter(x=>x.to===selected.id),
-        outgoing:source.edges.filter(x=>x.from===selected.id),
+        incoming:allEdges.filter(x=>x.to===selected.id),
+        outgoing:allEdges.filter(x=>x.from===selected.id),
         unresolved:source.unresolved.filter(x=>x.from===selected.id),
         unparsed:source.unparsed.filter(x=>x.path===selected.path),
+        tauriGaps:source.tauri?.gaps??[],
+        globalCoverage:source.coverage,
         proofBoundary:source.proofBoundary};
     }
     if(opt.impact){

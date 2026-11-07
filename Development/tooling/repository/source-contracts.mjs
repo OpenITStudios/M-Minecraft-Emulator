@@ -111,7 +111,9 @@ export function buildTauriContractProjection({root,resources,byPath,typescript,r
   const necessary=[BOOTSTRAP,COMMANDS];
   if(!necessary.every(path=>byPath.has(path)))
     return {mode:'TAURI_DECLARED_COMMAND_BINDING',status:'TAURI_SOURCE_OWNER_UNAVAILABLE',
-      edges:[],bindings:[],gaps:[],registrations:0,bridgeRequests:0};
+      edges:[],bindings:[],gaps:[{reason:'TAURI_SOURCE_OWNER_UNAVAILABLE',
+        missingOwners:necessary.filter(path=>!byPath.has(path))}],
+      registrations:0,bridgeRequests:0};
   if(typeof rustTokens!=='function')
     throw new Error('Tauri declaration projection requires the reviewed Rust tokenizer');
   const registration=registeredHandlers(read(root,BOOTSTRAP),rustTokens);

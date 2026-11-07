@@ -35,7 +35,7 @@ function fixture(fn,request='lazy_tester_session'){
     put(FRONT+'lazyTester.ts',[
       'import {invokeRuntime} from "./invokeRuntime.js";',
       'const value=invokeRuntime<unknown>("'+request+'");',
-      'const quoted="invokeRuntime(\\'ghost\\')";',
+      'const quoted="invokeRuntime(ghost)";',
       'void value; void quoted;',
     ].join('\n'));
     return fn({root,put});
