@@ -155,7 +155,36 @@ test('ignored storage and installed packages never enter the scanned graph',()=>
   put('App/installed.ts','export const live = true;\n');
   const paths=listOwnedSourceFiles(root);
   assert.ok(paths.every(p=>!p.startsWith('Data/')&&!p.startsWith('App/')&&!p.includes('node_modules')));
-  assert.ok(!paths.some(p=>p.endsWith('.cpp')));
+  assert.ok(paths.some(p=>p.endsWith('ignored.cpp')));
+  assert.ok(paths.every(p=>!p.startsWith('Data/')&&!p.startsWith('App/')));
+}));
+test('C++ quoted includes and literal CMake source declarations retain provenance',()=>fixture(({root,put})=>{
+  const native='Development/tooling/acceptance/windows/bootstrap-ordering/';
+  put(native+'CMakeLists.txt',[
+    'add_library(bootstrap-compat SHARED compat.cpp graphics.cpp)',
+    'target_sources(bootstrap-compat PRIVATE opt-in.cpp)',
+    'target_sources(bootstrap-compat PRIVATE ${SOME_GENERATED_SOURCE})',
+  ].join('\n'));
+  put(native+'compat.cpp','#include "shared.h"\n// #include "not-real.h"\n');
+  put(native+'graphics.cpp','#include "shared.h"\n');
+  put(native+'opt-in.cpp','#include <windows.h>\n');
+  put(native+'shared.h','#pragma once\n');
+  const index=buildSourceDependencyIndex(root,parsers());
+  const header=index.byPath.get(native+'shared.h');
+  assert.ok(header);
+  const impact=sourceImpact(index,header.id);
+  assert.ok(impact.impacted.some(x=>x.resource.path===native+'compat.cpp'));
+  assert.ok(impact.impacted.some(x=>x.resource.path===native+'CMakeLists.txt'));
+  assert.ok(index.edges.some(e=>e.sourceSites.some(site=>site.syntax==='CMAKE_TARGET_SOURCE_LITERAL')));
+  assert.ok(!index.unresolved.some(x=>x.specifier==='not-real.h'));
+  assert.ok(index.unparsed.some(x=>x.reason==='CMAKE_VARIABLE_OR_GENERATOR_SOURCE_UNRESOLVED'));
+}));
+test('unparsed unrelated importer prevents complete-looking impact claims',()=>fixture(({root,put,ui})=>{
+  put('Development/apps/desktop/test/broken.test.ts','import { from "../src/lib.js";\n');
+  const index=buildSourceDependencyIndex(root,parsers());
+  const impact=sourceImpact(index,ui+'lib.ts');
+  assert.equal(impact.status.status,'GLOBAL_PARSER_COVERAGE_INCOMPLETE');
+  assert.equal(impact.status.noObservedPathMeans,'UNKNOWN_NOT_NO_IMPACT');
 }));
 test('existing documentation query API stays separate from source mode',()=>fixture(({root})=>{
   assert.match(run(['--source-summary'],root),/SOURCE_FILE_DEPENDENCY_SUMMARY/);
