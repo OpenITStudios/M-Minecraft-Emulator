@@ -203,7 +203,7 @@
               {/if}
             </div>
           </details>
-          {#if clearingData}<p class="lt-alert" role="status">Clearing profile data… Keep Lazy Tester open.</p>{/if}
+          {#if clearingData}<p class="lt-alert" role="status">Clearing profile data… Keep LazyTester open.</p>{/if}
           <section class="lt-danger-zone" aria-labelledby="lt-clear-data-heading"><div><h3 id="lt-clear-data-heading" tabindex="-1">Clear all data</h3><p>Permanently deletes this launcher's local accounts, worlds, cache, settings and backups. Minecraft and app preferences stay.</p><p>Export worlds first: no recovery backup is made. Windows sign-in may remain. External backups stay.</p>{#if selectedStorage?.fullClear?.pending}<p>Cleanup is pending. This launcher cannot start until it finishes.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{userMessage('clearData')}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lt-secondary lt-danger" disabled={busy||refreshing||resizing||!available||!selectedStorage?.fullClear?.canClear} on:click={event=>showFullReview(event.currentTarget)}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear all data…'}</button></section>
           {#if fullReview?.slot===selectedSlot}
             <form class="lt-cache-confirm lt-delete-confirm" aria-label="Confirm full launcher data deletion" bind:this={fullReviewElement} on:submit|preventDefault={onClearAllData}>

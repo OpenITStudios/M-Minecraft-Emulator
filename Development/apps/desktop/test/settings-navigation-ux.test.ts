@@ -25,7 +25,7 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(apply).toContain("settings.changedProfiles===null");
     expect(app).toContain("if (page==='settings') rememberGraphicsDraft()");
     expect(app).toContain("graphicsPreset=graphicsChoice(selectedSlot)");
-    expect(app).toContain('Lazy Tester will leave Minecraft graphics options unchanged');
+    expect(app).toContain('Preserve Visuals saved. Future launches leave existing graphics unchanged.');
   });
   it('moves screen-reader focus only to Settings / Storage headings on explicit navigation',()=>{
     const app=load('LazyTesterApp.svelte');

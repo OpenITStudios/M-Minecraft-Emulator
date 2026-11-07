@@ -7,10 +7,11 @@ authority: REFERENCE
 lifecycle: ACTIVE
 ---
 
-# Lazy Tester — Minimal Professional visual identity and UX consistency
+# LazyTester — Minimal Professional visual identity and UX consistency
 
-**Scope:** standalone product name **Lazy Tester** only in product-facing
-branding. No parent-brand lockup, "powered by", decorative gaming motif or
+**Scope:** visible product name **LazyTester** (one word) only in
+product-facing branding. The existing installed product name stays
+`Lazy Tester` until a separately approved compatibility migration. No parent-brand lockup, "powered by", decorative gaming motif or
 unverified gameplay implication. This reference is subordinate to the active
 [unified workspace](unified-workspace.md), actual desktop source, and native
 session ownership. It does not change installed identifiers, release metadata,
@@ -117,14 +118,23 @@ reflow result.
 ## Identity source of truth
 
 - Master vector asset: `Development/apps/desktop/src-tauri/app-icon.svg`.
-- Motif: **Focused Workspace** — a selected foreground frame over a retained
-  background frame. It must remain legible on the Windows Taskbar at 16–32 px.
+- Motif: **approved white testing window + check + five session tiles** on a
+  solid blue rounded-square field. Source is a faithful raster-to-vector
+  trace of the operator-approved artwork, not a newly generated design.
+  Small-size 16–32 px Windows Taskbar acceptance is still NOT_EXECUTED.
 - One source generates packaging PNG/ICO through existing
   `Development/apps/desktop/scripts/prepare-icons.mjs`. The WebView titlebar,
   Play header, and empty workspace use the same SVG by CSS URL; do not embed a
   second independently maintained logo.
-- Name/wordmark: **Lazy Tester**, in the platform UI family. Do not add a
-  tagline inside the manager.
+- Name/wordmark: **LazyTester**, one word, in the platform UI family.
+  Do not add a tagline inside the manager.
+- Palette of the icon itself: **#343DF3** field and **#FFFFFF** glyph.
+  The raster-to-vector conversion removes the reference image's black
+  presentation canvas; the exported SVG has transparent corners and
+  eight editable vector paths (background plus window, check and five tiles).
+- Build pipeline: `prepare:icons` fingerprints the approved SVG and
+  regenerates 32/128/256 PNG plus Windows ICO when the source changes.
+  Generated binary assets remain build outputs, not competing masters.
 - Accessibility: decorative inline logo is hidden from the accessibility tree
   because adjacent text already names the app. Taskbar icon has the app title.
 - Do **not** change Tauri identifier, publisher metadata, install folder,
@@ -1140,3 +1150,29 @@ These details belong in the existing confirmation UI, not a new page.
 The UI, copy and pure test fixtures were revised at source-only
 scope; Vitest, browser rendering, installed WebView2, native Windows
 DWM, Minecraft gameplay and data operations are **NOT_EXECUTED**.
+
+## Approved LazyTester icon (7 November 2026)
+
+The operator selected the compact blue rounded-square icon with a white
+L-shaped window, integrated verification check and five white session
+tiles. The former two-stacked-window logo and subsequent unapproved
+logo studies are **superseded**. The approved image has been traced
+into a real scalable SVG at `src-tauri/app-icon.svg` with no embedded
+raster, font or network dependency. The original user-approved raster
+was preserved in the separately supplied logo pack for comparison.
+
+The SVG is reused by existing WebView header/titlebar/empty-Play
+selectors. The existing Tauri `prepare:icons` generates the Windows
+PNG/ICO assets from that same vector, now protected by an SHA-256
+source fingerprint rather than timestamps alone. Visible product
+branding and the app window title read **LazyTester**. Installed
+product name, bundle ID, executable/role names, NSIS install folder,
+data paths, sign-in and native session identities remain untouched.
+Do not use the GUI rename as evidence that an installed product
+migration is safe.
+
+Visual trace and icon size exports were rendered in the source-only
+workspace. Application compilation, Tauri icon CLI execution, Windows
+taskbar/installer icon embedding, 16–32 px taskbar acceptance, DPI,
+Minecraft gameplay and installed product compatibility remain
+**NOT_EXECUTED**.

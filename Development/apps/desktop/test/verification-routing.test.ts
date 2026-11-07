@@ -264,7 +264,7 @@ describe("Native-only Windows preview package", () => {
     expect(actual.config.bundle.windows.nsis).not.toHaveProperty("installerHooks");
     expect(actual.config.bundle.windows.nsis.startMenuFolder).toBe("Minecraft Instance Manager Preview");
     expect(actual.config.app.security.csp).toContain("object-src 'none'");
-    expect(actual.config.app.windows[0].title).toBe("Lazy Tester");
+    expect(actual.config.app.windows[0].title).toBe("LazyTester");
   });
   it("uses RFC 7396 deletions and preserves the original package hold", async () => {
     const {mergePatch} = await import("../scripts/check-native-preview-package.mjs");

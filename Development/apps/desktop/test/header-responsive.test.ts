@@ -24,8 +24,8 @@ describe('Lazy Tester optional activity status stays inside fixed-height topbar'
     expect(css).not.toContain('right:230px;top:9px');
     expect(css).toContain('.lt-topbar .lt-brand-name{white-space:nowrap}');
     expect(css).toContain('.lt-topbar .lt-connection{');
-    expect(app).toContain('aria-label="Lazy Tester — Play"');
-    expect(app).toContain('<span class="lt-brand-name">Lazy Tester</span>');
+    expect(app).toContain('aria-label="LazyTester — Play"');
+    expect(app).toContain('<span class="lt-brand-name">LazyTester</span>');
     expect(app).toContain('role="status" title={sessionConnectionLabel(');
     expect(notice).toContain('Summary takes a bounded slot in the fixed-height topbar');
     expect(notice).toContain('name="lt-play-disclosures"');

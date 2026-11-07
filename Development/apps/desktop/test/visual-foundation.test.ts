@@ -10,7 +10,13 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     const play=asset('src/LazyTesterApp.svelte');
     const bar=asset('src/WindowTitlebar.svelte');
     expect(svg).toContain('viewBox="0 0 256 256"');
-    expect(svg).toContain('Focused Workspace');
+    expect(svg).toContain('aria-label="LazyTester"');
+    expect(svg).toContain('Approved LazyTester icon');
+    expect(svg).toContain('fill="#343DF3"');
+    expect(svg).toContain('<g fill="#FFFFFF">');
+    expect((svg.match(/<path /g)??[])).toHaveLength(8);
+    expect(svg).not.toContain('<image');
+    expect(svg).not.toContain('data:image/');
     expect(css).toContain('url("../src-tauri/app-icon.svg")');
     expect(play).toContain('class="lt-brand-mark"');
     expect(bar).toContain('class="lt-window-mark"');
@@ -20,7 +26,7 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     const bar=asset('src/WindowTitlebar.svelte');
     expect(bar).toContain('<div class="lt-window-drag" data-tauri-drag-region>');
     expect(bar).toContain('<span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span>');
-    expect(bar).toContain('<span data-tauri-drag-region>Lazy Tester</span>');
+    expect(bar).toContain('<span data-tauri-drag-region>LazyTester</span>');
     expect(bar).not.toContain('<button class="lt-window-drag"');
     expect(bar).not.toContain('Move Lazy Tester window');
     expect(bar).not.toContain('on:dblclick=');

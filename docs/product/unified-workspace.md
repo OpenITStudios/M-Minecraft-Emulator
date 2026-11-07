@@ -7,10 +7,11 @@ authority: WORKING
 lifecycle: ACTIVE
 ---
 
-# Lazy Tester workspace contract — 26 October 2026
+# LazyTester workspace contract — 26 October 2026
 
 The approved product is one central application controlling five stable Minecraft
-profiles. Users explicitly open each desired profile; app startup launches no game.
+profiles. The user-facing brand is **LazyTester**; current Windows installed
+product identifiers and the historical package name remain unchanged. Users explicitly open each desired profile; app startup launches no game.
 One large viewport contains the selected game surface. All five Minecraft
 profiles (MC01-MC05) stay in a single fixed-order lower rail, including the
 selected profile. F3 Inspector and Coordinates & Saves have been removed

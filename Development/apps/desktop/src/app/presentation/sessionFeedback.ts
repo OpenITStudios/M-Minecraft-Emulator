@@ -34,7 +34,7 @@ const feedback = {
   graphicsBlocked: {code:'LT-SET-05',area:'Settings',message:'Close all Minecraft sessions, then Refresh before saving graphics.'},
   performanceBlocked: {code:'LT-SET-06',area:'Settings',message:'Refresh before saving FPS limits.'},
   windowControl: {code:'LT-DIS-05',area:'Display',message:'Refresh status before trying the window action again.'},
-  windowStatus: {code:'LT-DIS-06',area:'Display',message:'You can keep using Lazy Tester. Refresh to check.'},
+  windowStatus: {code:'LT-DIS-06',area:'Display',message:'You can keep using LazyTester. Refresh to check.'},
   windowClose: {code:'LT-APP-04',area:'Application',message:'Check running games before trying to exit again.'},
   closeIncomplete: {code:'LT-GAM-04',area:'Game',message:'Check the remaining sessions in Play.'},
   closeRejected: {code:'LT-APP-05',area:'Application',message:'Another operation is running. Try again when it finishes.'},

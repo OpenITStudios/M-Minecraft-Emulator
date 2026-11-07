@@ -33,11 +33,11 @@
   <!-- Tauri owns native drag/double-click; the following window buttons own keyboard actions. -->
   <div class="lt-window-drag" data-tauri-drag-region>
     <span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span>
-    <span data-tauri-drag-region>Lazy Tester</span>
+    <span data-tauri-drag-region>LazyTester</span>
   </div>
   <button class="lt-window-control" aria-label="Minimize" title="Minimize" on:click={()=>action('minimize')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
   <button class="lt-window-control" aria-label={maximized?'Restore down':'Maximize'} title={maximized?'Restore down':'Maximize'} on:click={()=>action('toggleMaximize')}><svg viewBox="0 0 16 16" aria-hidden="true">{#if maximized}<path d="M5 5V3h8v8h-2M3 5h8v8H3Z"/>{:else}<path d="M3 3h10v10H3Z"/>{/if}</svg></button>
-  <button class="lt-window-control lt-window-close" disabled={closing} aria-label={backendSupport === 'WindowsNative' ? 'Exit Lazy Tester and all managed Minecraft sessions' : 'Close Lazy Tester'} title={backendSupport === 'WindowsNative' ? 'Exit Lazy Tester and all managed Minecraft sessions' : 'Close Lazy Tester'} on:click={()=>action('close')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+  <button class="lt-window-control lt-window-close" disabled={closing} aria-label={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} title={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} on:click={()=>action('close')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
 </div>
-{#if closing}<div class="lt-alert" role="status">{backendSupport === 'WindowsNative' ? 'Closing Lazy Tester… Waiting for managed games and pending work to finish.' : 'Closing Lazy Tester…'}</div>{/if}
+{#if closing}<div class="lt-alert" role="status">{backendSupport === 'WindowsNative' ? 'Closing LazyTester… Waiting for managed games and pending work to finish.' : 'Closing LazyTester…'}</div>{/if}
 {#if error}<div class="lt-alert" role="alert"><p>{userMessage(error)}</p><details class="lt-feedback-reference"><summary>Support reference</summary><p>{userFeedback(error).area} · {userFeedback(error).code}</p></details></div>{/if}
