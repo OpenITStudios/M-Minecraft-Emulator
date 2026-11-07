@@ -31,6 +31,32 @@ describe('nonmodal Play disclosure positioning and keyboard source contract',()=
       expect(file).not.toContain('setInterval(');
     }
   });
+  it('handles null focusout, WebView blur, and scoped Escape across the existing three Play disclosures',()=>{
+    const f3=source('F3InspectorPanel.svelte');
+    const coords=source('CoordinatePastePanel.svelte');
+    const agent=source('AgentActivityNotice.svelte');
+    for(const component of [f3,coords,agent]){
+      expect(component).toContain('function closeWhenFocusLeaves(event: FocusEvent): void {');
+      expect(component).toContain('if (!detailsElement?.open) return;');
+      expect(component).toContain('const next = event.relatedTarget;');
+      expect(component).toContain('if (next instanceof Node) {');
+      expect(component).toContain('if (!detailsElement.contains(next)) detailsElement.open = false;');
+      expect(component).toContain('void tick().then(() => {');
+      expect(component).toContain('!document.hasFocus() || !(focused instanceof Node)');
+      expect(component).toContain('function closeOnWindowBlur(): void {');
+      expect(component).toContain('on:blur={closeOnWindowBlur}');
+      expect(component).toContain('if (document.hasFocus() && summaryElement?.isConnected)');
+      expect(component).toContain('summaryElement?.focus({preventScroll: true});');
+      expect(component).toContain("event.key !== 'Escape' || !detailsElement?.open");
+      expect(component).toContain('event.stopPropagation();');
+      expect(component).not.toContain("event.key === 'Tab'");
+      expect(component).not.toContain('setInterval(');
+    }
+    expect(f3).toContain("import {tick} from 'svelte';");
+    expect(coords).toContain("import {tick} from 'svelte';");
+    expect(agent).toContain("import {onDestroy,tick} from 'svelte';");
+    expect(agent).toContain("!document.hasFocus() || !(focused instanceof Node)");
+  });
   it('shares exclusive native disclosures without creating a second native owner',()=>{
     const f3=source('F3InspectorPanel.svelte');
     const coords=source('CoordinatePastePanel.svelte');

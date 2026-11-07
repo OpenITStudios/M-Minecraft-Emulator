@@ -234,12 +234,95 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
 
+  // Nonmodal Play tools: native Tab/Shift+Tab traverses the existing
+  // disclosure summaries/fields. Only in-panel Escape returns to the
+  // opener; external focus and WebView blur must never pull game focus.
+  // Synthetic browser DOM evidence, NOT a Windows keyboard/DWM PASS.
+  const f3Details=page.locator('details.lt-f3-inspector');
+  const coordinateDetails=page.locator('details.lt-coordinate-paste:not(.lt-f3-inspector)');
+  const f3Trigger=f3Details.locator('summary');
+  const coordinateTrigger=coordinateDetails.locator('summary');
+  await f3Trigger.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await f3Details.getAttribute('open'),'',
+    'F3 disclosure is keyboard-operable without a separate controller');
+  await page.keyboard.press('Tab');
+  assert.equal(await coordinateTrigger.evaluate(node=>document.activeElement===node),true,
+    'Tab from read-only F3 must reach the next native Play tool');
+  assert.equal(await f3Details.getAttribute('open'),null,
+    'F3 focusout must close its former popup without reclaiming Tab focus');
+  await page.keyboard.press('Enter');
+  assert.equal(await coordinateDetails.getAttribute('open'),'',
+    'Coordinates expands through the native summary, not an artificial dialog');
+  const coordinateInput=coordinateDetails.locator('#lt-coordinate-input');
+  await page.keyboard.press('Tab');
+  assert.equal(await coordinateInput.evaluate(node=>document.activeElement===node),true,
+    'Tab into Coordinates must reach editable XYZ in DOM order');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await coordinateTrigger.evaluate(node=>document.activeElement===node),true,
+    'Shift+Tab within Coordinates returns to its summary without trapping focus');
+  assert.equal(await coordinateDetails.getAttribute('open'),'');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Escape');
+  assert.equal(await coordinateDetails.getAttribute('open'),null);
+  assert.equal(await coordinateTrigger.evaluate(node=>document.activeElement===node),true,
+    'Escape from inside Coordinates closes only its disclosure and restores its trigger');
+  await page.keyboard.press('Enter');
+  await coordinateInput.focus();
+  await page.evaluate(()=>{
+    const field=document.querySelector('#lt-coordinate-input');
+    field?.dispatchEvent(new FocusEvent('focusout',{bubbles:true,relatedTarget:null}));
+  });
+  // Allow the component's deferred null-relatedTarget recheck to finish.
+  await page.waitForTimeout(0);
+  assert.equal(await coordinateDetails.getAttribute('open'),'',
+    'A null focusout must not close an internally focused field by itself');
+  await page.getByRole('button',{name:'Refresh',exact:true}).focus();
+  assert.equal(await coordinateDetails.getAttribute('open'),null,
+    'Focus outside Coordinates closes it without stealing the new control focus');
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true})
+    .evaluate(node=>document.activeElement===node),true);
+  await coordinateTrigger.focus();
+  await page.keyboard.press('Enter');
+  await coordinateInput.focus();
+  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+  assert.equal(await coordinateDetails.getAttribute('open'),null,
+    'WebView blur closes Coordinates without replaying Escape into Minecraft');
+  await f3Trigger.focus();
+  await page.keyboard.press('Enter');
+  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+  assert.equal(await f3Details.getAttribute('open'),null,
+    'WebView blur also closes read-only F3 without a new game/input owner');
+  await f3Trigger.focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  assert.equal(await f3Details.getAttribute('open'),null);
+  assert.equal(await f3Trigger.evaluate(node=>document.activeElement===node),true,
+    'F3 Escape restores its own summary focus and does not trap the next Tab');
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    ['Launch','CloseOne','ClearProfileData'].includes(call.args?.request?.operation))),false,
+    'Disclosure focus traversal must not start or modify any Minecraft session');
+
   // The native activity indicator is sparse and never claims game control.
   await page.goto('http://lazy-tester.test/?agent-status=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
   const statusDisclosure=page.locator('.lt-agent-activity');
   await statusDisclosure.waitFor();
+  await statusDisclosure.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await statusDisclosure.getAttribute('open'),'',
+    'The optional controller-reported disclosure uses native keyboard activation');
+  await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+  assert.equal(await statusDisclosure.getAttribute('open'),null,
+    'Native desktop focus loss closes the optional AI disclosure without game input');
+  await statusDisclosure.locator('summary').focus();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  assert.equal(await statusDisclosure.getAttribute('open'),null);
+  assert.equal(await statusDisclosure.locator('summary')
+    .evaluate(node=>document.activeElement===node),true,
+    'AI disclosure Escape returns to its own summary while WebView focus is active');
   assert.match(await statusDisclosure.textContent(),/Testing · Waiting · MC02/);
   assert.doesNotMatch(await statusDisclosure.textContent(),/\bQA\b/,
     'All visible AI and Testing labels use the agreed English terminology');

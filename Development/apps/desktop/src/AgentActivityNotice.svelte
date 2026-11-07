@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {onDestroy} from 'svelte';
+  import {onDestroy,tick} from 'svelte';
   import type {ActivityView} from './app/presentation/agentActivity.js';
   export let view:ActivityView;
   let detailsElement: HTMLDetailsElement | undefined;
@@ -10,26 +10,42 @@
     event.preventDefault();
     event.stopPropagation();
     detailsElement.open = false;
-    summaryElement?.focus({preventScroll: true});
+    if (document.hasFocus() && summaryElement?.isConnected)
+      summaryElement?.focus({preventScroll: true});
   }
   function closeWhenFocusLeaves(event: FocusEvent): void {
+    if (!detailsElement?.open) return;
     const next = event.relatedTarget;
-    if (detailsElement?.open && next instanceof Node && !detailsElement.contains(next))
-      detailsElement.open = false;
+    if (next instanceof Node) {
+      if (!detailsElement.contains(next)) detailsElement.open = false;
+      return;
+    }
+    // A native focus transfer may report null rather than a WebView node.
+    // Defer once so ordinary internal keyboard navigation is not dismissed.
+    void tick().then(() => {
+      if (!detailsElement?.open) return;
+      const focused = document.activeElement;
+      if (!document.hasFocus() || !(focused instanceof Node) ||
+          !detailsElement.contains(focused)) detailsElement.open = false;
+    });
+  }
+  function closeOnWindowBlur(): void {
+    if (detailsElement?.open) detailsElement.open = false;
   }
 
   onDestroy(() => {
     // A short-lived controller report may disappear while its summary owns
     // keyboard focus. Restore focus only in that case, never from gameplay.
     const focused = document.activeElement;
-    if (!(focused instanceof Node) || !detailsElement?.contains(focused)) return;
+    if (!document.hasFocus() || !(focused instanceof Node) ||
+        !detailsElement?.contains(focused)) return;
     const playNav = document.querySelector<HTMLButtonElement>(
       '.lt-topbar nav button[aria-current="page"]');
     if (playNav?.isConnected && !playNav.disabled)
       playNav.focus({preventScroll: true});
   });
 </script>
-<svelte:window on:keydown={closeOnEscape} />
+<svelte:window on:keydown={closeOnEscape} on:blur={closeOnWindowBlur} />
 
 <!-- Summary takes a bounded slot in the fixed-height topbar. Expanded details alone overlay the view; native viewport/rail size is unchanged. -->
 <details class="lt-agent-activity" name="lt-play-disclosures" bind:this={detailsElement} on:focusout={closeWhenFocusLeaves} aria-label="Local AI and Testing activity">

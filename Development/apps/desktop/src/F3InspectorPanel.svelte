@@ -1,4 +1,5 @@
 <script lang="ts">
+  import {tick} from 'svelte';
   import type {F3InspectorView} from './app/presentation/f3Inspector.js';
   import {playToolPopupStyle} from './app/presentation/playToolPopup.js';
 
@@ -27,9 +28,28 @@
     else popupStyle = 'visibility:hidden;';
   }
   function closeWhenFocusLeaves(event: FocusEvent): void {
+    if (!detailsElement?.open) return;
     const next = event.relatedTarget;
-    if (detailsElement?.open && next instanceof Node && !detailsElement.contains(next))
-      detailsElement.open = false;
+    // Tab/Shift+Tab must remain native browser navigation; never restore
+    // focus on an ordinary move to another control.
+    if (next instanceof Node) {
+      if (!detailsElement.contains(next)) detailsElement.open = false;
+      return;
+    }
+    // Focus leaving WebView can have relatedTarget=null. Recheck only after
+    // browser focus settles, so an internal transition with a null target
+    // does not prematurely dismiss the disclosure.
+    void tick().then(() => {
+      if (!detailsElement?.open) return;
+      const focused = document.activeElement;
+      if (!document.hasFocus() || !(focused instanceof Node) ||
+          !detailsElement.contains(focused)) detailsElement.open = false;
+    });
+  }
+  function closeOnWindowBlur(): void {
+    // A native Minecraft focus transfer must leave no floating Play popup.
+    // Unlike Escape, it never re-focuses the WebView or game.
+    if (detailsElement?.open) detailsElement.open = false;
   }
 
   function closeOnEscape(event: KeyboardEvent): void {
@@ -38,10 +58,11 @@
     event.preventDefault();
     event.stopPropagation();
     detailsElement.open = false;
-    summaryElement?.focus({preventScroll: true});
+    if (document.hasFocus() && summaryElement?.isConnected)
+      summaryElement?.focus({preventScroll: true});
   }
 </script>
-<svelte:window on:keydown={closeOnEscape} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />
+<svelte:window on:keydown={closeOnEscape} on:blur={closeOnWindowBlur} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />
 
 <details class="lt-coordinate-paste lt-f3-inspector" name="lt-play-disclosures" bind:this={detailsElement} on:toggle={onToggle} on:focusout={closeWhenFocusLeaves}>
   <summary bind:this={summaryElement} aria-label="Open read-only F3 Inspector">F3 Inspector</summary>

@@ -134,7 +134,7 @@ describe('F3 Inspector presentation-only integration', () => {
     expect(ui).toContain('Show Coordinates');
     expect(ui).toContain('FPS targets (last report)');
     expect(ui).toContain('F3 Inspector');
-    expect(ui).toContain('<svelte:window on:keydown={closeOnEscape} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />');
+    expect(ui).toContain('<svelte:window on:keydown={closeOnEscape} on:blur={closeOnWindowBlur} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />');
     expect(ui).toContain('name="lt-play-disclosures"');
     expect(ui).toContain('on:focusout={closeWhenFocusLeaves}');
     expect(ui).toContain('style={popupStyle}');

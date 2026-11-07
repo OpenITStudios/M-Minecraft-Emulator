@@ -27,7 +27,7 @@ describe('optional manual XYZ user-paste UI',()=>{
   });
 
   it('closes an in-panel Escape, restores summary focus and preserves native toggle reset',()=>{
-    expect(panel).toContain("<svelte:window on:keydown={closeOnEscape} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />");
+    expect(panel).toContain("<svelte:window on:keydown={closeOnEscape} on:blur={closeOnWindowBlur} on:resize={repositionPopup} on:scroll|capture={repositionPopup} />");
     expect(panel).toContain('name="lt-play-disclosures"');
     expect(panel).toContain('on:focusout={closeWhenFocusLeaves}');
     expect(panel).toContain('style={popupStyle}');

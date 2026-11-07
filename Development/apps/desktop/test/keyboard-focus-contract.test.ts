@@ -22,8 +22,10 @@ describe('Lazy Tester scoped keyboard and transient report focus — source cont
   it('restores keyboard context when a transient local activity report unmounts',()=>{
     const notice=ui('AgentActivityNotice.svelte');
     const app=ui('LazyTesterApp.svelte');
-    expect(notice).toContain("import {onDestroy} from 'svelte';");
+    expect(notice).toContain("import {onDestroy,tick} from 'svelte';");
     expect(notice).toContain('onDestroy(() => {');
+    expect(notice).toContain("!document.hasFocus() || !(focused instanceof Node)");
+    expect(notice).toContain('on:blur={closeOnWindowBlur}');
     expect(notice).toContain('detailsElement?.contains(focused)');
     expect(notice).toContain("'.lt-topbar nav button[aria-current=\"page\"]'");
     expect(notice).toContain('playNav?.isConnected && !playNav.disabled');

@@ -428,11 +428,12 @@ Windows/runtime evidence exists.
 | UX-F01 | Play, selected running slot, close review open | Cancel receives initial focus; Escape inside review cancels, restores original Close game focus without a game exit | Keyboard trace + native CloseOne absence; TARGET_WINDOWS |
 | UX-F02 | Same review; Play/Settings navigation disabled; focus moves to an enabled titlebar control | Escape outside review leaves review open and does not send CloseOne | Focus/DOM trace; TARGET_WINDOWS |
 | UX-F03 | Storage, cache/settings/full-clear review | Safe Cancel or exact identity input receives focus; Escape within review returns to initiating control | Keyboard trace; TARGET_WINDOWS |
-| UX-F04 | F3, Coordinates, optional AI & Testing disclosures | One open at a time, Escape returns to own summary; game focus/keys are not stolen | Keyboard focus trace + WebView2 version; TARGET_WINDOWS |
+| UX-F04 | F3, Coordinates, optional AI & Testing disclosures | SOURCE_PREPARED: one open via named group, scoped Escape, Tab/Shift+Tab and deferred null-focusout/blur close without game-focus hijack | Keyboard focus trace + WebView2 version; TARGET_WINDOWS |
 | UX-F05 | Optional AI & Testing report expires while focused | Report disappears on schedule, no stale gameplay claims; focus returns to active nav only when owned by disappearing disclosure | Recorded keyboard focus + native report age; TARGET_WINDOWS |
 | UX-F06 | Keyboard focus on launcher Refresh/notice while native Inspect changes status | Refresh holds focus in authored notice, then returns to enabled same-slot card or named non-Tab fallback on unavailable status; never steals a newer or Minecraft focus | Browser and Windows focus trace + native Inspect receipt; TARGET_WINDOWS |
 | UX-F07 | Keyboard Refresh becomes disabled, or a confirmed CloseOne/full-clear review disappears | Original focused context remains on the page heading, same-slot launcher group, or persistent Storage warning heading; Tab/Shift+Tab user choices always prevail | Synthetic DOM/focus trace and Windows WebView2 focus + native receipts; TARGET_WINDOWS |
 | UX-F08 | Settings graphics/FPS/audio save becomes temporarily disabled; Storage cache/settings review is submitted | Owned WebView focus moves to its persistent section/Storage overview heading only; keyboard traversal continues and Cancel still returns to original trigger; native admission unchanged | Authored browser/source fixtures, Windows Tab/Shift+Tab, failure/success receipts, Narrator; TARGET_WINDOWS |
+| UX-F09 | Popup F3/Coordinates or AI & Testing loses WebView focus; focusout has null relatedTarget | Popup closes without re-focusing WebView/native game. Escape from inside returns to its summary; Tab/Shift+Tab moves naturally to the next control | Authored synthetic focus/blur fixture and Windows native-focus/WebView2 evidence; TARGET_WINDOWS |
 | UX-V01 | 920×620 at 100/125/150/200% display scaling | All five keyed MC cards remain ordered, central 16:9 viewport remains positive and fully in bounds; no clipped essential action | Sanitized screenshot + measured DOM/native DWM rectangles; TARGET_WINDOWS |
 | UX-V02 | 1280×900 and expanded desktop window, 5 mixed observed states | Names/status and long errors remain accessible; selected card never moves/reparents, no stale running count | Screenshot, text/accessibility snapshot, native state receipts; TARGET_WINDOWS |
 | UX-V03 | Long connection/recovery messages, narrow effective width | All support references and warnings remain reachable by Tab/scroll; no overlay covers the native game or critical button | Keyboard/scroll video or screenshot; TARGET_WINDOWS |
@@ -868,3 +869,56 @@ only. Svelte/TypeScript compilation, Vitest, synthetic browser execution,
 WebView2 keyboard/Tab order, Narrator, High Contrast, Windows DPI and
 native DWM/Minecraft behavior remain `NOT_EXECUTED`. The new
 `UX-F08` row is not accepted until real observations exist.
+
+## Nonmodal Play disclosure keyboard/focus lifecycle — source-only correction
+
+F3 Inspector and Coordinates & Saves use the existing HTML
+`details name="lt-play-disclosures"` group. The optional AI & Testing
+report is the third disclosure in that same group. There is **no modal
+dialog**, no custom Tab key handling, no new gameplay listener, and no
+additional process, DWM or clipboard authority.
+
+The previous focusout handler only closed a disclosure when the browser
+supplied another DOM `Node` as `relatedTarget`. Windows/WebView focus
+can instead leave `relatedTarget=null`, including when the operator
+switches to a separate native Minecraft window. The existing component
+owner now handles both cases:
+
+- For a real DOM destination outside the open disclosure, close the
+  `details` immediately. The new focus target keeps keyboard control.
+  Tab from the read-only F3 summary to the Coordinates summary, and
+  Shift+Tab from Coordinates to an earlier control, remain native.
+- For a null destination, defer **one Svelte tick**, then check the
+  actual active element and `document.hasFocus()`. Keep the popup
+  open when focus remains inside it; otherwise close it without calling
+  `focus()`. The explicit `window.blur` handler also closes the
+  disclosure when the WebView loses focus to another native window.
+- For an Escape event **originating inside** the open disclosure,
+  prevent only that event, close that disclosure and focus its own
+  connected summary only while the WebView still owns focus.
+  Escape from Minecraft, titlebar, or unrelated page controls is not
+  intercepted, and a normal Tab/Shift+Tab departure never bounces
+  back to the summary.
+
+The AI & Testing report's existing `onDestroy` focus fallback now
+also checks `document.hasFocus()`; an expiring short-lived report
+must not steal focus from an actual native Minecraft window.
+No new report source, polling or AI status owner is introduced.
+Coordinate text drafts, manual labels, bookmark storage and original
+read-only F3 provenance are preserved; closing a disclosure is not a
+discard operation.
+
+The optional in-memory Tauri synthetic browser journey now has
+**AUTHORED_NOT_EXECUTED** cases for F3→Coordinates Tab, Coordinates
+input Tab/Shift+Tab, scoped Escape restoration, focus moving to an
+unrelated Refresh control, a null-target focusout, and simulated window
+blur on all three Play disclosures. The existing source fixtures
+have been aligned with those listeners and the guarded AI onDestroy.
+This checks source intent only, not correctness of actual WebView2
+native-focus/Win32 event ordering.
+
+**Unresolved:** Edge/WebView2 `details name` support, popup hiding
+when a native game takes input, Tab/Shift+Tab traversal, focus-ring
+visibility, narrator, real 920×620/high-DPI rendering, native DWM
+and five Minecraft client acceptance remain `NOT_EXECUTED`. The
+`UX-F04` and `UX-F09` rows are `SOURCE_PREPARED`, not PASS.
