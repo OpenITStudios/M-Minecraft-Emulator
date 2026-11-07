@@ -77,7 +77,7 @@ supports it. Do not treat these as release approval.
 | P1 | Incomplete loading, offline and stale profile observations | Existing status projection; source-only confidence | Startup loss/retry with visible Disabled/Unavailable states, zero false readiness |
 | P1 | Long messages, varied card states and error overflow | Source text/keyboard affordances present | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
 | P1 | F3 / Coordinates popup placement and exclusivity | Source geometry + HTML details group | WebView2 named-details compatibility, overlap/scroll/resize at minimum window |
-| P1 | Optional AI & Testing header crowding on narrow/high-DPI view | OPEN_SOURCE_RISK: absolute header disclosure has no proven collision-free layout | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
+| P1 | Optional AI & Testing header crowding on narrow/high-DPI view | SOURCE_PREPARED: flex summary within fixed-height topbar; only expanded details overlay | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
 | P1 | Keyboard Escape, Cancel and ephemeral focus restoration | Source handlers present | Focus trace, game keyboard unaffected, nested and expired-report cases |
 | P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
@@ -566,3 +566,36 @@ Remaining high-risk items include optional topbar disclosure crowding,
 minimum-window/high-DPI actual geometry, screen-reader focus, target sizing,
 all unconfirmed native receipts, and true five-session DWM performance.
 These are **NOT_EXECUTED**, not passed.
+
+## Optional AI & Testing header containment — source-only
+
+The controller-reported AI & Testing summary previously used
+`position:absolute;right:230px` in the app topbar. This ignored the
+navigation and connection text in the available width and could overlap
+controls at narrow effective WebView sizes.
+
+The same summary now participates as a **shrinkable flex item** in the
+existing fixed-height header. Only the expanded read-only details remain
+an overlay. The bar remains 56px high (54px in the existing short-height
+media query); the game viewport and five keyed DWM targets are not moved,
+resized or reparented. The status is still absent without an original
+controller report, and no new event listeners, observers or polling are
+added.
+
+At <=860px CSS width, the topbar reduces gaps and horizontal padding.
+At <=650px, its product wordmark yields visually to the original logo,
+but its link retains the explicit accessible name `Lazy Tester — Play`.
+AI status and the connection label shrink rather than overlap; the full
+connection text remains in the DOM and title. On especially narrow views,
+the expanded details use a bounded fixed panel inside the WebView, rather
+than extending outside the left boundary.
+
+The existing optional synthetic-browser journey now contains
+**authored, unexecuted** geometry assertions for 920, 720, 620 and
+480 CSS-pixel widths, the 54px header at 620px height, nonoverlapping
+topbar children, and popup containment. These are planned checks, not
+Windows display-scale results.
+
+**Unresolved:** Svelte typecheck, synthetic-browser execution, WebView2,
+screen reader, Windows 100/125/150/200% DPI, native DWM coordinates,
+and actual Minecraft runtime are all `NOT_EXECUTED`.

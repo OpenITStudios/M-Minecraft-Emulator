@@ -58,9 +58,10 @@ A bounded read-only AI/Testing activity disclosure can appear in the Play
 header only when the original native controller has received an explicit
 short-lived local MCP status report. There is **no implicit status upload**,
 new background watcher, agent process discovery or separate UI status owner.
-The disclosure is absolutely positioned outside the five-card rail layout;
-it must not resize the central game viewport or move/replace any native
-DWM preview. Items identify reported local observation, source-only Probe
+The collapsed summary occupies only horizontal space in the fixed-height
+topbar; its expanded read-only details overlay outside the five-card rail
+layout. Neither may change the bar height, resize the central game viewport
+or move/replace any native DWM preview. Items identify reported local observation, source-only Probe
 preparation/results or experimental input/recovery only; **never** external
 Windows control, verified Minecraft input, or map gameplay acceptance.
 No incoming report means no extra UI. A stale earlier attention report

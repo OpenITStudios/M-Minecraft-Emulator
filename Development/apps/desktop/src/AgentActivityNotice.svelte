@@ -31,7 +31,7 @@
 </script>
 <svelte:window on:keydown={closeOnEscape} />
 
-<!-- Positioned out of normal layout: never changes viewport or rail size. -->
+<!-- Summary takes a bounded slot in the fixed-height topbar. Expanded details alone overlay the view; native viewport/rail size is unchanged. -->
 <details class="lt-agent-activity" name="lt-play-disclosures" bind:this={detailsElement} on:focusout={closeWhenFocusLeaves} aria-label="Local AI and Testing activity">
   <summary bind:this={summaryElement} aria-label={view.summary} title={view.summary}>{view.summary}</summary>
   <div class="lt-agent-activity-details">

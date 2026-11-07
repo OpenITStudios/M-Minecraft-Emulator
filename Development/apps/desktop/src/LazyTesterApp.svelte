@@ -897,12 +897,12 @@
 <div class="lt-app">
   <WindowTitlebar backendSupport={nativeBackend} />
   <header class="lt-topbar">
-    <a class="lt-brand" href="#play" aria-disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} on:click|preventDefault={() => navigate('workspace')}><span class="lt-brand-mark" aria-hidden="true"></span>Lazy Tester</a>
+    <a class="lt-brand" href="#play" aria-label="Lazy Tester — Play" aria-disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} on:click|preventDefault={() => navigate('workspace')}><span class="lt-brand-mark" aria-hidden="true"></span><span class="lt-brand-name">Lazy Tester</span></a>
     <nav aria-label="Main navigation"><button disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={navigationReviewOpen||nativeBackend!=='WindowsNative'} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
     {#if page==='workspace'&&available&&activityView}
       <AgentActivityNotice view={activityView}/>
     {/if}
-    <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
+    <span class="lt-connection" role="status" title={sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}

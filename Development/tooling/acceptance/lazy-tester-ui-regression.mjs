@@ -244,6 +244,40 @@ try {
   assert.doesNotMatch(await statusDisclosure.textContent(),/\bQA\b/,
     'All visible AI and Testing labels use the agreed English terminology');
   assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5);
+  // Synthetic CSS viewport cases, including a narrow/high-effective-scale
+  // view. These are NOT evidence of actual Windows device DPI or DWM behavior.
+  for(const width of [920,720,620,480]){
+    await page.setViewportSize({width,height:620});
+    const geometry=await page.evaluate(()=>{
+      const rect=selector=>{
+        const element=document.querySelector(selector);
+        if(!element)return null;
+        const r=element.getBoundingClientRect();
+        return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width};
+      };
+      return {bar:rect('.lt-topbar'),items:[
+        rect('.lt-topbar .lt-brand'),rect('.lt-topbar nav'),
+        rect('.lt-topbar .lt-agent-activity'),rect('.lt-topbar .lt-connection')
+      ]};
+    });
+    assert.equal(Math.round(geometry.bar.bottom-geometry.bar.top),54,
+      'Optional AI summary must not change the fixed-height topbar or native Play aperture');
+    assert.ok(geometry.items.every(item=>item&&item.width>0&&item.left>=0&&item.right<=width+1),
+      'All topbar controls must fit the CSS viewport');
+    for(let i=1;i<geometry.items.length;i++)
+      assert.ok(geometry.items[i].left>=geometry.items[i-1].right-1,
+        'Optional AI summary must not overlap navigation or the connection label');
+  }
+  await page.setViewportSize({width:480,height:620});
+  await statusDisclosure.locator('summary').click();
+  const popupRect=await statusDisclosure.locator('.lt-agent-activity-details').evaluate(element=>{
+    const r=element.getBoundingClientRect();
+    return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};
+  });
+  assert.ok(popupRect.left>=0&&popupRect.right<=480&&popupRect.top>=0&&popupRect.bottom<=620,
+    'Narrow agent details must stay in the WebView bounds');
+  await statusDisclosure.locator('summary').click();
+  await page.setViewportSize({width:920,height:620});
   await statusDisclosure.locator('summary').click();
   assert.match(await statusDisclosure.textContent(),/awaiting command or evidence/);
   assert.doesNotMatch(await statusDisclosure.textContent(),/AI controlling PC|Testing running verified/);
