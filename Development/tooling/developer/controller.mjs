@@ -53,7 +53,7 @@ const LOCAL_SMOKE_CHECKPOINTS = Object.freeze([
   Object.freeze({id:"LT-10",phase:"two-client",action:"Normal CloseOne on MC02 while MC01 remains active",passCondition:"Only MC02 closes after game confirmation; MC01 remains interactive",evidenceKind:"NATIVE_LIFECYCLE",stopOnFail:true,legacyCases:"STD-LIFE-01..04"}),
   Object.freeze({id:"LT-11",phase:"two-client",action:"Close/reopen manager with an owned game still active",passCondition:"Original session is correctly recovered or explicitly UNKNOWN; never fake STOPPED",evidenceKind:"NATIVE_LIFECYCLE",stopOnFail:true,legacyCases:"STD-LIFE-12..13"}),
   Object.freeze({id:"LT-12",phase:"data",action:"Inspect only bounded storage metadata across stopped slots",passCondition:"No reset, account/world disclosure or cross-slot folder confusion",evidenceKind:"STORAGE_METADATA",stopOnFail:true,legacyCases:"STD-DATA-01..03"}),
-  Object.freeze({id:"LT-13",phase:"ui-smoke",action:"Paste negative/fraction XYZ and inspect read-only F3",passCondition:"Correct manual formatting; live XYZ/Copy unavailable until actual source exists",evidenceKind:"UI_OBSERVATION",stopOnFail:false,legacyCases:"STD-SET-12..13;STD-SET-15..16"})
+  Object.freeze({id:"LT-13",phase:"ui-smoke",action:"Navigate Play, General Settings and Data Storage by sidebar",passCondition:"Keyboard focus, slot identity and read-only status are clear; retired F3/Coordinates UI is absent",evidenceKind:"UI_OBSERVATION",stopOnFail:false,legacyCases:"STD-UI-06..09;STD-SET-01;STD-DATA-01..03"})
 ]);
 const MANUAL_PLANS = Object.freeze({
   'local-smoke': Object.freeze({

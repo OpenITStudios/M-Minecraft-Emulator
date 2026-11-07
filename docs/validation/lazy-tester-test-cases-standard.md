@@ -167,6 +167,12 @@ targets*, bukan nilai frame-rate game nyata. Preset `Preserve` tidak
 mengembalikan nilai grafis sebelum High/Low; ia berhenti menulis
 future options.txt.
 
+**Retired desktop tests:** `STD-SET-12..16` remain listed for historical ID
+traceability, but their former Paste XYZ / F3 Inspector screens were removed
+by the operator. They are `NOT_APPLICABLE` to the current desktop and must not
+be executed or counted as standard feature failures. Pure coordinate research
+and the dormant native Saved Locations store do not expose replacement UI.
+
 | Case ID | Prioritas | Tindakan operator | PASS hanya apabila |
 | --- | --- | --- | --- |
 | STD-SET-01 | P1 | Buka Settings tanpa game | Inspect tidak mengubah saved data |
@@ -180,11 +186,11 @@ future options.txt.
 | STD-SET-09 | P1 | High/Low pada stopped MCxx | Preset slot tersebut saja, next launch |
 | STD-SET-10 | P0 | Apply preset ketika satu game berjalan | Refused, no live options.txt edit |
 | STD-SET-11 | P1 | Pilih preset MC01–MC05 satu per satu | Slot settings tidak tertukar |
-| STD-SET-12 | P1 | Paste XYZ bilangan positif, negatif, pecahan | Exact/block/position-only output konsisten |
-| STD-SET-13 | P1 | Floor untuk koordinat/chunk negatif | Menggunakan floor, bukan truncation toward zero |
-| STD-SET-14 | P1 | Select text dalam Paste XYZ | Manual selection saja, bukan auto clipboard/game teleport |
-| STD-SET-15 | P0 | Buka read-only F3 Inspector | Live XYZ/rotation/dimension/measured FPS unavailable jika belum ada input source |
-| STD-SET-16 | P0 | Refresh/change selected slot saat F3 terbuka | Tidak mengklaim PID/proses lama sebagai current |
+| STD-SET-12 | P1 | RETIRED — Paste XYZ di UI desktop dihapus | NOT_APPLICABLE: tidak ada layar Paste XYZ |
+| STD-SET-13 | P1 | RETIRED — hasil chunk/blok pada UI Paste XYZ dihapus | NOT_APPLICABLE: fungsi koordinat murni bukan UI desktop |
+| STD-SET-14 | P1 | RETIRED — pilihan teks Paste XYZ dihapus | NOT_APPLICABLE: tidak ada aksi clipboard pada layar ini |
+| STD-SET-15 | P0 | RETIRED — F3 Inspector desktop dihapus | NOT_APPLICABLE: tidak ada F3 Inspector dalam Play |
+| STD-SET-16 | P0 | RETIRED — transisi saat F3 Inspector terbuka | NOT_APPLICABLE: F3 desktop tidak ada; slot identity diuji di STD-UI/WIN |
 | STD-SET-17 | P1 | Missing/legacy options key | Tidak mengarang setting yang tidak dikenal |
 | STD-SET-18 | P2 | Save/refresh UI bersamaan | Tidak duplicate submit atau freeze |
 | STD-SET-19 | P1 | Reopen manager setelah audio/graphics/FPS changes | Last reported preferences benar dan no unapproved cross-slot writes |

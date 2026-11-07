@@ -88,6 +88,9 @@ test('local-smoke is a self-contained ordered risk-based evidence plan, not game
   assert.equal(plan.checkpoints[1].evidenceKind,'SOURCE_QUICK');
   assert.equal(plan.checkpoints[1].stopOnFail,true);
   assert.equal(plan.checkpoints.at(-1).stopOnFail,false);
+  assert.match(plan.checkpoints.at(-1).action,/General Settings and Data Storage/);
+  assert.doesNotMatch(plan.checkpoints.at(-1).action,/F3|XYZ|Coordinate/i);
+  assert.match(plan.checkpoints.at(-1).legacyCases,/STD-UI-06/);
   for(const step of plan.checkpoints){
     assert.ok(step.action.length>16 && step.passCondition.length>20);
     assert.match(step.legacyCases,/^STD-/);

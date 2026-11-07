@@ -7,7 +7,7 @@ authority: CANONICAL
 lifecycle: ACTIVE
 ---
 
-# Lazy Tester — current product and UX
+# LazyTester — current product and UX
 
 The current product is one Windows desktop workspace for **five**
 separately licensed Minecraft Education profiles (MC01–MC05).
@@ -18,7 +18,7 @@ previews. Starting the app does not automatically start Minecraft.
 **Current source and contracts:**
 
 - [Visual identity and UX consistency](visual-identity-and-ui-ux.md) — standalone
-  Lazy Tester brand, semantic UI tokens and read-only acceptance matrix.
+  LazyTester brand, semantic UI tokens and read-only acceptance matrix.
 - [Unified workspace](unified-workspace.md) — active first section
   defines operator actions, profile identity, native windows, recovery
   and data preservation. Sections explicitly labeled historical
@@ -35,7 +35,7 @@ previews. Starting the app does not automatically start Minecraft.
 [old Compact Manager design](compact-manager-implementation.md),
 [previous UX draft](compact-manager-ux-spec.md) and
 [VM Base image](base-image.md). They must not override the
-current five-profile Lazy Tester UI or restore Sandboxie/VMware.
+current five-profile LazyTester UI or restore Sandboxie/VMware.
 
 Minecraft itself owns authentication, worlds, rendering and network.
 A process or thumbnail is not proof of an authenticated playable

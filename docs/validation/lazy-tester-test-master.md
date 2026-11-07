@@ -29,7 +29,7 @@ Panduan ini menjelaskan **urutan, command, persiapan, bukti dan syarat lulus**. 
 
 **Produk standar:** Windows 10/11 x64 native, Tauri/Svelte/Rust, satu controller native, reviewed `bootstrap-compat.dll` dan `bootstrap-enroll.dll`, lima profil MC01–MC05, login Minecraft Education manual, Play/DWM preview, normal CloseOne/CloseAll, per-slot Data, setting, dan unsigned development installer.
 
-**Fitur yang TIDAK boleh diasumsikan siap:** input AI game 4–5 klien, experimental hook/ABI C++, Skills Probe gameplay, F3 live XYZ/Copy, resource-pack loading aktual, lima akun sungguhan, efektivitas FPS policy, multiplayer, atau signed public release. Ini adalah bukti Windows/Minecraft yang harus didapat secara terpisah. Native AI input tetap compile-OFF/default-OFF dan tidak ada di package normal. Reviewed **AI DLL khusus** belum siap sebagai artefak runtime; jangan menggunakan standard DLL sebagai pengganti.
+**Fitur yang TIDAK boleh diasumsikan siap:** input AI game 4–5 klien, experimental hook/ABI C++, Skills Probe gameplay, F3 Inspector/Coordinates & Saves (sudah dihapus dari UI desktop, bukan fitur pending), resource-pack loading aktual, lima akun sungguhan, efektivitas FPS policy, multiplayer, atau signed public release. Ini adalah bukti Windows/Minecraft yang harus didapat secara terpisah. Native AI input tetap compile-OFF/default-OFF dan tidak ada di package normal. Reviewed **AI DLL khusus** belum siap sebagai artefak runtime; jangan menggunakan standard DLL sebagai pengganti.
 
 **Jalur lama yang tidak aktif:** VMware, Sandboxie, Guest Agent, legacy VMware G0–G4, `DEV.cmd g0`, driver alternatif, auto login, bypass lisensi, GitHub Actions. Jangan mengaktifkannya untuk membuat tes lulus.
 
@@ -272,9 +272,10 @@ splash hanya berarti belum ada bukti gameplay.
 | MAP_QA | Skenario map benar-benar diuji, bukan sekadar original Probe all-PASS di log |
 
 P0 belum selesai → **NO-GO** untuk klaim penuh. `NOT_EXECUTED` bukan FAIL,
-tetapi juga bukan PASS. Live automatic F3 XYZ/Copy, AI native input, dan
-signed public release saat authoring tidak boleh dipaksa menjadi kriteria
-PASS standar bila fitur/capability tersebut memang belum tersedia.
+tetapi juga bukan PASS. F3 Inspector/Coordinates & Saves sudah dihapus dari UI desktop; kasus
+STD-SET-12..16 adalah NOT_APPLICABLE, bukan fitur pending. AI native
+input dan signed public release tetap memerlukan gate terpisah dan
+tidak menjadi syarat PASS untuk fitur standar yang belum tersedia.
 
 ## 9. Urutan operator paling ringkas pada hari-H
 

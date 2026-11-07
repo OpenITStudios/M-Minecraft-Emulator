@@ -1,9 +1,9 @@
-# Lazy Tester
+# LazyTester
 
-**Lazy Tester** is a Windows desktop manager for up to five independent,
+**LazyTester** is a Windows desktop manager for up to five independent,
 licensed Minecraft Education profiles (MC01–MC05). It uses one official
 game installation and persistent, private profile data. The operator
-explicitly launches games; opening Lazy Tester never starts Minecraft,
+explicitly launches games; opening LazyTester never starts Minecraft,
 signs in to Microsoft, or enters a world.
 
 **Development branch:** `Local`. `main` is release-reserved and GitHub
@@ -19,7 +19,7 @@ for the proof ceiling at the latest revision.
 | Read-only evidence-grounded source review | `DEV.cmd review --json` or `review --base-sha <ancestor-SHA> --json` when the pinned toolchain is approved | [Developer controller](Development/tooling/developer/README.md), [development discipline](docs/system/development-discipline.md); no agent/test execution |
 | Plan **all** tests and required evidence | 306 uniquely identified planned test cases, not yet executed | [Complete master](docs/validation/lazy-tester-test-master.md), [198 standard cases](docs/validation/lazy-tester-test-cases-standard.md), [108 MCP/AI/QA cases](docs/validation/lazy-tester-test-cases-experimental.md) |
 | Open an already prepared app | Root `Lazy Tester.exe` or compatibility `RUN.cmd` | [Desktop workspace](docs/product/unified-workspace.md) |
-| Save manually copied Minecraft coordinates | Play → Coordinates & Saves → paste XYZ, provide location/world labels, Save | [Native-first workflow](docs/system/coordinate-inspector.md#p19--native-first-manual-saved-locations-4-november-2026-source-only) |
+| Review current desktop navigation safely | Open Play → Settings → General / Data Storage; inspect read-only status, without changing game data | [Current workspace](docs/product/unified-workspace.md) |
 | Examine uninstalled experimental native coordinate HUD extension | `Development/tooling/agent/education-native-hud-prototype/` | [Compatibility and integration contract](docs/system/education-native-coordinate-hud.md) |
 | Develop or package locally **when explicitly authorized** | `DEV.cmd` | [Developer controller](Development/tooling/developer/README.md), [distribution](Development/engine/distribution/README.md) |
 | Inspect or launch profiles through an external model | Optional `Development/tooling/agent/mcp.mjs` | [MCP bridge](Development/tooling/agent/README.md) |

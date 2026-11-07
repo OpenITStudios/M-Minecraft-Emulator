@@ -7,9 +7,9 @@ authority: WORKING
 lifecycle: ACTIVE
 ---
 
-# First Windows PC test — Lazy Tester
+# First Windows PC test — LazyTester
 
-**Scope:** the standard **Lazy Tester** desktop manager on Windows 10/11 x64,
+**Scope:** the standard **LazyTester** desktop manager on Windows 10/11 x64,
 from the GitHub `Local` source branch. This is an operator runbook, **not**
 evidence that a build, installation, Minecraft session or test has run.
 For experimental independent AI keyboard/mouse input use the separate
@@ -43,7 +43,7 @@ launcher, runtime owner, CI workflow or data directory is introduced.
 | Start shortcut | `RUN.cmd` source only | Root `Lazy Tester.exe` exists after an approved `DEV.cmd package` |
 | Installer candidate | Packaging source only | Actual unsigned NSIS output, integrity and preservation checks |
 | Minecraft and 5 profiles | Game/session source, historical pilot evidence | Fresh **same-revision** Windows + licensed Education gameplay acceptance |
-| F3 automatic XYZ/Copy | **Not connected** | Native pixel source, correct game/window pairing and real Education recognition still missing |
+| Retired F3/Coordinates desktop controls | **Not part of current UI** | Verify both are absent; no unsupported live-coordinate or Copy action is advertised |
 
 The two native DLLs are not interchangeable with the **separate, unapproved
 AI-input experimental DLL**. Never change source hash policy just to get a
@@ -221,12 +221,11 @@ and closing/reopening the manager does not modify game data. Check the
 presented status against reality; a passive DWM preview or a PID is not
 proof that a game is playable.
 
-For the existing **manual** coordinate feature, paste sample XYZ and
-check decimal preservation, negative values and floor-based block/chunk
-display. The F3 Inspector must label unknown live XYZ/rotation/dimension
-as unavailable; **do not expect one-click live Copy Coordinate** from
-this revision. Any manually supplied screenshot of real Education
-Show Coordinates is separate, explicitly reviewed F3 evidence.
+On Play, confirm the retired F3 Inspector and Coordinates & Saves controls
+are absent. Navigate via Settings to General and Data Storage using keyboard
+focus. Inspect the selected profile's graphics/FPS labels and read-only
+storage status without saving, clearing, restoring, or changing any game data.
+A native Minecraft coordinate display is not a LazyTester desktop feature.
 
 ## 6. Optional package and root launcher test — only after steps 1–5
 
@@ -267,7 +266,7 @@ and observe each outcome against the **same** source SHA.
 | 4 | MC03–MC05 | Add one at a time; five distinct licensed playable sessions, no profile collision |
 | 5 | Workspace | Correct selected window, peer previews, focus, resize, minimize/reopen |
 | 6 | Recovery | CloseOne, CloseAll, manager exit/reopen, reconnect without data loss |
-| 7 | F3/manual XYZ | Manual paste works; F3 unavailable fields are honest; automatic Copy remains blocked |
+| 7 | Settings and storage UX | Play/General/Data Storage navigation, readable status and keyboard focus; no retired desktop F3/Coordinates controls |
 | 8 | Package preservation | **Separate** disposable install/repair/uninstall review; `Data/` survives |
 
 Experimental multi-client AI keyboard/mouse input and
@@ -290,5 +289,6 @@ a second state database or turn source-only documentation into test proof.
 
 **Expected conclusion before Windows execution:** checkout/runbook
 `SOURCE_PREPARED`; toolchain, payload, UI, installer, game, five profiles,
-F3 live Copy and experimental AI input are **NOT_VERIFIED**. Stop at the
+and experimental AI input are **NOT_VERIFIED**. Retired desktop F3/Coordinates
+controls are not an acceptance requirement. Stop at the
 first real blocker and repair its original owner; do not bypass it.

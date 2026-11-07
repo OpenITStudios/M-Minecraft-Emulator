@@ -104,9 +104,10 @@ NOT_VERIFIED.
   dispatch game commands or certify map/world gameplay.
 - **HUD/coordinates:** native Minecraft coordinates are the live owner.
   The additive, world-scoped P22 v0.3 JSON UI prototype is **uninstalled**
-  and unverified in Education 26.33. Desktop Saved Locations stores only
-  manually pasted XYZ. Automatic F3/OCR, live world Save/Load, and sealed
-  Testing CAS transfer remain blocked.
+  and unverified in Education 26.33. The dormant native Saved Locations
+  store retains existing XYZ data; its desktop UI has been removed.
+  Automatic F3/OCR, live world Save/Load, and sealed Testing CAS transfer
+  remain blocked.
 - **Developer harness:** one existing `DEV.cmd`/developer controller.
   Harness² Propose–Probe–Compose, DeepSeek scoped roles and REA are
   **developer-side reference patterns**, not installed agent runtimes or
@@ -116,6 +117,7 @@ NOT_VERIFIED.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Retired desktop F3/Coordinates validation drift (7 November) | Aligned README, Windows first-run guide, standard-case inventory and `DEV.cmd plan` LT-13 with the removed F3 Inspector / Coordinates & Saves UI. Retained stable case IDs; old STD-SET-12..16 cases explicitly NOT_APPLICABLE, LT-13 now checks actual General/Data Storage navigation. Authored a bounded plan regression fixture; no game, data, installer or native controller change | REMOTE_GITHUB source and consumer review only; Node/Vitest/Windows/Minecraft NOT_EXECUTED |
 | Approved LazyTester logo and one-word UI brand (7 November) | Replaced canonical app-icon.svg with a real vector trace of the approved blue-white L/window + check + five tiles design. Existing WebView header/titlebar/empty workspace reuse the SVG. Tauri prepare:icons now fingerprints SVG content to prevent stale Windows ICO/PNG outputs. Aligned visible LazyTester wordmark and window title only; installed productName, executable, bundle identity, NSIS paths, native session and profile data untouched. Generated downloadable SVG/PNG/ICO pack; source and packaging fixtures authored | REMOTE_GITHUB SOURCE_PREPARED, SVG/PNG/ICO renders generated in container and inspected; Tauri CLI/Windows icon embedding, WebView2 and installed update runtime NOT_EXECUTED |
 | Concise and clear UI copy (7 November) | Simplified global error explanations, per-launcher health guidance, General help, Storage overview/Advanced recovery copy and successful operation receipts; set 80-character authored-feedback budget. Kept unconfirmed-status, next-start, backup replacement, world deletion, Windows sign-in and native confirmation semantics explicit. Reconciled source and synthetic browser fixtures; no UI controls, session owners or file data changed | REMOTE_GITHUB SOURCE_PREPARED; source fixtures AUTHORED_NOT_EXECUTED, Windows/WebView2/DWM and Minecraft NOT_EXECUTED |
 | Final error feedback and familiar Settings labels (7 November) | Structured authored error headings, safe same-handler Refresh status action, collapsed Error codes; bounded sticky error banner in Settings/Storage only. Marked Preserve Visuals as recommended, explained legacy High/Low equivalence and FPS caps versus measured values, renamed Locate/Advanced recovery. Corrected stale source fixture expecting “Profiles verified.” No new native operation, observer, dashboard or destructive action | REMOTE_GITHUB SOURCE_PREPARED, fixture assertions AUTHORED_NOT_EXECUTED; Windows/WebView2/DWM, assistive-tech, Minecraft and actual native error recovery NOT_VERIFIED |

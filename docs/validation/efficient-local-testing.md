@@ -107,7 +107,7 @@ its changed-source basis can be a documentation-only latest commit.
 | LT-10 | CloseOne MC02 (`STD-LIFE-01..04`) | Normal exit of only MC02; MC01 remains interactive |
 | LT-11 | Reopen manager with owned game active (`STD-LIFE-12..13`) | Correct original controller/process retained or safely reported UNKNOWN, no fake stopped state |
 | LT-12 | Read-only storage and persistence (`STD-DATA-01..03`) | Five private profile inventories are not mixed/reset; inspect only metadata |
-| LT-13 | Manual coordinates and honest F3 (`STD-SET-12..13`, `STD-SET-15..16`) | XYZ negatives/fractions format correctly; unsupported live copy/rotation remains unavailable |
+| LT-13 | Settings and Storage navigation (`STD-UI-06..09`, `STD-SET-01`, `STD-DATA-01..03`) | Play → General → Data Storage is readable and keyboard-safe; selected slot remains correct; removed F3/Coordinates controls are absent |
 
 **Priority distinction:** an existing P0 case denotes serious failure if
 triggered; it does not imply that all 213 P0 catalog cases should run in
