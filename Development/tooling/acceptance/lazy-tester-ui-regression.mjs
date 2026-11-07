@@ -843,6 +843,66 @@ try {
   assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 3 · /}).isEnabled(),true,
     'Only a subsequent clean STOPPED observation may enable Launch');
 
+  // A keyboard-issued Refresh disables its own button while native Inspect
+  // is pending. The focused authored notice persists until the old warning
+  // disappears; focus then returns to the same stable native slot's button.
+  // These synthetic checks do not prove Windows/WebView2 or DWM focus.
+  await page.goto('http://lazy-tester.test/?health-state=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const focusedHealth=page.getByRole('status',{name:'Minecraft - 2 needs attention'});
+  const focusedRefresh=page.getByRole('button',{name:'Refresh status for Minecraft - 2'});
+  await focusedRefresh.waitFor();
+  await focusedRefresh.focus();
+  await page.evaluate(()=>{window.__holdInspect=true;window.__healthFixture=false;});
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>typeof window.__finishInspect==='function');
+  assert.equal(await focusedHealth.evaluate(node=>document.activeElement===node),true,
+    'Keyboard Refresh should keep focus in its read-only notice while the button is disabled');
+  await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
+  await focusedHealth.waitFor({state:'detached'});
+  await page.waitForFunction(()=>document.activeElement?.matches(
+    '.lt-launcher-entry[data-slot="2"] > .lt-card')===true);
+  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isEnabled(),true,
+    'A verified STOPPED observation returns focus to the same newly enabled launcher card');
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    ['Launch','CloseOne','CloseAll'].includes(call.args?.request?.operation))),false,
+    'The focus handoff must not trigger native game operations');
+
+  // If native Inspect fails and the card is disabled, return focus to a
+  // non-Tabbable named group for the same slot instead of document.body.
+  await page.goto('http://lazy-tester.test/?health-state=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const unobservedHealth=page.getByRole('status',{name:'Minecraft - 2 needs attention'});
+  await unobservedHealth.waitFor();
+  await page.evaluate(()=>{window.__holdInspect=true;window.__offline=true;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(()=>typeof window.__finishInspect==='function');
+  await unobservedHealth.focus();
+  await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
+  await unobservedHealth.waitFor({state:'detached'});
+  await page.waitForFunction(()=>document.activeElement?.matches(
+    '.lt-launcher-entry[data-slot="2"][role="group"]')===true);
+  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
+    'Connection uncertainty must not create a new Launch admission');
+
+  // A later explicit focus change takes precedence over any stale notice.
+  await page.goto('http://lazy-tester.test/?health-state=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  const supersededHealth=page.getByRole('status',{name:'Minecraft - 2 needs attention'});
+  await supersededHealth.waitFor();
+  await page.evaluate(()=>{window.__holdInspect=true;window.__healthFixture=false;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(()=>typeof window.__finishInspect==='function');
+  await supersededHealth.focus();
+  await nav('Play').focus();
+  await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
+  await supersededHealth.waitFor({state:'detached'});
+  assert.equal(await nav('Play').evaluate(node=>document.activeElement===node),true,
+    'Removing an old notice cannot steal focus after the operator chose another control');
+
   // A windowless NOT_RESPONDING observation must not tell users to inspect
   // a non-existent game window or allow a second Launch.
   await page.goto('http://lazy-tester.test/?health-state=1&windowless-health=1');

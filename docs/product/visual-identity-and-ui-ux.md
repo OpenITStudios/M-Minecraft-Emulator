@@ -78,7 +78,7 @@ supports it. Do not treat these as release approval.
 | P1 | Long messages, varied card states and error overflow | SOURCE_PREPARED: keyboard-readable bounded notices, 24px recovery actions and per-slot accessible guidance | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
 | P1 | F3 / Coordinates popup placement and exclusivity | Source geometry + HTML details group | WebView2 named-details compatibility, overlap/scroll/resize at minimum window |
 | P1 | Optional AI & Testing header crowding on narrow/high-DPI view | SOURCE_PREPARED: flex summary within fixed-height topbar; only expanded details overlay | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
-| P1 | Keyboard Escape, Cancel and ephemeral focus restoration | Source handlers present | Focus trace, game keyboard unaffected, nested and expired-report cases |
+| P1 | Keyboard Escape, Cancel and ephemeral focus restoration | SOURCE_PREPARED: close/disclosure guards and same-slot health-notice focus handoff; no game-focus takeover | Focus trace, game keyboard unaffected, nested, expired-report and offline-refresh cases |
 | P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
 | P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, Settings controls, 24px launcher recovery actions and 32px Close game review targets | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
@@ -430,6 +430,7 @@ Windows/runtime evidence exists.
 | UX-F03 | Storage, cache/settings/full-clear review | Safe Cancel or exact identity input receives focus; Escape within review returns to initiating control | Keyboard trace; TARGET_WINDOWS |
 | UX-F04 | F3, Coordinates, optional AI & Testing disclosures | One open at a time, Escape returns to own summary; game focus/keys are not stolen | Keyboard focus trace + WebView2 version; TARGET_WINDOWS |
 | UX-F05 | Optional AI & Testing report expires while focused | Report disappears on schedule, no stale gameplay claims; focus returns to active nav only when owned by disappearing disclosure | Recorded keyboard focus + native report age; TARGET_WINDOWS |
+| UX-F06 | Keyboard focus on launcher Refresh/notice while native Inspect changes status | Refresh holds focus in authored notice, then returns to enabled same-slot card or named non-Tab fallback on unavailable status; never steals a newer or Minecraft focus | Browser and Windows focus trace + native Inspect receipt; TARGET_WINDOWS |
 | UX-V01 | 920×620 at 100/125/150/200% display scaling | All five keyed MC cards remain ordered, central 16:9 viewport remains positive and fully in bounds; no clipped essential action | Sanitized screenshot + measured DOM/native DWM rectangles; TARGET_WINDOWS |
 | UX-V02 | 1280×900 and expanded desktop window, 5 mixed observed states | Names/status and long errors remain accessible; selected card never moves/reparents, no stale running count | Screenshot, text/accessibility snapshot, native state receipts; TARGET_WINDOWS |
 | UX-V03 | Long connection/recovery messages, narrow effective width | All support references and warnings remain reachable by Tab/scroll; no overlay covers the native game or critical button | Keyboard/scroll video or screenshot; TARGET_WINDOWS |
@@ -714,3 +715,53 @@ DWM rectangles, keyboard focus, tooltip rendering, Narrator/High Contrast,
 Windows DPI 100–200%, responsive overflow and gameplay is
 `NOT_EXECUTED`. Keep this source work **SOURCE_PREPARED**, not UI
 acceptance PASS.
+
+## Disappearing launcher health notices — scoped focus recovery
+
+The existing five-slot `SessionHealthNotice.svelte` can disappear after a
+new native Inspect because the original `projectSessionHealth` projection
+no longer reports the per-slot problem. Previously its scrollable message
+and individual Refresh button could own keyboard focus at the moment
+their component was removed. If the button was disabled as the original
+inspection began, focus could be lost before a clean observation arrived.
+
+For a **focused Refresh action only**, the existing UI first moves
+focus into that slot's read-only, scrollable authored status message
+before asking the original `onAction(slot,'refresh')` callback to run.
+There is no additional refresh request, retry, watcher or game input.
+The separate **Select game** action remains on its original native
+presentation path; this focus handoff never reroutes an explicit
+attempt to enter Minecraft.
+
+If the Refresh-type notice then unmounts with focus still inside it,
+the component waits for the Svelte DOM update and validates all of the
+following before restoring focus:
+
+- The original MC01–MC05 launcher entry is still connected in Play.
+- The WebView still has focus; an actual native Minecraft focus
+  transfer must not be stolen back.
+- No other user-selected WebView control has acquired focus.
+
+The existing parent entry is now a programmatically focusable
+`role="group"` with a slot-specific accessible name and
+`tabindex="-1"`. This is **not** a new Tab stop, launcher button
+or native-session owner. If the original launcher card is active and
+allowed by its existing native-observation gate, focus returns to
+that card; otherwise it returns to the non-actionable same-slot
+group, where a visible ring preserves user context. This does not
+make a disabled card interactive. A removed entire Play page or an
+operator's newer focus choice takes priority over restoration.
+
+The authored, **unexecuted** browser regression now describes three
+negative/positive cases: clean Inspect returning a now-enabled MC02
+card, lost Inspect returning a disabled MC02 card plus safe group
+focus, and an unrelated deliberate Play-navigation focus that must
+not be overridden. The new source fixture checks the original
+action callback, DOM lifecycle gate, group focus semantics and
+unaltered five native preview targets.
+
+**Evidence ceiling:** pinned `REMOTE_GITHUB` source/fixture review
+only. The `UX-F06` acceptance case remains `NOT_EXECUTED`.
+Svelte lifecycle behavior, browser focus heuristics, WebView2,
+Windows game-focus isolation, Narrator/forced-colors, all DPI
+settings and Minecraft gameplay remain `NOT_VERIFIED`.

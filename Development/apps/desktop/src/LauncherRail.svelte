@@ -64,7 +64,9 @@
           : profile.state === 'RUNNING'
             ? 'Running in background'
             : labels[profile.state]}
-    <div class="lt-launcher-entry" data-slot={profile.slot} title={guidance??undefined}>
+    <div class="lt-launcher-entry" data-slot={profile.slot}
+      role="group" tabindex="-1" aria-label={'Minecraft - '+profile.slot+' launcher controls'}
+      title={guidance??undefined}>
       <button class="lt-card" class:selected={observedSlot&&active===profile.slot&&!detached}
         aria-pressed={observedSlot&&profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
         aria-label={cardActionName(profile, statusLabel)}

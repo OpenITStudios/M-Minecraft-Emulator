@@ -1,10 +1,45 @@
 <script lang="ts">
+  import {onDestroy,tick} from 'svelte';
   import type {ProfileSlot} from './app/bridge/lazyTester.js';
   import type {SessionHealthAction, SessionHealthIssue} from './app/presentation/sessionHealth.js';
 
   export let item: SessionHealthIssue;
   export let onAction: (slot: ProfileSlot, action: SessionHealthAction) => void;
   export let disabled = false;
+  let noticeElement: HTMLDivElement | undefined;
+  let statusElement: HTMLDivElement | undefined;
+  let actionButton: HTMLButtonElement | undefined;
+
+  // A focused Refresh may disable its own button while the native
+  // observation is pending. Keep focus within the read-only, scrollable
+  // message until the issue is actually removed. Select game retains the
+  // original native presentation/focus behavior.
+  function requestAction(): void {
+    if (item.action === 'refresh' && document.activeElement === actionButton)
+      statusElement?.focus({preventScroll:true});
+    onAction(item.slot,item.action);
+  }
+
+  onDestroy(() => {
+    if (item.action !== 'refresh') return;
+    const previousFocus = document.activeElement;
+    if (!(previousFocus instanceof Node) || !noticeElement?.contains(previousFocus)) return;
+    const entry = noticeElement.closest('.lt-launcher-entry');
+    if (!(entry instanceof HTMLElement)) return;
+    // Wait for the original parent to apply the observed native status.
+    // Do not focus an entry that went away during page navigation, a native
+    // game focus switch, or a later explicit user focus change.
+    void tick().then(() => {
+      if (!entry.isConnected || !document.hasFocus()) return;
+      const current = document.activeElement;
+      if (current !== document.body && current !== previousFocus) return;
+      const card = entry.querySelector<HTMLButtonElement>(':scope > .lt-card');
+      if (card?.isConnected && !card.disabled)
+        card.focus({preventScroll:true});
+      else
+        entry.focus({preventScroll:true});
+    });
+  });
 
   $: accessibleName = item.kind === 'preview'
     ? 'Minecraft - ' + item.slot + ' preview unavailable'
@@ -14,10 +49,11 @@
   $: actionName = item.action === 'open' ? 'Select game' : 'Refresh status';
 </script>
 
-<div class="lt-health-notice">
+<div class="lt-health-notice" bind:this={noticeElement}>
   <div
     class={item.kind === 'preview' ? 'lt-error lt-preview-slot-issue' : 'lt-error lt-session-slot-issue'}
     role="status"
+    bind:this={statusElement}
     aria-label={accessibleName}
     aria-describedby={'lt-health-guidance-'+item.slot}
     tabindex="0"
@@ -29,10 +65,11 @@
   <button
     type="button"
     class="lt-health-action"
+    bind:this={actionButton}
     disabled={disabled}
     aria-label={actionName + ' for Minecraft - ' + item.slot}
     aria-describedby={'lt-health-guidance-'+item.slot}
-    on:click={() => onAction(item.slot, item.action)}
+    on:click={requestAction}
   >{actionLabel}</button>
 </div>
 

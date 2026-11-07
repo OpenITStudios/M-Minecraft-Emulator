@@ -23,7 +23,9 @@ describe('Launcher recovery action target and accessibility source contracts',()
     expect(health).toContain('box-sizing: border-box; min-height: 24px;');
     expect(health).toContain('margin-top: 4px; padding: 3px 6px;');
     expect(health).toContain('disabled={disabled}');
-    expect(health).toContain('on:click={() => onAction(item.slot, item.action)}');
+    expect(health).toContain('on:click={requestAction}');
+    expect(health).toContain('onAction(item.slot,item.action);');
+    expect(health).toContain("item.action === 'refresh' && document.activeElement === actionButton");
     expect(rail).toContain('disabled={!guidedRecoveryAllowed(healthItem, profile, profile.slot,');
     expect(css).toContain('.lt-app .lt-close-launcher{width:100%;min-height:32px;');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');

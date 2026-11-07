@@ -835,3 +835,15 @@
     color:HighlightText;
   }
 }
+
+/* A removed per-slot health notice may return keyboard focus to this
+   non-actionable group when native admission keeps its main card disabled.
+   tabindex="-1" does not add a Tab stop or change any DWM node geometry. */
+.lt-filmstrip .lt-launcher-entry:focus{
+  outline:2px solid var(--lt-accent);
+  outline-offset:-2px;
+  border-radius:6px;
+}
+@media (forced-colors:active){
+  .lt-filmstrip .lt-launcher-entry:focus{outline-color:Highlight}
+}
