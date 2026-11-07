@@ -6,13 +6,14 @@ const source=(name:string)=>readFileSync(new URL('../src/'+name,import.meta.url)
 describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
   it('uses one observed status in the card text, accessible name and tooltip',()=>{
     const rail=source('LauncherRail.svelte');
-    expect(rail).toContain('{@const statusLabel = !available || !bindingConfigured');
+    expect(rail).toContain('{@const statusLabel = !observedSlot || !available || !bindingConfigured');
     expect(rail).toContain('function cardActionName(profile: ProfileSession, statusLabel: string)');
     expect(rail).toContain('aria-label={cardActionName(profile, statusLabel)}');
     expect(rail).toContain('title={statusLabel}>{statusLabel}</small>');
     expect(rail).toContain('use:observePreview={profile.slot}');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('canRequestLaunch(profile)&&onLaunch(profile.slot)');
+    expect(rail).toContain('disabled={busy||!observedSlot||!available||!bindingConfigured');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
   });
 
@@ -53,6 +54,6 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');
     expect(app).toContain('await lazyTester.present(slot, viewport.getBoundingClientRect())');
-    expect(rail).toContain('aria-pressed={profile.state===\'RUNNING\'');
+    expect(rail).toContain('aria-pressed={observedSlot&&profile.state===\'RUNNING\'');
   });
 });

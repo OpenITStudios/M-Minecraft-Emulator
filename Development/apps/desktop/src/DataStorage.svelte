@@ -116,7 +116,7 @@
 
         <div class="lt-settings-content">
           <p>Worlds, cache and settings for each launcher.</p><div class="lt-launcher-heading"><select value={selectedSlot} disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lt-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft - {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
-          {#if clearSlot!==null||recovery!==null||fullReview!==null}<p id="lt-storage-review-guidance" class="lt-help" role="status">Finish or cancel the current review before choosing another Minecraft profile.</p>{/if}
+          {#if clearSlot!==null||recovery!==null||fullReview!==null}<p id="lt-storage-review-guidance" class="lt-help" role="status">Finish or cancel the current review before changing pages or choosing another Minecraft profile.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
           {#if storage===null}
             <p class="lt-storage-feedback" role="status">Storage measurements are unavailable. Choose Refresh to inspect again; an unmeasured size does not mean a profile is empty.</p>

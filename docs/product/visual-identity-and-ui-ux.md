@@ -16,6 +16,104 @@ unverified gameplay implication. This reference is subordinate to the active
 session ownership. It does not change installed identifiers, release metadata,
 private profiles, session authority, or packaged installer compatibility.
 
+## Professional UX closure criteria — 7 November 2026
+
+**Scope and evidence rule:** this is the canonical **product UX quality bar**,
+not a second project tracker, approval register or status database. The
+current handoff remains in `planning/development.md` and the Windows
+verification owners remain under `docs/validation/`. A source change is
+**SOURCE_PREPARED**, never a Windows PASS until actual execution is
+authorized, observed, and attributed to one exact commit. Each known
+source risk and its necessary proof must remain explicit; avoid claiming
+that ten rounds of source commits constitute finished UI acceptance.
+
+### Non-negotiable user journeys
+
+1. **Starting:** once Windows native capability is confirmed, present
+   exactly five stable, disabled MC01–MC05 controls while session data
+   is unavailable. Unsupported or still-unverified host capability
+   does not advertise a native game inventory. Native `profileSlots` and the
+   original five-slot parser remain authoritative; UI placeholders are not
+   observed STOPPED processes and must never enable Launch.
+2. **Playing:** one selected native 16:9 window and five stable keyed DWM
+   targets in unchanged slots. A DWM failure does not mean the process
+   stopped, is signed in, or is playable.
+3. **Recovering:** every error or uncertain status has truthful wording
+   and only the original read-only Refresh / verified Select admission.
+   Never offer a parallel game controller or fake success.
+4. **Changing settings:** per-slot unsaved preferences are reversible;
+   saving, failure and unconfirmed receipts are visibly different.
+   Re-entering Settings must not silently discard a user's work.
+5. **Managing storage:** measurements distinguish unavailable from zero;
+   show the full date and time of the last UI-received report. Clear,
+   restore and full deletion use the original native admission.
+6. **Confirming risky actions:** switching pages does not silently
+   dismiss a pending CloseOne or Data Storage review, nor the in-flight
+   full-data-clear action. Cancel is explicit; Escape only applies while
+   keyboard focus is inside the active review.
+7. **Using secondary tools:** F3, Coordinates and optional AI & Testing
+   are passive, truthful disclosures, not new game owners. Manual
+   coordinate drafts stay isolated per launcher and are never attributed
+   to an actual world or player.
+8. **Navigating:** all interactive controls have visible keyboard focus,
+   logical Tab order and discernible state. Focus remains visible and
+   returns predictably when short-lived UI is removed.
+
+### Prioritized closure matrix
+
+`SOURCE_PREPARED` means source exists and has been inspected, **not**
+compiled or visually accepted. `RUNTIME_GATE` means the next claim
+requires separately authorized execution. `OPEN_SOURCE_RISK` is a
+known candidate for another bounded source correction if evidence
+supports it. Do not treat these as release approval.
+
+| Priority | Area and blind spot | Current source position | Closure evidence |
+| --- | --- | --- | --- |
+| P0 | Confirmed Windows host shows fewer than five cards during pending/failed binding | SOURCE_PREPARED: five fixed slot placeholders, disabled and unavailable | Delayed binding/failed binding/connected recovery, five stable DWM nodes |
+| P0 | Clicking navigation silently cancels open CloseOne/Storage review | SOURCE_PREPARED: route guard, disabled nav and explicit Cancel guidance | Escape, brand click, top/side tab, and restored keyboard focus |
+| P0 | Navigate while full-data-clear request is in flight | SOURCE_PREPARED: navigation remains unavailable until result | No page change before native confirmation/uncertainty handling |
+| P0 | Unsafe Launch / Close / Clear with stale native state | Existing native/controller gates retained | Actual original-process and token admission; no second client launched |
+| P0 | Five native viewport and preview identities | Existing owner retained | 920×620 and 1280×900, mixed five-slot HWND/DWM snapshots and stable coordinates |
+| P1 | Incomplete loading, offline and stale profile observations | Existing status projection; source-only confidence | Startup loss/retry with visible Disabled/Unavailable states, zero false readiness |
+| P1 | Long messages, varied card states and error overflow | Source text/keyboard affordances present | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
+| P1 | F3 / Coordinates popup placement and exclusivity | Source geometry + HTML details group | WebView2 named-details compatibility, overlap/scroll/resize at minimum window |
+| P1 | Optional AI & Testing header crowding on narrow/high-DPI view | OPEN_SOURCE_RISK: absolute header disclosure has no proven collision-free layout | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
+| P1 | Keyboard Escape, Cancel and ephemeral focus restoration | Source handlers present | Focus trace, game keyboard unaffected, nested and expired-report cases |
+| P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
+| P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
+| P1 | Accessible contrast, non-color state and hit target sizing | Tokens/forced-colors/reduced-motion source present | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
+| P1 | Narrow Settings/Storage and zoom/reflow | Responsive source scopes present | No hidden controls/dual-axis text scrolling at supported Windows scales |
+| P1 | Browser regression previously sent reversed profile order rejected by parser | SOURCE_PREPARED: valid inventory journey plus separate rejection fixture | Authorized synthetic browser suite and original parser tests |
+| P2 | App icon quality and independent visual identity | One SVG source and app title retained | Native Taskbar 16/24/32/48px, Win10/11 dark/light/forced-color review |
+| P2 | Repeated raw colors, selector specificity and spacing density | OPEN_SOURCE_RISK: cascade partially consolidated | Token audit + rendered component inventory, consistent states/spacing |
+| P2 | Consistent naming, help and disclosure discoverability | Source wording partially unified | English copy review with representative first-time and expert users |
+
+The highest-priority source risks must be resolved before calling this
+phase source-complete. `RUNTIME_GATE` rows cannot be closed by writing
+more unexecuted fixtures or generating mock UI images.
+
+### Required visual acceptance artifacts
+
+Use the existing validation system, not a new runner: capture sanitized
+screenshots and DOM/focus measurements of **Play, General, Data Storage,
+all five mixed statuses, delayed startup, connection failure, preview
+unavailable, CloseOne, cache/restore/full-clear review, F3, Coordinates,
+AI & Testing (when truly reported), and transient error/recovery**.
+Record the exact 40-character `Local` SHA, OS/WebView2 versions, viewport
+size, DPI, expected/observed result and PASS/FAIL/INCONCLUSIVE. Minimum
+sizes are 920×620 and 1280×900 with 100%, 125%, 150% and 200% DPI.
+Tests of profile data clearing require a disposable profile and separate
+destructive-action approval. Absent evidence remains `NOT_EXECUTED`.
+
+Quality references: [Windows navigation principles](https://learn.microsoft.com/windows/apps/design/basics/navigation-basics),
+[Windows focus navigation](https://learn.microsoft.com/windows/apps/develop/input/focus-navigation),
+[WCAG 2.2 Focus Not Obscured](https://www.w3.org/WAI/standards-guidelines/wcag/new-in-22/),
+[WCAG Non-text Contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast),
+[WCAG Target Size Minimum](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum).
+The app is a native-window host; spatially necessary DWM layout still
+requires its own Windows acceptance rather than a guessed web-only
+reflow result.
+
 ## Identity source of truth
 
 - Master vector asset: `Development/apps/desktop/src-tauri/app-icon.svg`.
@@ -298,9 +396,9 @@ sessions and Minecraft gameplay acceptance remain `NOT_EXECUTED`.
 The original CloseOne review now handles **Escape only when the event
 originates inside the focused confirmation section**. Opening CloseOne still
 focuses **Cancel**; Escape there still cancels and restores focus to the
-original Close game button. An Escape pressed over Play navigation, the
-Coordinates/F3 disclosures, or another WebView control must not silently
-dismiss an unrelated close review. The original native CloseOne admission,
+original Close game button. An Escape pressed over another enabled WebView control (such as a
+window control) must not silently dismiss an unrelated close review;
+Play/Settings navigation remains disabled until explicit Cancel. The original native CloseOne admission,
 normal-exit process owner and stale-inspection gates remain unchanged.
 
 Short-lived `AI & Testing` controller reports may vanish while keyboard
@@ -328,7 +426,7 @@ Windows/runtime evidence exists.
 | Check | View and setup | Required observed acceptance | Evidence and ceiling |
 | --- | --- | --- | --- |
 | UX-F01 | Play, selected running slot, close review open | Cancel receives initial focus; Escape inside review cancels, restores original Close game focus without a game exit | Keyboard trace + native CloseOne absence; TARGET_WINDOWS |
-| UX-F02 | Same review; keyboard focus manually moves to Play navigation | Escape outside review leaves review open and does not send CloseOne | Focus/DOM trace; TARGET_WINDOWS |
+| UX-F02 | Same review; Play/Settings navigation disabled; focus moves to an enabled titlebar control | Escape outside review leaves review open and does not send CloseOne | Focus/DOM trace; TARGET_WINDOWS |
 | UX-F03 | Storage, cache/settings/full-clear review | Safe Cancel or exact identity input receives focus; Escape within review returns to initiating control | Keyboard trace; TARGET_WINDOWS |
 | UX-F04 | F3, Coordinates, optional AI & Testing disclosures | One open at a time, Escape returns to own summary; game focus/keys are not stolen | Keyboard focus trace + WebView2 version; TARGET_WINDOWS |
 | UX-F05 | Optional AI & Testing report expires while focused | Report disappears on schedule, no stale gameplay claims; focus returns to active nav only when owned by disappearing disclosure | Recorded keyboard focus + native report age; TARGET_WINDOWS |
@@ -436,3 +534,35 @@ the accurate per-launcher help copy.
 `AUTHORED_NOT_EXECUTED` fixtures only. No Svelte typecheck, browser
 fixture, WebView2 support/scroll verification, Windows 920×620/DPI
 rendering, DWM preview, or Minecraft session acceptance was executed.
+
+## UX closure audit and source corrections (7 November 2026)
+
+The source correction in this revision pins the Windows-native manager
+inventory to five unobserved, non-launchable UI slot placeholders while
+session binding is pending, until the original native controller supplies
+a complete, validated five-slot snapshot. Unknown host capability does
+not show a game inventory; the confirmed unsupported-host policy remains
+unchanged: no native-game inventory or commands. A status-less placeholder cannot trigger Launch, Select,
+Close, DWM recovery or data operations by itself.
+
+Page transitions are held while a CloseOne / Storage review is open, or while
+full profile deletion is in progress. The disabled navigation and review
+help explicitly direct the operator to **Cancel** before switching. The
+original shared UI dispatcher, native CloseOne, Storage approval/backup
+and deletion token checks remain unchanged.
+
+The synthetic browser regression now tests a delayed native binding with
+five non-actionable cards. The prior reversed native snapshot fixture was
+invalid because the native-schema parser explicitly requires five ordered
+slots; it now verifies stable card identity through **valid** updates,
+while a separate source fixture asserts reversed snapshots are rejected.
+None of these tests was executed.
+
+The Storage timestamp now includes a date and a time so an older measured
+size does not read as a current-day measurement. This remains the time the
+UI received the controller report; it does not inspect file changes itself.
+
+Remaining high-risk items include optional topbar disclosure crowding,
+minimum-window/high-DPI actual geometry, screen-reader focus, target sizing,
+all unconfirmed native receipts, and true five-session DWM performance.
+These are **NOT_EXECUTED**, not passed.

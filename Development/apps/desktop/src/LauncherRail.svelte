@@ -1,6 +1,6 @@
 <script lang="ts">
   // Presentation only; native game/session ownership and scheduling stay in LazyTesterApp.
-  import {canRequestLaunch, type ProfileSession, type ProfileSlot} from './app/bridge/lazyTester.js';
+  import {canRequestLaunch, profileSlots, type ProfileSession, type ProfileSlot} from './app/bridge/lazyTester.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
   import {launcherCardGuidance} from './app/presentation/sessionHealth.js';
   import type {SessionHealthIssue, SessionHealthAction} from './app/presentation/sessionHealth.js';
@@ -28,7 +28,14 @@
 
   // A changing native enumeration never changes a launcher's visual slot.
   // Existing keyed elements retain their original native DWM preview targets.
-  $: orderedProfiles = [...profiles].sort((left, right) => left.slot - right.slot);
+  // The native session snapshot is either five verified slots or unavailable.
+  // Render presentation-only placeholders during initial binding failure so
+  // all five keyed DWM card targets exist from the first Windows UI frame.
+  // This does not create a native STOPPED observation or authorize Launch.
+  $: orderedProfiles = profileSlots.map((slot): ProfileSession =>
+    profiles.find(profile => profile.slot === slot) ?? {
+      slot, state: 'STOPPED', process: null, issue: 'UNOBSERVED_UI_PLACEHOLDER',
+    });
 
   // Accessible action names describe what is currently possible. A blocked or
   // unobserved launcher is never announced as a ready-to-launch button.
@@ -43,11 +50,12 @@
 
 <div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">
   {#each orderedProfiles as profile (profile.slot)}
-    {@const healthItem = healthIssues.find(item => item.slot === profile.slot)}
+    {@const observedSlot = profiles.some(item => item.slot === profile.slot)}
+    {@const healthItem = observedSlot ? healthIssues.find(item => item.slot === profile.slot) : undefined}
     {@const guidance = launcherCardGuidance(
-      profile, available && bindingConfigured && !unresolvedRecovery.has(profile.slot)
+      profile, observedSlot && available && bindingConfigured && !unresolvedRecovery.has(profile.slot)
     )}
-    {@const statusLabel = !available || !bindingConfigured
+    {@const statusLabel = !observedSlot || !available || !bindingConfigured
       ? 'Status unavailable'
       : active === profile.slot && !detached && profile.state === 'RUNNING'
         ? 'Selected in Play'
@@ -57,16 +65,16 @@
             ? 'Running in background'
             : labels[profile.state]}
     <div class="lt-launcher-entry" data-slot={profile.slot} title={guidance??undefined}>
-      <button class="lt-card" class:selected={active===profile.slot&&!detached}
-        aria-pressed={profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
+      <button class="lt-card" class:selected={observedSlot&&active===profile.slot&&!detached}
+        aria-pressed={observedSlot&&profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
         aria-label={cardActionName(profile, statusLabel)}
         aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
-        disabled={busy||!available||!bindingConfigured||
+        disabled={busy||!observedSlot||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
         <strong title={'Minecraft - '+profile.slot}>Minecraft - {profile.slot}{active===profile.slot&&!detached?' ✓':''}</strong>
-        <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
-        <small class={available&&bindingConfigured
+        <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!observedSlot||!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
+        <small class={observedSlot&&available&&bindingConfigured
           ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'
             ? 'lt-status-attention'
             : profile.state==='STARTING'
@@ -86,7 +94,7 @@
               primarySlot: primary,
             })}/>
       {/if}
-      {#if ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
+      {#if observedSlot && ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
         <button class="lt-secondary lt-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}
           disabled={busy||closeInProgress||nativeExitReview||!available||!bindingConfigured}

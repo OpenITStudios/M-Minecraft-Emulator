@@ -70,6 +70,12 @@
   let loadingPage: Page | null = null;
   let pageHeading: HTMLHeadingElement | undefined;
   let initializing = true, checkingStorage = false, storageCheckedAt = '';
+  // A clock time alone is ambiguous after an overnight/open-window session.
+  // The timestamp describes the last UI-received storage report, not a live
+  // native filesystem measurement or a verified game/world state.
+  function measuredStorageAt(): string {
+    return new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'});
+  }
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
   let viewport: HTMLDivElement, stageSpace: HTMLDivElement, observer: ResizeObserver | undefined;
   let busy = false, refreshing = false, resizing = false, available = false;
@@ -120,6 +126,10 @@
     selectedReview: closeOneSlot !== null,
     selectedCloseRunning: closingOneSlot !== null,
   });
+  // Page changes must not silently dispose a visible CloseOne or Storage
+  // review. The user explicitly cancels it before navigating elsewhere.
+  $: navigationReviewOpen = closeReviewPending || clearingData ||
+    clearSlot !== null || recovery !== null || fullReview !== null;
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
   const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
@@ -338,7 +348,8 @@
   }
   function navigate(next: typeof page) {
     // Settings and storage require the Windows native session owner.
-    if (nativeBackend !== 'WindowsNative') return;
+    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) ||
+        clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;
     if (page==='settings') rememberGraphicsDraft();
     closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
     if(next==='launchers')next='workspace';
@@ -366,7 +377,7 @@
       }
       if(next==='storage'&&binding?.configured) {
         const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;
-        storageCheckedAt=new Date().toLocaleTimeString('en-US');
+        storageCheckedAt=measuredStorageAt();
       }
       dirty = true;
     } catch (error) { issueKey='workspace'; dirty = true; }
@@ -383,7 +394,7 @@
         if(!binding?.configured)await checkBinding();
         try{dataLocation=await lazyTester.dataLocation();locationIssue='';}
         catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;throw error;}
-        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageCheckedAt=new Date().toLocaleTimeString('en-US');available=true;connectionIssueKey=null;}
+        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageCheckedAt=measuredStorageAt();available=true;connectionIssueKey=null;}
       }catch(error){issueKey='storage';storage=null;}
       finally{checkingStorage=false;busy=false;}
     } else {
@@ -645,7 +656,7 @@
     try {
       const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage;
       available = true; connectionIssueKey=null;
-      storageCheckedAt = new Date().toLocaleTimeString('en-US');
+      storageCheckedAt = measuredStorageAt();
     }
     catch (error) { issueKey='storage'; storage = null; }
     finally { checkingStorage = false; busy = false; }
@@ -730,7 +741,7 @@
     try {
       const snapshot = await lazyTester.clearCache(slot);
       profiles = snapshot.profiles; storage = snapshot.storage;
-      storageCheckedAt = new Date().toLocaleTimeString('en-US');
+      storageCheckedAt = measuredStorageAt();
       storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
       issueKey='cache'; storage = null;
@@ -758,7 +769,7 @@
           ? await lazyTester.disableImprovedInputResponse(pending.slot)
           : await lazyTester.recoverSettings(pending.slot,pending.action);
       profiles=snapshot.profiles;storage=snapshot.storage;
-      storageCheckedAt=new Date().toLocaleTimeString('en-US');
+      storageCheckedAt=measuredStorageAt();
       storageNotice=pending.action==='EnableTextureStreaming'
         ? 'Minecraft - '+pending.slot+': Texture Streaming enabled in saved options. Restart normally; GPU and system RAM benefits remain unverified. The previous settings are backed up.'
         : pending.action==='DisableTextureStreaming'
@@ -787,7 +798,7 @@
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
       profiles=snapshot.profiles;storage=snapshot.storage;
-      storageCheckedAt=new Date().toLocaleTimeString('en-US');
+      storageCheckedAt=measuredStorageAt();
       storageNotice=`Minecraft - ${pending.slot}: local data cleared. Its next launch uses an empty profile. Other launchers, the Minecraft installation and app preferences are kept.`;
     } catch(error) {issueKey='clearData';storage=null;}
     finally {busy=false;clearingData=false;}
@@ -886,15 +897,15 @@
 <div class="lt-app">
   <WindowTitlebar backendSupport={nativeBackend} />
   <header class="lt-topbar">
-    <a class="lt-brand" href="#play" on:click|preventDefault={() => navigate('workspace')}><span class="lt-brand-mark" aria-hidden="true"></span>Lazy Tester</a>
-    <nav aria-label="Main navigation"><button disabled={closeInProgress} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={closeInProgress||nativeBackend!=='WindowsNative'} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
+    <a class="lt-brand" href="#play" aria-disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} on:click|preventDefault={() => navigate('workspace')}><span class="lt-brand-mark" aria-hidden="true"></span>Lazy Tester</a>
+    <nav aria-label="Main navigation"><button disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={navigationReviewOpen||nativeBackend!=='WindowsNative'} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
     {#if page==='workspace'&&available&&activityView}
       <AgentActivityNotice view={activityView}/>
     {/if}
     <span class="lt-connection" role="status"><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
-    {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
+    {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1 bind:this={pageHeading} tabindex={page==='workspace'?undefined:-1}>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
@@ -956,7 +967,7 @@
         {#if closeOneSlot!==null}
           <section class="lt-single-close-confirm" aria-label="Confirm one Minecraft close" bind:this={closeOneReviewElement}>
             <h3>Close Minecraft - {closeOneSlot}?</h3>
-            <p>Only this Minecraft session will be asked to exit normally. Other games will keep running. Save any work in Minecraft before continuing.</p>
+            <p>Only this Minecraft session will be asked to exit normally. Other games will keep running. Save any work in Minecraft before continuing. Choose Cancel before switching pages.</p>
             <div class="lt-actions">
               <button disabled={busy||refreshing||resizing||closeInProgress||nativeExitReview} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
               <button class="lt-secondary" bind:this={closeCancelButton} disabled={busy||closeInProgress||nativeExitReview} on:click={cancelCloseOne}>Cancel</button>

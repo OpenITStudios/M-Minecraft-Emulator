@@ -37,6 +37,9 @@ describe("Emulator source verification routing", () => {
     expect(ui).not.toContain('<div class="lt-filmstrip"');
     expect(rail).toContain('<div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">');
     expect(rail).toContain("use:observePreview={profile.slot}");
+    expect(rail).toContain("profileSlots.map((slot): ProfileSession =>");
+    expect(rail).toContain("issue: 'UNOBSERVED_UI_PLACEHOLDER'");
+    expect(rail).toContain("disabled={busy||!observedSlot||!available||!bindingConfigured");
     expect(rail).toContain("canRequestLaunch(profile)&&onLaunch(profile.slot)");
     expect(rail).toContain("guidedRecoveryAllowed(healthItem, profile, profile.slot,");
     expect(rail).toContain("onRequestClose(profile.slot,event.currentTarget)");
@@ -148,7 +151,7 @@ describe("Emulator source verification routing", () => {
     expect(bar).not.toContain("String(reason)");
     expect(bar).not.toContain("error=String(");
     expect(bar).not.toContain("{error}</p>");
-    expect(cards).toContain("profile, available && bindingConfigured && !unresolvedRecovery.has(profile.slot)");
+    expect(cards).toContain("profile, observedSlot && available && bindingConfigured && !unresolvedRecovery.has(profile.slot)");
     expect(cards).toContain("unresolvedRecovery: ReadonlySet<ProfileSlot>");
     expect(cards).toContain("title={guidance??undefined}");
     expect(cards).toContain("aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}");

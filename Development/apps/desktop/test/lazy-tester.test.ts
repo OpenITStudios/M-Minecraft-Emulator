@@ -12,6 +12,11 @@ const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('rejects reversed native inventory rather than trusting unverified order',()=>{
+    const snapshot=stopped();
+    expect(()=>parseSession({...snapshot,profiles:[...snapshot.profiles].reverse()}))
+      .toThrow('Invalid profile response');
+  });
   it('accepts only compiled-backend support, never user agent or gameplay guesses',()=>{
     expect(parseNativeBackendSupport('WindowsNative')).toBe('WindowsNative');
     expect(parseNativeBackendSupport('Unsupported')).toBe('Unsupported');

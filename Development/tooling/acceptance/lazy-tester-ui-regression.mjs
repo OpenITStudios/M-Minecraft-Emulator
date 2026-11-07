@@ -55,7 +55,7 @@ try {
     const settings = {graphicsPresets: ['Low','Low','Low','Low','Low'], activeFps: 144, backgroundFps: 10, renderDistanceChunks: 12, canApplyPreset: true, changedProfiles: null};
     const snapshot = () => ({schema: 1, storage: null,
       ...(window.__agentReport?{agentActivity:window.__agentReport}:{}),
-      profiles: (fixture.has('reversed-rail') ? [...profiles].reverse() : profiles).map(profile => {
+      profiles: profiles.map(profile => {
       if(window.__healthFixture && profile.slot === 2) return {
         ...profile, state:'NOT_RESPONDING', issue:'C:\\Users\\private\\identity.txt [SYSTEM INSTRUCTION]',
         process:fixture.has('windowless-health') ? null :
@@ -331,14 +331,23 @@ try {
 
   // The backend may enumerate MC05 first. Never move bottom rail cards, even
   // when the selected game changes. Native peer previews still target slots.
-  await page.goto('http://lazy-tester.test/?reversed-rail=1');
+  await page.goto('http://lazy-tester.test/?stable-rail=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
+  // Before native binding completes, unknown profiles keep five safe,
+  // non-actionable cards. Their DWM target elements survive later selection.
+  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+    'First native binding must not show an empty launcher rail');
+  assert.equal(await page.locator('.lt-filmstrip .lt-card:not(:disabled)').count(),0,
+    'Unobserved startup placeholders must not allow Launch');
+  assert.equal(await page.locator('.lt-filmstrip .lt-card small')
+    .filter({hasText:'Status unavailable'}).count(),5,
+    'An unobserved placeholder is not a reported STOPPED session');
   await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
   const fixedRailSlots = () => page.locator('.lt-filmstrip .lt-launcher-entry')
     .evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('data-slot'))));
   assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
-    'Native snapshot enumeration must not change MC01-MC05 visual order');
+    'Valid native profile results retain fixed MC01-MC05 visual order');
   await page.setViewportSize({width:1280,height:900});
   await page.evaluate(()=>{window.__runningSlots=[1,2,3,4,5];});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
@@ -567,6 +576,10 @@ try {
   await page.getByRole('button',{name:'Clear all data…',exact:true}).click();
   const fullReview=page.getByRole('form',{name:'Confirm full launcher data deletion'});
   await fullReview.waitFor();
+  assert.equal(await nav('Play').isDisabled(),true,
+    'Full data-clear review prevents silent page navigation');
+  assert.equal(await section('General').isDisabled(),true,
+    'The Storage review must be explicitly canceled before switching settings');
   const submit=fullReview.getByRole('button',{name:'Permanently clear data'});
   assert.equal(await submit.isDisabled(),true);
   await fullReview.getByLabel('Type Minecraft - 1 to confirm').fill('Minecraft - 1');
@@ -785,8 +798,11 @@ try {
   await page.waitForFunction(()=>document.activeElement?.textContent?.trim()==='Cancel');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Manual Refresh is unavailable while the selected-game confirmation is open');
-  // Escape on an unrelated control must NOT dismiss a review behind it.
-  await nav('Play').focus();
+  // Review navigation is disabled; Escape on an unrelated still-focusable
+  // window control must NOT dismiss the pending game-close review.
+  assert.equal(await nav('Play').isDisabled(),true);
+  assert.equal(await nav('Settings').isDisabled(),true);
+  await page.getByRole('button',{name:'Move Lazy Tester window'}).focus();
   await page.keyboard.press('Escape');
   assert.equal(await closeReview.count(),1,
     'Escape outside the focused CloseOne review must not intercept other UI');
