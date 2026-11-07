@@ -184,9 +184,9 @@ try {
   // A refused window operation must not reveal untrusted OS diagnostics.
   await page.goto('http://lazy-tester.test/?window-error=1');
   const windowAlert=page.locator('.lt-window-bar + .lt-alert[role="alert"]');
-  await windowAlert.getByText('Window status is unavailable. You can continue using Lazy Tester.').waitFor();
+  await windowAlert.getByText('You can keep using LazyTester. Refresh to check.').waitFor();
   await page.getByRole('button',{name:'Minimize'}).click();
-  await windowAlert.getByText('The window action could not be completed. Try again.').waitFor();
+  await windowAlert.getByText('Refresh status before trying the window action again.').waitFor();
   await windowAlert.locator('summary').click();
   assert.match(await windowAlert.textContent(),/Display.*LT-DIS-05/s);
   assert.doesNotMatch(await windowAlert.textContent(),/SYSTEM INSTRUCTION|PID 999|worlds/,
@@ -216,7 +216,7 @@ try {
   assert.equal(await nav('Settings').isDisabled(),true,'unsupported host must not expose native settings');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true);
   assert.equal(await page.locator('.lt-filmstrip').count(),0,'unsupported host has no game inventory');
-  assert.equal(await page.getByRole('button',{name:'Close Lazy Tester'}).getAttribute('title'),'Close Lazy Tester');
+  assert.equal(await page.getByRole('button',{name:'Close LazyTester'}).getAttribute('title'),'Close LazyTester');
   await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
   // Cross the 2-second background observer interval as well as resize.
   await page.waitForTimeout(2150);
@@ -505,7 +505,7 @@ try {
   assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 5 · /}).count(),1);
   assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 1 · /}).getAttribute('aria-pressed'),null,
     'Launch is an action, not a selected-state toggle');
-  assert.equal(await page.getByRole('button',{name:'Exit Lazy Tester and all managed Minecraft sessions',exact:true}).count(),1,
+  assert.equal(await page.getByRole('button',{name:'Exit LazyTester and all managed Minecraft sessions',exact:true}).count(),1,
     'Assistive control must state that closing the manager also closes managed games');
   assert.equal(await nav('Play').getAttribute('aria-current'),'page');
   // Unchanged background checks must not flash controls, lock cards or move native surfaces.
@@ -1155,7 +1155,7 @@ try {
   // Native Maximize remains the real, independently focusable window action.
   assert.equal(await page.locator('.lt-window-drag[data-tauri-drag-region]').count(),1,
     'The branded titlebar keeps its original Tauri-native drag region');
-  assert.equal(await page.getByRole('button',{name:'Move Lazy Tester window'}).count(),0,
+  assert.equal(await page.getByRole('button',{name:'Move LazyTester window'}).count(),0,
     'Pointer-only titlebar drag cannot pollute the keyboard button list');
   await page.getByRole('button',{name:'Maximize',exact:true}).focus();
   await page.keyboard.press('Escape');

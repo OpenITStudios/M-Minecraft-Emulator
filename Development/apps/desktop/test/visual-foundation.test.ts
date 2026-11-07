@@ -28,7 +28,7 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(bar).toContain('<span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span>');
     expect(bar).toContain('<span data-tauri-drag-region>LazyTester</span>');
     expect(bar).not.toContain('<button class="lt-window-drag"');
-    expect(bar).not.toContain('Move Lazy Tester window');
+    expect(bar).not.toContain('Move LazyTester window');
     expect(bar).not.toContain('on:dblclick=');
     expect(bar).toContain('aria-label="Minimize"');
     expect(bar).toContain("aria-label={maximized?'Restore down':'Maximize'}");

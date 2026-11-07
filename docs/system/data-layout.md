@@ -16,7 +16,7 @@ Desktop and Start Menu entries are shortcuts to that same root launcher.
 Neither the shortcut nor the root launcher owns profiles or game sessions.
 Data is resolved from the executable/project location, never the working directory.
 
-\`\`\`text
+```text
 M-Minecraft-Emulator/                 one Local checkout, not several app roots
   DEV.cmd                             developer actions (authorization required)
   RUN.cmd                             starts an already prepared root launcher
@@ -53,7 +53,7 @@ M-Minecraft-Emulator/                 one Local checkout, not several app roots
     packages/lazy-tester/            immutable installer candidates/receipts
     runs/                             private local-test receipts
     private/local-app-backups/        retained old App / launcher snapshots
-\`\`\`
+```
 
 **One-root Windows development contract.** On a fresh checkout, `App/`,
 `Data/`, and `Lazy Tester.exe` may not exist yet. The current native root
@@ -66,8 +66,8 @@ switch roots. Preserve that directory for explicit review; never move,
 merge, delete, reparse-link or reset it automatically.
 
 **Installed layout is separate by design.** A new approved per-user NSIS
-install defaults to `%USERPROFILE%\\Lazy Tester\\App\\` with
-`%USERPROFILE%\\Lazy Tester\\Data\\` as its sibling; existing install
+install defaults to `%USERPROFILE%\Lazy Tester\App\` with
+`%USERPROFILE%\Lazy Tester\Data\` as its sibling; existing install
 locations remain authoritative and are never silently migrated.
 Windows-owned Microsoft sign-in/DPAPI components, licensed Minecraft,
 shortcuts and OS toolchains stay in Windows-managed locations. Do not run
