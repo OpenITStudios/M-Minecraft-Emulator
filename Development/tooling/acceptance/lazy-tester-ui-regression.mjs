@@ -316,7 +316,6 @@ try {
     'F3 Escape restores its own summary focus and does not trap the next Tab');
   assert.equal(await toolsMenu.getAttribute('open'),'',
     'Closing the nested F3 panel leaves the parent Tools menu intact');
-  await toolsSummary.focus();
   await page.keyboard.press('Escape');
   assert.equal(await toolsMenu.getAttribute('open'),null,
     'Escape on Tools closes the optional menu without affecting Minecraft');

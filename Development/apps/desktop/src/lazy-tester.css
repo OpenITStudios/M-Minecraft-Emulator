@@ -987,11 +987,9 @@
   display:flex;flex-direction:column;align-items:stretch;gap:4px;
   min-width:188px;width:max-content;max-width:calc(100vw - 24px);
   padding:7px;border:1px solid var(--lt-control-outline);
-  border-left:1px solid var(--lt-control-outline);
   border-radius:8px;background:var(--lt-panel);
   box-shadow:0 12px 28px var(--lt-popup-shadow);
 }
-.lt-play-utilities[open] > .lt-play-tools{padding-left:7px}
 .lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste{width:100%;flex:none}
 .lt-play-utilities[open] > .lt-play-tools > .lt-coordinate-paste > summary{
   width:100%;text-align:left;

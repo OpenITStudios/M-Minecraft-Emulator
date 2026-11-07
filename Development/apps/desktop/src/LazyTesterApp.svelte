@@ -98,7 +98,7 @@
     // Nested F3/Coordinates own their original Escape and focus restoration.
     // Even if a child closes during this event, don't close both levels.
     if (event.target instanceof Element &&
-        event.target.closest('details.lt-coordinate-paste')) return;
+        event.target.closest('details.lt-coordinate-paste[open]')) return;
     event.preventDefault();
     event.stopPropagation();
     playToolsElement.open = false;

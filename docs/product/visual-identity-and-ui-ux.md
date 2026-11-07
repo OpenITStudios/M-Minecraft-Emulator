@@ -1084,9 +1084,10 @@ does not create a new persistent user setting, status poller or IPC.
 Its panel is positioned outside normal document flow so the optional
 controls no longer force header wrapping at 920px. Child F3/Coordinates
 retain their original HTML details, popup projection and scoped Escape.
-Escape on the parent summary closes only Tools. Normal Tab/Shift+Tab
-and focus leaving the menu dismiss the parent without redirecting game
-focus; native WebView blur also collapses it. Only user-initiated opening
+Escape in an open F3/Coordinates panel closes only that child; a
+subsequent Escape at its focused closed summary closes Tools. Normal
+Tab/Shift+Tab and focus leaving the menu dismiss the parent without
+redirecting game focus; native WebView blur also collapses it. Only user-initiated opening
 can display the secondary panel above the main stage.
 
 The browser regression fixture now explicitly opens Tools before

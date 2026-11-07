@@ -109,7 +109,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(coord).toBeGreaterThan(f3);
     expect(app).toContain('on:focusout={closePlayToolsOnFocusOut} on:keydown={closePlayToolsOnEscape}');
     expect(app).toContain('<svelte:window on:blur={closePlayToolsOnBlur} />');
-    expect(app).toContain("event.target.closest('details.lt-coordinate-paste')");
+    expect(app).toContain("event.target.closest('details.lt-coordinate-paste[open]')");
     expect(app).toContain('playToolsElement.open = false;');
     expect(css).toContain('.lt-play-utilities[open] > .lt-play-tools{');
     expect(css).toContain('position:absolute;right:0;top:calc(100% + 6px);z-index:21;');
