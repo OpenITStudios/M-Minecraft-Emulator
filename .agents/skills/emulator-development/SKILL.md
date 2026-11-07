@@ -19,6 +19,12 @@ Applies to system development, refactoring, bug fixes and documentation that cha
    exact current source manually and never claim the CLI executed. The
    documentation graph remains separate, and seven upstream methods remain
    conditional references, not additional Skills or runtime authority.
+   For material design rationale, consult
+   [Architecture Reasoning](../../../docs/system/architecture-reasoning.md):
+   inspect exact authored owner rows, applicable canonical invariant
+   text and optional bounded Git Work/path history. Git trailers remain
+   historical author claims and never authorize a new runtime owner.
+   Missing Git never blocks independent current-source review.
 4. Separate facts observable in source from unexecuted tests and Windows/VMware/Minecraft acceptance. Existing successful checks at a different SHA are not evidence for the current change.
 5. Consider no change, correction of the existing owner, reuse, and only then a new component. Never add a second lifecycle/readiness manager, provider state store, account automation or speculative compatibility alias.
 6. For material changes, follow [evidence-grounded source improvement](../../../docs/system/development-discipline.md#evidence-grounded-source-improvement-harness--deepseek-harness--rea):

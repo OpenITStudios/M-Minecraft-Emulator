@@ -213,14 +213,16 @@ const QUALITY_AREAS=Object.freeze({
     checks:[
       'Keep one allowlisted developer command owner, exact Local SHA and non-executable read-only planning.',
       'Reject arbitrary shell/tool/plugin activation, CI, implicit approval and unscoped deletion.',
-      'Check affected consumer paths and authored positive/negative regressions; do not label them executed.'
+      'Check affected consumer paths and authored positive/negative regressions; do not label them executed.',
+      'When rationale matters, consult optional read-only architecture-context/decision-history evidence; a historical Git trailer is not source authorization or test PASS.'
     ]
   }),
   'documentation':Object.freeze({
     owner:'Existing canonical AGENTS, docs/system and planning/development.md',
     checks:[
       'Resolve references to current source and remove stale claims rather than duplicate policy or status owners.',
-      'Keep authored tests distinct from executed tests and historical evidence distinct from exact-HEAD proof.'
+      'Keep authored tests distinct from executed tests and historical evidence distinct from exact-HEAD proof.',
+      'Reconcile canonical owner/invariant references against actual current source; an earlier Git Decision/Proof is recorded author intent only.'
     ]
   }),
   'cross-cutting':Object.freeze({

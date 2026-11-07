@@ -112,6 +112,19 @@ runtime behavior remain outside this milestone. No Windows Computer Use,
 native controller, product CI, account/world data, or current primary next
 action changed.
 
+The bounded architecture improvement now includes
+[Architecture Reasoning and Decision Provenance](../docs/system/architecture-reasoning.md):
+one read-only explanation composed of the existing implementation-map
+owner references, canonical invariant text, conservative Source Graph
+impact and optional direct Git commit history by exact Work trailer or
+source path. Git author decisions remain historical claims; dirty or
+unavailable Git, missing owners, incomplete imports and unexecuted
+checks stay UNKNOWN. No ADR database, memory store, agent, CI, native
+runtime/installer, credentials, account/world migration or automatic
+approval was added. Fixtures are AUTHORED_NOT_EXECUTED. The existing
+primary Windows background Computer Use goal and single current next
+action remain unchanged.
+
 ## Product and owners
 
 - **Product:** Lazy Tester, one Windows desktop manager for up to five

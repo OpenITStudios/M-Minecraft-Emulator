@@ -47,6 +47,19 @@ claiming the optional Node query ran. Source implementation authority
 remains [implementation map](docs/system/implementation-map.md) and
 actual code; no other agent or source registry is authorized.
 
+**Architecture Reasoning and Decision Provenance:** For source changes
+where design rationale, owner boundaries or earlier decisions matter,
+consult [Architecture Reasoning](docs/system/architecture-reasoning.md).
+The optional `--architecture-context` command combines authored
+implementation-map owner rows, invariant text and conservative source
+impact. The `--decision-history <exact-Work>` query and optional
+path-scoped Git history read the operator-selected `Local` branch.
+These are **historical author claims**, not current requirements,
+execution PASS, approval or authority to revive retired systems.
+Missing owner, dirty/unavailable Git and incomplete parsing remain
+UNKNOWN. Never create a duplicate ADR ledger, agent memory, persistent
+architecture graph or CI job.
+
 ## Priority and branch
 
 Current user intent guides bounded work, subject to source authority,

@@ -65,8 +65,15 @@ Require an explicit distinction between observed source declarations,
 global missing-parser/unknown source coverage, Tauri named-command bindings,
 native C/C++ includes, and runtime-verified behavior. A declared Tauri
 name does not prove payload compatibility or successful Windows IPC.
-Consult the original implementation owner before editing. Keep the
-current no-CI and no-source-test-execution decision unchanged.
+Consult the original implementation owner before editing. The optional
+[Architecture Reasoning](docs/system/architecture-reasoning.md)
+combines authored owner/invariant text with bounded exact-`Work` or
+file-scoped Git decisions. Earlier `State: DONE`, `Decision:` and
+`Proof:` are recorded author claims, not current source authority,
+permission, passed tests or runtime acceptance. A dirty checkout
+cannot be treated as identical to its pinned Git HEAD. Do not infer
+design supersession from chronology alone. Keep the current no-CI
+and no-source-test-execution decision unchanged.
 
 ## 4. Diagnose the first wrong owner
 
