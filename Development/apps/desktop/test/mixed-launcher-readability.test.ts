@@ -24,7 +24,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(css).toContain('max-height:min(88px,16dvh);');
     expect(css).toContain('overflow:auto;\n  overflow-wrap:anywhere;');
     expect(css).toContain('overscroll-behavior:contain;');
-    expect(app).toContain('<div class="lt-alert" role="alert" tabindex="0">');
+    expect(app).toContain('<div class="lt-alert" role="alert" tabindex="0" aria-label="Action needs attention">');
     expect(app).toContain('tabindex="0" aria-label="Window recovery unconfirmed"');
     expect(app).toContain('tabindex="0" aria-label="Launcher recovery"');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
@@ -40,7 +40,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(rail).toContain('use:observePreview={profile.slot}');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('canRequestLaunch(profile)&&onLaunch(profile.slot)');
-    expect(rail).toContain('disabled={busy||!observedSlot||!available||!bindingConfigured');
+    expect(rail).toContain('disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
   });
 
@@ -64,7 +64,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(health).toContain("title={item.title+' — '+item.guidance}");
     expect(health).toContain("id={'lt-health-guidance-'+item.slot}");
     expect(health).toContain('tabindex="0"');
-    expect(app).toContain('<div class="lt-alert" role="alert" tabindex="0">');
+    expect(app).toContain('<div class="lt-alert" role="alert" tabindex="0" aria-label="Action needs attention">');
     expect(app).toContain('tabindex="0" aria-label="Window recovery unconfirmed"');
     expect(app).toContain('tabindex="0" aria-label="Launcher recovery"');
     expect(css).toContain('max-height:38px;');
