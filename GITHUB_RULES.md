@@ -55,8 +55,14 @@ is a derived, optional read-only view, not runtime verification, an
 execution engine, or a source-dependency call graph. Historical and
 legacy `WORKING` metadata cannot promote old VM/CI designs to active
 authority. Missing links stay UNKNOWN; do not infer relationships from
-similar filenames. Keep the current no-CI and no-source-test-execution
-decision unchanged.
+similar filenames. For code-change impact, the separate
+[Source Dependency Graph](docs/system/source-dependency-graph.md)
+records exact source declaration witnesses and bounded potential
+reverse import reachability. Its parser gaps, cfg/feature ambiguity,
+unresolved imports and unscanned languages must remain explicit; an
+absence of edges is **not** safety, no-impact or test PASS proof.
+Consult the original implementation owner before editing. Keep the
+current no-CI and no-source-test-execution decision unchanged.
 
 ## 4. Diagnose the first wrong owner
 

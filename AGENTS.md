@@ -35,8 +35,17 @@ Context with explicit proof ceiling -> decision. Its canonical contract is
 Obsidian wiki links, Mermaid/Pele diagram output and Graphify-inspired
 query-first navigation are read-only views, **not installed services**.
 No source dependency or Minecraft/runtime relationship can be inferred
-from a documentation edge. Source implementation authority remains
-[implementation map](docs/system/implementation-map.md) and actual code.
+from a documentation edge. For code changes, use the separate
+[Source Dependency Graph](docs/system/source-dependency-graph.md) when
+useful: selected existing Rust/TypeScript/JavaScript/Svelte source ->
+literal declaration witnesses -> reverse potentially affected files ->
+unresolved parser/feature gaps. Its source results are **potential
+static reachability only**, not proof of function use, successful builds,
+live game input, native Windows sessions or test results. In GitHub Chat
+without source execution, inspect the same imports directly instead of
+claiming the optional Node query ran. Source implementation authority
+remains [implementation map](docs/system/implementation-map.md) and
+actual code; no other agent or source registry is authorized.
 
 ## Priority and branch
 

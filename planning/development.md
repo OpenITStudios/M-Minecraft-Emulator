@@ -93,7 +93,14 @@ metadata. It adds no separate agent/runtime manager, code-dependency proof,
 execution, CI, status owner or product change. The primary Windows
 Computer Use continuation and its single next action remain unchanged.
 See [knowledge navigation](../docs/system/repository-knowledge-graph.md).
-Optional Node fixtures are AUTHORED_NOT_EXECUTED.
+Optional Node fixtures are AUTHORED_NOT_EXECUTED. The same bounded
+architecture work now adds an opt-in, file-level
+[source dependency analysis](../docs/system/source-dependency-graph.md):
+TypeScript/Svelte declared parsers, lexical Rust module/use references,
+source-site witnesses and conservative import impact/trace. Unresolved
+parser availability and cfg/feature conditions are never promoted to
+proof. No Windows Computer Use, native controller, product CI, account/world
+data, or current primary next action changed.
 
 ## Product and owners
 

@@ -70,8 +70,10 @@ links. Missing relationships stay unresolved.
 ### Keep three graphs separate
 
 1. **Documentation/navigation graph** — built here from authored route links.
-2. **Repository source-dependency / affected-work graph** — requires separate
-   actual source analysis; the current CLI makes *no* import/impact claim.
+2. **Repository source-dependency / affected-work graph** —
+   [Source Dependency Graph](source-dependency-graph.md) uses a separate,
+   opt-in AST/lexical source-declaration projection with conservative
+   potential-file impact, explicit missing parse coverage and source sites.
 3. **Minecraft/runtime/process graph** — must use original Rust session,
    identity, IPC and verified Windows/game observations; never derived from
    this repository documentation graph.
@@ -105,10 +107,12 @@ Obsidian vault (repository root is the vault root) and a Mermaid diagram that
 can be inspected with compatible diagram tooling, including Pele workflows.
 It **does not install or invoke Obsidian, Pele or Graphify**. Graphify-like
 query-first navigation inspires the design, but this implementation does not
-claim full Graphify AST parsing, clustering, embeddings, HTML visualization,
-MCP, watchers, automatic exports, or change-impact analysis. Those require
-separate justification and explicit permission, particularly if they introduce
-new dependencies or mutation.
+claim full Graphify behavior, complete Rust AST analysis, semantic
+clustering, embeddings, HTML visualization, MCP, watchers, or automatic
+exports. The separate source-declaration impact projection is deliberately
+bounded and cannot establish function-level consequences or runtime
+execution. Further integrations require separate justification and permission,
+particularly if they introduce new dependencies or mutation.
 
 For CI-free review, `--audit` reports metadata/route integrity and unresolved
 paths without writing outputs or changing tracked source. A static audit is
