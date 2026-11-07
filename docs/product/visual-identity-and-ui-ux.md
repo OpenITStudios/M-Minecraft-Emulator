@@ -75,13 +75,13 @@ supports it. Do not treat these as release approval.
 | P0 | Unsafe Launch / Close / Clear with stale native state | Existing native/controller gates retained | Actual original-process and token admission; no second client launched |
 | P0 | Five native viewport and preview identities | Existing owner retained | 920×620 and 1280×900, mixed five-slot HWND/DWM snapshots and stable coordinates |
 | P1 | Incomplete loading, offline and stale profile observations | Existing status projection; source-only confidence | Startup loss/retry with visible Disabled/Unavailable states, zero false readiness |
-| P1 | Long messages, varied card states and error overflow | Source text/keyboard affordances present | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
+| P1 | Long messages, varied card states and error overflow | SOURCE_PREPARED: keyboard-readable bounded notices, 24px recovery actions and per-slot accessible guidance | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
 | P1 | F3 / Coordinates popup placement and exclusivity | Source geometry + HTML details group | WebView2 named-details compatibility, overlap/scroll/resize at minimum window |
 | P1 | Optional AI & Testing header crowding on narrow/high-DPI view | SOURCE_PREPARED: flex summary within fixed-height topbar; only expanded details overlay | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
 | P1 | Keyboard Escape, Cancel and ephemeral focus restoration | Source handlers present | Focus trace, game keyboard unaffected, nested and expired-report cases |
 | P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
-| P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, numeric contrast fixture, Settings control target dimensions and forced-colors states | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
+| P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, Settings controls, 24px launcher recovery actions and 32px Close game review targets | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
 | P1 | Narrow Settings/Storage and zoom/reflow | Responsive source scopes present | No hidden controls/dual-axis text scrolling at supported Windows scales |
 | P1 | Browser regression previously sent reversed profile order rejected by parser | SOURCE_PREPARED: valid inventory journey plus separate rejection fixture | Authorized synthetic browser suite and original parser tests |
 | P2 | App icon quality and independent visual identity | One SVG source and app title retained | Native Taskbar 16/24/32/48px, Win10/11 dark/light/forced-color review |
@@ -669,3 +669,48 @@ pointer bounds, Windows 100/125/150/200% scaling, Narrator, screen-reader
 output, forced-colors, 920x620 navigation, Svelte compilation, DWM
 placements and Minecraft gameplay all remain `NOT_EXECUTED`.
 These rows are `SOURCE_PREPARED`, **not** accessible UI PASS.
+
+## Launcher recovery target and focus clarity — source-only update
+
+The canonical five-card rail presents one primary **Launch/Select** action
+per native profile, plus the original **Close game** review button when
+the observed session state allows it. A per-slot read-only health notice
+may additionally offer **Refresh** or a verified **Select game** action.
+Previously the text-like health action used only 3px of vertical padding
+and no minimum height, so its hit area could be less than the WCAG 2.2
+24px CSS target minimum.
+
+The existing `SessionHealthNotice.svelte` action now has
+`min-height:24px`, 6px horizontal click padding and a 4px top margin
+to approximately offset the previously used 6px margin. The original
+`onAction(item.slot,item.action)` handler, `disabled` admission and
+`guidedRecoveryAllowed` projection are **unchanged**. No action is
+started by focusing a message, no native IPC is added, and the label
+does not imply the game is playable.
+
+The action now references the **same existing per-slot authored guidance
+ID** that the keyboard-scrollable status message already uses. This
+provides context when assistive technology reaches the individual
+Refresh/Select game button. Hover uses the existing selected surface;
+High Contrast uses Windows `LinkText`, `ButtonText`, `GrayText` and
+`Highlight`. Focus styling remains visible.
+
+The separate `Close game` normal-exit review target retains its full
+card width and now has an explicit 32px minimum height. Its click still
+starts the original Cancel-first close confirmation rather than closing
+Minecraft immediately. Changes apply only to these **secondary controls**;
+launcher card width, the fixed five-slot grid, the 16:9 preview-image
+CSS rules and the selected-game native aperture are not edited.
+
+An authored synthetic-browser regression measures the actual rendered
+Refresh target (at least 24x24 CSS pixels), Close game button (at least
+32px tall), the nonzero preview placeholder and the recovery button's
+`aria-describedby` relationship. A focused source fixture records
+those controls and unchanged original safety gates. Both test sources
+are **AUTHORED_NOT_EXECUTED**.
+
+**Remaining gate:** whether these adjustments shift the actual native
+DWM rectangles, keyboard focus, tooltip rendering, Narrator/High Contrast,
+Windows DPI 100–200%, responsive overflow and gameplay is
+`NOT_EXECUTED`. Keep this source work **SOURCE_PREPARED**, not UI
+acceptance PASS.

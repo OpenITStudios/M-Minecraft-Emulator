@@ -786,6 +786,28 @@ try {
     'Health inspection must not start a Minecraft instance');
   const checkHealth=page.getByRole('button',{name:'Refresh status for Minecraft - 2'});
   await checkHealth.waitFor();
+  assert.equal(await checkHealth.getAttribute('aria-describedby'),'lt-health-guidance-2',
+    'Recovery button must reference its own authored issue guidance');
+  const recoveryTargets=await page.locator('.lt-launcher-entry[data-slot="2"]')
+    .evaluate(entry=>{
+      const measure=selector=>{
+        const node=entry.querySelector(selector);
+        if(!node)return null;
+        const rect=node.getBoundingClientRect();
+        return {width:rect.width,height:rect.height};
+      };
+      return {refresh:measure('.lt-health-action'),
+        close:measure('.lt-close-launcher'),
+        preview:measure('.lt-card-picture')};
+    });
+  assert.ok(recoveryTargets.refresh&&recoveryTargets.refresh.width>=24&&
+    recoveryTargets.refresh.height>=24,
+    'Read-only recovery action must expose at least a 24x24 CSS-pixel target');
+  assert.ok(recoveryTargets.close&&recoveryTargets.close.width>=24&&
+    recoveryTargets.close.height>=32,
+    'Normal Close game review must keep its original distinct 32px-or-taller target');
+  assert.ok(recoveryTargets.preview&&recoveryTargets.preview.width>0&&recoveryTargets.preview.height>0,
+    'Native DWM preview target must remain allocated independently');
   await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',true));
   assert.equal(await checkHealth.isDisabled(),true,
     'Guided action must be disabled during a native close review');
