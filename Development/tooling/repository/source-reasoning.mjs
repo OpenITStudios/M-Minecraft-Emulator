@@ -29,7 +29,8 @@ function graphStatus(index, relevantIds){
   const unknown=index.unparsed.filter(item=>relevantIds.has(index.byPath.get(item.path)?.id));
   const unresolved=index.unresolved.filter(item=>relevantIds.has(item.from));
   const globalParserGaps=index.unparsed.length;
-  const globalUnresolved=index.unresolved.length+(index.cargoUnresolved?.length??0);
+  const globalUnresolved=index.unresolved.length+(index.cargoUnresolved?.length??0)+
+    (index.tauri?.gaps?.length??0);
   return {
     confidence:'POTENTIAL_STATIC_FILE_REACHABILITY_ONLY',
     completeness:'NOT_PROVEN_COMPLETE',
@@ -51,7 +52,7 @@ export function sourceImpact(index,input,{maxHops=4}={}){
   const selected=selectSource(index,input,{directory:true});
   const originals=new Set(selected.map(r=>r.id));
   const visited=new Set(originals);
-  const incoming=adjacency(index.edges,'to');
+  const incoming=adjacency([...index.edges,...(index.contractEdges??[])],'to');
   const queue=selected.map(resource=>({resource,distance:0,pathToSelected:[]}));
   const impacted=[];
   let depthTruncated=false;
@@ -86,8 +87,9 @@ export function sourceImpact(index,input,{maxHops=4}={}){
 export function sourceTrace(index,from,to,{maxHops=4,allowReverse=false}={}){
   if(!Number.isInteger(maxHops)||maxHops<1||maxHops>6)throw new Error('maxHops must be 1..6');
   const start=selectSource(index,from),goal=selectSource(index,to);
-  const target=goal[0].id,forward=adjacency(index.edges,'from'),
-    backward=allowReverse?adjacency(index.edges,'to'):new Map();
+  const graphEdges=[...index.edges,...(index.contractEdges??[])];
+  const target=goal[0].id,forward=adjacency(graphEdges,'from'),
+    backward=allowReverse?adjacency(graphEdges,'to'):new Map();
   const queue=[{id:start[0].id,ids:[start[0].id],steps:[]}];
   const visited=new Set([start[0].id]);
   for(let i=0;i<queue.length;i++){
@@ -127,6 +129,9 @@ export function sourceSummary(index){
     unresolvedCargoPaths:index.cargoUnresolved||[],
     filesByDomain:counts(index.resources,r=>r.domain),
     sourceEdges:index.edges.length,
+    tauriCommandBridgeLinks:index.tauri?.bindings?.length??0,
+    tauriContractGaps:index.tauri?.gaps?.length??0,
+    tauriRegistrationGroups:index.tauri?.handlerGroups??0,
     declarationSites:index.siteCount,
     externalOrAliasReferencesSkipped:index.externalCount,
     nonCodeResourcesSkipped:index.resourceCount,
@@ -138,16 +143,24 @@ export function sourceSummary(index){
     diagnostics:{
       unparsed:index.unparsed.slice(0,30),
       unresolved:index.unresolved.slice(0,30),
+      tauriContractGaps:index.tauri?.gaps?.slice(0,30)??[],
     },
-    excludedFromAnalysis:['C++/C','PowerShell','Cargo package/dependency resolution',
-      'macro-expanded Rust','conditional cfg/feature reachability',
-      'computed dynamic imports','TS path aliases','runtime/Minecraft execution'],
+    excludedFromAnalysis:['CMake target/feature resolution','PowerShell dependency graph',
+      'C++ preprocessor macros','Rust macro expansion and cfg/feature gates',
+      'Tauri command payload equivalence','computed dynamic imports','TS path aliases',
+      'runtime/Minecraft execution'],
   };
 }
 export function sourceGraphProjection(index){
   return {schemaVersion:1,mode:index.mode,status:index.status,
     proofBoundary:index.proofBoundary,parserAvailability:index.parserAvailability,
-    resources:index.resources,edges:index.edges,unresolved:index.unresolved,unparsed:index.unparsed,
+    resources:index.resources,edges:index.edges,
+    crossLanguageEdges:index.contractEdges??[],
+    tauriContracts:index.tauri?{
+      status:index.tauri.status,bindings:index.tauri.bindings,
+      gaps:index.tauri.gaps,handlerGroups:index.tauri.handlerGroups,
+    }:undefined,
+    unresolved:index.unresolved,unparsed:index.unparsed,
     coverage:index.coverage,
     cargoLocalDependencies:index.cargoLocalDependencies||[],
     cargoUnresolved:index.cargoUnresolved||[]};
@@ -163,10 +176,12 @@ export function sourceDiagram(resources,edges){
   const seen=new Set();
   for(const e of edges){
     if(!alias.has(e.from)||!alias.has(e.to))continue;
-    const key=e.from+'|'+e.to;
+    const key=e.from+'|'+e.to+'|'+e.type;
     if(seen.has(key))continue;
     seen.add(key);
-    lines.push('  '+alias.get(e.from)+' -->|declares dependency| '+alias.get(e.to));
+    const label=e.type?.startsWith('TAURI_')?'Tauri named command':
+      e.type==='DEPENDS_ON'?'source declaration':'source relationship';
+    lines.push('  '+alias.get(e.from)+' -->|'+label+'| '+alias.get(e.to));
   }
   return lines.join('\n');
 }
@@ -193,6 +208,12 @@ export function sourceImpactMarkdown(impact){
         site.path+':'+site.line+':'+site.column+tick+' '+site.syntax+
         ' '+tick+site.specifier+tick);
       if(e.sourceSites.length>4)lines.push('  - '+(e.sourceSites.length-4)+' additional sites in JSON');
+      if(e.contractWitnesses){
+        for(const site of e.contractWitnesses.registered??[])
+          lines.push('  - '+tick+site.path+':'+site.line+tick+' TAURI_HANDLER_REGISTRATION');
+        const def=e.contractWitnesses.definition;
+        if(def)lines.push('  - '+tick+def.path+':'+def.line+tick+' TAURI_COMMAND_FUNCTION');
+      }
     }
   }
   if(!impact.impacted.length)lines.push('No reverse dependency found within the scan; this is NOT proof of no impact.');
@@ -228,7 +249,13 @@ export function sourceTraceMarkdown(trace){
       lines.push('- '+tick+e.from+tick+' -> '+tick+e.to+tick+' ('+e.direction+')');
       for(const site of e.sourceSites.slice(0,5))
         lines.push('  - '+tick+site.path+':'+site.line+':'+site.column+tick+
-          ' '+site.syntax+' '+tick+site.specifier+tick);
+          ' '+site.syntax+' '+tick+(site.specifier??e.command)+tick);
+      if(e.contractWitnesses){
+        for(const site of e.contractWitnesses.registered??[])
+          lines.push('  - '+tick+site.path+':'+site.line+tick+' TAURI_HANDLER_REGISTRATION');
+        const def=e.contractWitnesses.definition;
+        if(def)lines.push('  - '+tick+def.path+':'+def.line+tick+' TAURI_COMMAND_FUNCTION');
+      }
     }
   }else lines.push('No verified source-declaration path within scan; do not infer independence.');
   lines.push('','## Mermaid / Pele-compatible trace','','~~~mermaid',
