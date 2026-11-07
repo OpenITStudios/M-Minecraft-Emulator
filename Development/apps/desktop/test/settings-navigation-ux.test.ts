@@ -31,7 +31,7 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     const app=load('LazyTesterApp.svelte');
     expect(app).toContain('if (next !== \'workspace\' && !disposed && pageHeading?.isConnected)');
     expect(app).toContain('pageHeading.focus({preventScroll:true})');
-    expect(app).toContain("tabindex={page==='workspace'?undefined:-1}");
+    expect(app).toContain('<h1 bind:this={pageHeading} tabindex="-1">');
     expect(app).toContain('loadingPage = next;');
     expect(app).toContain('finally { loadingPage = null; busy = false; }');
     expect(app).toContain('Checking saved profile storage…');

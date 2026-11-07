@@ -847,3 +847,19 @@
 @media (forced-colors:active){
   .lt-filmstrip .lt-launcher-entry:focus{outline-color:Highlight}
 }
+
+/* Keyboard-initiated actions can disable or remove their own controls.
+   These two existing, non-Tabbable headings are temporary focus anchors
+   only; no new controls, native viewport dimensions or DWM layout. */
+.lt-play-header h1:focus,
+.lt-settings-layout #lt-clear-data-heading:focus{
+  outline:2px solid var(--lt-accent);
+  outline-offset:4px;
+  border-radius:4px;
+}
+@media (forced-colors:active){
+  .lt-play-header h1:focus,
+  .lt-settings-layout #lt-clear-data-heading:focus{
+    outline-color:Highlight;
+  }
+}

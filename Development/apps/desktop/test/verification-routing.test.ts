@@ -63,7 +63,9 @@ describe("Emulator source verification routing", () => {
     const ui=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
     const scheduling=readFileSync(new URL("../src/app/inspectionScheduling.ts",import.meta.url),"utf8");
     expect(ui).toContain("manualRefreshRequested||closeReviewPending||nativeBackend");
-    expect(ui).toContain("if(!closeReviewActive(reviewState()))manualRefreshRequested=true;");
+    expect(ui).toContain("if (closeReviewActive(reviewState())) return;");
+    expect(ui).toContain('on:click={requestHeaderRefresh}');
+    expect(ui).toContain('manualRefreshRequested=true;');
     expect(ui).toContain("selectedReview: closeOneSlot !== null");
     expect(ui).toContain("selectedCloseRunning: closingOneSlot !== null");
     expect(scheduling).toContain("state.selectedReview || state.selectedCloseRunning");

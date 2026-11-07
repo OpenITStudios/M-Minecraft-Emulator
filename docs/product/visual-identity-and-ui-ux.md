@@ -78,7 +78,7 @@ supports it. Do not treat these as release approval.
 | P1 | Long messages, varied card states and error overflow | SOURCE_PREPARED: keyboard-readable bounded notices, 24px recovery actions and per-slot accessible guidance | Tab/scroll/Narrator access, no focus clipped or text permanently unreachable |
 | P1 | F3 / Coordinates popup placement and exclusivity | Source geometry + HTML details group | WebView2 named-details compatibility, overlap/scroll/resize at minimum window |
 | P1 | Optional AI & Testing header crowding on narrow/high-DPI view | SOURCE_PREPARED: flex summary within fixed-height topbar; only expanded details overlay | Show/hide at 920×620 and 125–200% DPI without covering Play or nav |
-| P1 | Keyboard Escape, Cancel and ephemeral focus restoration | SOURCE_PREPARED: close/disclosure guards and same-slot health-notice focus handoff; no game-focus takeover | Focus trace, game keyboard unaffected, nested, expired-report and offline-refresh cases |
+| P1 | Keyboard Escape, Cancel and ephemeral focus restoration | SOURCE_PREPARED: same-slot health notices, keyboard Refresh/Tab continuity, focused CloseOne/full-clear handoff; no native-focus takeover | Focus trace, game keyboard unaffected, nested, disabled-control and offline-refresh cases |
 | P1 | Dirty forms, saved versus unconfirmed receipts | Source guards/drafts present | Preset success/failure/retry; FPS invalid; discard and return flows |
 | P1 | Storage measurements, cache, recovery and full deletion | Source guards and dated measurement label | Last-measured clarity; reversible cancel; disposable data-only destructive test with explicit approval |
 | P1 | Accessible contrast, non-color state and hit target sizing | SOURCE_PREPARED: semantic tokens, Settings controls, 24px launcher recovery actions and 32px Close game review targets | WCAG 2.2 AA contrast, 24px target/spacing, forced-colors and Narrator screenshots |
@@ -431,6 +431,7 @@ Windows/runtime evidence exists.
 | UX-F04 | F3, Coordinates, optional AI & Testing disclosures | One open at a time, Escape returns to own summary; game focus/keys are not stolen | Keyboard focus trace + WebView2 version; TARGET_WINDOWS |
 | UX-F05 | Optional AI & Testing report expires while focused | Report disappears on schedule, no stale gameplay claims; focus returns to active nav only when owned by disappearing disclosure | Recorded keyboard focus + native report age; TARGET_WINDOWS |
 | UX-F06 | Keyboard focus on launcher Refresh/notice while native Inspect changes status | Refresh holds focus in authored notice, then returns to enabled same-slot card or named non-Tab fallback on unavailable status; never steals a newer or Minecraft focus | Browser and Windows focus trace + native Inspect receipt; TARGET_WINDOWS |
+| UX-F07 | Keyboard Refresh becomes disabled, or a confirmed CloseOne/full-clear review disappears | Original focused context remains on the page heading, same-slot launcher group, or persistent Storage warning heading; Tab/Shift+Tab user choices always prevail | Synthetic DOM/focus trace and Windows WebView2 focus + native receipts; TARGET_WINDOWS |
 | UX-V01 | 920×620 at 100/125/150/200% display scaling | All five keyed MC cards remain ordered, central 16:9 viewport remains positive and fully in bounds; no clipped essential action | Sanitized screenshot + measured DOM/native DWM rectangles; TARGET_WINDOWS |
 | UX-V02 | 1280×900 and expanded desktop window, 5 mixed observed states | Names/status and long errors remain accessible; selected card never moves/reparents, no stale running count | Screenshot, text/accessibility snapshot, native state receipts; TARGET_WINDOWS |
 | UX-V03 | Long connection/recovery messages, narrow effective width | All support references and warnings remain reachable by Tab/scroll; no overlay covers the native game or critical button | Keyboard/scroll video or screenshot; TARGET_WINDOWS |
@@ -765,3 +766,54 @@ only. The `UX-F06` acceptance case remains `NOT_EXECUTED`.
 Svelte lifecycle behavior, browser focus heuristics, WebView2,
 Windows game-focus isolation, Narrator/forced-colors, all DPI
 settings and Minecraft gameplay remain `NOT_VERIFIED`.
+
+## Disabled and disappearing controls — focus continuity source contract
+
+Three already-existing user actions can disable or remove the very control
+that holds WebView keyboard focus. The original session, native close and
+destructive-data controllers remain the only action owners.
+
+- **Header Refresh:** for keyboard-generated clicks (`detail=0`) with
+  focus actually on the Refresh button, the UI first focuses the existing
+  page's non-Tabbable `h1`. Refresh still follows the original
+  `manualRefreshRequested` / `refreshPage` sequence. After the
+  original request finishes and Svelte updates the button, focus returns
+  to that same Refresh button **only if** the page is unchanged, the
+  WebView still has focus, the heading still owns focus, and the button
+  is connected and enabled. A user who pressed Tab/Shift+Tab to another
+  control is never redirected. Pointer clicks do not initiate this
+  keyboard-only focus handoff.
+- **Confirm Close Minecraft:** the reviewed confirm action reanchors
+  focus, before removing its panel, to the existing same-slot
+  `lt-launcher-entry` (`tabindex=-1`). This is safe even when native
+  CloseOne remains unconfirmed and its launcher card is disabled.
+  The original Rust CloseOne admission, required review, and Cancel
+  behavior are unchanged; the reanchor neither selects nor launches
+  the game and does not pull focus back from a native game.
+- **Permanent profile-data clear:** after the original exact-slot,
+  typed-name, acknowledgement and controller-token UI guards pass,
+  focus moves from the disappearing confirmation form to the persistent
+  **Clear all data** heading (`tabindex=-1`) if the form truly owns
+  WebView focus. The original native deletion is still requested only
+  once through the same controller and its own safeguards. No new
+  confirmation path, storage owner or automatic removal is introduced.
+
+The two headings have explicit focus rings, including system Highlight
+when forced colors are active. They are **programmatic anchors**, not
+new Tab stops or modal traps. Original five DWM preview rectangles and
+selected 16:9 aperture sizing remain unchanged.
+
+The existing optional synthetic-browser journey has new
+**AUTHORED_NOT_EXECUTED** scenarios for: Refresh while disabled,
+Tab and Shift+Tab before Inspect completes, safe restoration only
+while the heading retains focus, and same-slot focus after the
+original CloseOne review is submitted. Permanent data-clear focus
+is represented in source fixtures **without** triggering the
+destructive operation. The explicit `UX-F07` acceptance row
+remains `NOT_EXECUTED`.
+
+**Evidence ceiling:** remote exact-source/blob checks only. Svelte
+compilation, Edge/WebView2 focus and keyboard behavior, screen reader,
+Windows 100–200% DPI and forced colors, native DWM/game-focus
+handoff and Minecraft runtime still require separately authorized
+execution; none is a current PASS.

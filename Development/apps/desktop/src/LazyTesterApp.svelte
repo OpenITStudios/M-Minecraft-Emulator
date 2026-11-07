@@ -69,6 +69,9 @@
   // Ephemeral route feedback only; not another session or settings owner.
   let loadingPage: Page | null = null;
   let pageHeading: HTMLHeadingElement | undefined;
+  let headerRefreshButton: HTMLButtonElement | undefined;
+  // Keyboard-only Refresh focus continuity, not a new status or native action.
+  let headerRefreshFocusPage: Page | null = null;
   let initializing = true, checkingStorage = false, storageCheckedAt = '';
   // A clock time alone is ambiguous after an overnight/open-window session.
   // The timestamp describes the last UI-received storage report, not a live
@@ -383,7 +386,21 @@
     } catch (error) { issueKey='workspace'; dirty = true; }
     finally { loadingPage = null; busy = false; }
   }
+  function requestHeaderRefresh(event: MouseEvent): void {
+    if (closeReviewActive(reviewState())) return;
+    // A keyboard-triggered click (detail=0) would disable its own button.
+    // Move focus first to the existing page heading; a user Tab/Shift+Tab
+    // choice from there always supersedes our eventual restoration.
+    if (event.detail === 0 && document.hasFocus() &&
+        document.activeElement === event.currentTarget && pageHeading?.isConnected) {
+      headerRefreshFocusPage = page;
+      pageHeading.focus({preventScroll:true});
+    }
+    manualRefreshRequested=true;
+  }
   async function refreshPage() {
+    const keyboardOrigin = headerRefreshFocusPage;
+    headerRefreshFocusPage = null;
     if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing) return;
     manualRefreshing=true;
     try {
@@ -409,7 +426,16 @@
       if (previewFailed && page === 'workspace' && available &&
           !detached && !disposed) dirty = true;
     }
-    }finally{manualRefreshing=false;}
+    }finally{
+      manualRefreshing=false;
+      if (keyboardOrigin !== null) {
+        await tick();
+        if (!disposed && document.hasFocus() && page === keyboardOrigin &&
+            document.activeElement === pageHeading &&
+            headerRefreshButton?.isConnected && !headerRefreshButton.disabled)
+          headerRefreshButton.focus({preventScroll:true});
+      }
+    }
   }
   async function saveAudio(mode:'Keep'|'Mute') {
     if(busy||!settings?.backgroundAudio)return;
@@ -496,6 +522,13 @@
     const slot=closeOneSlot;
     if (slot===null || closeInProgress || nativeExitReview || busy ||
         refreshing || resizing || closingOneSlot!==null) return;
+    // A committed CloseOne review disappears immediately. Before its focused
+    // button is removed, anchor keyboard context to the SAME stable MC slot
+    // group, not to body, another Minecraft process or a new Tab stop.
+    const entry = closeOneTrigger?.closest<HTMLElement>('.lt-launcher-entry');
+    if (document.hasFocus() && closeOneReviewElement?.contains(document.activeElement) &&
+        entry?.isConnected)
+      entry.focus({preventScroll:true});
     closeOneSlot=null;closeOneTrigger=null; closingOneSlot=slot; busy=true; issueKey=null;
     try {
       const report=await lazyTester.closeOne(slot);
@@ -794,6 +827,13 @@
     const pending=fullReview,status=selectedStorage?.fullClear;
     if(!pending||busy||refreshing||resizing||!fullAck||pending.slot!==selectedSlot||fullName!==`Minecraft - ${pending.slot}`||
       !status?.canClear||status.confirmationToken!==pending.token)return;
+    // The exact typed-name/ack/token admission above remains authoritative.
+    // This is only a focus handoff from the disappearing confirmation form
+    // to its persistent warning heading; no extra deletion is requested.
+    const deletionReview = document.querySelector('.lt-delete-confirm');
+    if (document.hasFocus() && document.activeElement instanceof Node &&
+        deletionReview?.contains(document.activeElement))
+      document.getElementById('lt-clear-data-heading')?.focus({preventScroll:true});
     busy=true;clearingData=true;issueKey=null;storageNotice='';fullReview=null;
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
@@ -908,8 +948,8 @@
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1 bind:this={pageHeading} tabindex={page==='workspace'?undefined:-1}>{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
-        <div class="lt-header-actions"><button class="lt-secondary" disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={()=>{if(!closeReviewActive(reviewState()))manualRefreshRequested=true;}}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}{#if page==='workspace'}<div class="lt-play-tools" role="group" aria-label="Play tools"><F3InspectorPanel view={f3View} /><CoordinatePastePanel selectedSlot={active} /></div>{/if}</div>
+        <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div class="lt-header-actions"><button class="lt-secondary" bind:this={headerRefreshButton} disabled={busy||manualRefreshing||manualRefreshRequested||closeReviewPending||nativeBackend!=='WindowsNative'} on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>{#if page==='workspace'&&active!==null}<button class="lt-secondary" disabled={busy||refreshing||resizing} title={'Open only Minecraft - '+active+' in its own window'} on:click={release}>Open Minecraft - {active} in a window</button>{/if}{#if page==='workspace'}<div class="lt-play-tools" role="group" aria-label="Play tools"><F3InspectorPanel view={f3View} /><CoordinatePastePanel selectedSlot={active} /></div>{/if}</div>
       </header>
       {#if loadingPage===page && page!=='workspace'}
         <p class="lt-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>

@@ -427,6 +427,46 @@ try {
   await page.goto('http://lazy-tester.test/');
   await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
+  // Keyboard Refresh must not lose focus when the original controller
+  // request makes its own button disabled. These are synthetic DOM checks,
+  // NOT Windows focus, DPI or five-client acceptance.
+  const keyboardRefresh=page.getByRole('button',{name:'Refresh',exact:true});
+  await keyboardRefresh.focus();
+  await page.evaluate(()=>{window.__holdInspect=true;});
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>typeof window.__finishInspect==='function');
+  assert.equal(await heading('Ready when you are').evaluate(node=>document.activeElement===node),true,
+    'Focused keyboard Refresh temporarily anchors to the unchanged page heading');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.evaluate(()=>document.activeElement!==document.body&&
+    document.activeElement!==document.querySelector('.lt-page-header h1')),true,
+    'Shift+Tab while Refresh is disabled must reach the existing navigation');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(()=>document.activeElement!==document.body&&
+    document.activeElement!==document.querySelector('.lt-page-header h1')),true,
+    'Tab progresses through existing controls while Refresh is disabled');
+  await page.evaluate(()=>{window.__manualOtherFocus=document.activeElement;});
+  await page.evaluate(()=>{
+    const release=window.__finishInspect;window.__holdInspect=false;
+    window.__finishInspect=null;release();
+  });
+  await page.waitForFunction(()=>!document.querySelector('.lt-header-actions > button')?.disabled);
+  assert.equal(await page.evaluate(()=>document.activeElement===window.__manualOtherFocus),true,
+    'The user-selected Shift+Tab destination must not be stolen on completion');
+  await keyboardRefresh.focus();
+  await page.evaluate(()=>{window.__holdInspect=true;});
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(()=>typeof window.__finishInspect==='function');
+  assert.equal(await heading('Ready when you are').evaluate(node=>document.activeElement===node),true);
+  await page.evaluate(()=>{
+    const release=window.__finishInspect;window.__holdInspect=false;
+    window.__finishInspect=null;release();
+  });
+  await page.waitForFunction(()=>document.activeElement===
+    document.querySelector('.lt-header-actions > button'),
+    null,{timeout:7000});
+  assert.equal(await keyboardRefresh.isEnabled(),true,
+    'Only the existing Refresh button regains keyboard focus; no new action is sent');
   assert.equal(await page.locator('.lt-card').count(),5);
   const profileGroup = page.getByRole('group',{name:'Minecraft profiles'});
   assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 1 · /}).count(),1,
@@ -959,6 +999,10 @@ try {
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true);
   await page.getByRole('region',{name:'Confirm one Minecraft close'})
     .getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
+  await page.waitForFunction(()=>document.activeElement?.matches(
+    '.lt-launcher-entry[data-slot="2"][role="group"]')===true);
+  assert.equal(await affectedCard.locator('.lt-card').count(),1,
+    'Confirmed CloseOne review keeps its original stable launcher focus group');
   await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
   await page.waitForFunction(()=>
     document.querySelectorAll('[aria-label="Refresh status for Minecraft - 2"]').length===0);
