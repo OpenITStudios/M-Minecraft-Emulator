@@ -81,7 +81,27 @@ Direct2D or FPS-meter work; measurement is read only for an actual
 visible panel. D3D11.1 context-state swapping fences the Direct2D draw
 and restores the game's previous immediate pipeline state after either
 success or failed EndDraw. D3D11.1 support is another fail-closed gate,
-not proof that it is compatible with Education 26.33. Source admission now requires
+not proof that it is compatible with Education 26.33.
+
+Further source correction: the F3+C path now captures a bounded
+same-game Player/world frame while under the single existing F3 session
+lock, **releases the lock**, then rechecks the same world generation,
+capture timestamp, game HWND and foreground before invoking the Windows
+clipboard. EmptyClipboard can notify the previous clipboard owner; the
+game must never hold its exclusive F3/DXGI render state lock while that
+external message interaction occurs. All CF_UNICODETEXT memory is
+allocated and populated before OpenClipboard; ownership transfers
+only after a successful SetClipboardData. A result of `Copied`
+still means only that the OS call succeeded, not that Minecraft
+Education input/HUD or a paste was accepted.
+
+The Direct2D backbuffer code also now treats an invalid buffer index,
+failed IDXGISwapChain::GetBuffer or failed
+CreateBitmapFromDxgiSurface as a **sticky** refusal for that chain.
+It releases the retained bitmap target references and does not
+repeat a failing GPU resource operation on every Present. Only the
+original native ResizeBuffers/teardown path permits another attempt.
+These are source corrections, **not measured performance results**. Source admission now requires
 a real engine-captured `capturedTickMs` (never the delayed delivery clock),
 strictly increasing world generation and an existing D3D11 device with
 BGRA support. Regressing worlds and expired/queued frames cannot overwrite

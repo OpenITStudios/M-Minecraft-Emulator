@@ -50,6 +50,14 @@ struct Painter {
         bufferCount = 0; pixelFormat = DXGI_FORMAT_UNKNOWN;
         refused = false;
     }
+    bool refuse() noexcept {
+        // Any unsupported or failed native backbuffer admission gets ONE
+        // attempt per chain. Release all D2D-held backbuffer COM references;
+        // only the original ResizeBuffers or chain teardown may retry.
+        release();
+        refused = true;
+        return false;
+    }
 
     bool prepare(IDXGISwapChain4* swap) noexcept {
         if (!swap || refused) return false;
@@ -121,17 +129,19 @@ struct Painter {
     bool draw(IDXGISwapChain4* swap, const wchar_t* text) noexcept {
         if (!prepare(swap)) return false;
         const UINT index = swap->GetCurrentBackBufferIndex();
-        if (index >= bufferCount) return false;
+        if (index >= bufferCount) return refuse();
         if (!buffers[index]) {
             ComPtr<IDXGISurface> surface;
-            if (FAILED(swap->GetBuffer(index, IID_PPV_ARGS(&surface)))) return false;
+            if (FAILED(swap->GetBuffer(index, IID_PPV_ARGS(&surface))))
+                return refuse();
             D2D1_BITMAP_PROPERTIES1 properties{};
             properties.pixelFormat.format = pixelFormat;
             properties.pixelFormat.alphaMode = D2D1_ALPHA_MODE_IGNORE;
             properties.bitmapOptions = D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
             properties.dpiX = properties.dpiY = 96.0f;
             if (FAILED(context->CreateBitmapFromDxgiSurface(surface.Get(),
-                &properties, buffers[index].GetAddressOf()))) return false;
+                &properties, buffers[index].GetAddressOf())))
+                return refuse();
         }
         // Preserve the game's shader, targets, blend, viewport, resource
         // and rasterizer bindings. Never clear or replace the game context.
@@ -150,11 +160,9 @@ struct Painter {
         context->SetTarget(nullptr);
         // Restore on both success and failed EndDraw, BEFORE any release.
         immediate->SwapDeviceContextState(gameState.Get(), nullptr);
-        if (FAILED(result)) {
-            release();
-            refused = true; // Device-loss/unsupported draws wait for a real resize.
-            return false;
-        }
+        if (FAILED(result)) return refuse();
+        // A failed EndDraw releases all interop targets and stays refused
+        // until ResizeBuffers/teardown, never an automatic per-Present retry.
         return true;
     }
 };
@@ -212,18 +220,28 @@ bool copyCoordinates(HWND owner, const PlayerFrame& frame) noexcept {
     wchar_t coordinates[128]{};
     const int size = swprintf_s(coordinates, L"%.0f %.0f %.0f",
         std::floor(frame.x), std::floor(frame.y), std::floor(frame.z));
-    if (size <= 0 || !OpenClipboard(owner)) return false;
+    if (size <= 0) return false;
+    // Prepare all memory BEFORE taking the process-global Windows clipboard.
+    // EmptyClipboard can send WM_DESTROYCLIPBOARD to the previous owner.
+    // NEVER hold session.lock across Open/Empty/Set/CloseClipboard.
     const SIZE_T bytes = (static_cast<SIZE_T>(size) + 1) * sizeof(wchar_t);
     HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
-    if (!memory) { CloseClipboard(); return false; }
+    if (!memory) return false;
     void* destination = GlobalLock(memory);
     if (!destination) {
-        GlobalFree(memory); CloseClipboard(); return false;
+        GlobalFree(memory);
+        return false;
     }
     memcpy(destination, coordinates, bytes);
     GlobalUnlock(memory);
+    if (!OpenClipboard(owner)) {
+        GlobalFree(memory);
+        return false;
+    }
     const bool success = EmptyClipboard()
         && SetClipboardData(CF_UNICODETEXT, memory) != nullptr;
+    // Successful SetClipboardData transfers the memory ownership to
+    // Windows. On failure the producer still owns it and must free it.
     if (!success) GlobalFree(memory);
     CloseClipboard();
     return success;
@@ -304,6 +322,8 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
                    LPARAM parameters, bool gameplay, bool physical) noexcept {
     const DWORD error = GetLastError();
     KeyResult result = KeyResult::Ignored;
+    PlayerFrame requestedCopy{};
+    bool copyRequested = false;
     AcquireSRWLockExclusive(&session.lock);
     const bool admitted = session.claimed && session.owner == game
         && session.ownerThread == gameThread
@@ -328,8 +348,10 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
         } else if (key == 'C' && keyDown && !altContext && !repeated
             && session.f3Held && !session.chord && session.shown) {
             session.chord = true;
-            result = copyCoordinates(game, session.frame) ?
-                KeyResult::Copied : KeyResult::CopyFailed;
+            requestedCopy = session.frame;
+            copyRequested = true;
+            // Do NOT call Windows clipboard functions under session.lock:
+            // they can reenter the UI message loop and block DXGI Present.
         } else if (key == VK_F3 && (keyUp || message == WM_SYSKEYUP)) {
             // Always clear a held F3 when released, including if Alt was
             // added during the hold; never toggle for a system-key release.
@@ -345,6 +367,27 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
         }
     }
     ReleaseSRWLockExclusive(&session.lock);
+    if (copyRequested) {
+        // A captured frame is a value from the exact physical key event,
+        // NOT live game data pulled from a second player by name or PID.
+        // Recheck that the original F3 action and its owned Player/world
+        // have not been revoked since the lock was released.
+        AcquireSRWLockShared(&session.lock);
+        const bool current = session.claimed && session.owner == game
+            && session.ownerThread == gameThread && session.shown
+            && session.worldGeneration == requestedCopy.worldGeneration
+            && session.observed == requestedCopy.capturedTickMs
+            && live(session);
+        ReleaseSRWLockShared(&session.lock);
+        const bool foreground = GetCurrentThreadId() == gameThread
+            && exactWindow(game, gameThread) && GetForegroundWindow() == game;
+        result = current && foreground
+            && sampleFresh(requestedCopy, GetTickCount64())
+            && copyCoordinates(game, requestedCopy)
+            ? KeyResult::Copied : KeyResult::CopyFailed;
+        // A later world transition cannot undo an already-successful user
+        // clipboard request; the copied value is from the keypress snapshot.
+    }
     SetLastError(error);
     return result;
 }

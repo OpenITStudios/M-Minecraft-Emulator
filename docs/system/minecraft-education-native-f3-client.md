@@ -168,6 +168,21 @@ The former plan-only route now has a **real C++ source slice** inside
   releases backbuffer references before both `ResizeBuffers` variants
   and on final native chain teardown. D3D12/HDR/unsupported devices
   fail closed; render or F3 intents are never called a drawn receipt.
+- F3+C no longer holds the F3 session's exclusive SRW lock while
+  calling OpenClipboard/EmptyClipboard/SetClipboardData/CloseClipboard.
+  The key handler snapshots the single original Player frame under
+  the lock, releases it, validates the unchanged world-generation,
+  original snapshot timestamp, HWND and foreground, and then attempts
+  one copy. Clipboard bytes are prepared before opening the system
+  clipboard. Windows may send clipboard-owner notifications; it must
+  not be able to reenter a lock held by the game render path.
+  A Copied receipt reflects OS SetClipboardData success, not
+  a verified Minecraft input route or pasted result.
+- Backbuffer acquisition errors (GetCurrentBackBufferIndex bounds,
+  GetBuffer, CreateBitmapFromDxgiSurface, EndDraw) now invalidate
+  Direct2D-held targets and refuse further drawing on that swapchain
+  until genuine ResizeBuffers or retirement. Unsupported frame paths
+  cannot repeatedly recreate expensive GPU resource bindings.
 - `dxgi-pacing.cpp` calls the compositor only with
   `BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE` set. The standalone CMake
   option is **OFF**; normal DLL and product packaging remain unchanged.

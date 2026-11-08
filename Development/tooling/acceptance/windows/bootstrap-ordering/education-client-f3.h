@@ -39,6 +39,8 @@ bool publish_player(HWND game, const PlayerFrame& frame) noexcept;
 // Called ONLY by a verified game keyboard dispatch owner on its own thread.
 // WM_KEYDOWN/WM_KEYUP F3 are accepted, NOT WM_SYSKEYDOWN/Alt+F3;
 // F3+C only acts during the user's explicit held F3 gesture.
+// Clipboard Win32 calls happen AFTER releasing the F3 session lock;
+// revalidate the same Player/world capture and foreground before copying.
 // No SetWindowsHookEx, subclass, polling, injected or global hotkey is
 // installed here. "physical" and "gameplay" need actual engine provenance.
 KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
