@@ -1,5 +1,6 @@
 #include "education-client-f3.h"
-#include <d3d11.h>
+#include "dxgi-pacing.h" // Existing in-process FPS owner; no new HUD meter.
+#include <d3d11_1.h>
 #include <dxgi1_5.h>
 #include <d2d1_1.h>
 #include <d2d1_1helper.h>
@@ -24,6 +25,10 @@ struct Painter {
     ComPtr<ID2D1Factory1> factory;
     ComPtr<ID2D1Device> device;
     ComPtr<ID2D1DeviceContext> context;
+    // Isolate our Direct2D draw from the game's D3D11 immediate state.
+    // A device without the 11.1 state-swap interfaces is unsupported.
+    ComPtr<ID3D11DeviceContext1> immediate;
+    ComPtr<ID3DDeviceContextState> f3ContextState;
     ComPtr<IDWriteFactory> textFactory;
     ComPtr<IDWriteTextFormat> format;
     ComPtr<ID2D1SolidColorBrush> foreground, background;
@@ -41,6 +46,7 @@ struct Painter {
         foreground.Reset(); background.Reset();
         format.Reset(); textFactory.Reset();
         context.Reset(); device.Reset(); factory.Reset();
+        f3ContextState.Reset(); immediate.Reset();
         bufferCount = 0; pixelFormat = DXGI_FORMAT_UNKNOWN;
         refused = false;
     }
@@ -62,6 +68,27 @@ struct Painter {
             && (graphics->GetCreationFlags() & D3D11_CREATE_DEVICE_BGRA_SUPPORT) != 0
             && SUCCEEDED(graphics.As(&dxgiDevice));
         if (!compatible) { refused = true; return false; }
+        // Microsoft's D3D11.1 context-state swapping is documented for
+        // Direct2D plug-ins that share an application's immediate context.
+        // Do not draw if we cannot restore the exact original pipeline state.
+        ComPtr<ID3D11Device1> graphics11;
+        if (FAILED(graphics.As(&graphics11))) {
+            refused = true;
+            return false;
+        }
+        graphics11->GetImmediateContext1(immediate.GetAddressOf());
+        const D3D_FEATURE_LEVEL featureLevel = graphics->GetFeatureLevel();
+        const UINT stateFlags =
+            (graphics->GetCreationFlags() & D3D11_CREATE_DEVICE_SINGLETHREADED)
+                ? D3D11_1_CREATE_DEVICE_CONTEXT_STATE_SINGLETHREADED : 0;
+        if (!immediate || FAILED(graphics11->CreateDeviceContextState(
+                stateFlags, &featureLevel, 1, D3D11_SDK_VERSION,
+                __uuidof(ID3D11Device1), nullptr,
+                f3ContextState.GetAddressOf()))) {
+            release();
+            refused = true;
+            return false;
+        }
         // D3D12, HDR or unsupported buffers deliberately remain unavailable.
         if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,
             __uuidof(ID2D1Factory1), nullptr,
@@ -106,6 +133,11 @@ struct Painter {
             if (FAILED(context->CreateBitmapFromDxgiSurface(surface.Get(),
                 &properties, buffers[index].GetAddressOf()))) return false;
         }
+        // Preserve the game's shader, targets, blend, viewport, resource
+        // and rasterizer bindings. Never clear or replace the game context.
+        ComPtr<ID3DDeviceContextState> gameState;
+        immediate->SwapDeviceContextState(f3ContextState.Get(),
+            gameState.GetAddressOf());
         context->SetTarget(buffers[index].Get());
         context->BeginDraw();
         const D2D1_RECT_F backdrop = D2D1::RectF(10.f, 10.f, 420.f, 210.f);
@@ -116,6 +148,8 @@ struct Painter {
             DWRITE_MEASURING_MODE_NATURAL);
         const HRESULT result = context->EndDraw();
         context->SetTarget(nullptr);
+        // Restore on both success and failed EndDraw, BEFORE any release.
+        immediate->SwapDeviceContextState(gameState.Get(), nullptr);
         if (FAILED(result)) {
             release();
             refused = true; // Device-loss/unsupported draws wait for a real resize.
@@ -130,7 +164,6 @@ struct Session {
     HWND owner = nullptr;
     DWORD ownerThread = 0;
     bool claimed = false, shown = false, f3Held = false, chord = false, fresh = false;
-    bool rendererReady = false; // Proven compatible only by current D3D11 device admission.
     ULONGLONG observed = 0;
     std::uint64_t worldGeneration = 0;
     PlayerFrame frame{};
@@ -277,25 +310,36 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
         && GetCurrentThreadId() == gameThread
         && exactWindow(game, gameThread)
         && GetForegroundWindow() == game
-        && gameplay && physical && session.rendererReady && live(session);
+        && gameplay && physical && live(session);
     if (!admitted) {
         hide(session);
     } else {
-        const bool down = message == WM_KEYDOWN || message == WM_SYSKEYDOWN;
-        const bool up = message == WM_KEYUP || message == WM_SYSKEYUP;
-        if (key == VK_F3 && down && (parameters & (1LL << 30)) == 0 && !session.f3Held) {
+        // F3 must be the game's ordinary keyboard key, not Alt+F3 or
+        // another system-key accelerator. Bit 30 rejects autorepeat.
+        // Input provenance (gameplay/physical) remains the responsibility
+        // of a future exact Education engine key adapter.
+        const bool keyDown = message == WM_KEYDOWN;
+        const bool keyUp = message == WM_KEYUP;
+        const bool altContext = (static_cast<ULONGLONG>(parameters) & (1ULL << 29)) != 0;
+        const bool repeated = (static_cast<ULONGLONG>(parameters) & (1ULL << 30)) != 0;
+        if (key == VK_F3 && keyDown && !altContext && !repeated && !session.f3Held) {
             session.f3Held = true;
             session.chord = false;
-        } else if (key == 'C' && down && (parameters & (1LL << 30)) == 0
+        } else if (key == 'C' && keyDown && !altContext && !repeated
             && session.f3Held && !session.chord && session.shown) {
             session.chord = true;
             result = copyCoordinates(game, session.frame) ?
                 KeyResult::Copied : KeyResult::CopyFailed;
-        } else if (key == VK_F3 && up) {
-            if (session.f3Held && !session.chord) {
+        } else if (key == VK_F3 && (keyUp || message == WM_SYSKEYUP)) {
+            // Always clear a held F3 when released, including if Alt was
+            // added during the hold; never toggle for a system-key release.
+            if (keyUp && !altContext && session.f3Held && !session.chord) {
                 session.shown = !session.shown;
                 result = session.shown ? KeyResult::ShowRequested : KeyResult::HideRequested;
             }
+            session.f3Held = false;
+            session.chord = false;
+        } else if (key == VK_F3 && message == WM_SYSKEYDOWN) {
             session.f3Held = false;
             session.chord = false;
         }
@@ -305,29 +349,38 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
     return result;
 }
 
-void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread,
-                    unsigned milliFps, bool measuredFps) noexcept {
+void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noexcept {
     const DWORD error = GetLastError();
     AcquireSRWLockExclusive(&session.lock);
-    const bool eligible = session.claimed && session.owner == game
+    // The original DXGI wrapper invokes us on every eligible Present.
+    // A hidden F3 panel must never query COM interfaces, initialize D2D,
+    // create swapchain targets or sample the player every frame.
+    if (!session.claimed || !session.shown) {
+        ReleaseSRWLockExclusive(&session.lock);
+        SetLastError(error);
+        return;
+    }
+    const bool eligible = session.owner == game
         && session.ownerThread == gameThread && exactWindow(game, gameThread)
         && GetForegroundWindow() == game && live(session) && original;
     if (!eligible) {
         hide(session); // No stale data, background focus or absent Player.
-        session.rendererReady = false;
     } else {
         ComPtr<IDXGISwapChain4> chain;
         if (FAILED(original->QueryInterface(IID_PPV_ARGS(&chain)))
             || !session.painter.prepare(chain.Get())) {
             hide(session);
-            session.rendererReady = false; // No blank/unsupported panel.
         } else {
-            session.rendererReady = true;
             if (session.shown) {
                 const auto& f = session.frame;
                 wchar_t text[768]{}, fps[40]{};
-                if (measuredFps) {
-                    swprintf_s(fps, L"%.1f", static_cast<double>(milliFps) / 1000.);
+                // No FPS telemetry work on the ordinary hidden-F3
+                // Present path. The existing native HUD meter remains
+                // the sole source, sampled only when text is drawn.
+                const auto reading = dxgi_pacing::hud_snapshot().reading;
+                if (reading.valid) {
+                    swprintf_s(fps, L"%.1f",
+                        static_cast<double>(reading.milliFps) / 1000.);
                 } else {
                     wcscpy_s(fps, L"--");
                 }
@@ -347,7 +400,6 @@ void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread,
                     facing(f.yaw), f.yaw, f.pitch, dimension(f.dimension), fps);
                 if (written <= 0 || !session.painter.draw(chain.Get(), text)) {
                     hide(session);
-                    session.rendererReady = false;
                     // No successful Draw acknowledgement is fabricated if a
                     // device/swapchain reset or an incompatible buffer fails.
                 }
@@ -362,7 +414,6 @@ void before_resize(HWND game) noexcept {
     AcquireSRWLockExclusive(&session.lock);
     if (session.claimed && session.owner == game) {
         session.painter.release(); // Drop all backbuffer refs before ResizeBuffers.
-        session.rendererReady = false;
         hide(session);
     }
     ReleaseSRWLockExclusive(&session.lock);
@@ -374,7 +425,7 @@ void retire(HWND game) noexcept {
     if (session.claimed && session.owner == game) {
         session.painter.release();
         hide(session);
-        session.claimed = session.fresh = session.rendererReady = false;
+        session.claimed = session.fresh = false;
         session.owner = nullptr; session.ownerThread = 0;
         session.observed = 0; session.worldGeneration = 0;
         session.frame = {};

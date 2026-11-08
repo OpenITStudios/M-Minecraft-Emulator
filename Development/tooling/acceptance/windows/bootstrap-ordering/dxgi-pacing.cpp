@@ -76,9 +76,9 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
         // by the DXGI wrapper; both remain unbound by default.
 #if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
         if (measured && !(flags & (DXGI_PRESENT_TEST | DXGI_PRESENT_DO_NOT_WAIT))) {
-            const auto fps = policy_.hud.snapshot().reading;
-            education_client_f3::before_present(inner_.Get(), window_,
-                windowThread_, fps.milliFps, fps.valid);
+            // The source-only F3 renderer reads measured FPS lazily,
+            // ONLY when it has a visible and fresh in-game Player frame.
+            education_client_f3::before_present(inner_.Get(), window_, windowThread_);
         }
 #endif
         SetLastError(before);

@@ -37,6 +37,8 @@ bool claim_game_window(HWND game, DWORD gameThread) noexcept;
 bool publish_player(HWND game, const PlayerFrame& frame) noexcept;
 
 // Called ONLY by a verified game keyboard dispatch owner on its own thread.
+// WM_KEYDOWN/WM_KEYUP F3 are accepted, NOT WM_SYSKEYDOWN/Alt+F3;
+// F3+C only acts during the user's explicit held F3 gesture.
 // No SetWindowsHookEx, subclass, polling, injected or global hotkey is
 // installed here. "physical" and "gameplay" need actual engine provenance.
 KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
@@ -45,8 +47,9 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
 // Composes directly into a compatible D3D11 DXGI game backbuffer, NOT an
 // independent Windows layered window. Does nothing until both verified
 // game-specific owners above have published a fresh Player frame.
-void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread,
-                    unsigned milliFps, bool measuredFps) noexcept;
+// FPS is read lazily from the ONE existing DXGI policy only when a
+// visible, current Player frame requires an actual D3D11 draw.
+void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noexcept;
 void before_resize(HWND game) noexcept;
 void retire(HWND game) noexcept;
 } // namespace education_client_f3

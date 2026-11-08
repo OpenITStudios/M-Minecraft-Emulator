@@ -74,7 +74,14 @@ existing measured FPS HUD remains separate and unchanged.
 
 The C++ source implements F3 edge intent, F3+C clipboard logic, bounded
 same-process OGLES Player-frame freshness and Direct2D/D3D11 in-backbuffer
-painting with resize/retirement cleanup. Source admission now requires
+painting with resize/retirement cleanup. F3-key admission now uses only
+ordinary WM_KEYDOWN/WM_KEYUP, refusing Alt+F3 system-key chords and
+autorepeat. When the panel is hidden, Present returns before any F3 COM,
+Direct2D or FPS-meter work; measurement is read only for an actual
+visible panel. D3D11.1 context-state swapping fences the Direct2D draw
+and restores the game's previous immediate pipeline state after either
+success or failed EndDraw. D3D11.1 support is another fail-closed gate,
+not proof that it is compatible with Education 26.33. Source admission now requires
 a real engine-captured `capturedTickMs` (never the delayed delivery clock),
 strictly increasing world generation and an existing D3D11 device with
 BGRA support. Regressing worlds and expired/queued frames cannot overwrite

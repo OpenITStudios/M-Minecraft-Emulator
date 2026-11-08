@@ -154,6 +154,14 @@ The former plan-only route now has a **real C++ source slice** inside
 - The source-only D3D11 compositor writes directly into the existing
   game DXGI swapchain **backbuffer**, via Direct2D/DirectWrite and without
   creating a `WS_EX_LAYERED` or other separate Windows overlay.
+  Native key admission now ignores WM_SYSKEYDOWN/Alt+F3 and only
+  treats an ordinary F3 press/release as the requested toggle.
+  Hidden F3 returns without its former per-Present COM/D2D/FPS
+  workload; FPS is sampled from the existing DXGI owner only when
+  debug text is drawn. Rendering requires D3D11.1 context-state
+  save/restore to preserve the game's immediate pipeline across D2D
+  drawing, and refuses devices without that interface. This is
+  source-only protection, NOT proven Education render safety.
   Admission now requires the actual existing D3D11 device to expose
   `D3D11_CREATE_DEVICE_BGRA_SUPPORT`; an unsupported device is
   refused once for its current chain, not probed every Present. It
