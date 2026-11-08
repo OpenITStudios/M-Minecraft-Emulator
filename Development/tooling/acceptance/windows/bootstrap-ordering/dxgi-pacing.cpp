@@ -135,7 +135,16 @@ public:
     FORWARD(GetParent, (REFIID id, void** value), (id, value))
     FORWARD(GetDevice, (REFIID id, void** value), (id, value))
     FORWARD(GetBuffer, (UINT index, REFIID id, void** value), (index, id, value))
+#if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+    HRESULT STDMETHODCALLTYPE SetFullscreenState(BOOL fullscreen, IDXGIOutput* target) override {
+        // The original game may replace/reconfigure backbuffers here.
+        // Release all F3 Direct2D targets BEFORE forwarding to native DXGI.
+        education_client_f3::before_resize(window_);
+        return inner_->SetFullscreenState(fullscreen, target);
+    }
+#else
     FORWARD(SetFullscreenState, (BOOL fullscreen, IDXGIOutput* target), (fullscreen, target))
+#endif
     FORWARD(GetFullscreenState, (BOOL* fullscreen, IDXGIOutput** target), (fullscreen, target))
     FORWARD(GetDesc, (DXGI_SWAP_CHAIN_DESC* value), (value))
 #if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
@@ -147,7 +156,16 @@ public:
 #else
     FORWARD(ResizeBuffers, (UINT count, UINT w, UINT h, DXGI_FORMAT format, UINT flags), (count, w, h, format, flags))
 #endif
+#if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+    HRESULT STDMETHODCALLTYPE ResizeTarget(const DXGI_MODE_DESC* value) override {
+        // Target-mode changes can invalidate cached presentation surfaces,
+        // even if the game has not called ResizeBuffers yet.
+        education_client_f3::before_resize(window_);
+        return inner_->ResizeTarget(value);
+    }
+#else
     FORWARD(ResizeTarget, (const DXGI_MODE_DESC* value), (value))
+#endif
     FORWARD(GetContainingOutput, (IDXGIOutput** value), (value))
     FORWARD(GetFrameStatistics, (DXGI_FRAME_STATISTICS* value), (value))
     FORWARD(GetLastPresentCount, (UINT* value), (value))

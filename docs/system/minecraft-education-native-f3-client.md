@@ -165,8 +165,13 @@ The former plan-only route now has a **real C++ source slice** inside
   Admission now requires the actual existing D3D11 device to expose
   `D3D11_CREATE_DEVICE_BGRA_SUPPORT`; an unsupported device is
   refused once for its current chain, not probed every Present. It
-  releases backbuffer references before both `ResizeBuffers` variants
-  and on final native chain teardown. D3D12/HDR/unsupported devices
+  releases backbuffer references before both `ResizeBuffers` variants,
+  `ResizeTarget`, `SetFullscreenState`, and on final native chain teardown.
+  Once F3 is hidden, the next native Present drops cached D2D targets
+  without initializing new F3 COM/D2D resources or reading FPS; ordinary
+  hidden subsequent frames retain the constant-cost fast path. A failed
+  painter stays refused until an actual DXGI mode change rather than
+  retrying merely because the panel was hidden. D3D12/HDR/unsupported devices
   fail closed; render or F3 intents are never called a drawn receipt.
 - F3+C no longer holds the F3 session's exclusive SRW lock while
   calling OpenClipboard/EmptyClipboard/SetClipboardData/CloseClipboard.
@@ -181,8 +186,13 @@ The former plan-only route now has a **real C++ source slice** inside
 - Backbuffer acquisition errors (GetCurrentBackBufferIndex bounds,
   GetBuffer, CreateBitmapFromDxgiSurface, EndDraw) now invalidate
   Direct2D-held targets and refuse further drawing on that swapchain
-  until genuine ResizeBuffers or retirement. Unsupported frame paths
+  until an original ResizeBuffers/ResizeTarget/SetFullscreenState
+  transition or retirement. Unsupported frame paths
   cannot repeatedly recreate expensive GPU resource bindings.
+  The native F3 Block/Chunk display and F3+C clipboard now share the
+  same bounded signed integer floor conversion, including negative
+  fractional coordinates and negative-zero normalization. This is
+  a source formatting guarantee, not a game-observed XYZ result.
 - `dxgi-pacing.cpp` calls the compositor only with
   `BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE` set. The standalone CMake
   option is **OFF**; normal DLL and product packaging remain unchanged.

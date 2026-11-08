@@ -39,6 +39,13 @@ struct Painter {
     // factory/device creation attempt on every game Present. Reset only
     // with a genuine ResizeBuffers or final chain teardown.
     bool refused = false;
+    bool ownsBackbuffers() const noexcept {
+        // Only a completely admitted painter holds resources that need
+        // deferred cleanup after the user hides the debug panel.
+        // A previously REFUSED chain must keep its refusal until a real
+        // swapchain mode transition, never retry just because F3 is hidden.
+        return context.Get() != nullptr;
+    }
 
     void release() noexcept {
         if (context) context->SetTarget(nullptr);
@@ -53,7 +60,7 @@ struct Painter {
     bool refuse() noexcept {
         // Any unsupported or failed native backbuffer admission gets ONE
         // attempt per chain. Release all D2D-held backbuffer COM references;
-        // only the original ResizeBuffers or chain teardown may retry.
+        // only an original swapchain mode change or teardown may retry.
         release();
         refused = true;
         return false;
@@ -216,10 +223,18 @@ bool live(Session& state) noexcept {
 void hide(Session& state) noexcept {
     state.shown = state.f3Held = state.chord = false;
 }
+std::int32_t blockCoordinate(double value) noexcept {
+    // Called exclusively after validFrame: finite world coordinates are
+    // bounded to 30 million, well inside a signed 32-bit integer.
+    // Java/Minecraft block semantics are FLOOR (not truncation), including
+    // negative fractional XYZ. An integer also cannot format as "-0".
+    return static_cast<std::int32_t>(std::floor(value));
+}
 bool copyCoordinates(HWND owner, const PlayerFrame& frame) noexcept {
     wchar_t coordinates[128]{};
-    const int size = swprintf_s(coordinates, L"%.0f %.0f %.0f",
-        std::floor(frame.x), std::floor(frame.y), std::floor(frame.z));
+    const int size = swprintf_s(coordinates, L"%d %d %d",
+        blockCoordinate(frame.x), blockCoordinate(frame.y),
+        blockCoordinate(frame.z));
     if (size <= 0) return false;
     // Prepare all memory BEFORE taking the process-global Windows clipboard.
     // EmptyClipboard can send WM_DESTROYCLIPBOARD to the previous owner.
@@ -396,9 +411,12 @@ void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noex
     const DWORD error = GetLastError();
     AcquireSRWLockExclusive(&session.lock);
     // The original DXGI wrapper invokes us on every eligible Present.
-    // A hidden F3 panel must never query COM interfaces, initialize D2D,
-    // create swapchain targets or sample the player every frame.
+    // A hidden F3 panel must never query the game's swapchain, initialize
+    // D2D, create targets or sample FPS each frame. Drop any retained
+    // D2D/backbuffer COM references once, on the next normal Present after
+    // F3 was hidden. Rapid hide/show before that Present may reuse them.
     if (!session.claimed || !session.shown) {
+        if (session.painter.ownsBackbuffers()) session.painter.release();
         ReleaseSRWLockExclusive(&session.lock);
         SetLastError(error);
         return;
@@ -427,13 +445,16 @@ void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noex
                 } else {
                     wcscpy_s(fps, L"--");
                 }
-                const double bx = std::floor(f.x), by = std::floor(f.y), bz = std::floor(f.z);
-                const double cx = std::floor(bx / 16.), cz = std::floor(bz / 16.);
+                const std::int32_t bx = blockCoordinate(f.x);
+                const std::int32_t by = blockCoordinate(f.y);
+                const std::int32_t bz = blockCoordinate(f.z);
+                const std::int32_t cx = blockCoordinate(static_cast<double>(bx) / 16.);
+                const std::int32_t cz = blockCoordinate(static_cast<double>(bz) / 16.);
                 const int written = swprintf_s(text,
                     L"Minecraft Education | F3 Debug\n"
                     L"XYZ: %.2f / %.2f / %.2f\n"
-                    L"Block: %.0f / %.0f / %.0f\n"
-                    L"Chunk: %.0f / %.0f\n"
+                    L"Block: %d / %d / %d\n"
+                    L"Chunk: %d / %d\n"
                     L"Facing: %ls\n"
                     L"Yaw / Pitch: %.2f / %.2f\n"
                     L"Dimension: %ls\n"
