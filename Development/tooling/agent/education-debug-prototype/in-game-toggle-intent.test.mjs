@@ -2,7 +2,7 @@
 // No Minecraft Add-On, Script API subscription or native key hook runs.
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {planPlayerSourcedDebugToggle} from './in-game-toggle-intent.mjs';
+import {planPlayerSourcedDebugToggle, planVisiblePlayerDebugFrame} from './in-game-toggle-intent.mjs';
 
 const eventId='example:debug_toggle'; // Test-only; NOT a published team wire ID.
 function player(x=-385.25) {
@@ -94,4 +94,83 @@ test('hide is a player-specific UI intent and never calls a stale Player getter'
   stale.getRotation=()=>{throw new Error('stale');};
   assert.deepEqual(planPlayerSourcedDebugToggle(origin(stale),{eventId,currentlyVisible:true}),
     {kind:'hide',player:stale,nextVisible:false});
+});
+
+test('visible in-game debug data changes with position without a second toggle',()=>{
+  const p=player();
+  const opened=planPlayerSourcedDebugToggle(origin(p),{eventId,currentlyVisible:false});
+  assert.equal(opened.kind,'show');
+  const idle=planVisiblePlayerDebugFrame(p,{
+    visible:opened.nextVisible,
+    previousLines:opened.lines,
+    previousCoordinatesText:opened.copyCoordinatesText,
+  });
+  assert.deepEqual(idle,{kind:'unchanged',player:p,nextVisible:true},
+    'No needless render request while player data is unchanged');
+  p.location.x = -384.2;
+  const moved=planVisiblePlayerDebugFrame(p,{
+    visible:true,previousLines:opened.lines,
+    previousCoordinatesText:opened.copyCoordinatesText,
+  });
+  assert.equal(moved.kind,'update');
+  assert.equal(moved.player,p);
+  assert.equal(moved.copyCoordinatesText,'-385 64 -61');
+  assert.ok(moved.lines.includes('XYZ: -384.20 / 64.00 / -60.10'));
+  assert.equal(Object.isFrozen(moved.lines),true);
+  assert.equal(Object.hasOwn(moved,'clipboardWritten'),false);
+});
+
+test('facing and dimension refresh even if block coordinates do not change',()=>{
+  const p=player();
+  const opened=planPlayerSourcedDebugToggle(origin(p),{eventId,currentlyVisible:false});
+  p.getRotation=()=>({x:-20,y:90});
+  p.dimension={id:'minecraft:nether'};
+  const update=planVisiblePlayerDebugFrame(p,{
+    visible:true, previousLines:opened.lines,
+    previousCoordinatesText:opened.copyCoordinatesText,
+  });
+  assert.equal(update.kind,'update');
+  assert.equal(update.lines[5],'Facing: West (-X)');
+  assert.equal(update.lines[6],'Rotation: yaw 90.00 / pitch -20.00');
+  assert.equal(update.lines[7],'Dimension: Nether');
+  assert.equal(update.copyCoordinatesText,opened.copyCoordinatesText);
+});
+
+test('hidden panels never read player data or issue a UI update',()=>{
+  const p={typeId:'minecraft:player'};
+  Object.defineProperty(p,'location',{get(){throw new Error('must not be read');}});
+  p.getRotation=()=>{throw new Error('must not be called');};
+  assert.equal(planVisiblePlayerDebugFrame(p,{visible:false}),null);
+  assert.throws(()=>planVisiblePlayerDebugFrame(p,{visible:'false'}),TypeError);
+  assert.equal(planVisiblePlayerDebugFrame(null,{visible:false}),null);
+  assert.equal(planVisiblePlayerDebugFrame({typeId:'minecraft:zombie'},{visible:true}),null);
+});
+
+test('invalid player refresh clears an old panel rather than retaining stale coordinates',()=>{
+  const p=player();
+  p.location.x=Number.NaN;
+  const state=planVisiblePlayerDebugFrame(p,{visible:true});
+  assert.deepEqual(state,{kind:'hide',player:p,nextVisible:false});
+  const retired=player();
+  Object.defineProperty(retired,'typeId',{get(){throw new Error('entity no longer valid');}});
+  assert.deepEqual(planVisiblePlayerDebugFrame(retired,{visible:true}),
+    {kind:'hide',player:retired,nextVisible:false});
+});
+
+test('five player refresh intents remain independent without MCxx name or PID routing',()=>{
+  const players=[-385,7,31,90,-12].map(x=>player(x));
+  const states=players.map(p=>planVisiblePlayerDebugFrame(p,{visible:true}));
+  assert.deepEqual(states.map(x=>x.player),players);
+  assert.deepEqual(states.map(x=>x.copyCoordinatesText),[
+    '-385 64 -61','7 64 -61','31 64 -61','90 64 -61','-12 64 -61',
+  ]);
+  players[1].location.x=8.2;
+  const updated=planVisiblePlayerDebugFrame(players[1],{
+    visible:true,
+    previousLines:states[1].lines,
+    previousCoordinatesText:states[1].copyCoordinatesText,
+  });
+  assert.equal(updated.kind,'update');
+  assert.equal(updated.copyCoordinatesText,'8 64 -61');
+  assert.equal(states[0].copyCoordinatesText,'-385 64 -61');
 });

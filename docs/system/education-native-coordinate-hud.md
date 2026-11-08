@@ -345,6 +345,23 @@ Source references:
 - https://learn.microsoft.com/en-us/minecraft/creator/reference/content/commandsreference/examples/commands/scriptevent
 - https://minecraft.wiki/w/Bedrock_Edition_26.0
 
+## Live source refresh for the eventual F3 panel — 8 November 2026
+
+The prior `in-game-toggle-intent.mjs` only emitted an initial show/hide
+snapshot. The new side-effect-free
+`planVisiblePlayerDebugFrame` produces `update`, `unchanged` or `hide`
+for the exact original Player as coordinated by the original team's display
+owner. It can avoid repeated UI writes while idle and stop showing stale
+coordinates after a failed or retired-player read. No listener, timer,
+HUD renderer, clipboard setter, installed pack, active F3 binding or
+Minecraft session code is added.
+
+The original team's repository remains unavailable to the current GitHub
+connection; this data refresh has NOT been connected to live rendering.
+The Bedrock 26.0 command macro is `Alt + key`, while the accepted goal is
+**F3 alone**; Education 26.33 support and any real physical F3-origin
+event are NOT_VERIFIED. Authored Node regression cases are NOT_EXECUTED.
+
 ## References
 
 - Mojang vanilla Bedrock HUD sample:

@@ -47,6 +47,33 @@ database, `@minecraft/server-ui` form or actionbar/scoreboard writer in
 LazyTester. The team repository is not visible through this GitHub
 connection, so this source is only an integration candidate.
 
+## Live-player debug updates (source-only)
+
+The previous player-origin toggle only produced one snapshot when the panel was
+first shown. Java-style debug information must also change as the player
+moves, turns, or travels between dimensions. The pure
+`planVisiblePlayerDebugFrame(player, {visible, previousLines,
+previousCoordinatesText})` projection now proposes:
+- `update`: the same validated Player has new coordinates/rotation/dimension.
+- `unchanged`: text and copyable coordinate text are unchanged, so no repeat
+  render request is needed.
+- `hide`: previously visible Player data became invalid; the team owner
+  should clear its old panel instead of displaying stale coordinates.
+- `null`: panel is hidden, or the supplied entity is not a Player.
+
+This does **not** poll the game, read raw key input, render a screen, alter
+Minecraft's UI, own visibility state, or change the clipboard. The original
+team `display/coords` owner must call this at its **existing** update cadence
+and decide the actual rendering and cleanup. No new timer, subscription,
+world-wide player enumeration, or per-profile process lookup is introduced.
+
+**Unresolved input gap:** confirmed Bedrock 26.0 Command Macros use
+`Alt + key` chords. Microsoft Education's published 26.33 changes do not
+establish that the macro feature exists there. Neither that shortcut nor an
+Entity-origin `/scriptevent` proves **F3-only** key-up. The stable
+`InputButton` reference exposes Jump and Sneak only. No claimed F3
+behavior or installation is made by this source milestone.
+
 ## Acceptance proof needed, not yet executed
 
 1. Prove keyboard F3 event delivery **inside the Minecraft client** with world loaded, chat closed, and game foreground; a second F3 hides it.

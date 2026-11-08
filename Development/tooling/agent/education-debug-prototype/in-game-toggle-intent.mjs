@@ -45,3 +45,38 @@ export function planPlayerSourcedDebugToggle(event, {eventId, currentlyVisible} 
     return null;
   }
 }
+
+// The original team display owner invokes this only while ITS own per-player
+// F3-like panel is visible, at its existing observation cadence. It doesn't
+// start a per-tick worker or render, and it never asserts that F3 was pressed.
+// Suppress duplicate frames to avoid unnecessary UI writes during idle play.
+export function planVisiblePlayerDebugFrame(
+  player, {visible, previousLines = null, previousCoordinatesText = null} = {},
+) {
+  if (typeof visible !== 'boolean') {
+    throw new TypeError('Unverified team-owned debug visibility');
+  }
+  if (!visible) return null; // Never read a hidden/retired Player.
+  try {
+    if (player?.typeId !== 'minecraft:player') return null;
+    const snapshot = formatPlayerDebugSnapshot({
+      location: player.location,
+      rotation: player.getRotation(),
+      dimensionId: player.dimension?.id,
+    });
+    if (Array.isArray(previousLines) &&
+        previousLines.length === snapshot.lines.length &&
+        previousLines.every((line, index) => line === snapshot.lines[index]) &&
+        previousCoordinatesText === snapshot.copyCoordinatesText) {
+      return Object.freeze({kind:'unchanged', player, nextVisible:true});
+    }
+    return Object.freeze({
+      kind:'update', player, nextVisible:true,
+      lines:snapshot.lines, copyCoordinatesText:snapshot.copyCoordinatesText,
+    });
+  } catch {
+    // The team's existing UI owner must hide an obsolete snapshot on a
+    // retired/moved/invalid player rather than indefinitely show stale XYZ.
+    return Object.freeze({kind:'hide', player, nextVisible:false});
+  }
+}
