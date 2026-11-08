@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-**Updated:** 7 November 2026. **Branch:** `Local` only; `main` is
+**Updated:** 8 November 2026. **Branch:** `Local` only; `main` is
 release-reserved and GitHub Actions CI remains disabled. This file owns
 the ONE active development handoff, proof ceiling, and next action.
 Always pin the actual `Local` HEAD. Historical detail through P46 is
@@ -175,6 +175,7 @@ single next action remain unchanged.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Data Storage per-launcher feedback and review preservation (8 November) | Parent chooser now refuses profile switches during a queued graphics change, native CloseOne review, Storage confirmation or in-flight mutation, instead of silently clearing the review. A safe selection clears previous slot's Settings/Storage success notice without invalidating native state or the measured storage report. Current UX acceptance no longer requests removed desktop F3/Coordinates screenshots. Authored static and synthetic-browser regression guards. | REMOTE_GITHUB source and immediate consumer review; fixtures AUTHORED_NOT_EXECUTED; Windows/WebView2, native controller, data/world and Minecraft NOT_VERIFIED |
 | Dev root guard when App already exists (7 November) | Confirmed a bypass in the shared manager/profile application_root resolver: staged App/ previously short-circuited the check for old build-local Data. The official dev target is now checked first and refuses any old Data beside the compiled executable even after App staging. Retains installed App/../Data and nonproject fallback, no migration, deletion or account/world content read. Added both-state Rust and source assertion fixtures | REMOTE_GITHUB source and consumer review; Rust/Vitest/Windows NOT_EXECUTED; no gameplay or installer acceptance |
 | Pre-localtest interaction admission (7 November) | Removed a source-proven CloseOne bypass: pending confirmation no longer disappears when users select/launch another card; guard source prevents overlapping CloseOne and queued actions. Storage review locks competing buttons, Refresh and Advanced collapse until explicit Cancel; audio checkbox reconciles after native receipt/refusal. Added source and synthetic UI regression assertions, updated stale source assertions without changing native session authority | REMOTE_GITHUB SOURCE_PREPARED; Vitest/Playwright/Windows/WebView2/Minecraft NOT_EXECUTED |
 | One-checkout native root and storage continuity (7 November) | Corrects manager_settings::application_root for approved workspace/Tauri dev targets BEFORE App is staged; profile owner and manager cache share this resolver. Older build-local Data is detected and preserved with a fail-closed error, no automatic migration; installed App/../Data and legacy fallback unchanged. Updated canonical layout, workspace/root docs and read-only localtest procedure with root/UX verification | REMOTE_GITHUB SOURCE_PREPARED; Rust/TypeScript regression fixtures AUTHORED_NOT_EXECUTED, Windows filesystem/installer/gameplay NOT_VERIFIED |

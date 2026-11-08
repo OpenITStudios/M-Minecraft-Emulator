@@ -47,9 +47,16 @@
   $: selectedPath=dataLocation?.profiles.find(item=>item.slot===selectedSlot)?.path;
   $: graphicsDirty=!!settings?.graphicsPresets&&graphicsPreset!==settings.graphicsPresets[selectedSlot-1];
   function chooseSlot(slot:ProfileSlot){
-    if (slot===selectedSlot) return;
+    // A profile switch is display-only. It must never silently dismiss
+    // an active CloseOne/Storage confirmation or an in-flight mutation.
+    if (slot===selectedSlot || busy || queuedPreset!==null ||
+        closeReviewActive(reviewState()) || clearingData ||
+        clearSlot!==null || recovery!==null || fullReview!==null) return;
     if (page==='settings') rememberGraphicsDraft();
-    selectedSlot=slot;clearSlot=null;recovery=null;fullReview=null;settingsNotice='';
+    selectedSlot=slot;
+    // Per-profile success receipts are not native session or storage truth.
+    // Do not show the prior slot's receipt under the newly selected slot.
+    settingsNotice='';storageNotice='';
     graphicsPreset=graphicsChoice(slot);
   }
   let savingPerformance=false;

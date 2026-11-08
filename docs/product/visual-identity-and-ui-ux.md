@@ -59,6 +59,14 @@ that ten rounds of source commits constitute finished UI acceptance.
    logical Tab order and discernible state. Focus remains visible and
    returns predictably when short-lived UI is removed.
 
+**8 November source-only clarification:** Switching the selected launcher in
+General or Data Storage must never dismiss a pending native-sensitive review.
+A completed switch clears only previous-launcher success feedback; stored
+profile data, the most recently observed storage measurements, and native
+admission remain unchanged. The parent callback guards this even if an
+out-of-date UI event arrives. These are authored source contracts, not
+completed WebView or Windows acceptance.
+
 ### Prioritized closure matrix
 
 `SOURCE_PREPARED` means source exists and has been inspected, **not**
@@ -98,8 +106,9 @@ more unexecuted fixtures or generating mock UI images.
 Use the existing validation system, not a new runner: capture sanitized
 screenshots and DOM/focus measurements of **Play, General, Data Storage,
 all five mixed statuses, delayed startup, connection failure, preview
-unavailable, CloseOne, cache/restore/full-clear review, F3, Coordinates,
-AI & Testing (when truly reported), and transient error/recovery**.
+unavailable, CloseOne, cache/restore/full-clear review, absence of the
+removed desktop F3/Coordinates controls, AI & Testing (when truly reported),
+and transient error/recovery**.
 Record the exact 40-character `Local` SHA, OS/WebView2 versions, viewport
 size, DPI, expected/observed result and PASS/FAIL/INCONCLUSIVE. Minimum
 sizes are 920×620 and 1280×900 with 100%, 125%, 150% and 200% DPI.

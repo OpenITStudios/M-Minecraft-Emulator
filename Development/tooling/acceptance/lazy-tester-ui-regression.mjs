@@ -806,6 +806,9 @@ try {
   await page.getByRole('button',{name:'Clear cache…',exact:true}).click();
   const cacheReview=page.getByRole('region',{name:'Confirm cache cleanup'});
   await cacheReview.waitFor();
+  const storageProfilePicker = page.getByRole('combobox',{name:'Choose Minecraft launcher'});
+  assert.equal(await storageProfilePicker.isDisabled(),true,
+    'A pending Storage review must block switching the selected launcher');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Refresh cannot invalidate a pending Storage confirmation');
   assert.equal(await page.getByRole('button',{name:'Clear all data…',exact:true}).isDisabled(),true,
@@ -818,6 +821,11 @@ try {
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true})
     .evaluate(node=>document.activeElement===node),true,
     'Cancel must still return focus to the original cache review trigger');
+  await storageProfilePicker.selectOption('2');
+  assert.equal(await storageProfilePicker.inputValue(),'2');
+  assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
+    'Switching to MC02 must display its own cache admission, not MC01 status');
+  await storageProfilePicker.selectOption('1');
   await page.locator('.lt-advanced summary').click();
   await section('General').click();
   await section('Data Storage').click();
