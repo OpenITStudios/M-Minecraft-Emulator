@@ -138,6 +138,25 @@ not obtainable from Education must be explicitly flagged as a
 F3 is open, subject to confirming it does not conflict with an existing
 Education input mapping. No automatic clipboard writes.
 
+## Read-only PE evidence collector — source prepared, NOT_EXECUTED
+
+`Development/tooling/acceptance/windows/inspect-education-f3-pe.ps1`
+is a developer-only, explicit-call **metadata** collector. It uses
+the existing `Resolve-ManagerEducationTarget -RegisteredOnly` to
+locate exactly one registered signed Education Desktop executable.
+It reads bounded AMD64 PE header/sections, optionally decodes
+a *reference* to CodeView/RSDS symbol metadata, hashes the entire
+existing image using SHA-256 and emits JSON without local paths,
+binary bytes, PDB source paths, or account/world data.
+
+Neither an RSDS reference nor a PE import proves a callable game
+`Player` interface, raw F3 key event, or in-game render hook. The
+report explicitly marks those ABI fields `NOT_ESTABLISHED` and
+does not launch or attach to Minecraft. It is not an F3 mod, is not
+connected to LazyTester startup, does not install a DLL or enable
+CI. The exact Education 26.33 build and native interfaces remain
+unverified until separate authorized evidence and Windows execution.
+
 ## Real integration evidence that is MISSING
 
 | Gate | Evidence required | Now |
