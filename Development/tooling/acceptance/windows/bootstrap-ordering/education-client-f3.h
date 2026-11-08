@@ -52,9 +52,10 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
 // FPS is read lazily from the ONE existing DXGI policy only when a
 // visible, current Player frame requires an actual D3D11 draw.
 void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noexcept;
-// Release F3-held backbuffers BEFORE native ResizeBuffers/ResizeBuffers1,
-// ResizeTarget and SetFullscreenState; reset cached render admission only
-// on these genuine DXGI mode transitions or final chain retirement.
+// The one F3 session serializes graphics teardown separately from Player
+// state. DXGI callers MUST pair before/after even when the native method
+// fails. Nested fullscreen/resize operations remain gated until all return.
 void before_resize(HWND game) noexcept;
+void after_resize(HWND game) noexcept;
 void retire(HWND game) noexcept;
 } // namespace education_client_f3

@@ -193,6 +193,24 @@ The former plan-only route now has a **real C++ source slice** inside
   same bounded signed integer floor conversion, including negative
   fractional coordinates and negative-zero normalization. This is
   a source formatting guarantee, not a game-observed XYZ result.
+- Rendering ownership is now split **inside the original F3 session**:
+  `session.lock` protects short-lived Player/input/visibility updates,
+  while `session.graphics` serializes COM/Direct2D initialization, draw,
+  resource release and native swapchain teardown. Whenever both are held,
+  the order is always **graphics → lock**. No Player or keyboard callback
+  waits for an ongoing GPU draw while holding its own state lock.
+  Each Present copies an admitted Player frame, releases the Player lock,
+  then rechecks the world/visibility before drawing. A concurrent hide
+  can still occur after that final check; the following Present will
+  clean up the graphics references.
+- Native mode changes now use a paired
+  `before_resize`/`after_resize` admission across both ResizeBuffers
+  variants, ResizeTarget and SetFullscreenState. It blocks new F3 input
+  and renders while native DXGI changes are in flight, including nested
+  mode transitions, and restores the prior Win32 LastError after
+  forwarding. A failed native resize leaves F3 hidden, not silently
+  re-enabled. This is source-only and has **NOT** been compiled or
+  verified in Education.
 - `dxgi-pacing.cpp` calls the compositor only with
   `BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE` set. The standalone CMake
   option is **OFF**; normal DLL and product packaging remain unchanged.

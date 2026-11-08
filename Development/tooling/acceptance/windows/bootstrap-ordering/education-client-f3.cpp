@@ -175,7 +175,12 @@ struct Painter {
 };
 
 struct Session {
+    // F3 input/Player data is small and must not wait for GPU/COM calls.
+    // Lock ordering when both needed: graphics -> lock. Key/Player
+    // callbacks acquire only lock; never acquire graphics while holding it.
     SRWLOCK lock = SRWLOCK_INIT;
+    SRWLOCK graphics = SRWLOCK_INIT;
+    unsigned modeChanges = 0;
     HWND owner = nullptr;
     DWORD ownerThread = 0;
     bool claimed = false, shown = false, f3Held = false, chord = false, fresh = false;
@@ -345,6 +350,7 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
         && GetCurrentThreadId() == gameThread
         && exactWindow(game, gameThread)
         && GetForegroundWindow() == game
+        && session.modeChanges == 0
         && gameplay && physical && live(session);
     if (!admitted) {
         hide(session);
@@ -409,92 +415,143 @@ KeyResult game_key(HWND game, DWORD gameThread, UINT message, WPARAM key,
 
 void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noexcept {
     const DWORD error = GetLastError();
+    // One graphics owner per process serializes in-swapchain D2D work and
+    // teardown, but does NOT hold the Player/key state lock during GPU
+    // calls. This is the existing F3 session, not another game controller.
+    AcquireSRWLockExclusive(&session.graphics);
+    PlayerFrame frame{};
+    bool shouldDraw = false;
     AcquireSRWLockExclusive(&session.lock);
-    // The original DXGI wrapper invokes us on every eligible Present.
-    // A hidden F3 panel must never query the game's swapchain, initialize
-    // D2D, create targets or sample FPS each frame. Drop any retained
-    // D2D/backbuffer COM references once, on the next normal Present after
-    // F3 was hidden. Rapid hide/show before that Present may reuse them.
-    if (!session.claimed || !session.shown) {
-        if (session.painter.ownsBackbuffers()) session.painter.release();
-        ReleaseSRWLockExclusive(&session.lock);
-        SetLastError(error);
-        return;
-    }
-    const bool eligible = session.owner == game
-        && session.ownerThread == gameThread && exactWindow(game, gameThread)
-        && GetForegroundWindow() == game && live(session) && original;
-    if (!eligible) {
-        hide(session); // No stale data, background focus or absent Player.
-    } else {
-        ComPtr<IDXGISwapChain4> chain;
-        if (FAILED(original->QueryInterface(IID_PPV_ARGS(&chain)))
-            || !session.painter.prepare(chain.Get())) {
-            hide(session);
+    if (session.claimed && session.shown) {
+        if (session.modeChanges == 0 && session.owner == game
+            && session.ownerThread == gameThread && exactWindow(game, gameThread)
+            && GetForegroundWindow() == game && original && live(session)) {
+            frame = session.frame;
+            shouldDraw = true;
         } else {
-            if (session.shown) {
-                const auto& f = session.frame;
-                wchar_t text[768]{}, fps[40]{};
-                // No FPS telemetry work on the ordinary hidden-F3
-                // Present path. The existing native HUD meter remains
-                // the sole source, sampled only when text is drawn.
-                const auto reading = dxgi_pacing::hud_snapshot().reading;
-                if (reading.valid) {
-                    swprintf_s(fps, L"%.1f",
-                        static_cast<double>(reading.milliFps) / 1000.);
-                } else {
-                    wcscpy_s(fps, L"--");
-                }
-                const std::int32_t bx = blockCoordinate(f.x);
-                const std::int32_t by = blockCoordinate(f.y);
-                const std::int32_t bz = blockCoordinate(f.z);
-                const std::int32_t cx = blockCoordinate(static_cast<double>(bx) / 16.);
-                const std::int32_t cz = blockCoordinate(static_cast<double>(bz) / 16.);
-                const int written = swprintf_s(text,
-                    L"Minecraft Education | F3 Debug\n"
-                    L"XYZ: %.2f / %.2f / %.2f\n"
-                    L"Block: %d / %d / %d\n"
-                    L"Chunk: %d / %d\n"
-                    L"Facing: %ls\n"
-                    L"Yaw / Pitch: %.2f / %.2f\n"
-                    L"Dimension: %ls\n"
-                    L"FPS: %ls\n"
-                    L"F3: Hide    F3+C: Copy XYZ",
-                    f.x, f.y, f.z, bx, by, bz, cx, cz,
-                    facing(f.yaw), f.yaw, f.pitch, dimension(f.dimension), fps);
-                if (written <= 0 || !session.painter.draw(chain.Get(), text)) {
-                    hide(session);
-                    // No successful Draw acknowledgement is fabricated if a
-                    // device/swapchain reset or an incompatible buffer fails.
-                }
-            }
+            hide(session);
         }
     }
     ReleaseSRWLockExclusive(&session.lock);
+    if (!shouldDraw) {
+        // Hidden panels drop cached successful backbuffers once. A failed
+        // painter retains its refusal until actual native mode change.
+        if (session.painter.ownsBackbuffers()) session.painter.release();
+        ReleaseSRWLockExclusive(&session.graphics);
+        SetLastError(error);
+        return;
+    }
+
+    bool drew = false;
+    ComPtr<IDXGISwapChain4> chain;
+    if (sampleFresh(frame, GetTickCount64()) && original
+        && SUCCEEDED(original->QueryInterface(IID_PPV_ARGS(&chain)))
+        && session.painter.prepare(chain.Get())) {
+        wchar_t text[768]{}, fps[40]{};
+        // Reuse the one existing in-process measured FPS owner, only
+        // while rendering a visible, freshly validated Player frame.
+        const auto reading = dxgi_pacing::hud_snapshot().reading;
+        if (reading.valid) {
+            swprintf_s(fps, L"%.1f",
+                static_cast<double>(reading.milliFps) / 1000.);
+        } else {
+            wcscpy_s(fps, L"--");
+        }
+        const std::int32_t bx = blockCoordinate(frame.x);
+        const std::int32_t by = blockCoordinate(frame.y);
+        const std::int32_t bz = blockCoordinate(frame.z);
+        const std::int32_t cx = blockCoordinate(static_cast<double>(bx) / 16.);
+        const std::int32_t cz = blockCoordinate(static_cast<double>(bz) / 16.);
+        const int written = swprintf_s(text,
+            L"Minecraft Education | F3 Debug\n"
+            L"XYZ: %.2f / %.2f / %.2f\n"
+            L"Block: %d / %d / %d\n"
+            L"Chunk: %d / %d\n"
+            L"Facing: %ls\n"
+            L"Yaw / Pitch: %.2f / %.2f\n"
+            L"Dimension: %ls\n"
+            L"FPS: %ls\n"
+            L"F3: Hide    F3+C: Copy XYZ",
+            frame.x, frame.y, frame.z, bx, by, bz, cx, cz,
+            facing(frame.yaw), frame.yaw, frame.pitch,
+            dimension(frame.dimension), fps);
+        if (written > 0) {
+            // Input can hide the panel while graphics are being prepared.
+            // Never draw a retired world or a panel hidden in the meantime.
+            AcquireSRWLockShared(&session.lock);
+            const bool current = session.claimed && session.shown
+                && session.modeChanges == 0
+                && session.owner == game && session.ownerThread == gameThread
+                && session.worldGeneration == frame.worldGeneration
+                && live(session);
+            ReleaseSRWLockShared(&session.lock);
+            if (current && GetForegroundWindow() == game)
+                drew = session.painter.draw(chain.Get(), text);
+            else {
+                ReleaseSRWLockExclusive(&session.graphics);
+                SetLastError(error);
+                return;
+            }
+        }
+    }
+    if (!drew) {
+        AcquireSRWLockExclusive(&session.lock);
+        if (session.claimed && session.owner == game
+            && session.ownerThread == gameThread) {
+            hide(session);
+        }
+        ReleaseSRWLockExclusive(&session.lock);
+        // A failed native graphics admission is not an F3 success.
+        // The next hidden Present releases successful cached targets.
+    }
+    ReleaseSRWLockExclusive(&session.graphics);
     SetLastError(error);
 }
 void before_resize(HWND game) noexcept {
     const DWORD error = GetLastError();
+    // Graphics first, then Player state: same lock order as before_present.
+    // This waits for an in-flight D2D frame before native DXGI changes
+    // buffers, without keeping the input/Player state lock on GPU calls.
+    AcquireSRWLockExclusive(&session.graphics);
     AcquireSRWLockExclusive(&session.lock);
-    if (session.claimed && session.owner == game) {
-        session.painter.release(); // Drop all backbuffer refs before ResizeBuffers.
+    const bool owned = session.claimed && session.owner == game;
+    if (owned) {
+        if (session.modeChanges != ~0u) ++session.modeChanges;
         hide(session);
+    }
+    ReleaseSRWLockExclusive(&session.lock);
+    if (owned) session.painter.release();
+    ReleaseSRWLockExclusive(&session.graphics);
+    SetLastError(error);
+}
+void after_resize(HWND game) noexcept {
+    const DWORD error = GetLastError();
+    // DXGI callers pair begin/end even on native failure. Nested mode
+    // changes remain gated until all outstanding calls return.
+    AcquireSRWLockExclusive(&session.lock);
+    if (session.claimed && session.owner == game
+        && session.modeChanges > 0 && session.modeChanges != ~0u) {
+        --session.modeChanges;
     }
     ReleaseSRWLockExclusive(&session.lock);
     SetLastError(error);
 }
 void retire(HWND game) noexcept {
     const DWORD error = GetLastError();
+    AcquireSRWLockExclusive(&session.graphics);
     AcquireSRWLockExclusive(&session.lock);
-    if (session.claimed && session.owner == game) {
-        session.painter.release();
+    const bool owned = session.claimed && session.owner == game;
+    if (owned) {
         hide(session);
         session.claimed = session.fresh = false;
         session.owner = nullptr; session.ownerThread = 0;
+        session.modeChanges = 0;
         session.observed = 0; session.worldGeneration = 0;
         session.frame = {};
     }
     ReleaseSRWLockExclusive(&session.lock);
+    if (owned) session.painter.release();
+    ReleaseSRWLockExclusive(&session.graphics);
     SetLastError(error);
 }
 } // namespace education_client_f3

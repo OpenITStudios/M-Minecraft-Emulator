@@ -140,7 +140,11 @@ public:
         // The original game may replace/reconfigure backbuffers here.
         // Release all F3 Direct2D targets BEFORE forwarding to native DXGI.
         education_client_f3::before_resize(window_);
-        return inner_->SetFullscreenState(fullscreen, target);
+        const HRESULT result = inner_->SetFullscreenState(fullscreen, target);
+        const DWORD after = GetLastError();
+        education_client_f3::after_resize(window_);
+        SetLastError(after);
+        return result;
     }
 #else
     FORWARD(SetFullscreenState, (BOOL fullscreen, IDXGIOutput* target), (fullscreen, target))
@@ -151,7 +155,11 @@ public:
     HRESULT STDMETHODCALLTYPE ResizeBuffers(UINT count, UINT w, UINT h,
         DXGI_FORMAT format, UINT flags) override {
         education_client_f3::before_resize(window_);
-        return inner_->ResizeBuffers(count, w, h, format, flags);
+        const HRESULT result = inner_->ResizeBuffers(count, w, h, format, flags);
+        const DWORD after = GetLastError();
+        education_client_f3::after_resize(window_);
+        SetLastError(after);
+        return result;
     }
 #else
     FORWARD(ResizeBuffers, (UINT count, UINT w, UINT h, DXGI_FORMAT format, UINT flags), (count, w, h, format, flags))
@@ -161,7 +169,11 @@ public:
         // Target-mode changes can invalidate cached presentation surfaces,
         // even if the game has not called ResizeBuffers yet.
         education_client_f3::before_resize(window_);
-        return inner_->ResizeTarget(value);
+        const HRESULT result = inner_->ResizeTarget(value);
+        const DWORD after = GetLastError();
+        education_client_f3::after_resize(window_);
+        SetLastError(after);
+        return result;
     }
 #else
     FORWARD(ResizeTarget, (const DXGI_MODE_DESC* value), (value))
@@ -191,7 +203,11 @@ public:
         DXGI_FORMAT format, UINT flags, const UINT* masks,
         IUnknown* const* queues) override {
         education_client_f3::before_resize(window_);
-        return inner_->ResizeBuffers1(count, w, h, format, flags, masks, queues);
+        const HRESULT result = inner_->ResizeBuffers1(count, w, h, format, flags, masks, queues);
+        const DWORD after = GetLastError();
+        education_client_f3::after_resize(window_);
+        SetLastError(after);
+        return result;
     }
 #else
     FORWARD(ResizeBuffers1, (UINT count, UINT w, UINT h, DXGI_FORMAT format, UINT flags,
