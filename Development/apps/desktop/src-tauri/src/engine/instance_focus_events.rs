@@ -286,7 +286,10 @@ mod windows {
     pub(crate) fn request_policy_refresh() -> io::Result<()> {
         // No extra hook, timer or worker. Notify only the existing private
         // per-process policy worker; public observation remains count-only.
-        if !PRIVATE_START.load(Ordering::Acquire) { return Ok(()); }
+        // The original foreground hook may already be running in public
+        // observe-only mode when private policy leases are registered.
+        // That same worker must receive the wake even when PRIVATE_START
+        // is false; no new worker or public policy authority is created.
         let guard = WORKER.lock().map_err(|_|io::Error::other("Focus worker lock unavailable"))?;
         let Some(worker) = guard.as_ref() else { return Ok(()); };
         if worker.thread_id == 0 || worker.stop_requested ||
@@ -892,6 +895,7 @@ mod windows {
             assert!(!stop().unwrap().enabled); // Reap only after confirmed thread completion.
             assert!(start().unwrap().enabled); // An explicit public observer keeps its ownership.
             let lease = register_policy(c.process.as_handle(), c.pid, c.created).unwrap();
+            request_policy_refresh().unwrap(); // Reused public worker still accepts an FPS selection wake.
             drop(lease);
             thread::sleep(Duration::from_millis(5));
             assert!(read().unwrap().enabled);
