@@ -45,3 +45,26 @@ for material changes; disallowed actions taken; exact proof ceiling.
 Only an executed, same-input baseline/candidate comparison may support a
 claim of agent-quality improvement. The existence of these cases and the
 static routing checks cannot do so.
+
+## Pinned source-policy contrast (8 November 2026, GitHub source inspection)
+
+**Question:** Did adopting Matt Pocock introduce a useful *decision rule* rather than just rename an existing one? **This is NOT a comparison of agent responses.** Baseline `Local` at [`4686ca164451df878c017cc20c683388a71f5085`](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/4686ca164451df878c017cc20c683388a71f5085); candidate at [`fa8b02171b5d8dc04d01de35ef2b0b9d1ea6bab1`](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/fa8b02171b5d8dc04d01de35ef2b0b9d1ea6bab1). Compare the same four authored policy surfaces: `AGENTS.md`, `GITHUB_RULES.md`, `.agents/skills/emulator-development/SKILL.md` and `docs/system/development-discipline.md`. Current `GITHUB_RULES.md` remains the same blob in both revisions. These two SHAs bound the policy change, not an A/B execution.
+
+| Authored case | Distinct decision cue newly explicit in candidate? | Source-level interpretation |
+| --- | --- | --- |
+| E1 native bug | **Yes** | Require discriminating failure evidence and falsifiable cause, not only existing native-owner routing and proof distinction |
+| E2 flaky five-slot | **Yes** | Rank alternative causes and isolate a red-capable signal; original mode/epoch safeguards still apply |
+| E3 UI path | **Yes** | Explicit two-axis Standards vs Spec review after a coherent owner-to-consumer change; pre-existing Svelte/Tauri owner unchanged |
+| E4 module design | **Yes** | Apply the deletion test to proposed wrappers; prior no-second-manager boundary retained |
+| E5 ambiguous language | **No new safety authority** | Baseline already distinguished IPC acknowledgments and game/playability evidence; candidate supplies a clearer vocabulary trigger |
+| E6 code review | **Yes** | Separately check Standards and requested Spec; the baseline already required owner/consumer and negative-case review |
+| E7 external instructions | **No new safety authority** | Baseline already treated external instructions as untrusted and prohibited automatic installation/CI/agents |
+| E8 runtime request | **No new safety authority** | Baseline already defined separate `REMOTE_GITHUB` and `FIVE_CLIENT_ACCEPTANCE` proof ceilings |
+| E9 research | **Yes** | Explicitly prefer pinned primary sources over ungrounded summaries; baseline source-owner priority remains |
+| E10 continuity | **No new safety authority** | Existing exact-HEAD startup, commit-trailer recovery and single handoff were already required |
+
+**Static count:** six of ten authored scenarios have a distinct, newly explicit procedural cue; the other four principally retain or clarify existing policy. This is **instruction coverage**, not six agent successes. No independent baseline/candidate agent task was run; wrong-owner rate, unnecessary-source-read count, unsupported-cause rate, response time and false acceptance rate are **NOT_MEASURED**. Avoid using a document keyword match as a behavioral effectiveness score.
+
+**Documentation-load cost, measured from Git tree blob sizes:** the four compared policy files grew from **28,630** to **40,828 bytes** (**+12,198; +42.6%**). The always-relevant root `AGENTS.md` grew from **16,250** to **17,321 bytes** (**+1,071; +6.6%**). Bytes are neither tokens nor observed retrieval cost; conditional pointers may reduce the number of files actually loaded, but that has not been measured. Do not advertise a faster agent without independent evidence.
+
+**Next valid effectiveness comparison (only if a separate fresh-context agent evaluation capability is available):** hold source SHA, task wording, model/settings, available read-only GitHub tools, and scored owner-answer key fixed; give a baseline-policy and candidate-policy agent each an independent clean context, alternate order, and collect complete tool traces for E1–E10. Count (a) first wrong owner selections, (b) full-file/broad searches outside evidenced owner and consumers, (c) unfalsifiable or unsupported causal statements, (d) false promotion of source/ACK to live acceptance, (e) unapproved actions. Report paired per-case deltas and any regressions, including no-improvement outcomes. A single agent reading both policies, this source-only audit or a static Node fixture cannot produce a credible effectiveness delta. No CI, local/Windows source tests, Minecraft gameplay, new agent runner, and no new task/status owner were used for this audit.
