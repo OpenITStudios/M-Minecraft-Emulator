@@ -312,6 +312,39 @@ disposable world. The connected GitHub account cannot read the team repo
 so no team runtime module was edited. All source fixtures are
 AUTHORED_NOT_EXECUTED; actual F3/clipboard/rendering NOT_VERIFIED.
 
+## Existing-player debug toggle adapter — 8 November 2026
+
+A source-only `in-game-toggle-intent.mjs` now provides an explicit integration
+boundary for the original team's script-event and display owner. It
+projects a verified-in-code `sourceType = Entity` and
+`sourceEntity.typeId = minecraft:player` command into a player-specific
+`show`/`hide` UI intent; `show` reads only that entity's
+location/rotation/dimension. It never registers `scriptEventReceive`,
+stores another player's visibility, writes clipboard, or renders outside
+Minecraft. The original team event ID and HUD adapter are NOT invented.
+
+Bedrock 26.0 added configurable **Alt+key** Command Macros that can
+submit commands in-game. The official `/scriptevent` requires Game
+Directors and cheats; even if Alt+F3 -> team-chosen event works on Bedrock,
+it is not evidence that Education 26.33 offers this setting, nor is it the
+requested **F3-only** trigger. The enum `InputButton` exposes Jump/Sneak,
+not F3. An Entity source is command attribution, not a physical-key
+attestation. Do not claim this adapter proves native F3 input or
+compatibility with the team's unavailable implementation.
+
+Success requires: a real F3 key-up observed from exactly the foreground
+game while chat/menu is closed; an existing team-owned HUD visibly
+showing and hiding correct same-player data; independent MC01-MC05
+operation; confirmed native Copy Coordinates if available; and no
+Windows/app overlays or shortcuts. These all remain NOT_EXECUTED /
+NOT_VERIFIED. Node test cases are authored but have NOT been run.
+
+Source references:
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/inputbutton
+- https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server/scripteventcommandmessageafterevent
+- https://learn.microsoft.com/en-us/minecraft/creator/reference/content/commandsreference/examples/commands/scriptevent
+- https://minecraft.wiki/w/Bedrock_Edition_26.0
+
 ## References
 
 - Mojang vanilla Bedrock HUD sample:

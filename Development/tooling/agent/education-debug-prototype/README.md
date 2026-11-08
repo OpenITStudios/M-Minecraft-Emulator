@@ -18,6 +18,35 @@ A direct Java-style F3 toggle cannot currently be wired through the stable docum
 
 The team source `achmadawdi/minecraft-bedrock-agent-skills` is not available through the connected GitHub scope; do not fabricate or fork its subscriptions/interfaces. The existing optional RP at `../education-native-hud-prototype/` is a static note, not a dynamic F3 renderer.
 
+## Candidate for the original team's in-game event owner
+
+`in-game-toggle-intent.mjs` adds **one pure adapter**, not a new runtime:
+`planPlayerSourcedDebugToggle(event, {eventId, currentlyVisible})` reads
+only the exact `sourceEntity` when the existing team's Script API event
+already says `sourceType: 'Entity'`, the entity is
+`minecraft:player`, the **team-chosen** namespaced `eventId` matches,
+and the message equals `toggle`. It produces a `show` intent with
+player-derived debug text, or a `hide` intent without touching a possibly
+stale player. The **team** retains the per-player visibility state and
+must render/clear the panel in Minecraft. This adapter never subscribes to
+`scriptEventReceive`, and no specific event ID is registered or shipped.
+
+**Potential Bedrock-only command-macro experiment:** Bedrock 26.x offers up
+to ten in-game command macros using `Alt + key`; the existing
+`/scriptevent` command can reach a team's *already registered* listener.
+This needs Game Directors/cheats for `/scriptevent`. Minecraft Education
+26.33 support and physical key origin are UNKNOWN. Even if a macro is
+bound to **Alt+F3**, it does not satisfy the required single-key **F3**
+Java-style toggle. An `Entity` source alone also does not authenticate
+a physical F3 keypress: chat, NPC/executed commands and scripts have
+separate origin and permission concerns. No macro, command, handler or
+HUD has been installed.
+
+Do not create a second telemetry module, event subscription, state
+database, `@minecraft/server-ui` form or actionbar/scoreboard writer in
+LazyTester. The team repository is not visible through this GitHub
+connection, so this source is only an integration candidate.
+
 ## Acceptance proof needed, not yet executed
 
 1. Prove keyboard F3 event delivery **inside the Minecraft client** with world loaded, chat closed, and game foreground; a second F3 hides it.
