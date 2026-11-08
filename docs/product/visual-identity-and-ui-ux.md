@@ -67,6 +67,17 @@ admission remain unchanged. The parent callback guards this even if an
 out-of-date UI event arrives. These are authored source contracts, not
 completed WebView or Windows acceptance.
 
+**Refresh / reconnect source closure (8 November):** The existing manual Data
+Storage Refresh still reads the data-location display for recovery, but a
+failed profile binding must not silently skip native storage inspection and
+retain a prior storage receipt. In that case it clears only UI-side cached
+storage/confirmation copy, shows the existing authored binding warning, and
+does not launch, reset, clear or claim a new native session observation. The
+Play heading says session status is unavailable when the binding is verified
+but the latest session inspection failed; it returns to normal guidance only
+after a new valid observation. The original five-slot preview nodes and native
+controller are unchanged. Source/browser scenarios are AUTHORED_NOT_EXECUTED.
+
 ### Prioritized closure matrix
 
 `SOURCE_PREPARED` means source exists and has been inspected, **not**

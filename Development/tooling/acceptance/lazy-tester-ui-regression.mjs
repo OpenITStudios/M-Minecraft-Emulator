@@ -458,6 +458,21 @@ try {
   await page.goto('http://lazy-tester.test/');
   await page.waitForFunction(()=>!!window.__finishBinding);await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
+  // A verified binding alone is not a fresh native session observation.
+  // When Inspect fails, Play must not claim that a game can be chosen.
+  await page.evaluate(()=>{window.__offline=true;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(()=>
+    document.querySelector('.lt-page-header h1')?.textContent==='Session status unavailable');
+  assert.equal(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').isDisabled(),true,
+    'Offline Inspect must not present a launchable profile even with saved binding');
+  assert.doesNotMatch(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').getAttribute('aria-label')??'',/^Launch /,
+    'Unavailable profile must not announce a Launch action');
+  await page.evaluate(()=>{window.__offline=false;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await heading('Ready when you are').waitFor();
+  assert.equal(await page.locator('.lt-page-header h1').textContent(),'Choose a Minecraft below',
+    'A successful fresh Inspect restores normal Play guidance');
   // Keyboard Refresh must not lose focus when the original controller
   // request makes its own button disabled. These are synthetic DOM checks,
   // NOT Windows focus, DPI or five-client acceptance.
@@ -1328,10 +1343,28 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import||c.args?.action==='Choose'||c.args?.request?.operation==='Launch')),false);
   await page.goto('http://lazy-tester.test/?broken=1');await heading('Connection needs attention').waitFor();
   await page.getByRole('region',{name:'Launcher recovery'}).getByRole('button',{name:'Data Storage',exact:true}).click();await heading('Data Storage').waitFor();
+  // The data folder can be inspected independently, even when the original
+  // private profile binding is still refused. This is not a successful Refresh.
+  await page.evaluate(()=>{window.__locationFailure='';});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByText('Launcher profiles not verified',{exact:true}).waitFor();
+  await page.getByText('Storage unavailable. Refresh to inspect again. Unknown does not mean empty.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
+    call.args?.request?.operation==='InspectStorage').length),0,
+    'Failed profile binding must never issue InspectStorage or reuse a previous report');
+  assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
+    'No storage mutation may be enabled from an unverified profile binding');
   await page.getByText('Find existing profile data',{exact:true}).click();
   const locate=page.locator('.lt-location-options').getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
-  await page.evaluate(()=>{window.__locateOutcome='invalid';});await locate.click();await page.getByText('The selected folder does not match the saved profile identities.',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.__locateOutcome='invalid';});await locate.click();await page.getByText('Check the folder in Data Storage before retrying.',{exact:true}).waitFor();
+  assert.equal(await page.getByText('The selected folder does not match the saved profile identities.',{exact:true}).count(),0,
+    'Untrusted native folder errors must never appear in Storage');
   await page.evaluate(()=>{window.__locateOutcome='valid';});await locate.click();await page.getByText('D:\\Recovered Data',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByText(/Last storage report received:/).waitFor();
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    call.args?.request?.operation==='InspectStorage')),true,
+    'A newly verified binding may use the original read-only Storage inspection');
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.action==='Choose'||['Launch','ClearProfileCache'].includes(c.args?.request?.operation))),false);
   assert.deepEqual(errors,[]);
   console.log('PASS: automatic startup reconnect; native capability refusal; layout/DPI; stable polling; settings and offline recovery; synthetic CloseOne recovery uncertainty persists through STOPPED and transport failure until a confirmed native receipt. Mocked Tauri only; no real game/data mutations.');

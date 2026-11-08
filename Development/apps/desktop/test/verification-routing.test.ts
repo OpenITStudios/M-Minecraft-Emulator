@@ -39,7 +39,7 @@ describe("Emulator source verification routing", () => {
     expect(rail).toContain("use:observePreview={profile.slot}");
     expect(rail).toContain("profileSlots.map((slot): ProfileSession =>");
     expect(rail).toContain("issue: 'UNOBSERVED_UI_PLACEHOLDER'");
-    expect(rail).toContain("disabled={busy||!observedSlot||!available||!bindingConfigured");
+    expect(rail).toContain("disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured");
     expect(rail).toContain("canRequestLaunch(profile)&&onLaunch(profile.slot)");
     expect(rail).toContain("guidedRecoveryAllowed(healthItem, profile, profile.slot,");
     expect(rail).toContain("onRequestClose(profile.slot,event.currentTarget)");
@@ -62,8 +62,8 @@ describe("Emulator source verification routing", () => {
   it("keeps manual header Refresh unavailable during an active close review", () => {
     const ui=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
     const scheduling=readFileSync(new URL("../src/app/inspectionScheduling.ts",import.meta.url),"utf8");
-    expect(ui).toContain("manualRefreshRequested||closeReviewPending||nativeBackend");
-    expect(ui).toContain("if (closeReviewActive(reviewState())) return;");
+    expect(ui).toContain("manualRefreshRequested||navigationReviewOpen||nativeBackend");
+    expect(ui).toContain("if (navigationReviewOpen) return;");
     expect(ui).toContain('on:click={requestHeaderRefresh}');
     expect(ui).toContain('manualRefreshRequested=true;');
     expect(ui).toContain("selectedReview: closeOneSlot !== null");
@@ -72,13 +72,31 @@ describe("Emulator source verification routing", () => {
     expect((ui.match(/setInterval\\(/g)??[])).toHaveLength(1);
   });
 
+  it("fails closed on Storage Refresh when profile binding remains unverified", () => {
+    const ui=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
+    const refresh=ui.split("async function refreshPage() {")[1]
+      ?.split("  async function saveAudio(")[0] ?? "";
+    // DataLocation may be readable even when the original private profile
+    // binding is not. The previous measurements must not masquerade as fresh.
+    expect(refresh).toContain("if(!binding?.configured)await checkBinding()");
+    expect(refresh).toContain("dataLocation=await lazyTester.dataLocation()");
+    expect(refresh).toContain("if(!binding?.configured){");
+    expect(refresh).toContain("storage=null;storageNotice='';issueKey='binding';");
+    expect(refresh).toContain("const snapshot=await lazyTester.storage();");
+    expect(refresh).not.toContain("if(binding?.configured){const snapshot=await lazyTester.storage();");
+    // An unavailable session status is never presented as a ready-to-launch
+    // Play heading; availability and the confirmed binding remain distinct.
+    expect(ui).toContain("!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable'");
+  });
+
   it("delegates General Settings rendering without duplicating form state or native authority", () => {
     const parent = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
     const child = readFileSync(new URL("../src/GeneralSettings.svelte", import.meta.url), "utf8");
     expect(parent).toContain("<GeneralSettings {profiles} {selectedSlot} {settings}");
     expect(parent).toContain("bind:graphicsPreset bind:activeFps bind:backgroundFps");
     expect(parent).toContain("onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}");
-    expect(parent).toContain("onOpenDataFolder={() => loadLocation('Open')}");
+    expect(parent).toContain("onDiscardGraphics={discardGraphicsDraft}");
+    expect(parent).toContain("on:click={()=>navigate('storage')}>Data Storage</button>");
     expect(parent).not.toContain('id="graphics-preset"');
     for(const control of ['graphics-preset','active-fps','background-fps'])
       expect(child).toContain('id="'+control+'"');
@@ -88,8 +106,8 @@ describe("Emulator source verification routing", () => {
     expect(child).toContain("function savePerformanceWithFocus(event: SubmitEvent): void");
     expect(child).toContain("onRequestPerformanceSave();");
     expect(child).toContain("frameHeading?.focus({preventScroll:true})");
-    expect(child).toContain("on:click={onOpenDataFolder}");
-    expect(child).toContain("on:click={onShowDataStorage}");
+    expect(child).not.toContain("on:click={onOpenDataFolder}");
+    expect(child).not.toContain("on:click={onShowDataStorage}");
     expect(child).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
   });
 

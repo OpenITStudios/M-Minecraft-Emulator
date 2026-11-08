@@ -405,7 +405,17 @@
         if(!binding?.configured)await checkBinding();
         try{dataLocation=await lazyTester.dataLocation();locationIssue='';}
         catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;throw error;}
-        if(binding?.configured){const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;storageReportReceivedAt=storageReportReceivedTime();available=true;connectionIssueKey=null;}
+        if(!binding?.configured){
+          // A readable DataLocation is not proof of verified profile handles.
+          // Do not present a previous storage report or success receipt as refreshed.
+          // Preserve the independently observed game session; do not retry/mutate it.
+          storage=null;storageNotice='';issueKey='binding';
+          return;
+        }
+        const snapshot=await lazyTester.storage();
+        profiles=snapshot.profiles;storage=snapshot.storage;
+        storageReportReceivedAt=storageReportReceivedTime();
+        available=true;connectionIssueKey=null;
       }catch(error){issueKey='storage';storage=null;}
       finally{checkingStorage=false;busy=false;}
     } else {
@@ -945,7 +955,7 @@
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main class={page==='workspace'?'lt-play-main':undefined}>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:requested?'Starting Minecraft - '+requested:binding?.configured?'Choose a Minecraft below':initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':'Launcher connection unavailable'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Choose a Minecraft below'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions">
           <button class="lt-secondary" bind:this={headerRefreshButton}
             disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
