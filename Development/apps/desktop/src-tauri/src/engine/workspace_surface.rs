@@ -329,8 +329,73 @@ mod controller;
 #[path = "workspace_surface/unsupported_controller.rs"]
 mod controller;
 pub use controller::{
-    is_active, present_retained, present_verified, release, release_for_close, allow_game_close_after_failed_restore, allow_managed_slot_close_after_failed_restore, release_exited_managed_slot_checkpoint, cancel_close, release_target, release_managed_slot, suspend, update,
+    is_active, allow_game_close_after_failed_restore,
+    allow_managed_slot_close_after_failed_restore,
+    release_exited_managed_slot_checkpoint, cancel_close,
 };
+#[cfg(windows)]
+pub(crate) fn presented_policy_target() -> Option<u32> {
+    controller::presented_policy_target()
+}
+// The original foreground worker owns all policy levels. These wrappers
+// only notify it AFTER the native workspace lock has been released;
+// a failed/partial native operation is re-observed, never called a success.
+#[cfg(windows)]
+fn notify_pacing_refresh() {
+    if let Err(error) = super::instance_focus_events::request_policy_refresh() {
+        eprintln!("Native FPS policy refresh notification unavailable: {error}");
+    }
+}
+pub fn present_retained(manager:u64, viewport:Viewport, target:OwnedProcess,
+    session:String, client:String) -> io::Result<bool> {
+    let result=controller::present_retained(manager,viewport,target,session,client);
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
+pub fn present_verified(manager:u64, viewport:Viewport, target:OwnedProcess,
+    session:String, client:String) -> io::Result<()> {
+    let result=controller::present_verified(manager,viewport,target,session,client);
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
+pub fn update(manager:u64, viewport:Option<Viewport>) -> io::Result<()> {
+    let result=controller::update(manager,viewport);
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
+pub fn suspend() -> io::Result<bool> {
+    let result=controller::suspend();
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
+pub fn release() -> io::Result<()> {
+    let result=controller::release();
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
+pub fn release_for_close() -> io::Result<()> {
+    let result=controller::release_for_close();
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
+pub fn release_target(target:&OwnedProcess) -> io::Result<()> {
+    let result=controller::release_target(target);
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
+pub fn release_managed_slot(slot:u32)->Result<(),(bool,io::Error)> {
+    let result=controller::release_managed_slot(slot);
+    #[cfg(windows)]
+    notify_pacing_refresh();
+    result
+}
 #[cfg(windows)]
 pub use controller::follow_manager;
 

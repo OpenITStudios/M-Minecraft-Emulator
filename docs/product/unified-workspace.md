@@ -53,7 +53,7 @@ Settings keeps graphics preferences per launcher, global FPS limits, and
 background audio with explicit save timing and scope; legacy graphics details
 remain collapsed. Preserve Visuals is visibly recommended, while its saved
 effect and the legacy High/Low compatibility tradeoffs remain explicit.
-Frame Limits explains FPS as limits, not measured game performance. Data Storage is reached through the existing Settings sidebar only.
+Frame Limits explains FPS as limits, not measured game performance. Data Storage is reached through the existing Settings sidebar only. The one native per-game FPS policy must react to an original verified Play switch: when the selected game has actual Windows foreground it gets the active cap; if LazyTester itself remains foreground, its original, visibly placed native game may receive the active cap only after exact window and viewport readback. Other games remain background; foreign foreground, minimized/suspended/covered surfaces or unverified identity demote all manager-selected hints. This changes event timing/selection of existing 144/10 ceilings, not saved settings, real measured FPS or game focus, and needs exact-SHA Windows acceptance.
 General has no duplicate folder actions or navigation section. Data Storage reports byte units
 honestly (B/KiB/MiB/GiB), distinguishes zero from unavailable and incomplete
 measurements, and labels the UI receipt time rather than claiming an exact

@@ -220,6 +220,13 @@ mod windows {
             self.finish();
         }
     }
+    // A verified in-app viewport may be the currently selected game while
+    // Windows still reports the manager as foreground. Actual foreground
+    // game/other-app identity always takes precedence; the presentation
+    // fallback is admitted only when the original workspace proves it.
+    fn policy_target(foreground: Option<u32>, manager_pid: u32, presented: Option<u32>) -> Option<u32> {
+        if foreground == Some(manager_pid) { presented } else { foreground }
+    }
     fn publish(bindings: &[Arc<Binding>], selected: Option<u32>) {
         // Demote before promoting; never transiently advertise two active clients.
         for binding in bindings.iter().filter(|p| Some(p.pid) != selected) {
@@ -268,7 +275,29 @@ mod windows {
                 && unsafe { GetForegroundWindow() } == window;
             stable.then_some(pid)
         });
-        publish(&bindings, selected);
+        // This read-only projection uses the original SURFACE lease. Its
+        // try_lock refusal demotes conservatively during an in-flight switch;
+        // the completing workspace operation queues another refresh.
+        let presented = if selected == Some(unsafe { GetCurrentProcessId() }) {
+            crate::engine::workspace_surface::presented_policy_target()
+        } else { None };
+        publish(&bindings, policy_target(selected, unsafe { GetCurrentProcessId() }, presented));
+    }
+    pub(crate) fn request_policy_refresh() -> io::Result<()> {
+        // No extra hook, timer or worker. Notify only the existing private
+        // per-process policy worker; public observation remains count-only.
+        if !PRIVATE_START.load(Ordering::Acquire) { return Ok(()); }
+        let guard = WORKER.lock().map_err(|_|io::Error::other("Focus worker lock unavailable"))?;
+        let Some(worker) = guard.as_ref() else { return Ok(()); };
+        if worker.thread_id == 0 || worker.stop_requested ||
+           !worker.alive.load(Ordering::Acquire) || worker.join.is_finished() {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "FPS focus worker is not accepting presentation notifications"));
+        }
+        if unsafe { PostThreadMessageW(worker.thread_id, REFRESH_POLICY, 0, 0) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
     }
     fn finish_policies() {
         let list = POLICIES
@@ -753,6 +782,22 @@ mod windows {
             assert!(readers.iter().all(|r| state(&r[2])));
         }
         #[test]
+        fn foreground_game_wins_and_manager_only_uses_verified_presentation() {
+            let manager=70;
+            let games=[101,102,103,104,105];
+            for pid in games {
+                assert_eq!(policy_target(Some(pid),manager,Some(101)),Some(pid),
+                    "An OS-foreground game must not be replaced by a different selected card");
+                assert_eq!(policy_target(Some(manager),manager,Some(pid)),Some(pid),
+                    "Only the matched manager foreground may prefer the in-app selected game");
+            }
+            assert_eq!(policy_target(Some(manager),manager,None),None,
+                "Unverified/hidden/suspended viewport cannot promote any game");
+            assert_eq!(policy_target(Some(900),manager,Some(105)),Some(900),
+                "Another foreground application must retain all game background limits");
+            assert_eq!(policy_target(None,manager,Some(104)),None);
+        }
+        #[test]
         fn focus_sample_recovers_from_transient_instability_without_guessing() {
             let mut samples = [None, Some(42)].into_iter();
             assert_eq!(retry_focus_sample(|| samples.next().flatten()), Some(42));
@@ -873,6 +918,10 @@ mod windows {
 #[cfg(windows)]
 #[allow(unused_imports)]
 pub(crate) use windows::{register_policy, PolicyChannel};
+#[cfg(windows)]
+pub(crate) fn request_policy_refresh() -> io::Result<()> {
+    windows::request_policy_refresh()
+}
 
 pub fn read_observer() -> io::Result<ForegroundEventObserverStatus> {
     #[cfg(windows)]

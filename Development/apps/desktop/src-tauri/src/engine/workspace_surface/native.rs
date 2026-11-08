@@ -503,6 +503,29 @@ pub(super) fn placed_at(saved: &Saved, expected: Rectangle) -> bool {
             && rect.bottom - rect.top == expected.height
     }
 }
+// Only grant the selected game's active FPS ceiling when Windows still
+// foregrounds the verified LazyTester manager AND the native game really
+// occupies its selected aperture. This is not gameplay or sign-in proof.
+pub(super) fn presented_under_manager(saved: &Saved, expected: Rectangle, manager: u64) -> bool {
+    if !placed_at(saved, expected) { return false; }
+    let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
+    let manager = manager as usize as HWND;
+    unsafe {
+        if GetForegroundWindow() != manager ||
+            GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize != 0 {
+            return false;
+        }
+        let hit = WindowFromPoint(POINT {
+            x: expected.x + expected.width / 2,
+            y: expected.y + expected.height / 2,
+        });
+        let root = GetAncestor(hit, GA_ROOT);
+        // Recheck after the OS read: stale/changed HWND or foreground loses
+        // priority rather than promoting an unrelated game.
+        root == window && GetForegroundWindow() == manager
+            && hwnd(&saved.target).is_ok_and(|(_pin, current)|current == window)
+    }
+}
 pub(super) fn parked_at(saved: &Saved, rect: Rectangle) -> bool {
     let Ok(expected) = parking_rectangle(rect) else { return false; };
     placed_at(saved, expected)

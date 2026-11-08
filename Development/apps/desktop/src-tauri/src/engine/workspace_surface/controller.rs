@@ -435,6 +435,23 @@ fn same(lease: &Lease, target: &OwnedProcess) -> bool {
     // Never promote the pre-Ready request to an acknowledged Play surface.
     lease.saved.as_ref().is_some_and(|saved| same_native_target(&saved.target, target))
 }
+// Read-only, bounded priority hint for the ONE existing FPS event worker.
+// An in-progress native switch cannot publish an unacknowledged target.
+pub(crate) fn presented_policy_target() -> Option<u32> {
+    let state = SURFACE.try_lock().ok()?;
+    if state.suspended || state.closing { return None; }
+    let lease = state.active.as_ref()?;
+    let (authority, client) = lease.authority.as_ref()?;
+    if authority != "LAZY_TESTER_MANAGED_SESSION" ||
+       !matches!(client.as_str(), "01" | "02" | "03" | "04" | "05") ||
+       lease.ended.is_some() || lease.last_confirmed_place.is_none() {
+        return None;
+    }
+    let saved = lease.saved.as_ref()?;
+    if native::minimized(lease.manager).ok()? { return None; }
+    let rect = native::rectangle(lease.manager, lease.viewport).ok()?;
+    native::presented_under_manager(saved,rect,lease.manager).then_some(saved.target.pid)
+}
 fn parked_cleanup_due(lease: &mut Lease) -> io::Result<bool> {
     Ok(lease.child.try_wait()?.is_some()
         || lease.saved.as_ref().is_some_and(|saved| native::retired(&saved.target)))

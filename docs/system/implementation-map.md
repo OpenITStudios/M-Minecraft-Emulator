@@ -47,6 +47,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Verified process/window identity | `src-tauri/src/engine/instance_identity.rs`, `process_identity.rs` | Existing native process/workspace callers. The identity owner additionally contains a P6 private test-only TCP four-tuple/PID classifier that cannot verify player/world or enable Copy; see `docs/system/coordinate-inspector.md`. |
 | Retained authenticated controller transport | `src-tauri/src/engine/native_clients_session.rs` | `native_clients_session/pipe.rs` |
 | Window placement / restoration | `src-tauri/src/engine/workspace_surface.rs` | `workspace_surface/controller.rs`, `native.rs` |
+| Native foreground/background FPS priority on Play switch | `Development/apps/desktop/src-tauri/src/engine/instance_focus_events.rs` (one policy worker and original per-process events) | `src-tauri/src/engine/workspace_surface.rs`, `workspace_surface/controller.rs`, `workspace_surface/native.rs` supply only exact, confirmed native-aperture readback and one post-transition notification; C++ `frame-pacing.h` consumes the original event handles, no new FPS authority |
 | DWM preview scheduling and native Windows worker | `src-tauri/src/engine/workspace_surface/previews.rs` | `workspace_surface/previews/windows.rs` |
 | Persisted manager performance settings | `src-tauri/src/engine/manager_settings.rs` | Existing per-profile native settings |
 | Pure cross-platform domain contracts | `Development/engine/runtime-core/src/independent_engine/mod.rs` | Applicable Rust module only; not a second launcher |
