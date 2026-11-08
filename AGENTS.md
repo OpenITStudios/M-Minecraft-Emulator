@@ -137,6 +137,19 @@ the exclusive team-owned gameplay/Script API, data-only in-game help
 or five-client process authority. See
 `docs/system/education-native-coordinate-hud.md`.
 
+**Superseding F3 product requirement — 8 November 2026:** F3 and Copy
+Coordinates must be **inside the Minecraft Education Windows client**, not
+in a world, Behavior/Resource Pack, server Script API, separate layered-window
+overlay or LazyTester UI. A source-only version-gated native client-mod
+investigation is requested. The existing JavaScript/JSON UI F3 experiments
+are historical research, NOT accepted F3 implementation paths; no more
+standalone formatter/event-intent scaffolding as substitute for the complete
+input + live Player + native renderer chain. The existing official game image
+must remain unmodified on disk; new native loading, hooks, app packaging,
+game/world access, tests or production activation still require separate
+target-specific review and execution approval. See
+`docs/system/minecraft-education-native-f3-client.md`.
+
 **Team source update admission:** When newer team skills/Skills Probe ZIP
 snapshots are supplied, use the local read-only review gate described in
 `docs/system/education-team-source-updates.md`. No automatic module

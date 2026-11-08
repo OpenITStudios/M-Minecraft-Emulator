@@ -9,6 +9,14 @@ lifecycle: SOURCE_ONLY
 
 # Education native coordinate HUD — opt-in JSON UI prototype
 
+**Historical world-only research, NOT the active F3 product path.**
+The operator's 8 November requirement is a **client-native** Java-style F3
+toggle working in Minecraft Education without modifying a world. This
+resource-pack approach is permanently excluded from the F3 deliverable;
+preserve its previous research/fixtures without installing or developing it
+further for F3. Canonical direction:
+[minecraft-education-native-f3-client.md](minecraft-education-native-f3-client.md).
+
 **Project:** Lazy Tester / M-Minecraft-Emulator, `Local` branch.
 **Status:** SOURCE_ONLY, compatibility NOT_VERIFIED, not installed.
 **Intent:** extend the vanilla `hud.player_position` component *without*

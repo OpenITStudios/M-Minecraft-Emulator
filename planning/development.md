@@ -24,15 +24,40 @@ before continuing. REA was not executed; public macOS/Windows source
 and independent RE reports were reviewed. All runtime behavior remains
 NOT_VERIFIED.
 
+## Current operator priority: client-native F3 (8 November 2026)
+
+**Deliverable:** a single F3 key toggles an actual in-game
+Minecraft Education Windows debug HUD, with live game-local XYZ,
+chunk/facing/dimension and an explicit in-game Copy Coordinates
+action. No world pack, global Resource Pack, Script API player
+event, modal form, Windows layered overlay or LazyTester
+application UI. Previous source-only `education-debug-prototype`
+and `education-native-hud-prototype` are reference-only, not
+product-completion paths.
+
+**Owner/evidence:** the exact installed Education 26.33 game-native
+input, Player/HUD and render ABI must be verified before any
+client hook or production integration. Existing source only supplies
+an owned native game process and DXGI FPS instrumentation; it
+does NOT expose Player coordinates or an in-game compositor.
+Do not turn a layered FPS window into a counterfeit Minecraft F3
+panel. No client F3 implementation has been built or tested.
+Read [native client F3 design](../docs/system/minecraft-education-native-f3-client.md).
+The prior Codex background CUA track remains unchanged but is not
+the requested F3 solution.
+
 ## Cross-chat continuation — one canonical handoff
 
 - **Repository/branch:** `OpenITStudios/M-Minecraft-Emulator` /
   `Local` only. Pin **actual current** HEAD, not a remembered SHA.
-- **Current track:** Codex Windows Computer Use, strict zero-disturbance
-  background; first read-only semantic UIA via existing Cua Driver,
-  then action admission and independently verified background delivery.
-  Keep Minecraft native game input separate and **NOT_VERIFIED**.
-- **Last source stages:** P58-P64 Cua UIA read-only / upstream Invoke
+- **Current priority:** Minecraft Education F3 **client-native** overlay;
+  F3-only input, player-sourced runtime data and actual in-game renderer.
+  The required exact Education 26.33 input/Player/HUD ABI is unavailable;
+  no credible mod integration can be committed yet. See the F3 design.
+- **Separate previous track:** Codex Windows Computer Use, strict
+  zero-disturbance background via existing Cua Driver; no input
+  implementation or proof is promoted by the F3 request.
+- **Prior native source stages:** P58-P64 Cua UIA read-only / upstream Invoke
   blocked; P65 synthetic counter; P66-P68 native multi-AI cohort
   cleanup/recovery; P69+ exact OGLES root, rejected-epoch, physical-input
   isolation, Raw Input owner-thread and keyboard final-read guards.
@@ -175,6 +200,7 @@ single next action remain unchanged.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Native-only Education client F3 routing correction (8 November) | Operator explicitly rejected world-based and app-based F3. Audited native `bootstrap-compat`, DXGI Present and measured FPS HUD: current HUD uses a separate layered Win32 window and does not expose a native Player/XYZ ABI. Pinned Git tree contains no game EXE/DLL to inspect. Added one authoritative client-native F3 design/validation gate; retired existing Script API/JSON UI experiments as historical F3 candidates, preserving sources. No speculative hook, binary patch, dummy output or client mod installed. | REMOTE_GITHUB code/source and official Education/Bedrock reference review; no native game ABI, real F3 input, HUD renderer or copy action verified; Windows/Minecraft NOT_EXECUTED |
 | In-game F3 live debug-data refresh projection (8 November) | Closed a source gap: the earlier pure toggle supplied only one position snapshot and would become stale as the player moved. Added a pure visible-panel update/unchanged/hide projection for player location, facing, rotation and dimension; an invalid Player hides rather than leaving stale text. The existing team `coords/display` remains the sole scheduler/HUD owner. Authored stationary/moving/dimension/invalid/five-player fixtures; no new key hook, macro, render, app UI, clipboard or world mutation. | REMOTE_GITHUB static source/consumer inspection; Node tests AUTHORED_NOT_EXECUTED; actual F3-only input, Education HUD updates, team integration and game acceptance NOT_VERIFIED |
 | In-game player-origin F3 toggle adapter (8 November) | Added a pure SourceEntity/ScriptEvent admission-and-intent adapter for the already-authoritative team coords/display module. Requires exact team-chosen event ID, player Entity source and `toggle` message; returns same-player show/hide intent and verified-in-code position data, with negative source fixtures. No new Script API listener, macro registration, player state store, HUD writer, game injection or LazyTester app UI. Bedrock Alt+key command macros and /scriptevent are evidence-backed candidates, NOT exact F3. | REMOTE_GITHUB source/consumer review; Node tests AUTHORED_NOT_EXECUTED, Education F3 keyboard/macro/player attribution, team integration, HUD and clipboard NOT_VERIFIED |
 | In-game F3 debug groundwork (8 November) | Confirmed Education lacks Java F3 and the documented Script API InputButton exposes Jump/Sneak, not raw F3. Added pure player-sourced XYZ/block/chunk/facing/dimension formatter and authored negative unit fixtures, explicitly without keyboard listener, HUD writer, clipboard, app UI, installed add-on or new team module. Team GitHub source not available; no integration or fake F3 toggle. | REMOTE_GITHUB static source/research; fixtures AUTHORED_NOT_EXECUTED; actual F3 input, Education render, Copy Coordinates and gameplay NOT_VERIFIED |
@@ -373,6 +399,22 @@ GitHub Actions CI remains disabled.
 
 ## Single next step
 
+**F3 client-native engine admission:** Review an **authorized exact
+Minecraft Education 26.33 Windows client image**, with verified product
+identity, to establish the original game's F3 input handling, live
+Player XYZ/dimension/camera accessor and in-render HUD presentation
+interface. Existing GitHub source has no Education executable or ABI
+for the latter two. Do not ship speculative binary offsets, a
+Windows-layered overlay, a world Add-On or a fake F3 toggle.
+The whole feature needs one integrated version-gated input + data +
+in-game render implementation and actual Windows/Minecraft acceptance
+before claiming completion. When these inputs are missing, maintain
+`BLOCKED_ENGINE_ABI`; do not add more source-only feature stubs or
+run a test/game without separate authorization. See
+[client-native F3 design](../docs/system/minecraft-education-native-f3-client.md).
+
+## Separate original native-input hold — unchanged
+
 **Final source-only native/CLI/MCP integrity review completed.**
 The only MCP writer lease acquisition refusals classified as
 definitely denied are original `NATIVE_WRITER_BUSY`,
@@ -395,7 +437,7 @@ provenance fixtures were AUTHORED_NOT_EXECUTED.
 No extra writer/lease owner, status type, IPC schema, v4 ABI,
 input hook or default-enable change was introduced.
 
-**Single next action: STOP speculative source guard changes on
+**Separate native-input decision: STOP speculative source guard changes on
 this track.** The native input source is integrated at the
 REMOTE_GITHUB review ceiling only. To establish actual
 correctness, source tests and Windows compilation would need

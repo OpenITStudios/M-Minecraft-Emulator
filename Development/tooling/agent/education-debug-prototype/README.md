@@ -1,6 +1,14 @@
 # Minecraft Education F3-like Debug Data — source-only adapter
 
-**Status:** `SOURCE_PREPARED / NOT_EXECUTED`. This folder does **not** contain an installable Add-On, listener, key hook, UI overlay, clipboard bridge or LazyTester desktop feature.
+**Status:** `HISTORICAL_SOURCE_ONLY / NOT_EXECUTED`. The operator superseded
+this **world/Script API** direction on 8 November: native F3 must be
+implemented **in the Education client**, not as an Add-On in a world.
+Do not extend these files as the primary F3 solution; keep their earlier
+source research without activating any script event or gameplay UI.
+See `../../../../docs/system/minecraft-education-native-f3-client.md`.
+
+This folder does **not** contain an installable Add-On, listener, key hook,
+UI overlay, clipboard bridge or LazyTester desktop feature.
 
 ## Intended in-game behavior
 
