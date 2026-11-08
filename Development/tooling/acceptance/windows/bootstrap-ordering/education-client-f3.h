@@ -12,7 +12,11 @@ namespace education_client_f3 {
 enum class Dimension : std::uint32_t { Overworld = 0, Nether = 1, End = 2 };
 struct PlayerFrame {
     std::uint32_t bytes = sizeof(PlayerFrame);
-    std::uint64_t worldGeneration = 0;
+    // Original engine adapter captures this at the SAME time as the
+    // Player snapshot, from GetTickCount64 in this client process.
+    // A delay between capture and publish must not renew its lifetime.
+    std::uint64_t worldGeneration = 0; // Strictly increasing per owned game process.
+    std::uint64_t capturedTickMs = 0;
     double x = 0, y = 0, z = 0;
     double yaw = 0, pitch = 0;
     Dimension dimension = Dimension::Overworld;
@@ -28,6 +32,8 @@ bool claim_game_window(HWND game, DWORD gameThread) noexcept;
 // A verified engine adapter publishes actual local Player data (not screen
 // OCR, a PID/username, world telemetry or desktop bookmarks). The adapter
 // and its engine-safe read thread are NOT implemented at this source stage.
+// capturedTickMs and worldGeneration must originate in that same engine
+// callback. Stale, delayed or regressing generations are not admitted.
 bool publish_player(HWND game, const PlayerFrame& frame) noexcept;
 
 // Called ONLY by a verified game keyboard dispatch owner on its own thread.

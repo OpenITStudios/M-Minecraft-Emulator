@@ -30,6 +30,10 @@ struct Painter {
     std::array<ComPtr<ID2D1Bitmap1>, MaxBuffers> buffers{};
     UINT bufferCount = 0;
     DXGI_FORMAT pixelFormat = DXGI_FORMAT_UNKNOWN;
+    // An unsupported D3D11 device/format should not trigger a Direct2D
+    // factory/device creation attempt on every game Present. Reset only
+    // with a genuine ResizeBuffers or final chain teardown.
+    bool refused = false;
 
     void release() noexcept {
         if (context) context->SetTarget(nullptr);
@@ -38,20 +42,26 @@ struct Painter {
         format.Reset(); textFactory.Reset();
         context.Reset(); device.Reset(); factory.Reset();
         bufferCount = 0; pixelFormat = DXGI_FORMAT_UNKNOWN;
+        refused = false;
     }
 
     bool prepare(IDXGISwapChain4* swap) noexcept {
-        if (!swap) return false;
+        if (!swap || refused) return false;
         if (context) return true;
         ComPtr<ID3D11Device> graphics;
         ComPtr<IDXGIDevice> dxgiDevice;
         DXGI_SWAP_CHAIN_DESC1 desc{};
-        if (FAILED(swap->GetDesc1(&desc)) || desc.Width < 480 || desc.Height < 260
-            || desc.BufferCount == 0 || desc.BufferCount > MaxBuffers
-            || (desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM
-                && desc.Format != DXGI_FORMAT_R8G8B8A8_UNORM)
-            || FAILED(swap->GetDevice(IID_PPV_ARGS(&graphics)))
-            || FAILED(graphics.As(&dxgiDevice))) return false;
+        // Direct2D interop requires the game's EXISTING D3D11 device to
+        // have BGRA support. Never replace/recreate Minecraft's device.
+        const bool compatible = SUCCEEDED(swap->GetDesc1(&desc))
+            && desc.Width >= 480 && desc.Height >= 260
+            && desc.BufferCount > 0 && desc.BufferCount <= MaxBuffers
+            && (desc.Format == DXGI_FORMAT_B8G8R8A8_UNORM
+                || desc.Format == DXGI_FORMAT_R8G8B8A8_UNORM)
+            && SUCCEEDED(swap->GetDevice(IID_PPV_ARGS(&graphics)))
+            && (graphics->GetCreationFlags() & D3D11_CREATE_DEVICE_BGRA_SUPPORT) != 0
+            && SUCCEEDED(graphics.As(&dxgiDevice));
+        if (!compatible) { refused = true; return false; }
         // D3D12, HDR or unsupported buffers deliberately remain unavailable.
         if (FAILED(D2D1CreateFactory(D2D1_FACTORY_TYPE_MULTI_THREADED,
             __uuidof(ID2D1Factory1), nullptr,
@@ -72,7 +82,9 @@ struct Painter {
             || FAILED(context->CreateSolidColorBrush(
                 D2D1::ColorF(0.02f, 0.035f, 0.07f, 0.82f),
                 background.GetAddressOf()))) {
-            release(); return false;
+            release();
+            refused = true; // Do not repeatedly re-initialize on every frame.
+            return false;
         }
         bufferCount = desc.BufferCount;
         pixelFormat = desc.Format;
@@ -104,7 +116,11 @@ struct Painter {
             DWRITE_MEASURING_MODE_NATURAL);
         const HRESULT result = context->EndDraw();
         context->SetTarget(nullptr);
-        if (FAILED(result)) { release(); return false; }
+        if (FAILED(result)) {
+            release();
+            refused = true; // Device-loss/unsupported draws wait for a real resize.
+            return false;
+        }
         return true;
     }
 };
@@ -138,6 +154,7 @@ bool validFrame(const PlayerFrame& frame) noexcept {
     };
     return frame.bytes == sizeof(PlayerFrame)
         && frame.worldGeneration != 0
+        && frame.capturedTickMs != 0
         && within(frame.x, 30000000.) && within(frame.z, 30000000.)
         && within(frame.y, 30000000.) && within(frame.pitch, 90.)
         && within(frame.yaw, 1000000.)
@@ -145,11 +162,15 @@ bool validFrame(const PlayerFrame& frame) noexcept {
             || frame.dimension == Dimension::Nether
             || frame.dimension == Dimension::End);
 }
+bool sampleFresh(const PlayerFrame& frame, ULONGLONG now) noexcept {
+    return validFrame(frame) && frame.capturedTickMs <= now
+        && now - frame.capturedTickMs <= FrameFreshnessMs;
+}
 bool live(Session& state) noexcept {
-    return state.fresh && state.worldGeneration != 0
-        && GetTickCount64() >= state.observed
-        && GetTickCount64() - state.observed <= FrameFreshnessMs
-        && validFrame(state.frame);
+    const ULONGLONG now = GetTickCount64();
+    return state.fresh && state.worldGeneration == state.frame.worldGeneration
+        && state.observed == state.frame.capturedTickMs
+        && sampleFresh(state.frame, now);
 }
 void hide(Session& state) noexcept {
     state.shown = state.f3Held = state.chord = false;
@@ -214,15 +235,29 @@ bool publish_player(HWND game, const PlayerFrame& frame) noexcept {
     AcquireSRWLockExclusive(&session.lock);
     if (session.claimed && session.owner == game &&
         exactWindow(game, session.ownerThread)) {
-        if (validFrame(frame)) {
+        const ULONGLONG now = GetTickCount64();
+        const bool staleGeneration = session.worldGeneration != 0
+            && frame.worldGeneration < session.worldGeneration;
+        const bool staleCapture = session.observed != 0
+            && frame.capturedTickMs <= session.observed;
+        // The actual engine owner timestamps the Player snapshot at capture.
+        // A delayed callback CANNOT refresh its expiry at queue delivery.
+        // World generation and captured time are strictly monotonic.
+        if (staleGeneration || staleCapture) {
+            // Never revoke a newer good frame because an older world,
+            // queued packet or invalid old callback arrived late.
+        } else if (sampleFresh(frame, now)) {
             if (session.worldGeneration && session.worldGeneration != frame.worldGeneration)
-                hide(session); // A new world cannot inherit the old F3 overlay.
+                hide(session); // A new world cannot inherit old F3 state.
             session.frame = frame;
             session.worldGeneration = frame.worldGeneration;
-            session.observed = GetTickCount64();
+            session.observed = frame.capturedTickMs;
             session.fresh = true;
             accepted = true;
-        } else {
+        } else if (!validFrame(frame)) {
+            // Only a non-stale invalid current-player reading may revoke
+            // earlier proof. Expired valid data is simply not promoted;
+            // the original 250-ms expiry still hides it on next Present.
             session.fresh = false;
             hide(session);
         }

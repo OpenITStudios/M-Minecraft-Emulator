@@ -74,7 +74,12 @@ existing measured FPS HUD remains separate and unchanged.
 
 The C++ source implements F3 edge intent, F3+C clipboard logic, bounded
 same-process OGLES Player-frame freshness and Direct2D/D3D11 in-backbuffer
-painting with resize/retirement cleanup. Crucially, no real Education
+painting with resize/retirement cleanup. Source admission now requires
+a real engine-captured `capturedTickMs` (never the delayed delivery clock),
+strictly increasing world generation and an existing D3D11 device with
+BGRA support. Regressing worlds and expired/queued frames cannot overwrite
+the latest accepted position. Unsupported renderers refuse once per
+chain instead of attempting Direct2D initialization each Present. Crucially, no real Education
 Player accessor or original-game F3 input callback is known, approved,
 registered or invoked. A frame cannot be published by DXGI alone.
 D3D12/HDR support and game-state access are NOT_IMPLEMENTED. The

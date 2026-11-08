@@ -147,10 +147,16 @@ The former plan-only route now has a **real C++ source slice** inside
   session, single physical F3 key-down/up toggle intent with autorepeat
   suppression, optional explicit F3+C clipboard write, bounded live
   Player-frame validation with world-generation and 250-ms freshness
-  invalidation, and teardown on focus/device/world change.
+  invalidation, and teardown on focus/device/world change. The source
+  now requires the original engine callback's `capturedTickMs`
+  timestamp and strictly increasing world-generation number, so late
+  snapshots cannot become fresh at delivery or revert to a retired world.
 - The source-only D3D11 compositor writes directly into the existing
   game DXGI swapchain **backbuffer**, via Direct2D/DirectWrite and without
-  creating a `WS_EX_LAYERED` or other separate Windows overlay. It
+  creating a `WS_EX_LAYERED` or other separate Windows overlay.
+  Admission now requires the actual existing D3D11 device to expose
+  `D3D11_CREATE_DEVICE_BGRA_SUPPORT`; an unsupported device is
+  refused once for its current chain, not probed every Present. It
   releases backbuffer references before both `ResizeBuffers` variants
   and on final native chain teardown. D3D12/HDR/unsupported devices
   fail closed; render or F3 intents are never called a drawn receipt.
