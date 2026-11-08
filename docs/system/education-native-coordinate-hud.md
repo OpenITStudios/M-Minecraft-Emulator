@@ -284,6 +284,34 @@ The v0.3.0 world-scoped RP, pack metadata and installed app remain unchanged.
 Fixtures are AUTHORED_NOT_EXECUTED; no command, test runner, build, CI, game,
 world or installer was started.
 
+## F3-style in-game debug data groundwork — 8 November 2026
+
+**Operator target:** One F3 key press with Minecraft foreground shows debug
+data inside that Minecraft client; the next F3 hides it. No LazyTester desktop
+F3 page, popup or substitute OS-overlay HUD is acceptable.
+
+A static source review of Microsoft's InputButton enumeration finds only
+`Jump` and `Sneak`, not F3 or arbitrary keyboard keys. The Education
+support team says Java's F3 debug screen is unavailable in Education. This
+means a Bedrock Script API event alone cannot currently promise an F3
+toggle. We will not fake F3 by binding an unrelated gameplay button or
+showing a desktop UI, and will not silently install game hooks.
+
+The source-only, pure formatter candidate now lives in
+`Development/tooling/agent/education-debug-prototype/` and derives XYZ,
+negative-safe block/chunk coordinates, facing and dimension from a single
+original in-game Player snapshot. It has no key handler, clipboard bridge,
+HUD painter, installed pack, or secondary gameplay owner. It also refuses
+to invent FPS/TPS readings. The current static JSON UI RP remains
+independent and unchanged; do not mistake it for a dynamic F3 panel.
+
+**Remaining work:** obtain an actual supported F3 key-up client source,
+integrate the team's real coords/display owner and in-game UI channel,
+verify clipboard capability, and observe Minecraft Education 26.33 on a
+disposable world. The connected GitHub account cannot read the team repo
+so no team runtime module was edited. All source fixtures are
+AUTHORED_NOT_EXECUTED; actual F3/clipboard/rendering NOT_VERIFIED.
+
 ## References
 
 - Mojang vanilla Bedrock HUD sample:
