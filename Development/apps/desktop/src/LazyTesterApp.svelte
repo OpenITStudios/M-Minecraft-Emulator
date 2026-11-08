@@ -349,34 +349,62 @@
     if (page==='settings') rememberGraphicsDraft();
     closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
     if(next==='launchers')next='workspace';
+    // A queued Refresh belongs to its original page; moving to another
+    // page cancels only the undispatched UI request, never a native action.
+    if (next !== page) {
+      manualRefreshRequested = false;
+      headerRefreshFocusPage = null;
+    }
     queuedPage = next; queued = null;queuedLaunch=null;
   }
   async function consumeNavigation() {
     const next = queuedPage; queuedPage = null;
     if (next === null || page === next) return;
+    // Navigation reads share the original close-review epoch with Inspect.
+    // A completed native suspend/present is not itself a UI or game receipt.
+    const issued = observationEpoch;
+    const current = () => !disposed &&
+      observationStillCurrent(issued, observationEpoch, reviewState());
     busy = true; loadingPage = next; issueKey=null;
     try {
       if (next !== 'workspace') await workspaceSurface.suspend();
+      if (!current()) return;
       page = next; await tick();
+      if (!current()) return;
       // Focus content only for Settings/Storage navigation. Do not steal game focus in Play.
-      if (next !== 'workspace' && !disposed && pageHeading?.isConnected)
+      if (next !== 'workspace' && pageHeading?.isConnected)
         pageHeading.focus({preventScroll:true});
-      if (next === 'workspace' && active !== null) await lazyTester.present(active, viewport.getBoundingClientRect());
+      if (next === 'workspace' && active !== null) {
+        await lazyTester.present(active, viewport.getBoundingClientRect());
+        if (!current()) return;
+      }
       if(next==='settings') {
-        const snapshot=await lazyTester.settings();profiles=snapshot.profiles;settings=snapshot.settings;available=true;
+        const snapshot=await lazyTester.settings();
+        if (!current()) return;
+        profiles=snapshot.profiles;settings=snapshot.settings;available=true;
         if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
         graphicsPreset=graphicsChoice(selectedSlot);
       }
       if(next==='storage'||next==='settings') {
-        try {dataLocation=await lazyTester.dataLocation();locationIssue='';}
-        catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;}
+        try {
+          const location=await lazyTester.dataLocation();
+          if (!current()) return;
+          dataLocation=location;locationIssue='';
+        } catch(error) {
+          if (!current()) return;
+          locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;
+        }
       }
       if(next==='storage'&&binding?.configured) {
-        const snapshot=await lazyTester.storage();profiles=snapshot.profiles;storage=snapshot.storage;
+        const snapshot=await lazyTester.storage();
+        if (!current()) return;
+        profiles=snapshot.profiles;storage=snapshot.storage;
         storageReportReceivedAt=storageReportReceivedTime();
       }
-      dirty = true;
-    } catch (error) { issueKey='workspace'; dirty = true; }
+      if (current()) dirty = true;
+    } catch (error) {
+      if (current()) {issueKey='workspace';dirty=true;}
+    }
     finally { loadingPage = null; busy = false; }
   }
   function requestHeaderRefresh(event: MouseEvent): void {
@@ -396,6 +424,9 @@
     headerRefreshFocusPage = null;
     if (nativeBackend !== 'WindowsNative' || navigationReviewOpen ||
         busy || refreshing || resizing) return;
+    const issued = observationEpoch;
+    const current = () => !disposed &&
+      observationStillCurrent(issued, observationEpoch, reviewState());
     manualRefreshing=true;
     try {
     issueKey=null;
@@ -403,8 +434,16 @@
       busy=true;checkingStorage=true;
       try {
         if(!binding?.configured)await checkBinding();
-        try{dataLocation=await lazyTester.dataLocation();locationIssue='';}
-        catch(error){locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;throw error;}
+        if (!current()) return;
+        try {
+          const location=await lazyTester.dataLocation();
+          if (!current()) return;
+          dataLocation=location;locationIssue='';
+        } catch(error) {
+          if (!current()) return;
+          locationIssue=userMessage('location');dataLocation=null;storage=null;binding=null;
+          throw error;
+        }
         if(!binding?.configured){
           // A readable DataLocation is not proof of verified profile handles.
           // Do not present a previous storage report or success receipt as refreshed.
@@ -413,10 +452,13 @@
           return;
         }
         const snapshot=await lazyTester.storage();
+        if (!current()) return;
         profiles=snapshot.profiles;storage=snapshot.storage;
         storageReportReceivedAt=storageReportReceivedTime();
         available=true;connectionIssueKey=null;
-      }catch(error){issueKey='storage';storage=null;}
+      }catch(error){
+        if (current()) {issueKey='storage';storage=null;}
+      }
       finally{checkingStorage=false;busy=false;}
     } else {
       // Only explicit Refresh of a known preview failure requests another
@@ -426,9 +468,11 @@
         pendingPreviewInvalidations.size > 0 ||
         previewStatuses.some(status => !status.registered && status.reason !== null);
       if (!binding?.configured) await loadBinding();
+      if (!current()) return;
       await refresh();
+      if (!current()) return;
       if (previewFailed && page === 'workspace' && available &&
-          !detached && !disposed) dirty = true;
+          !detached) dirty = true;
     }
     }finally{
       manualRefreshing=false;

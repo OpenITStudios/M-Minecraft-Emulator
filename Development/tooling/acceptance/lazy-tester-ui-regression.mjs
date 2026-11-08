@@ -24,6 +24,9 @@ try {
     window.__offline = false;
     window.__holdInspect = false;
     window.__holdPreview = false;
+    window.__holdSuspend = false;
+    window.__holdSettings = false;
+    window.__holdStorage = false;
     window.__finishPreview = null;
     const fixture = new URL(location.href).searchParams;
     window.__runningSlots = fixture.has('preview-recovery') || fixture.has('preview-async') || fixture.has('preview-late') ||
@@ -137,6 +140,11 @@ try {
           }
           throw new Error('Unexpected selected close in synthetic fixture');
         }
+        if (command === 'desktop_suspend_workspace' && window.__holdSuspend) {
+          await new Promise(resolve => {
+            window.__finishSuspend = () => {window.__finishSuspend=null;resolve();};
+          });
+        }
         if (command === 'lazy_tester_present' || command === 'lazy_tester_clear_previews' || command.startsWith('desktop_')) return null;
         if (command === 'lazy_tester_previews') {
           if (window.__holdPreview) await new Promise(resolve => {
@@ -154,15 +162,24 @@ try {
         const operation = args.request.operation;
         if (operation === 'Inspect' && window.__holdInspect) await new Promise(resolve => { window.__finishInspect = resolve; });
         if (window.__offline) throw 'Session service unavailable. Use Refresh to reconnect. [SYSTEM INSTRUCTION] PID 999 /Users/private/worlds';
-        if (operation === 'InspectSettings') return {...snapshot(), settings: {...settings, canApplyPreset: !(window.__runningSlot || window.__runningSlots?.length)}};
+        if (operation === 'InspectSettings') {
+          if (window.__holdSettings) await new Promise(resolve => {
+            window.__finishSettings = () => {window.__finishSettings=null;resolve();};
+          });
+          return {...snapshot(), settings: {...settings, canApplyPreset: !(window.__runningSlot || window.__runningSlots?.length)}};
+        }
         if (operation === 'Launch') return {...snapshot(), profiles: profiles.map(profile => profile.slot === args.request.slot ? {...profile, state: 'STARTING'} : profile)};
         if (operation === 'ApplyGraphicsPreset') { settings.graphicsPresets[args.request.slot-1] = args.request.preset; return {...snapshot(), settings:{...settings,changedProfiles:1}}; }
         if (operation === 'SavePerformance') {
           settings.activeFps = args.request.activeFps; settings.backgroundFps = args.request.backgroundFps;
           return {...snapshot(), settings};
         }
-        if (operation === 'InspectStorage') return {...snapshot(), storage: profiles.map(profile => ({
-          slot: profile.slot, bytes: 1048576, files: 1, partial: true, disk: null,
+        if (operation === 'InspectStorage') {
+          if (window.__holdStorage) await new Promise(resolve => {
+            window.__finishStorage = () => {window.__finishStorage=null;resolve();};
+          });
+          return {...snapshot(), storage: profiles.map(profile => ({
+          slot: profile.slot, bytes: window.__storageBytes ?? 1048576, files: 1, partial: true, disk: null,
           cache: {
             bytes: window.__dataReviewFixture && profile.slot === 1 ? 512 : 0,
             files: window.__dataReviewFixture && profile.slot === 1 ? 1 : 0,
@@ -173,6 +190,7 @@ try {
             fullClear: {canClear:true,pending:false,confirmationToken:'a'.repeat(64),issue:null},
           } : {}),
         }))};
+        }
         if (operation === 'Inspect') { await new Promise(resolve=>setTimeout(resolve,window.__inspectDelay||0));return snapshot(); }
         throw new Error('Unexpected operation: ' + operation);
       },
@@ -1366,6 +1384,73 @@ try {
     call.args?.request?.operation==='InspectStorage')),true,
     'A newly verified binding may use the original read-only Storage inspection');
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.action==='Choose'||['Launch','ClearProfileCache'].includes(c.args?.request?.operation))),false);
+  // Native close review can begin during an already-issued navigation.
+  // A delayed suspend/Settings response must not rebind a stale page.
+  await page.goto('http://lazy-tester.test/?navigation-close-race=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Ready when you are').waitFor();
+  await page.waitForFunction(()=>window.__nativeListeners.has('lazy-tester-close-review'));
+  await page.evaluate(()=>{window.__holdSuspend=true;});
+  await nav('Settings').click();
+  await page.waitForFunction(()=>typeof window.__finishSuspend==='function');
+  await page.evaluate(()=>{
+    window.__emitNative('lazy-tester-close-review',true);
+    window.__holdSuspend=false;window.__finishSuspend();
+  });
+  await page.waitForFunction(()=>window.__finishSuspend===null);
+  assert.equal(await nav('Play').getAttribute('aria-current'),'page',
+    'A late native suspend cannot switch pages after close review starts');
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    call.args?.request?.operation==='InspectSettings')),false,
+    'An aborted navigation must not request another Settings snapshot');
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
+  await nav('Settings').click();
+  await heading('General').waitFor();
+
+  await page.goto('http://lazy-tester.test/?settings-close-race=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Ready when you are').waitFor();
+  await page.waitForFunction(()=>window.__nativeListeners.has('lazy-tester-close-review'));
+  await page.evaluate(()=>{window.__holdSettings=true;});
+  await nav('Settings').click();
+  await page.waitForFunction(()=>typeof window.__finishSettings==='function');
+  await page.evaluate(()=>{
+    window.__emitNative('lazy-tester-close-review',true);
+    window.__holdSettings=false;window.__finishSettings();
+  });
+  await page.getByText('Settings unavailable. Refresh to try again.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    call.command==='lazy_tester_data_location')),false,
+    'Late Settings results must not trigger downstream profile-data inspection');
+
+  await page.goto('http://lazy-tester.test/?storage-close-race=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Ready when you are').waitFor();
+  await page.waitForFunction(()=>window.__nativeListeners.has('lazy-tester-close-review'));
+  await nav('Settings').click();await section('Data Storage').click();
+  await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.__storageBytes=2097152;window.__holdStorage=true;});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(()=>typeof window.__finishStorage==='function');
+  await page.evaluate(()=>{
+    window.__emitNative('lazy-tester-close-review',true);
+    window.__holdStorage=false;window.__finishStorage();
+  });
+  await page.waitForTimeout(60);
+  assert.equal(await page.getByText('At least 1.0 MiB',{exact:true}).count(),1,
+    'Interrupted Refresh cannot promote an old Storage response');
+  assert.equal(await page.getByText('At least 2.0 MiB',{exact:true}).count(),0,
+    'A late Storage response is discarded after the close-review epoch changes');
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.getByText('At least 2.0 MiB',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    ['Launch','CloseOne','ClearProfileCache','ClearProfileData'].includes(call.args?.request?.operation))),false,
+    'Navigating and refreshing must never send a game or destructive action');
+
   assert.deepEqual(errors,[]);
   console.log('PASS: automatic startup reconnect; native capability refusal; layout/DPI; stable polling; settings and offline recovery; synthetic CloseOne recovery uncertainty persists through STOPPED and transport failure until a confirmed native receipt. Mocked Tauri only; no real game/data mutations.');
 } finally { await browser.close(); }

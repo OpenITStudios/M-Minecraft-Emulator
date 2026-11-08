@@ -78,6 +78,16 @@ but the latest session inspection failed; it returns to normal guidance only
 after a new valid observation. The original five-slot preview nodes and native
 controller are unchanged. Source/browser scenarios are AUTHORED_NOT_EXECUTED.
 
+**8 November source-only navigation freshness:** Manual Refresh and page
+transitions now use the existing native close-review observation epoch, just
+like periodic Inspect. After every asynchronous suspend/present, Settings,
+DataLocation or Storage read, an interrupted request stops updating UI state;
+a late error is not presented as a current failure. Native operations that
+may already have happened are never described as rolled back. Changing pages
+also discards only an undispatched Refresh intent from the old page.
+The original controller, five DWM targets and private profile data remain
+unchanged. Authored browser and source fixtures are NOT_EXECUTED.
+
 ### Prioritized closure matrix
 
 `SOURCE_PREPARED` means source exists and has been inspected, **not**

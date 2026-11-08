@@ -42,6 +42,27 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     expect(app).toContain('function cancelCloseOne()');
     expect(storage).toContain('cancelReview(onCancelFullReview)');
   });
+  it('rejects delayed navigation and Refresh responses after a native close review',()=>{
+    const app=source('LazyTesterApp.svelte');
+    const navigation=app.split('async function consumeNavigation() {')[1]
+      ?.split('  function requestHeaderRefresh(')[0] ?? '';
+    const refresh=app.split('async function refreshPage() {')[1]
+      ?.split('  async function saveAudio(')[0] ?? '';
+    const navigate=app.split('function navigate(next: typeof page) {')[1]
+      ?.split('  async function consumeNavigation() {')[0] ?? '';
+    for (const body of [navigation, refresh]) {
+      expect(body).toContain('const issued = observationEpoch;');
+      expect(body).toContain('observationStillCurrent(issued, observationEpoch, reviewState())');
+      expect(body).toContain('if (!current()) return;');
+    }
+    expect(navigation).toContain("const snapshot=await lazyTester.settings();\n        if (!current()) return;");
+    expect(navigation).toContain("const snapshot=await lazyTester.storage();\n        if (!current()) return;");
+    expect(navigation).toContain("if (current()) {issueKey='workspace';dirty=true;}");
+    expect(refresh).toContain("const snapshot=await lazyTester.storage();\n        if (!current()) return;");
+    expect(refresh).toContain("if (current()) {issueKey='storage';storage=null;}");
+    expect(navigate).toContain('manualRefreshRequested = false;');
+    expect(navigate).toContain('headerRefreshFocusPage = null;');
+  });
   it('shows the date as well as the clock time of recorded Storage checks',()=>{
     const app=source('LazyTesterApp.svelte');
     expect(app).toContain('function storageReportReceivedTime(): string');
