@@ -200,9 +200,15 @@ The former plan-only route now has a **real C++ source slice** inside
   the order is always **graphics → lock**. No Player or keyboard callback
   waits for an ongoing GPU draw while holding its own state lock.
   Each Present copies an admitted Player frame, releases the Player lock,
-  then rechecks the world/visibility before drawing. A concurrent hide
-  can still occur after that final check; the following Present will
-  clean up the graphics references.
+  then rechecks the **world, snapshot capture timestamp and visibility**
+  before drawing. Comparing world identity alone was insufficient:
+  a newer Player position in the SAME world could previously be replaced
+  visually by an older frame while D2D was prepared. A failed draw now
+  hides the panel only when its failed frame is still the currently
+  accepted frame; it cannot hide a newer snapshot. Freshness is rechecked
+  immediately before drawing. A later concurrent change can still occur
+  after the last state check; the unverified engine render pipeline must
+  establish exact ordering before claiming fully consistent frames.
 - Native mode changes now use a paired
   `before_resize`/`after_resize` admission across both ResizeBuffers
   variants, ResizeTarget and SetFullscreenState. It blocks new F3 input

@@ -483,11 +483,18 @@ void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noex
                 && session.modeChanges == 0
                 && session.owner == game && session.ownerThread == gameThread
                 && session.worldGeneration == frame.worldGeneration
+                // A later Player snapshot can arrive from the SAME world
+                // while the game render thread prepares COM/D2D resources.
+                // Do not draw that superseded XYZ frame.
+                && session.observed == frame.capturedTickMs
                 && live(session);
             ReleaseSRWLockShared(&session.lock);
-            if (current && GetForegroundWindow() == game)
+            if (current && sampleFresh(frame, GetTickCount64())
+                && GetForegroundWindow() == game) {
                 drew = session.painter.draw(chain.Get(), text);
-            else {
+            } else {
+                // A newer Player/frame or hidden panel is not a graphics
+                // failure. Leave the newer state alone for the next Present.
                 ReleaseSRWLockExclusive(&session.graphics);
                 SetLastError(error);
                 return;
@@ -496,8 +503,13 @@ void before_present(IDXGISwapChain1* original, HWND game, DWORD gameThread) noex
     }
     if (!drew) {
         AcquireSRWLockExclusive(&session.lock);
-        if (session.claimed && session.owner == game
-            && session.ownerThread == gameThread) {
+        // A failed graphics admission for frame A must not hide a fresh
+        // frame B or a newly opened F3 panel that superseded A while
+        // graphics work was in progress. Same world alone is insufficient.
+        if (session.claimed && session.shown && session.modeChanges == 0
+            && session.owner == game && session.ownerThread == gameThread
+            && session.worldGeneration == frame.worldGeneration
+            && session.observed == frame.capturedTickMs) {
             hide(session);
         }
         ReleaseSRWLockExclusive(&session.lock);
