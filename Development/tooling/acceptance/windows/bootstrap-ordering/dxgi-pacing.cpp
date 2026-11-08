@@ -3,6 +3,9 @@
 #include <dxgi1_5.h>
 #include <wrl/client.h>
 #include <memory>
+#if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+#include "education-client-f3.h"
+#endif
 
 namespace dxgi_pacing {
 namespace {
@@ -32,6 +35,9 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
     DWORD windowThread_;
     ~Chain() {
         // Drop every native interface before allowing a replacement binding.
+#if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+        education_client_f3::retire(window_);
+#endif
         policy_.hud.unbind();
         media_.Reset(); inner_.Reset();
         policy_.destroyed.fetch_add(1);
@@ -64,6 +70,17 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
                 ReleaseSRWLockExclusive(&policy_.rendering);
             }
         }
+        // Optional source-only client F3 candidate draws directly into the
+        // original DXGI backbuffer BEFORE Present, never using an OS overlay.
+        // No game Player data or F3 keyboard adapter is claimed or installed
+        // by the DXGI wrapper; both remain unbound by default.
+#if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+        if (measured && !(flags & (DXGI_PRESENT_TEST | DXGI_PRESENT_DO_NOT_WAIT))) {
+            const auto fps = policy_.hud.snapshot().reading;
+            education_client_f3::before_present(inner_.Get(), window_,
+                windowThread_, fps.milliFps, fps.valid);
+        }
+#endif
         SetLastError(before);
         const HRESULT result = native();
         const DWORD after = GetLastError();
@@ -121,7 +138,15 @@ public:
     FORWARD(SetFullscreenState, (BOOL fullscreen, IDXGIOutput* target), (fullscreen, target))
     FORWARD(GetFullscreenState, (BOOL* fullscreen, IDXGIOutput** target), (fullscreen, target))
     FORWARD(GetDesc, (DXGI_SWAP_CHAIN_DESC* value), (value))
+#if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+    HRESULT STDMETHODCALLTYPE ResizeBuffers(UINT count, UINT w, UINT h,
+        DXGI_FORMAT format, UINT flags) override {
+        education_client_f3::before_resize(window_);
+        return inner_->ResizeBuffers(count, w, h, format, flags);
+    }
+#else
     FORWARD(ResizeBuffers, (UINT count, UINT w, UINT h, DXGI_FORMAT format, UINT flags), (count, w, h, format, flags))
+#endif
     FORWARD(ResizeTarget, (const DXGI_MODE_DESC* value), (value))
     FORWARD(GetContainingOutput, (IDXGIOutput** value), (value))
     FORWARD(GetFrameStatistics, (DXGI_FRAME_STATISTICS* value), (value))
@@ -143,8 +168,17 @@ public:
     FORWARD(GetMatrixTransform, (DXGI_MATRIX_3X2_F* value), (value))
     FORWARD(CheckColorSpaceSupport, (DXGI_COLOR_SPACE_TYPE value, UINT* support), (value, support))
     FORWARD(SetColorSpace1, (DXGI_COLOR_SPACE_TYPE value), (value))
+#if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+    HRESULT STDMETHODCALLTYPE ResizeBuffers1(UINT count, UINT w, UINT h,
+        DXGI_FORMAT format, UINT flags, const UINT* masks,
+        IUnknown* const* queues) override {
+        education_client_f3::before_resize(window_);
+        return inner_->ResizeBuffers1(count, w, h, format, flags, masks, queues);
+    }
+#else
     FORWARD(ResizeBuffers1, (UINT count, UINT w, UINT h, DXGI_FORMAT format, UINT flags,
         const UINT* masks, IUnknown* const* queues), (count, w, h, format, flags, masks, queues))
+#endif
     FORWARD(SetHDRMetaData, (DXGI_HDR_METADATA_TYPE type, UINT bytes, void* data), (type, bytes, data))
 #undef FORWARD
     BOOL STDMETHODCALLTYPE IsTemporaryMonoSupported() override { return inner_->IsTemporaryMonoSupported(); }

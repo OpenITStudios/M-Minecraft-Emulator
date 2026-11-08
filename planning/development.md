@@ -37,9 +37,10 @@ product-completion paths.
 
 **Owner/evidence:** the exact installed Education 26.33 game-native
 input, Player/HUD and render ABI must be verified before any
-client hook or production integration. Existing source only supplies
-an owned native game process and DXGI FPS instrumentation; it
-does NOT expose Player coordinates or an in-game compositor.
+client hook or production integration. Existing source now also contains an OFF-by-default D3D11
+in-backbuffer F3 compositor and input/Player-frame source contracts,
+but it still does NOT expose a verified Minecraft Education Player
+or keyboard ABI. None of these source-only components is active.
 Do not turn a layered FPS window into a counterfeit Minecraft F3
 panel. No client F3 implementation has been built or tested.
 Read [native client F3 design](../docs/system/minecraft-education-native-f3-client.md).
@@ -200,6 +201,7 @@ single next action remain unchanged.
 
 | Revision | Source-only change | State |
 | --- | --- | --- |
+| Native client F3 input/render source slice (8 November) | Introduced `education-client-f3.h/.cpp` under the original test-only bootstrap folder. It has OGLES/window-thread gated F3 key-edge+F3+C, same-client live Player-frame validation/world-epoch freshness, a real Direct2D/D3D11 in-swapchain draw path and swapchain resize/retire cleanup. Linked only under new `BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE=OFF` CMake flag and existing `dxgi-pacing.cpp` wrapper. No new game keyboard hook/Player ABI provider, no layered overlay, no world/UI/installer changes; gameplay source and D3D12/HDR support remain unavailable. | REMOTE_GITHUB source and immediate native consumer review; zero tests/builds executed at operator instruction. Client ABI, compile, graphics state preservation, F3 toggle/clipboard and Minecraft acceptance NOT_VERIFIED |
 | Native Education F3 read-only PE evidence (8 November) | Added a developer-only, explicit-call PE metadata collector that reuses the registered Microsoft-signed Desktop resolver, validates bounded x64 PE structure and optional CodeView reference, computes SHA-256 and excludes install/PDB paths, account and world data. Always reports F3 input/Player/HUD ABI NOT_ESTABLISHED; no client hook, F3 renderer, installer, profile or runtime activation. | REMOTE_GITHUB source review; PowerShell NOT_EXECUTED, client build ABI, live F3 and Minecraft NOT_VERIFIED |
 | Native-only Education client F3 routing correction (8 November) | Operator explicitly rejected world-based and app-based F3. Audited native `bootstrap-compat`, DXGI Present and measured FPS HUD: current HUD uses a separate layered Win32 window and does not expose a native Player/XYZ ABI. Pinned Git tree contains no game EXE/DLL to inspect. Added one authoritative client-native F3 design/validation gate; retired existing Script API/JSON UI experiments as historical F3 candidates, preserving sources. No speculative hook, binary patch, dummy output or client mod installed. | REMOTE_GITHUB code/source and official Education/Bedrock reference review; no native game ABI, real F3 input, HUD renderer or copy action verified; Windows/Minecraft NOT_EXECUTED |
 | In-game F3 live debug-data refresh projection (8 November) | Closed a source gap: the earlier pure toggle supplied only one position snapshot and would become stale as the player moved. Added a pure visible-panel update/unchanged/hide projection for player location, facing, rotation and dimension; an invalid Player hides rather than leaving stale text. The existing team `coords/display` remains the sole scheduler/HUD owner. Authored stationary/moving/dimension/invalid/five-player fixtures; no new key hook, macro, render, app UI, clipboard or world mutation. | REMOTE_GITHUB static source/consumer inspection; Node tests AUTHORED_NOT_EXECUTED; actual F3-only input, Education HUD updates, team integration and game acceptance NOT_VERIFIED |
@@ -404,8 +406,10 @@ GitHub Actions CI remains disabled.
 Minecraft Education 26.33 Windows client image**, with verified product
 identity, to establish the original game's F3 input handling, live
 Player XYZ/dimension/camera accessor and in-render HUD presentation
-interface. Existing GitHub source has no Education executable or ABI
-for the latter two. Do not ship speculative binary offsets, a
+interface. Existing GitHub source has no Education executable or native Player
+/keyboard ABI. The D3D11 renderer and key state now exist only behind
+a disabled source flag, with no source-bound player/input owner.
+Do not ship speculative binary offsets, a
 Windows-layered overlay, a world Add-On or a fake F3 toggle.
 The whole feature needs one integrated version-gated input + data +
 in-game render implementation and actual Windows/Minecraft acceptance

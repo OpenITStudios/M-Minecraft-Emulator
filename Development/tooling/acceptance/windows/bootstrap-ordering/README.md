@@ -62,6 +62,29 @@ Five-client launch uses the private CLI; the four-tab public manager is unchange
 [single current handoff](../../../../../planning/development.md).
 
 
+## Education client-native F3 source (8 November 2026; OFF)
+
+The actual F3 requirement is **inside Minecraft Education's own DXGI
+backbuffer**, independent of world packs and LazyTester UI. The new
+`education-client-f3.h/.cpp` is an explicit source-only, non-product
+C++ candidate. `BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE` is **OFF** by
+default and joins only the original `bootstrap-compat` DXGI owner when
+separately enabled. It does NOT create a Windows layered window; the
+existing measured FPS HUD remains separate and unchanged.
+
+The C++ source implements F3 edge intent, F3+C clipboard logic, bounded
+same-process OGLES Player-frame freshness and Direct2D/D3D11 in-backbuffer
+painting with resize/retirement cleanup. Crucially, no real Education
+Player accessor or original-game F3 input callback is known, approved,
+registered or invoked. A frame cannot be published by DXGI alone.
+D3D12/HDR support and game-state access are NOT_IMPLEMENTED. The
+source-only build option is NOT an authorization to use it.
+
+No source test, compilation, CMake, DLL load, Minecraft launch,
+Windows game interaction, world write, profile change, or CI was run.
+See `docs/system/minecraft-education-native-f3-client.md` for
+remaining engine-ABI and gameplay blockers.
+
 ## Measured FPS HUD — 25 October 2026
 
 The existing typed presentation owner now retains one lightweight HUD worker

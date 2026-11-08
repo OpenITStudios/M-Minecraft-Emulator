@@ -138,6 +138,45 @@ not obtainable from Education must be explicitly flagged as a
 F3 is open, subject to confirming it does not conflict with an existing
 Education input mapping. No automatic clipboard writes.
 
+## Native client source slice — prepared, default OFF, NOT_EXECUTED
+
+The former plan-only route now has a **real C++ source slice** inside
+`Development/tooling/acceptance/windows/bootstrap-ordering/`:
+
+- `education-client-f3.h/.cpp` define a process-local OGLES-window
+  session, single physical F3 key-down/up toggle intent with autorepeat
+  suppression, optional explicit F3+C clipboard write, bounded live
+  Player-frame validation with world-generation and 250-ms freshness
+  invalidation, and teardown on focus/device/world change.
+- The source-only D3D11 compositor writes directly into the existing
+  game DXGI swapchain **backbuffer**, via Direct2D/DirectWrite and without
+  creating a `WS_EX_LAYERED` or other separate Windows overlay. It
+  releases backbuffer references before both `ResizeBuffers` variants
+  and on final native chain teardown. D3D12/HDR/unsupported devices
+  fail closed; render or F3 intents are never called a drawn receipt.
+- `dxgi-pacing.cpp` calls the compositor only with
+  `BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE` set. The standalone CMake
+  option is **OFF**; normal DLL and product packaging remain unchanged.
+  The initial input/Player source is intentionally NOT registered by
+  `compat.cpp`, `presentation-enrollment.cpp` or the manager.
+- The renderer's current text layout includes native XYZ, block/chunk,
+  facing, rotation, dimension and the already measured FPS field.
+  This is **not full Java debug parity**; biome/light/targeting and
+  other game-specific fields still need actual Education engine access.
+  No hardcoded Player pointer, made-up coordinate value, screenshot
+  extraction or world gamerule is used.
+
+**Source boundary:** `claim_game_window`, `publish_player`, and
+`game_key` are unbound input functions for a future source-verified
+Education engine adapter. A HWND/class name alone does not authenticate
+gameplay, raw key provenance or a Player object. Until an exact native
+source is established they are never called, the compositor is inactive,
+and **F3 cannot work in Minecraft**. Direct2D/D3D11 compatibility, state
+restoration, main/render-thread scheduling, copy-to-clipboard and
+MC01–MC05 isolation are all NOT_EXECUTED; source-only code is not
+Windows runtime acceptance. No test, build, native or game execution was
+authorized by this change.
+
 ## Read-only PE evidence collector — source prepared, NOT_EXECUTED
 
 `Development/tooling/acceptance/windows/inspect-education-f3-pe.ps1`

@@ -5,6 +5,10 @@ option(BOOTSTRAP_ORDERING_TEST_ONLY "Build the standalone self-child ordering ex
 # Input discovery/experimental native source only. No default product
 # payload or automatic execution. MC02-named flags retain private ABI
 # compatibility; the new opt-in permits 1-5 independently owned slots.
+# Experimental native game-rendered F3 source slice. Never enabled in the
+# ordinary DLL, product installer or source-only acceptance by default.
+# The actual Education 26.33 game Player/keyboard ABI is still unverified.
+option(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE "Explicit source-only in-game F3/D3D11 candidate (no engine adapter)" OFF)
 option(BOOTSTRAP_MC02_INPUT_API_OBSERVE "Record one-shot MC02 input API presence; no input dispatch" OFF)
 option(BOOTSTRAP_MC02_VIRTUAL_INPUT "Historical name for the isolated per-client AI polling candidate" OFF)
 option(BOOTSTRAP_MULTI_CLIENT_VIRTUAL_INPUT "Experimental MC01-MC05 independently owned AI polling" OFF)
@@ -63,6 +67,14 @@ target_compile_options(probe-detours PRIVATE /W4 /WX)
 
 add_library(bootstrap-dependency SHARED dependency.cpp)
 add_library(bootstrap-compat SHARED compat.cpp compat.def presentation-enrollment.cpp dxgi-pacing.cpp fps-hud.cpp graphics-warm-pools.cpp)
+if(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
+  # This source joins the existing DXGI wrapper. It registers NO keyboard
+  # hook or game Player callback: verified Education engine adapters are
+  # deliberately absent, so the opt-in candidate cannot display fake XYZ.
+  target_sources(bootstrap-compat PRIVATE education-client-f3.cpp)
+  target_compile_definitions(bootstrap-compat PRIVATE BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE=1)
+  target_link_libraries(bootstrap-compat PRIVATE d3d11 d2d1 dwrite)
+endif()
 if(BOOTSTRAP_MC02_VIRTUAL_INPUT)
   target_sources(bootstrap-compat PRIVATE mc02-virtual-input.cpp)
   target_compile_definitions(bootstrap-compat PRIVATE BOOTSTRAP_MC02_VIRTUAL_INPUT=1)
