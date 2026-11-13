@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "repository": "OpenITStudios/M-Minecraft-Emulator",
+  "activeBranch": "Local",
+  "branchPolicy": {
+    "writableBranches": [
+      "Local"
+    ],
+    "allowAutoBranch": false,
+    "allowAutoPromotion": false
+  },
+  "executionPolicy": {
+    "ci": "disabled",
+    "tests": "on_hold",
+    "nativeProof": "required_when_claimed"
+  },
+  "permissions": {
+    "crossRepoWrites": false,
+    "mutatingActionsRequireUserIntent": true,
+    "releaseRequiresExplicitApproval": true
+  },
+  "protectedPaths": [],
+  "holds": [
+    {
+      "id": "no-ci-native-source-test-hold",
+      "reason": "Current operator decision: no GitHub Actions and no source-test execution until separately authorized; source-only review/authoring is permitted.",
+      "paths": [],
+      "blockedActions": [
+        "ci",
+        "test"
+      ],
+      "until": "Explicit operator approval for a matching verified PC-local validation phase."
+    }
+  ],
+  "dataPolicy": "confidential-project",
+  "note": "Read .agent-standard/project-policy.md after shared rules/profile for M-Minecraft-Emulator domain invariants. Prior roots are archived under .agent-standard/history/.",
+  "workflowPolicy": {
+    "sourceSurface": "CHATGPT_GITHUB",
+    "localValidationSurface": "LOCAL_PC_AGENT",
+    "localTestDuringSourcePhase": false,
+    "requestLocaltestFromChatGPT": false,
+    "githubActionsOrCloudTestSubstitution": false,
+    "localValidationRequiresExplicitTransition": true
+  }
+}
