@@ -14,6 +14,11 @@
 - Preserve Rust runtime core, Tauri desktop, installer identity, data formats, profile/world storage, saved snapshots, compatibility and user data. Never silently remove any old account-bearing disk or protected Minecraft material.
 - Preserve the native Lazy Tester installation and source acceptance boundaries. Only an actually connected target can prove native gameplay, installed app or UI acceptance.
 
+
+## Related Lazy-family task routing
+
+When an explicitly authorized task involves another Lazy Minecraft product, consult this repository's `README.md` **Related Lazy-family handoff** section to locate the actual artifact and evidence owner. This is a navigation pointer, not another agent/router. Read the other repository's current selected ref and own local policy only when the handoff is genuinely required. Preserve exact asset/world identity, edition/version, user approval, evidence tier and every local test/CI hold. A relationship never grants automatic transfer, cross-repository writes, native host access or gameplay approval.
+
 ## Security, provenance, preservation
 - No account/Microsoft credentials, OAuth tokens, signing keys, machine identity values, private worlds, snapshots or secrets in Git/source/logs.
 - Do not run a CLI, installer, source tests, cloud runner or GitHub Action merely to prove this standards migration. Never manufacture source/native PASS.
