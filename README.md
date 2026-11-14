@@ -70,6 +70,15 @@ Content Log's process/world origin. The source-only `proofGate` marks
 those unknowns; command dispatch stays disabled. No exact-revision
 Windows/gameplay acceptance or current Node test execution is claimed.
 
+
+## Related Lazy-family handoff (source coordination only)
+
+[Lazy-Developer](https://github.com/OpenITStudios/M-Lazy-Developer/tree/Local) owns the selected Bedrock/Education `.mcworld` source audit, finding IDs, obligations, and evidence classification. LazyTester owns **independent Minecraft Education runtime/profile observation**, not the source audit or its defect verdicts. This MCP does **not** accept `MapAuditOutputV2` or an AI `--handoff` packet as an executable map-test contract.
+
+For an explicitly approved native investigation, the map owner must separately review a [`map-test-contract.json`](docs/system/map-aware-probe-qa.md) against the exact selected map, including the artifact SHA-256, edition/version, expected outcome, required evidence and relevant source revision. Configure it explicitly with `LAZY_TESTER_MAP_CONTRACT` or `--map-contract` only on an authorized local host. The existing `probe_qa` remains the sole probe interface; `mapPlan` and `qaReport` describe source-planned checks, and **map requirements stay NOT_TESTED** without independent native/world/Player/log evidence. Probe-reported success must not be forwarded as Lazy-Developer gameplay PASS.
+
+[LazyDesigner](https://github.com/OpenITStudios/M-LazyDesigner/tree/Local) separately owns Bedrock Entity `.bbmodel` visuals. LazyTester does not package those assets into worlds or validate them from an export alone. No automatic map/model transfer, startup, test dispatch, credential access, world mutation, or cross-repository write is established. Shared AgentSkill governance and existing source-test/CI holds stay effective.
+
 ## Source and private data layout
 
 ```text
