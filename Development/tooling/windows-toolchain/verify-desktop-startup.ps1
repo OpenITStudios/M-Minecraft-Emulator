@@ -69,7 +69,7 @@ try {
                     if ($cacheInsideData) { break }
                 }
             }
-            $observation = [PSCustomObject]@{event='desktop-startup-observation';sourceCommit=$receipt.sourceCommit;processId=$manager.Id;parentProcessId=$process.ParentProcessId;explorerParent=$true;connected=('Connected' -in $names);cards=$cards.Count;enabled=$enabled;issue=($issue -join ' ');cacheInsideData=$cacheInsideData}
+            $observation = [PSCustomObject]@{event='desktop-startup-observation';sourceCommit=$receipt.sourceCommit;processId=$manager.Id;parentProcessId=$process.ParentProcessId;explorerParent=$true;connected=('Profile data verified' -in $names);cards=$cards.Count;enabled=$enabled;issue=($issue -join ' ');cacheInsideData=$cacheInsideData}
             if ($observation.connected -and $cards.Count -eq 5 -and $enabled -eq 5 -and -not $observation.issue -and $cacheInsideData) { break }
         }
         Start-Sleep -Milliseconds 250

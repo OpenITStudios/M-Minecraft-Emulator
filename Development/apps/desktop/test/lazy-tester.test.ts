@@ -743,16 +743,17 @@ describe('Lazy Tester queue scheduling parity',()=>{
         {nativeBackend:'Unsupported' as const},{mounted:false},
       ]){
         const state={...idle,...mask,...variants};
-        expect(nextPendingUiAction(state)).toBe(previousFirst(state));
+        expect(nextPendingUiAction(state)).toBe(state.initializing ? null : previousFirst(state));
       }
     }
   });
-  it('cannot dispatch during close review; Refresh precedes Launch, and initialization retains passive lanes',()=>{
+  it('keeps layout and selection out of initial profile/session inspection',()=>{
     expect(nextPendingUiAction({...idle,manualRefreshRequested:true,queuedLaunch:true})).toBe('manualRefresh');
     expect(nextPendingUiAction({...idle,queuedAudio:true,manualRefreshRequested:true})).toBe('audio');
     expect(nextPendingUiAction({...idle,queuedSelection:true,dirty:true})).toBe('selection');
-    expect(nextPendingUiAction({...idle,initializing:true,queuedSelection:true})).toBe('selection');
-    expect(nextPendingUiAction({...idle,initializing:true,dirty:true})).toBe('layout');
+    expect(nextPendingUiAction({...idle,initializing:true,queuedSelection:true})).toBeNull();
+    expect(nextPendingUiAction({...idle,initializing:true,dirty:true})).toBeNull();
+    expect(nextPendingUiAction({...idle,initializing:false,dirty:true})).toBe('layout');
     expect(nextPendingUiAction({...idle,initializing:true,queuedAudio:true})).toBeNull();
     expect(nextPendingUiAction({...idle,queuedAudio:true,closeReviewPending:true,queuedSelection:true})).toBeNull();
   });

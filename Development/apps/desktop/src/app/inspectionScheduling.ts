@@ -104,7 +104,10 @@ export type PendingUiAction =
   | 'manualRefresh' | 'launch' | 'selection' | 'layout';
 
 export function nextPendingUiAction(state: PendingUiQueueState): PendingUiAction | null {
+  // Native layout can otherwise occupy the resize/admission lane before
+  // initializeLaunchers performs its first session inspection.
   if (!state.mounted || state.nativeBackend !== 'WindowsNative' ||
+      state.initializing ||
       state.closeInProgress || state.closeReviewPending ||
       state.busy || state.refreshing || state.resizing) return null;
 

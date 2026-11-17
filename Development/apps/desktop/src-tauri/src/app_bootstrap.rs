@@ -255,7 +255,7 @@ fn startup_diagnostic_result(app: tauri::AppHandle, connection: String, issue: S
     }
     use std::io::Write;
     writeln!(std::io::stdout(), "{}", serde_json::json!({"event":"startup-observation","processId":std::process::id(),"connection":connection,"issue":issue,"cards":cards,"enabled":enabled,"diagnosticOnly":true})).map_err(|error|error.to_string())?;
-    if startup_diagnostic_mode() {app.exit(if connection=="Connected" && cards==5 && enabled==5 {0}else{2});}
+    if startup_diagnostic_mode() {app.exit(if connection=="Profile data verified" && cards==5 && enabled==5 {0}else{2});}
     Ok(())
 }
 

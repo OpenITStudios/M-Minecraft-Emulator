@@ -2,8 +2,27 @@
 
 ## Launch repair incident — 17 November 2026
 
-Current outcome: Education 1.26.33 image/callsite review is complete; the
-new source is being built and staged for actual managed-launch validation.
+Current outcome: the cea37a26 build was packaged/staged and successfully
+launched two retained managed Education 1.26.33 sessions concurrently. Both
+reported RUNNING, a responsive HWND, and no attention issue. The original
+controller's close-all then returned all five slots STOPPED, with no live
+Minecraft process and no forced termination. This is startup/lifecycle
+evidence, not sign-in, licensing, world or gameplay acceptance.
+
+App-only staging backed up the previous App/root launcher. Before/after
+metadata checks verified 29 protected objects, including all five profile
+directories and all five existing hive file identities; Data metadata was
+unchanged during replacement. No profile contents were copied/read by the
+stager and no reset/migration/login/world action was issued.
+
+Ordinary root startup exposed an additional UI scheduling defect: initial
+native layout/preview work was eligible before initial session inspection,
+so refresh could return early while resizing, producing zero enabled cards.
+Queue regression tests first failed (two cases), then all 49 frontend tests
+passed after gating layout/selection until initialization completes. Startup
+diagnostic consumers also now use the current Profile data verified label,
+not the obsolete Connected label. This startup correction is being rebuilt
+and staged; its actual installed UI acceptance remains to verify.
 The operator explicitly requests completion to a usable local build while
 preserving old profiles/authentication, with no Computer Use or data reset.
 
@@ -20,9 +39,9 @@ validation that previously failed, and the scoped CLI argument test PASS.
 The existing CLI now forwards close/close-all to the original normal-close
 actor; no force kill or parallel game owner is introduced.
 
-Next: build/stage this exact source using the existing App-only backup/rollback
-stager; compare original Data/profile/hive file identities, then verify actual
-managed launches and normal close without sign-in automation or world access.
+Next: build/stage the startup correction with the same App-only backup/rollback
+stager and Data metadata comparison, then verify the real UI enables all five
+launchers and retains the already-proven managed launch/normal-close path.
 No new release/main/CI publication is authorized.
 
 Earlier controller stabilization (retained evidence):
