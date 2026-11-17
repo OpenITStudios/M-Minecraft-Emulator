@@ -33,6 +33,18 @@ Rust emitted existing warnings, including clashing GetSecurityInfo declarations.
 Production package, App staging, native UI and repaired Minecraft launch/close
 acceptance are NOT_EXECUTED. Installed App/root receipt remains unchanged.
 
+Follow-up actual checks requested by the operator, at source
+4e1f9cc08906f86fc62a69b2ab901e226decc7aa: installed a788a06 App binary
+matched its build receipt, but its --lazy-tester-check-webview diagnostic
+exited 2 with connection Unavailable, zero cards and zero enabled controls.
+This hidden/build-context observation is NOT ordinary Explorer/Desktop
+acceptance and does not identify the separate startup failure's root cause.
+The ignored read-only registered_launch_validation_cost test was explicitly
+run against the actual registered installation and FAILED at registered_image(true)
+with Unsupported (current Education version lacks a reviewed recipe).
+No timing result or successful Launch is claimed. No game was launched and
+no Computer Use, login, world access or installed payload replacement occurred.
+
 Current operator request: restore the installed Lazy Tester launch behavior.
 The operator explicitly authorized local compatibility review, builds and
 launch/normal-close tests without sign-in or world access, then prohibited
