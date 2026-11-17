@@ -1,5 +1,46 @@
 # Current Development Handoff — Lazy Tester
 
+## Launch repair incident — 17 November 2026
+
+Current operator request: restore the installed Lazy Tester launch behavior.
+The operator explicitly authorized local compatibility review, builds and
+launch/normal-close tests without sign-in or world access, then prohibited
+Computer Use because the PC is in use. No further UI/focus/input automation
+or foreground game experiments are in scope now. The F3/native-input work
+below is separate and is not resumed by this repair request.
+
+State: BLOCKED_COMPATIBILITY, not repaired. Source was fast-forwarded from
+aad08f54dce59836b8543718c0c9bbbeea7ce08b to GitHub Local
+f2d9b8ca62c22c6284b228f2c09ec5df28c9a724 without replacing App or Data.
+Installed App/build-info.json still identifies a788a06. No product code,
+installed payload, profile, world, or game installation was changed.
+
+Observed installed Education: file version 1.26.33.0, valid Microsoft
+Authenticode signature, SHA-256
+59fac48cfb6b2cf8d0821e9a0ae6d586481ab1e73ceef46cea53ecee3ac48b43.
+The screenshot's exact refusal originates in independent_bootstrap.rs:
+validate_registered_image_with requires
+04164c1c64458a5d984dbc1687d0e8023d1808c44ee7be03519cdf8355233eaa.
+Both prepare_registered_mode and session_controller::Sessions::launch_inner
+use the previously reviewed mutex caller RVA 0x2cdc30. New-image caller
+compatibility is UNKNOWN; changing the accepted digest alone is unjustified.
+
+Read-only PE inspection found a changed section/import layout. One temporary
+local startup observer using DEBUG_ONLY_THIS_PROCESS reached a Themida
+debugger-rejection dialog before producing any mutex-call evidence. The
+observer detached successfully with kill-on-debugger-exit disabled; at the
+last observation its game process/dialog remained alive. This is not a
+normal-startup failure or proof that the ordinary bootstrap DLL is rejected.
+No protection bypass, forced process termination, login or world operation
+was performed. Do not reuse historical PIDs or repeat this debugger test.
+The operator's no-Computer-Use instruction remains active.
+
+Next repair prerequisite: establish the exact new image's startup/mutex
+compatibility through an authorized observation method that does not use a
+debugger or disturb the operator's desktop, before admitting it in the
+existing bootstrap owner. No production build/staging or repaired launch
+acceptance occurred; all other historical test holds remain unchanged.
+
 **Updated:** 8 November 2026. **Branch:** `Local` only; `main` is
 release-reserved and GitHub Actions CI remains disabled. This file owns
 the ONE active development handoff, proof ceiling, and next action.
