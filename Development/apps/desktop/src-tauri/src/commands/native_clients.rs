@@ -203,6 +203,10 @@ pub async fn lazy_tester_clear_previews() -> Result<(), String> {
 
 type SurfaceFailure = crate::engine::manager_settings::OperationFailure;
 
+fn surface_failure(error: impl std::fmt::Display) -> SurfaceFailure {
+    std::io::Error::other(error.to_string()).into()
+}
+
 #[tauri::command]
 pub async fn desktop_update_workspace(
     window: tauri::WebviewWindow,

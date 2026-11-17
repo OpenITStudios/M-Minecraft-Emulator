@@ -1291,4 +1291,5 @@ pub(super) fn refresh() {
 }
 
 #[cfg(test)]
+#[path = "windows/tests.rs"]
 mod tests;

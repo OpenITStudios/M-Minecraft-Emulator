@@ -512,6 +512,7 @@ fn create_unstarted_tracked_select(
 }
 
 const MAX_EDUCATION_SLOTS: u32 = 5;
+const REVIEWED_SINGLETON_CALLER_RVA: u32 = 0x2cdc30;
 
 #[path = "independent_bootstrap/game_preset.rs"]
 mod game_preset;
@@ -560,7 +561,7 @@ fn prepare_registered_mode<const N: usize>(
     let mut children = Vec::with_capacity(N);
     for mut store in stores {
         if observe {
-            store.singleton_caller_rva = 0x2cdc30;
+            store.singleton_caller_rva = REVIEWED_SINGLETON_CALLER_RVA;
         }
         children.push(create_unstarted_configured(
             path,
@@ -576,11 +577,14 @@ fn prepare_registered_mode<const N: usize>(
 }
 
 fn registered_image(observe: bool) -> io::Result<(String, File)> {
-    let selector = "Resolve-ManagerEducationTarget -RegisteredOnly";
-    let target = super::resolve_registered_education_target(selector)?;
+    registered_image_with(observe, || super::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly"))
+}
+
+fn registered_image_with(observe: bool, mut resolve: impl FnMut() -> io::Result<String>) -> io::Result<(String, File)> {
+    let target = resolve()?;
     let path = Path::new(&target);
     let image = pin_image(path)?;
-    validate_registered_image(&target,&image,observe)?;
+    validate_registered_image_with(&target,&image,observe,&mut resolve)?;
     Ok((target,image))
 }
 
@@ -596,24 +600,58 @@ fn validate_registered_image_with(target:&str,image:&File,observe:bool,resolve:i
     if !same_image(&image_id(image)?,&image_id(&pin_image(Path::new(target))?)?) {
         return Err(invalid("Registered Education image identity changed"));
     }
-    // The scoped experiment is bound to the actually observed official image bytes/callsite.
-    // An update refuses before allocating profiles; publisher identity alone cannot authorize an RVA.
+    if observe {
+        reviewed_singleton_recipe(file_digest(image, 256 * 1024 * 1024)?)?;
+    }
+    Ok(())
+}
+
+fn reviewed_singleton_recipe(digest: [u8; 32]) -> io::Result<u32> {
+    // Publisher identity alone cannot authorize a version-specific callsite.
     let expected = [
         0x04, 0x16, 0x4c, 0x1c, 0x64, 0x45, 0x8a, 0x5d, 0x98, 0x4d, 0xbc, 0x16, 0x87, 0xd0, 0xe8,
         0x02, 0x3d, 0x18, 0x08, 0xc4, 0x4e, 0xe7, 0xbe, 0x03, 0x51, 0x9c, 0xdf, 0x83, 0x55, 0x23,
         0x3e, 0xaa,
     ];
-    if observe && file_digest(image, 256 * 1024 * 1024)? != expected {
-        return Err(invalid(
-            "Education image changed; singleton recipe requires review",
-        ));
+    if digest != expected {
+        return Err(io::Error::new(io::ErrorKind::Unsupported,
+            "This Minecraft Education version is not yet supported for managed launch. Update Lazy Tester compatibility before launching. Saved launcher data is preserved."));
     }
-    Ok(())
+    Ok(REVIEWED_SINGLETON_CALLER_RVA)
 }
 
 #[cfg(test)]
 mod launch_preflight_measurement {
     use super::*;
+    #[test]
+    fn each_launch_resolves_and_pins_the_current_installation_only_for_that_attempt() {
+        let root=std::env::temp_dir().join(format!("lazy-registration-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&root).unwrap();
+        let first=root.join("first.exe");let second=root.join("second.exe");
+        std::fs::write(&first,[7u8;128]).unwrap();std::fs::write(&second,[9u8;128]).unwrap();
+        for path in [&first,&second] {
+            let mut calls=0;
+            let (target,pin)=registered_image_with(false,||{calls+=1;Ok(path.to_str().unwrap().into())}).unwrap();
+            assert_eq!(calls,2,"Registration must be checked after the image is pinned");
+            assert_eq!(target,path.to_str().unwrap());
+            assert!(OpenOptions::new().write(true).open(path).is_err());
+            drop(pin);
+            assert!(OpenOptions::new().write(true).open(path).is_ok(),"No idle controller pin may block an update");
+        }
+        let mut calls=0;
+        assert!(registered_image_with(false,||{calls+=1;Ok(if calls==1{&first}else{&second}.to_str().unwrap().into())}).is_err(),"Registration races must still fail");
+        assert_eq!(registered_image_with(true,||Ok(second.to_str().unwrap().into())).unwrap_err().kind(),io::ErrorKind::Unsupported);
+        assert!(OpenOptions::new().write(true).open(&second).is_ok(),"Refused attempts must release their image pins");
+        std::fs::remove_file(first).unwrap();std::fs::remove_file(second).unwrap();std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn a_recipe_binds_exact_image_bytes_to_its_reviewed_callsite() {
+        let digest=[0x04,0x16,0x4c,0x1c,0x64,0x45,0x8a,0x5d,0x98,0x4d,0xbc,0x16,0x87,0xd0,0xe8,0x02,0x3d,0x18,0x08,0xc4,0x4e,0xe7,0xbe,0x03,0x51,0x9c,0xdf,0x83,0x55,0x23,0x3e,0xaa];
+        assert_eq!(reviewed_singleton_recipe(digest).unwrap(),REVIEWED_SINGLETON_CALLER_RVA);
+        let mut changed=digest;changed[31]^=1;
+        assert_eq!(reviewed_singleton_recipe(changed).unwrap_err().kind(),io::ErrorKind::Unsupported);
+    }
     #[test]
     fn retained_launch_validation_checks_fresh_registration_identity_and_bytes() {
         let root=std::env::temp_dir().join(format!("lazy-preflight-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));

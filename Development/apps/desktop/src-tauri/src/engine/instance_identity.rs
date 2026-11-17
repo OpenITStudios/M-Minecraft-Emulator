@@ -1952,7 +1952,7 @@ mod windows {
             signer_result.map_err(|_| ()),
         ).map_err(invalid)?;
         let after = file_identity(&file)?;
-        if before != after || image_name(&process)? != path {
+        if before != after || crate::engine::windows_process_image::query(process.0)? != path {
             return Err(invalid("On-disk process image changed during inspection"));
         }
         live(&process)?;

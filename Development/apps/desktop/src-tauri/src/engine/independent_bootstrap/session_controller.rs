@@ -94,7 +94,6 @@ struct Sessions {
     issues: Vec<Option<String>>,
     windows: Vec<Option<OwnedProcess>>,
     path: String,
-    image: File,
     exiting: bool,
     #[cfg(feature="mc02-native-input")]
     ai_leases:AiLeaseBook, // ONE native actor: no additional game owner.
@@ -109,7 +108,15 @@ impl Sessions {
             return Err(io::Error::new(io::ErrorKind::AlreadyExists,
                 "Existing Minecraft sessions are preserved. Close them normally before starting managed profiles."));
         }
-        let (path, image) = registered_image(true)?;
+        // An unsupported game version blocks Launch, not settings or profile observation.
+        // Release this temporary image pin before retaining the idle controller.
+        let (path, image) = registered_image(false)?;
+        let launch_issue = match reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?) {
+            Ok(_) => None,
+            Err(error) if error.kind() == io::ErrorKind::Unsupported => Some(error.to_string()),
+            Err(error) => return Err(error),
+        };
+        drop(image);
         // Opening five product profiles can recover an interrupted clear or
         // persist the data-location pointer. Reject missing/unreviewed DLLs
         // BEFORE any of those profile-side effects or a game launch.
@@ -118,10 +125,9 @@ impl Sessions {
         Ok(Self {
             stores,
             running: (0..5).map(|_| None).collect(),
-            issues: vec![None; 5],
+            issues: vec![launch_issue; 5],
             windows: vec![None; 5],
             path,
-            image,
             exiting: false,
             #[cfg(feature="mc02-native-input")]
             ai_leases:AiLeaseBook::default(),
@@ -221,21 +227,25 @@ impl Sessions {
         }
         let payload = BootstrapLibrary::reviewed()?;
         crate::engine::manager_settings::load_performance()?;
-        // Recheck current registration/signature/path identity and exact bytes
-        // against the original retained image without a redundant initial resolve.
-        validate_registered_image(&self.path,&self.image,true)?;
+        // Each attempt selects the current signed registration and pins its exact
+        // reviewed bytes before touching settings or creating a game process.
+        let (path, image) = match registered_image(true) {
+            Ok(target) => target,
+            Err(error) => { self.issues[index] = Some(error.to_string()); return Err(error); }
+        };
+        self.path = path.clone();
         let store = self.stores[index]
             .as_mut()
             .ok_or_else(|| invalid("Profile is unavailable after unconfirmed startup cleanup; existing processes are preserved"))?;
-        store.singleton_caller_rva = 0x2cdc30;
+        store.singleton_caller_rva = REVIEWED_SINGLETON_CALLER_RVA;
         game_preset::apply_inactive(std::slice::from_ref(store))?;
         // Keep the exact validated store until ownership reaches the started
         // transaction. Cloning handles neither reopens paths nor seeds a profile.
         let cleanup = UnstartedCleanup::new();
         let attempt = (|| {
             let child = create_unstarted_tracked_select(
-                Path::new(&self.path),
-                self.image.try_clone()?,
+                Path::new(&path),
+                image.try_clone()?,
                 Some(self.stores[index].as_ref().unwrap().duplicate()?),
                 true,
                 Some(&payload),
@@ -878,7 +888,7 @@ impl Sessions {
     }
 
     // Read-only UI settings observation. The exact registered image path was
-    // validated and its file HANDLE pinned at controller preparation; reusing
+    // signature-checked at controller preparation or the last launch; reusing
     // that path avoids launching the full PowerShell registration preflight
     // on every idle Settings refresh. It is a DISPLAY HINT, not permission
     // to alter profiles. settings() below keeps the original fresh check.
@@ -2033,7 +2043,6 @@ mod tests {
             running:(0..5).map(|_|None).collect(),
             issues:vec![None;5],windows:vec![None;5],
             path:String::new(),
-            image:File::open(std::env::current_exe().unwrap()).unwrap(),
             exiting:false,
         };
         let one=normal_close_mask(Some(2)).unwrap();
@@ -2065,7 +2074,7 @@ mod tests {
 
     #[test]
     fn full_exit_of_idle_sessions_does_not_prepare_profiles_and_denies_new_launches() {
-        let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),image:File::open(std::env::current_exe().unwrap()).unwrap(),exiting:false};
+        let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),exiting:false};
         // The selected-close owner must never report a successful exit
         // for a stopped slot even if it has no process to wait for.
         for slot in 1..=5 {
@@ -2293,7 +2302,7 @@ mod tests {
         let mut sessions=Sessions {
             stores:(0..5).map(|_|None).collect(), running:(0..5).map(|_|None).collect(),
             issues:vec![None;5], windows:vec![None;5], path:String::new(),
-            image:File::open(std::env::current_exe().unwrap()).unwrap(), exiting:false,
+            exiting:false,
         };
         assert!(sessions.settings(true).unwrap_err().to_string().contains("Close all Minecraft"));
         assert!(sessions.running.iter().all(Option::is_none));
@@ -2323,6 +2332,7 @@ mod tests {
             cache: Default::default(),
             game_settings: None,
             full_clear: None,
+            resource_packs: None,
         };
         scan(&directory, &mut result, InspectionBudget::new(Duration::from_secs(2)), 0);
         assert_eq!((result.bytes, result.files, result.partial), (40, 2, false));

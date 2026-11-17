@@ -432,7 +432,12 @@ This is callsite attribution, not static proof of the game's rejection branch.
 
 Private config v2 remains 1,136 bytes. StorageAndRegistryOnly requires a zero
 caller RVA; StorageRegistrySelectedMutex requires a nonzero reviewed RVA. An
-exact-image hash check refuses a game update before allocating/reopening stores.
+exact-image hash check refuses an unreviewed managed launch before game-settings
+writes or process creation. The current session controller can inspect profiles
+and Settings on an unsupported version; its stopped profiles need attention.
+It releases the preparation image pin and resolves the current signed image for
+each launch. Earlier experiment-specific preparation still refuses unreviewed
+images before opening its stores.
 The observed caller binds one immutable process-local GUID name. Only that name
 in the verified session directory is mapped to a suffix derived from the pinned
 private directory identity; real native create/open and Win32 results are kept.

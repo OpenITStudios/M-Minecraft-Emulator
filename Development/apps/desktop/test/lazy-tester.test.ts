@@ -510,7 +510,8 @@ describe('Lazy Tester user-facing feedback and recovery warnings',()=>{
       expect(message.length).toBeLessThanOrEqual(80);
       expect(message).not.toMatch(/PID|HWND|stack trace|internal policy/i);
     }
-    expect(userMessage('launch')).toContain('may still be starting');
+    expect(userMessage('launch')).toContain('Check Minecraft version support');
+    expect(userMessage('launch')).not.toContain('may still be starting');
     expect(userMessage('recovery')).toContain('not window restoration');
     expect(userMessage('clearData')).toContain('unfinished');
     expect(userMessage('binding')).toContain('No game was launched');

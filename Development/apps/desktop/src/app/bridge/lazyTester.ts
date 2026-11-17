@@ -134,7 +134,7 @@ export function parseAgentActivity(value:unknown):AgentActivityReport {
         !['PROBE_REPORTED_PASS','FAIL','NEEDS_REVIEW'].includes(String(entry.reportedOutcome)) ||
         !record(counts) ||
         !exact(counts,['expected','pass','fail','info','look']) ||
-        !Number.isSafeInteger(counts.expected)||counts.expected<1||counts.expected>80||
+        typeof counts.expected!=='number'||!Number.isSafeInteger(counts.expected)||counts.expected<1||counts.expected>80||
         !['pass','fail','info','look'].every(k=>Number.isSafeInteger(counts[k])&&
           Number(counts[k])>=0&&Number(counts[k])<=80) ||
         Number(counts.pass)+Number(counts.fail)+Number(counts.info)+Number(counts.look)!==counts.expected ||

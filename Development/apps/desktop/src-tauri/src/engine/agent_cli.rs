@@ -706,7 +706,7 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             .duration_since(std::time::UNIX_EPOCH)
             .map_err(|_|"STALE_MC02_INPUT")?
             .as_millis();
-        if requested_at_ms==0 || wall_now<u128::from(requested_at_ms)) {
+        if requested_at_ms==0 || wall_now<u128::from(requested_at_ms) {
             return Err("STALE_MC02_INPUT");
         }
         let request_age_ms=wall_now-u128::from(requested_at_ms);

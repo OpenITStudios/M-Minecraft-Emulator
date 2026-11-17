@@ -2,6 +2,37 @@
 
 ## Launch repair incident — 17 November 2026
 
+Current source outcome: update-resilient controller preparation is implemented;
+Minecraft 1.26.33 managed-launch compatibility remains BLOCKED_COMPATIBILITY.
+At parent 353e0e7027fca4a959ccf4bec46b66bcd1672e3b, an unsupported image
+prevented the entire retained controller from starting. The controller now
+signature/identity-checks the installation, reports unsupported existing
+profiles as ATTENTION, releases its idle image pin, and leaves inspection
+and Settings accessible. Each Launch resolves and fully validates the current
+signed image before game-settings writes or process creation. Original child
+image pins survive for their full managed lifetimes. Fresh profile creation,
+migration and experimental startup routes retain their existing review gates.
+No unreviewed image or callsite is admitted; automatic compatibility with all
+future game versions is NOT claimed.
+
+Necessary build repairs also restore explicit nested Rust module paths,
+missing window verification/error conversion/imports, an existing stale
+process-image reader call, a recovery error return and test fixture field;
+remove one extra CLI delimiter; and restore the existing frontend recovery
+import and numeric type guard. These were compilation blockers in the pinned
+source, not changes to game input, public schemas or provider selection.
+
+Executed on the operator-authorized PC, without Computer Use or new Minecraft
+launches: three Rust image-preflight tests PASS (one timing test ignored),
+four pure actor/error-regression tests PASS, Windows product Cargo check PASS,
+Svelte/TypeScript check PASS with nine existing warnings, frontend build PASS,
+and the 49-test launcher/frontend suite PASS. The broader Vitest run is NOT
+green: 168 PASS, 11 FAIL in nine files, including existing source-contract
+expectations and import failures; do not claim complete regression acceptance.
+Rust emitted existing warnings, including clashing GetSecurityInfo declarations.
+Production package, App staging, native UI and repaired Minecraft launch/close
+acceptance are NOT_EXECUTED. Installed App/root receipt remains unchanged.
+
 Current operator request: restore the installed Lazy Tester launch behavior.
 The operator explicitly authorized local compatibility review, builds and
 launch/normal-close tests without sign-in or world access, then prohibited
@@ -9,11 +40,11 @@ Computer Use because the PC is in use. No further UI/focus/input automation
 or foreground game experiments are in scope now. The F3/native-input work
 below is separate and is not resumed by this repair request.
 
-State: BLOCKED_COMPATIBILITY, not repaired. Source was fast-forwarded from
+Initial diagnosis (before the source changes above): source was fast-forwarded from
 aad08f54dce59836b8543718c0c9bbbeea7ce08b to GitHub Local
 f2d9b8ca62c22c6284b228f2c09ec5df28c9a724 without replacing App or Data.
-Installed App/build-info.json still identifies a788a06. No product code,
-installed payload, profile, world, or game installation was changed.
+Installed App/build-info.json still identifies a788a06. No installed payload,
+profile, world, or game installation was changed by that initial observation.
 
 Observed installed Education: file version 1.26.33.0, valid Microsoft
 Authenticode signature, SHA-256
@@ -35,7 +66,7 @@ No protection bypass, forced process termination, login or world operation
 was performed. Do not reuse historical PIDs or repeat this debugger test.
 The operator's no-Computer-Use instruction remains active.
 
-Next repair prerequisite: establish the exact new image's startup/mutex
+Single remaining repair prerequisite: establish the exact new image's startup/mutex
 compatibility through an authorized observation method that does not use a
 debugger or disturb the operator's desktop, before admitting it in the
 existing bootstrap owner. No production build/staging or repaired launch

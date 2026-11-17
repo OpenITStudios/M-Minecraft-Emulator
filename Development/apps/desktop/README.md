@@ -32,6 +32,14 @@ unverified games.
 
 ## Profile layout and legacy compatibility
 
+Minecraft version compatibility is checked for every managed launch. An
+unreviewed version leaves existing configured launcher inspection and Settings available, with
+the stopped profiles marked as needing attention. Launch remains blocked
+until its exact image/callsite is reviewed. The idle controller retains no
+game executable handle; each launch resolves the current signed installation
+again. Running games retain their original image pins until they exit.
+This does not promise automatic compatibility with future Minecraft builds.
+
 - Current schema 2 profiles: `Data/Launchers/Minecraft-1..5`.
 - Catalog: `Data/profiles.json`.
 - Canonical pointer: `Data/Settings/data-location.json`.

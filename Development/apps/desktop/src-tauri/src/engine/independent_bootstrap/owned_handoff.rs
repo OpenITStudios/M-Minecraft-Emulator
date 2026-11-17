@@ -1,7 +1,7 @@
 //! Fixed own-descendant handoff control. Never compiled into product launch paths.
 use super::*;
 use std::sync::atomic::{AtomicI32, Ordering};
-use windows_sys::Win32::System::Threading::{CreateEventW, SetEvent};
+use windows_sys::Win32::System::Threading::{CreateEventW, QueryFullProcessImageNameW, SetEvent};
 
 #[repr(C)]
 pub(super) struct Handoff {

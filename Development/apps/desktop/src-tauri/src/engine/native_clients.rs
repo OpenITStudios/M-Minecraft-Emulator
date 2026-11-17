@@ -928,8 +928,32 @@ pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
     native_workspace_windows::inspect()
 }
 
+// Existing bootstrap callers retain the process lifetime separately; recheck
+// HWND ownership immediately before their native window operation.
+#[cfg(windows)]
+fn verify_live_client_02_window(
+    hwnd: windows_sys::Win32::Foundation::HWND,
+    expected_pid: u32,
+) -> io::Result<()> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetAncestor, GetWindow, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
+        GA_ROOT, GW_OWNER,
+    };
+    let mut actual_pid = 0;
+    if expected_pid == 0 || unsafe { IsWindow(hwnd) } == 0
+        || unsafe { IsWindowVisible(hwnd) } == 0
+        || unsafe { GetWindowThreadProcessId(hwnd, &mut actual_pid) } == 0
+        || actual_pid != expected_pid || unsafe { GetAncestor(hwnd, GA_ROOT) } != hwnd
+        || !unsafe { GetWindow(hwnd, GW_OWNER) }.is_null()
+    {
+        return Err(io::Error::new(io::ErrorKind::NotFound,
+            "Minecraft game window changed, closed or became an owned popup; Refresh first"));
+    }
+    Ok(())
+}
+
 // Internal read-only Settings receipt: this path was already resolved and
-// image-pinned by Sessions::prepare(). Skip a new PowerShell registered-app
+// signature-checked by Sessions::prepare() or its last launch. Skip a new PowerShell registered-app
 // preflight for an observation only. All mutations still use the normal
 // registered_education_target/inspect_native_workspace admission and the
 // original OS process checks; this hint never authorizes a settings write.

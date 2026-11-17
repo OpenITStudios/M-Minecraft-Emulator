@@ -121,6 +121,7 @@ pub(super) fn configure(
 }
 
 #[cfg(windows)]
+#[path = "previews/windows.rs"]
 mod windows;
 
 fn fit_rectangle(
@@ -173,4 +174,5 @@ pub(super) fn refresh() {
 }
 
 #[cfg(test)]
+#[path = "previews/tests.rs"]
 mod tests;

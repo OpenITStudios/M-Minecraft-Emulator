@@ -162,6 +162,7 @@ fn rollback_error(parked: &io::Result<()>, restored: &io::Result<()>) -> Option<
     if problems.is_empty() { None } else { Some(problems.join("; ")) }
 }
 #[cfg(test)]
+#[path = "controller/rollback_tests.rs"]
 mod rollback_tests;
 enum Event {
     Reply(Reply),
@@ -1259,4 +1260,5 @@ pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
 }
 
 #[cfg(all(test, windows))]
+#[path = "controller/windows_tests.rs"]
 mod windows_tests;

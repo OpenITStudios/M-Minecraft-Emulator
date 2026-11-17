@@ -11,6 +11,7 @@
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
+  import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, type CloseReview} from './app/inspectionScheduling.js';
 

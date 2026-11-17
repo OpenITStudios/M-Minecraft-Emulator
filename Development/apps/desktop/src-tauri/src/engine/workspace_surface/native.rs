@@ -613,7 +613,7 @@ pub(super) fn restore_traced(
                     ))),
                 };
             }
-            Err(error)
+            return Err(error);
         }
     };
     verify_saved_window(saved,window)?;
