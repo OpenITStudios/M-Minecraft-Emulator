@@ -2,7 +2,41 @@
 
 ## Launch repair incident — 17 November 2026
 
-Current outcome: the cea37a26 build was packaged/staged and successfully
+Delivered local build: a15dd9f5811dcc6a937890b3e90cc0673e99214d. Installed
+App payload hashes and the root launcher hash all match their build receipt.
+The ordinary root launcher now opens the real compiled UI with Profile data
+verified, five cards, five enabled controls and no binding issue. After two
+managed Education 1.26.33 sessions reported responsive RUNNING windows, the
+manager's actual normal CloseRequested path closed itself, both games and
+the retained controller without force termination. A subsequent root start
+again reported five enabled controls. The delivered manager is left open.
+Read-only canonical setup verification reports configured=true, issue=null.
+
+The final App-only promotion preserved metadata for all 29 protected objects,
+including the same five profile directories and hive files. Prior App/root
+payloads remain in workspace/private/local-app-backups. Local installer export:
+workspace/packages/lazy-tester/0.1.0-a15dd9f5811d-20261117T075038267Z/.
+No installer was published and signing/install-repair-uninstall are unverified.
+No profile reset, migration, credential copying, sign-in automation or world
+interaction occurred. Retaining these files is NOT proof that Microsoft's
+session remains valid; account sign-in, licensing, world play and networking
+were not inspected or accepted by this launcher test.
+
+The prior cea37a26 manager became stuck behind its native resource lock and
+refused repeated normal close attempts even with no game process. Only that
+exact installed manager was terminated to permit replacement, after verifying
+no Minecraft was alive. No game was force-stopped. The final a15dd9f5 manager
+passed normal close, so the earlier failure is not promoted into a final PASS.
+
+Scoped repair outcome: DONE for packaged/staged launcher startup, two-session
+managed launch, normal whole-app exit and data-preserving App replacement.
+No Computer Use tool, mouse/keyboard/focus input or game account/world
+automation was used. The broad source-contract failures recorded below remain
+outside this acceptance; do not claim the whole test suite or five licensed
+playable clients passed. Next for this bounded repair: STOP.
+
+Earlier build/diagnosis evidence:
+The cea37a26 build was packaged/staged and successfully
 launched two retained managed Education 1.26.33 sessions concurrently. Both
 reported RUNNING, a responsive HWND, and no attention issue. The original
 controller's close-all then returned all five slots STOPPED, with no live
@@ -39,9 +73,8 @@ validation that previously failed, and the scoped CLI argument test PASS.
 The existing CLI now forwards close/close-all to the original normal-close
 actor; no force kill or parallel game owner is introduced.
 
-Next: build/stage the startup correction with the same App-only backup/rollback
-stager and Data metadata comparison, then verify the real UI enables all five
-launchers and retains the already-proven managed launch/normal-close path.
+The build/stage/startup/normal-close step above is now complete for the
+delivered a15dd9f5 product source; retained earlier notes below are historical.
 No new release/main/CI publication is authorized.
 
 Earlier controller stabilization (retained evidence):
