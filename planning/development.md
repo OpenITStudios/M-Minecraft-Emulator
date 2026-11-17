@@ -2,8 +2,30 @@
 
 ## Launch repair incident — 17 November 2026
 
-Current source outcome: update-resilient controller preparation is implemented;
-Minecraft 1.26.33 managed-launch compatibility remains BLOCKED_COMPATIBILITY.
+Current outcome: Education 1.26.33 image/callsite review is complete; the
+new source is being built and staged for actual managed-launch validation.
+The operator explicitly requests completion to a usable local build while
+preserving old profiles/authentication, with no Computer Use or data reset.
+
+A transparent native observer without a debugger reproduced one initially
+owned GUID-shaped CreateMutexA call at RVA 0x2cf0f0: first process returned
+0, the second returned ERROR_ALREADY_EXISTS (183) and exited normally with
+code 0. The first process then accepted normal close and exited 0. Only
+callsite/result metadata was recorded; no object names, login or world data.
+The exact signed image digest is the 1.26.33 hash recorded below. The shared
+bootstrap now selects and returns the caller together with its pinned image;
+both launch owners use that selected caller, retaining the old image recipe.
+All four preflight tests PASS, including actual current registered-image
+validation that previously failed, and the scoped CLI argument test PASS.
+The existing CLI now forwards close/close-all to the original normal-close
+actor; no force kill or parallel game owner is introduced.
+
+Next: build/stage this exact source using the existing App-only backup/rollback
+stager; compare original Data/profile/hive file identities, then verify actual
+managed launches and normal close without sign-in automation or world access.
+No new release/main/CI publication is authorized.
+
+Earlier controller stabilization (retained evidence):
 At parent 353e0e7027fca4a959ccf4bec46b66bcd1672e3b, an unsupported image
 prevented the entire retained controller from starting. The controller now
 signature/identity-checks the installation, reports unsupported existing
@@ -78,11 +100,10 @@ No protection bypass, forced process termination, login or world operation
 was performed. Do not reuse historical PIDs or repeat this debugger test.
 The operator's no-Computer-Use instruction remains active.
 
-Single remaining repair prerequisite: establish the exact new image's startup/mutex
-compatibility through an authorized observation method that does not use a
-debugger or disturb the operator's desktop, before admitting it in the
-existing bootstrap owner. No production build/staging or repaired launch
-acceptance occurred; all other historical test holds remain unchanged.
+The initial new-image review prerequisite above has now been met by the
+non-debugger observation. Actual managed-launch and installed acceptance
+still require the current build/stage/verification step. All unrelated
+historical holds remain unchanged.
 
 **Updated:** 8 November 2026. **Branch:** `Local` only; `main` is
 release-reserved and GitHub Actions CI remains disabled. This file owns

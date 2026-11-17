@@ -512,7 +512,6 @@ fn create_unstarted_tracked_select(
 }
 
 const MAX_EDUCATION_SLOTS: u32 = 5;
-const REVIEWED_SINGLETON_CALLER_RVA: u32 = 0x2cdc30;
 
 #[path = "independent_bootstrap/game_preset.rs"]
 mod game_preset;
@@ -550,7 +549,7 @@ fn prepare_registered_mode<const N: usize>(
             "Registered presentation requires reviewed profile replay",
         ));
     }
-    let (target, image) = registered_image(observe)?;
+    let (target, image, singleton_caller_rva) = registered_image(observe)?;
     let path = Path::new(&target);
     let stores = registered_slots::<N>(observe)?;
     if observe {
@@ -561,7 +560,7 @@ fn prepare_registered_mode<const N: usize>(
     let mut children = Vec::with_capacity(N);
     for mut store in stores {
         if observe {
-            store.singleton_caller_rva = REVIEWED_SINGLETON_CALLER_RVA;
+            store.singleton_caller_rva = singleton_caller_rva;
         }
         children.push(create_unstarted_configured(
             path,
@@ -576,22 +575,22 @@ fn prepare_registered_mode<const N: usize>(
     children.try_into().map_err(|_| invalid("Incomplete Education process set"))
 }
 
-fn registered_image(observe: bool) -> io::Result<(String, File)> {
+fn registered_image(observe: bool) -> io::Result<(String, File, u32)> {
     registered_image_with(observe, || super::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly"))
 }
 
-fn registered_image_with(observe: bool, mut resolve: impl FnMut() -> io::Result<String>) -> io::Result<(String, File)> {
+fn registered_image_with(observe: bool, mut resolve: impl FnMut() -> io::Result<String>) -> io::Result<(String, File, u32)> {
     let target = resolve()?;
     let path = Path::new(&target);
     let image = pin_image(path)?;
-    validate_registered_image_with(&target,&image,observe,&mut resolve)?;
-    Ok((target,image))
+    let singleton_caller_rva = validate_registered_image_with(&target,&image,observe,&mut resolve)?;
+    Ok((target,image,singleton_caller_rva))
 }
 
-fn validate_registered_image(target:&str,image:&File,observe:bool)->io::Result<()> {
+fn validate_registered_image(target:&str,image:&File,observe:bool)->io::Result<u32> {
     validate_registered_image_with(target,image,observe,||super::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly"))
 }
-fn validate_registered_image_with(target:&str,image:&File,observe:bool,resolve:impl FnOnce()->io::Result<String>)->io::Result<()> {
+fn validate_registered_image_with(target:&str,image:&File,observe:bool,resolve:impl FnOnce()->io::Result<String>)->io::Result<u32> {
     // The original pin predates this full signature/registration check. Reopen the
     // current name only to prove it still denotes those same retained bytes.
     if resolve()? != target {
@@ -601,23 +600,32 @@ fn validate_registered_image_with(target:&str,image:&File,observe:bool,resolve:i
         return Err(invalid("Registered Education image identity changed"));
     }
     if observe {
-        reviewed_singleton_recipe(file_digest(image, 256 * 1024 * 1024)?)?;
+        return reviewed_singleton_recipe(file_digest(image, 256 * 1024 * 1024)?);
     }
-    Ok(())
+    Ok(0)
 }
 
 fn reviewed_singleton_recipe(digest: [u8; 32]) -> io::Result<u32> {
     // Publisher identity alone cannot authorize a version-specific callsite.
-    let expected = [
+    let previous_image = [
         0x04, 0x16, 0x4c, 0x1c, 0x64, 0x45, 0x8a, 0x5d, 0x98, 0x4d, 0xbc, 0x16, 0x87, 0xd0, 0xe8,
         0x02, 0x3d, 0x18, 0x08, 0xc4, 0x4e, 0xe7, 0xbe, 0x03, 0x51, 0x9c, 0xdf, 0x83, 0x55, 0x23,
         0x3e, 0xaa,
     ];
-    if digest != expected {
-        return Err(io::Error::new(io::ErrorKind::Unsupported,
-            "This Minecraft Education version is not yet supported for managed launch. Update Lazy Tester compatibility before launching. Saved launcher data is preserved."));
+    if digest == previous_image {
+        return Ok(0x2cdc30);
     }
-    Ok(REVIEWED_SINGLETON_CALLER_RVA)
+    // Education 1.26.33.0: transparent native startup observed this caller's
+    // initially owned GUID mutex returning 0, then 183 in the rejected second process.
+    let education_12633 = [
+        0x59,0xfa,0xc4,0x8c,0xfb,0x6b,0x2c,0xf8,0xd0,0x82,0x1e,0x9a,0x0a,0xe6,0xd5,0x86,
+        0x48,0x1a,0xb1,0xe7,0x3c,0xee,0xf4,0x6c,0xea,0x53,0xec,0xee,0x3a,0xc4,0x8b,0x43,
+    ];
+    if digest == education_12633 {
+        return Ok(0x2cf0f0);
+    }
+    Err(io::Error::new(io::ErrorKind::Unsupported,
+        "This Minecraft Education version is not yet supported for managed launch. Update Lazy Tester compatibility before launching. Saved launcher data is preserved."))
 }
 
 #[cfg(test)]
@@ -631,7 +639,8 @@ mod launch_preflight_measurement {
         std::fs::write(&first,[7u8;128]).unwrap();std::fs::write(&second,[9u8;128]).unwrap();
         for path in [&first,&second] {
             let mut calls=0;
-            let (target,pin)=registered_image_with(false,||{calls+=1;Ok(path.to_str().unwrap().into())}).unwrap();
+            let (target,pin,rva)=registered_image_with(false,||{calls+=1;Ok(path.to_str().unwrap().into())}).unwrap();
+            assert_eq!(rva,0);
             assert_eq!(calls,2,"Registration must be checked after the image is pinned");
             assert_eq!(target,path.to_str().unwrap());
             assert!(OpenOptions::new().write(true).open(path).is_err());
@@ -648,7 +657,9 @@ mod launch_preflight_measurement {
     #[test]
     fn a_recipe_binds_exact_image_bytes_to_its_reviewed_callsite() {
         let digest=[0x04,0x16,0x4c,0x1c,0x64,0x45,0x8a,0x5d,0x98,0x4d,0xbc,0x16,0x87,0xd0,0xe8,0x02,0x3d,0x18,0x08,0xc4,0x4e,0xe7,0xbe,0x03,0x51,0x9c,0xdf,0x83,0x55,0x23,0x3e,0xaa];
-        assert_eq!(reviewed_singleton_recipe(digest).unwrap(),REVIEWED_SINGLETON_CALLER_RVA);
+        assert_eq!(reviewed_singleton_recipe(digest).unwrap(),0x2cdc30);
+        let updated=[0x59,0xfa,0xc4,0x8c,0xfb,0x6b,0x2c,0xf8,0xd0,0x82,0x1e,0x9a,0x0a,0xe6,0xd5,0x86,0x48,0x1a,0xb1,0xe7,0x3c,0xee,0xf4,0x6c,0xea,0x53,0xec,0xee,0x3a,0xc4,0x8b,0x43];
+        assert_eq!(reviewed_singleton_recipe(updated).unwrap(),0x2cf0f0);
         let mut changed=digest;changed[31]^=1;
         assert_eq!(reviewed_singleton_recipe(changed).unwrap_err().kind(),io::ErrorKind::Unsupported);
     }

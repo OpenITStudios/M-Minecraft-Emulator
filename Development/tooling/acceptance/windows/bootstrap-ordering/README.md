@@ -415,6 +415,19 @@ is solely in `planning/development.md`.
 
 ## Current Education experiment — 24 October 2026
 
+Update, 17 November 2026: the exact Microsoft-signed Education 1.26.33.0 image
+`59fac48cfb6b2cf8d0821e9a0ae6d586481ab1e73ceef46cea53ecee3ac48b43`
+was observed with a transparent CreateMutexA observer without a debugger.
+Its initially owned GUID-shaped mutex returned 0 at caller RVA `0x2cf0f0` in
+the first process and ERROR_ALREADY_EXISTS (183) in the second, which exited
+with code 0. The first process then accepted a normal close and exited 0.
+The bootstrap now binds each reviewed image digest to its own caller RVA
+and passes that selected recipe to both preparation and per-slot launch.
+The actual registered-image preflight passes. This observation does not prove
+private-profile sign-in, playable worlds, networking or managed-launch acceptance.
+No official game file, existing account/profile or world was modified by the
+observer. Raw object names were neither printed nor persisted.
+
 The original self-owned controls below remain controls. The private opt-in
 same-manager `--education-startup-observation-once` path additionally runs the
 operator-authorized two-Education experiment; ordinary provider admission and

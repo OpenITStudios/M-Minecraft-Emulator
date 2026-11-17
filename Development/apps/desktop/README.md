@@ -40,6 +40,12 @@ game executable handle; each launch resolves the current signed installation
 again. Running games retain their original image pins until they exit.
 This does not promise automatic compatibility with future Minecraft builds.
 
+The reviewed Education 1.26.33.0 image selects its own observed mutex caller;
+the earlier reviewed image retains its original recipe. The existing one-shot
+`--lazy-tester-agent-cli` adapter also accepts `close <1..5>` and `close-all`,
+using the retained controller's normal close path. These commands never force
+terminate Minecraft, sign in, reset profiles or replace their data.
+
 - Current schema 2 profiles: `Data/Launchers/Minecraft-1..5`.
 - Catalog: `Data/profiles.json`.
 - Canonical pointer: `Data/Settings/data-location.json`.

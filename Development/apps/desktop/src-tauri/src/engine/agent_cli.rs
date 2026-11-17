@@ -9,6 +9,12 @@ use serde_json::{json, Value};
 fn parse_operation(args: &[String]) -> Result<(&'static str, Option<u32>), &'static str> {
     match args {
         [one] if one == "inspect" => Ok(("inspect", None)),
+        [one] if one == "close-all" => Ok(("close-all", None)),
+        [one, slot] if one == "close" => {
+            let slot = slot.parse::<u32>().map_err(|_| "INVALID_ARGUMENTS")?;
+            if !(1..=5).contains(&slot) { return Err("INVALID_ARGUMENTS"); }
+            Ok(("close", Some(slot)))
+        }
         #[cfg(feature="mc02-native-input")]
         [one,slot] if one=="launch-mc02-input" && slot=="2" =>
             Ok(("launch-mc02-input",Some(2))),
@@ -861,6 +867,16 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
                 "evidence":"NOT_VERIFIED_IN_MINECRAFT"
             }));
         }
+        // Reuse the retained actor's normal close, including its original
+        // process identity checks and no-force-termination policy.
+        if operation == "close" || operation == "close-all" {
+            let request = match slot {
+                Some(slot) => SessionRequest::CloseOne {slot},
+                None => SessionRequest::CloseAll,
+            };
+            let snapshot = native_clients_session::request(request).map_err(native_error)?;
+            return Ok(json!({"schema":1,"ok":true,"operation":operation,"snapshot":snapshot}));
+        }
         #[cfg(feature="mc02-native-input")]
         let request=if operation=="launch-mc02-input" {
             SessionRequest::LaunchMc02Experiment {
@@ -1162,6 +1178,8 @@ mod tests {
     #[test]
     fn one_shot_command_accepts_only_inspect_or_five_slots() {
         assert_eq!(parse_operation(&["inspect".into()]).unwrap(), ("inspect", None));
+        assert_eq!(parse_operation(&["close-all".into()]).unwrap(), ("close-all", None));
+        assert_eq!(parse_operation(&["close".into(),"2".into()]).unwrap(), ("close", Some(2)));
         assert_eq!(parse_operation(&["launch".into(), "5".into()]).unwrap(), ("launch", Some(5)));
         #[cfg(feature="mc02-native-input")]
         {
@@ -1178,7 +1196,8 @@ mod tests {
             ("target", Some(2)));
         assert_eq!(parse_operation(&["probe-background".into(), "2".into()]).unwrap(),
             ("probe-background", Some(2)));
-        for args in [vec!["close"], vec!["launch"], vec!["launch", "0"],
+        for args in [vec!["close"], vec!["close", "0"], vec!["close", "6"],
+            vec!["close-all", "1"], vec!["close", "2", "extra"], vec!["launch"], vec!["launch", "0"],
             vec!["launch", "6"], vec!["inspect", "1"], vec!["launch", "1", "extra"],
             vec!["launch-mc02-input","1"],vec!["launch-mc02-input","3"],
             vec!["probe-background", "1"], vec!["probe-background", "3"],
