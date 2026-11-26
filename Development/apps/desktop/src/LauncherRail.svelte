@@ -85,6 +85,7 @@
           : ''} title={statusLabel}>{statusLabel}</small>
       </button>
       {#if guidance}<span id={'lt-launcher-guidance-'+profile.slot} hidden>{guidance}</span>{/if}
+      <div class="lt-launcher-health-slot">
       {#if healthItem}
         <SessionHealthNotice item={healthItem} onAction={onGuidedRecovery}
           disabled={!guidedRecoveryAllowed(healthItem, profile, profile.slot,
@@ -94,6 +95,7 @@
               primarySlot: primary,
             })}/>
       {/if}
+      </div>
       {#if observedSlot && ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
         <button class="lt-secondary lt-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}

@@ -12,7 +12,8 @@ collapsed legacy disclosure. Native settings and stored values are unchanged. Pr
 runs on Data Storage navigation, not when opening General Settings.
 The fixed-height launcher action strip hosts selected-game close review and
 pending-close status without inserting a new workspace row. Native close
-admission and recovery remain unchanged.
+admission and recovery remain unchanged. Every launcher reserves a bounded
+health row so a warning does not resize the rail or shift native previews.
 Native Windows Minecraft Education has five
 fixed profile identities and an explicit manual launch path; the old
 Sandboxie/VMware provider route is retired.

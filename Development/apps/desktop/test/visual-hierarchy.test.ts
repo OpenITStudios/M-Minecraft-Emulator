@@ -20,6 +20,8 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     const css=source('lazy-tester.css');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('use:observePreview={profile.slot}');
+    expect(rail).toContain('<div class="lt-launcher-health-slot">');
+    expect(css).toContain('.lt-launcher-health-slot{flex:0 0 42px;height:42px;');
     expect(rail).toContain('lt-status-attention');
     expect(rail).toContain('lt-status-routine');
     expect(rail).not.toContain(' ✓');

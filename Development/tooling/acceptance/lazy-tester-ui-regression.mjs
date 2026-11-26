@@ -929,6 +929,11 @@ try {
     window.__calls.some(call=>call.command==='lazy_tester_previews'));
   const baseline = await page.evaluate(()=>window.__calls.filter(
     call=>call.command==='lazy_tester_previews').length);
+  const readPreviewGeometry=()=>page.evaluate(()=>['.lt-viewport',...Array.from({length:5},(_,i)=>'.lt-launcher-entry[data-slot="'+(i+1)+'"] .lt-card-picture')].map(selector=>{
+    const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
+    return {x,y,width,height};
+  }));
+  const beforePreviewWarning=await readPreviewGeometry();
   await page.evaluate(()=>{
     const process={pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:true};
     window.__emitNative('workspace-surface-error','dwm-preview-invalidated:'+
@@ -943,6 +948,8 @@ try {
   });
   const asyncPreviewIssue = page.getByRole('status',{name:'Minecraft - 2 preview unavailable'});
   await asyncPreviewIssue.waitFor();
+  assert.deepEqual(await readPreviewGeometry(),beforePreviewWarning,
+    'A per-launcher preview warning must not shift native geometry');
   assert.match(await asyncPreviewIssue.textContent(),/Preview is unavailable/);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
   assert.equal(await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).isEnabled(),true);
@@ -956,6 +963,8 @@ try {
   await page.waitForFunction(previous=>window.__calls.filter(
     call=>call.command==='lazy_tester_previews').length>previous,baseline);
   await asyncPreviewIssue.waitFor({state:'detached'});
+  assert.deepEqual(await readPreviewGeometry(),beforePreviewWarning,
+    'Clearing a preview warning must not shift native geometry');
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
 
   // A failed MC02 DWM observation is visible on MC02 only. MC03 is not
