@@ -1,3 +1,4 @@
+import {sameWorkspaceGeometry, type WorkspaceGeometry} from '../src/app/workspaceGeometry.js';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
@@ -770,5 +771,17 @@ describe('Lazy Tester queue scheduling parity',()=>{
     expect(nextPendingUiAction({...idle,initializing:false,dirty:true})).toBe('layout');
     expect(nextPendingUiAction({...idle,initializing:true,queuedAudio:true})).toBeNull();
     expect(nextPendingUiAction({...idle,queuedAudio:true,closeReviewPending:true,queuedSelection:true})).toBeNull();
+  });
+});
+
+ describe('Workspace geometry identity',()=>{
+  const rect=(x=0,y=0,width=640,height=360)=>({x,y,width,height} as DOMRect);
+  const baseline:WorkspaceGeometry={viewport:rect(),tiles:[{slot:2,rect:rect(20,400,160,90)}],pixelRatio:1};
+  it('rejects position-only changes, DPI changes and changed preview targets',()=>{
+    expect(sameWorkspaceGeometry(baseline,{...baseline,viewport:rect()})).toBe(true);
+    expect(sameWorkspaceGeometry(baseline,{...baseline,viewport:rect(1)})).toBe(false);
+    expect(sameWorkspaceGeometry(baseline,{...baseline,tiles:[{slot:2,rect:rect(20,401,160,90)}]})).toBe(false);
+    expect(sameWorkspaceGeometry(baseline,{...baseline,pixelRatio:1.25})).toBe(false);
+    expect(sameWorkspaceGeometry(baseline,{...baseline,tiles:[]})).toBe(false);
   });
 });

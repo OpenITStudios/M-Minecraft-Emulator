@@ -13,6 +13,7 @@
   import {canRequestProfileLaunch, projectSessionHealth, type LaunchReceiptState, type SessionHealthAction} from './app/presentation/sessionHealth.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
+  import {sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
@@ -659,6 +660,17 @@
     }
   }
 
+  function captureWorkspaceGeometry(): WorkspaceGeometry {
+    // Only observed RUNNING background processes can supply preview targets.
+    const tiles = others.filter(profile=>profile.state==='RUNNING'&&!!profile.process).flatMap(profile => {
+      const element = images.get(profile.slot); if (!element) return [];
+      const rect = element.getBoundingClientRect();
+      return rect.x >= 0 && rect.y >= 0 && rect.width >= 32 && rect.height >= 24 &&
+        rect.right <= window.innerWidth && rect.bottom <= window.innerHeight ? [{slot: profile.slot, rect}] : [];
+    });
+    return {viewport:viewport.getBoundingClientRect(),tiles,pixelRatio:window.devicePixelRatio};
+  }
+
   async function syncLayout() {
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
     // This UI snapshot grants no native process/window authority. The
@@ -692,19 +704,13 @@
       }
       await tick();
       if (!layoutCurrent()) {discardOutdated();return;}
-      if (active !== null) await workspaceSurface.update(viewport.getBoundingClientRect());
-      if (!layoutCurrent()) {discardOutdated();return;}
-      // DWM monitoring tiles require an observed RUNNING process, not
-      // merely an existing launcher profile or stale session state.
-      const tiles = others.filter(profile=>profile.state==='RUNNING'&&!!profile.process).flatMap(profile => {
-        const element = images.get(profile.slot); if (!element) return [];
-        const rect = element.getBoundingClientRect();
-        return rect.x >= 0 && rect.y >= 0 && rect.width >= 32 && rect.height >= 24 &&
-          rect.right <= window.innerWidth && rect.bottom <= window.innerHeight ? [{slot: profile.slot, rect}] : [];
-      });
-      if (!layoutCurrent()) {discardOutdated();return;}
-      const response = (await lazyTester.previews(viewport.getBoundingClientRect(), tiles)).tiles;
-      if (!layoutCurrent()) {discardOutdated();return;}
+      const geometry = captureWorkspaceGeometry();
+      const geometryCurrent = () => layoutCurrent() &&
+        sameWorkspaceGeometry(geometry,captureWorkspaceGeometry());
+      if (active !== null) await workspaceSurface.update(geometry.viewport);
+      if (!geometryCurrent()) {discardOutdated();return;}
+      const response = (await lazyTester.previews(geometry.viewport,[...geometry.tiles])).tiles;
+      if (!geometryCurrent()) {discardOutdated();return;}
       // An invalidation received AFTER this layout began is newer evidence
       // than its eventual PreviewReport. Never let that older response
       // re-mark MC02 as registered. Only another genuine layout can clear it.
@@ -907,6 +913,11 @@
       dirty = true;
     };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
+    // Main can scroll even when native targets retain their original size.
+    const workspaceScrolled = (event: Event) => {
+      if (page==='workspace' && event.target instanceof Element && event.target.contains(viewport)) dirty=true;
+    };
+    document.addEventListener('scroll', workspaceScrolled, true);
     const stops: (() => void)[] = [];
     const retain = (stop: () => void) => { if (disposed) stop(); else stops.push(stop); };
     void listen<boolean>('lazy-tester-close-review', event => {
@@ -960,6 +971,7 @@
     return () => {
       mounted = false; disposed = true; clearInterval(interval); observer?.disconnect();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
+      document.removeEventListener('scroll', workspaceScrolled, true);
       stops.forEach(stop => stop());pendingPreviewInvalidations.clear();
       // Unsupported diagnostic UI holds no native game-window lease.
       if (nativeBackend === 'WindowsNative') void workspaceSurface.release().catch(() => {});

@@ -104,3 +104,7 @@ No CI runs are enabled; the only development branch is `Local`.
 See the [implementation map](../../../docs/system/implementation-map.md),
 [current handoff](../../../planning/development.md), root `AGENTS.md`
 and `GITHUB_RULES.md`. Retired designs remain in Git history, not active UI.
+
+Workspace placement and preview IPC share one captured geometry per layout pass.
+Position, size, target identity and pixel ratio are rechecked after native awaits;
+ancestor scroll events reuse the existing dirty scheduler.
