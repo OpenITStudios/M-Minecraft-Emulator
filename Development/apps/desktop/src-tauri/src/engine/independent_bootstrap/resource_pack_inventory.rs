@@ -18,17 +18,22 @@ const MAX_WORLD_ENTRIES: u32 = 128;
 const MAX_WORLD_PACK_REFS: u32 = 256;
 const MAX_DECLARATIONS_BYTES: usize = 32 * 1024;
 
-fn base_path(private: &File) -> io::Result<Option<std::path::PathBuf>> {
+// Hold every verified ancestor for the entire read-only inventory. A path
+// returned without its pins is not a stable basis for a later cleanup review.
+fn base_path(private: &File, budget: InspectionBudget) -> io::Result<Option<(std::path::PathBuf, Vec<File>)>> {
     let mut path = directory_path(private)?;
+    let mut pins = vec![private.try_clone()?];
     for part in ["Roaming", "Minecraft Education Edition", "games", "com.mojang"] {
+        if budget.exhausted() { return Err(io::Error::other("Resource pack inventory exceeded its time limit")); }
         path.push(part);
         match open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
-            Ok(_) => {}
+            Ok(pin) => pins.push(pin),
             Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(error),
         }
     }
-    Ok(Some(path))
+    if budget.exhausted() { return Err(io::Error::other("Resource pack inventory exceeded its time limit")); }
+    Ok(Some((path, pins)))
 }
 
 fn count_manifested(base: &Path, budget: InspectionBudget) -> io::Result<u32> {
@@ -41,11 +46,11 @@ fn count_manifested(base: &Path, budget: InspectionBudget) -> io::Result<u32> {
             return Err(io::Error::other("Resource pack inventory exceeded its time limit"));
         }
         let root = base.join(name);
-        match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
-            Ok(_directory) => {}
+        let _directory = match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
+            Ok(directory) => directory,
             Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
             Err(error) => return Err(error),
-        }
+        };
         for entry in fs::read_dir(&root)? {
             visited += 1;
             if visited > MAX_PACK_ENTRIES || budget.exhausted() {
@@ -124,8 +129,8 @@ fn scan_world_declarations(base: &Path, budget: InspectionBudget) -> io::Result<
         return Err(io::Error::other("World resource-pack inventory exceeded its time limit"));
     }
     let root = base.join("minecraftWorlds");
-    match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
-        Ok(_root) => {}
+    let _root = match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
+        Ok(root) => root,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             // Missing root means zero only if this OS probe stayed in budget.
             if budget.exhausted() {
@@ -137,7 +142,7 @@ fn scan_world_declarations(base: &Path, budget: InspectionBudget) -> io::Result<
             });
         },
         Err(error) => return Err(error),
-    }
+    };
     let mut scanned = 0;
     let mut with_references = 0;
     let mut references = 0;
@@ -192,7 +197,7 @@ pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackS
     // Do not open resource-pack paths when the shared five-slot budget is
     // already exhausted. UNKNOWN is not evidence of zero installed packs.
     if budget.exhausted() { return exhausted_report(); }
-    let base = match base_path(private) {
+    let base = match base_path(private, budget) {
         Ok(base) => base,
         Err(error) => return ResourcePackStorage {
             manifested: 0, partial: true, issue: Some(error.to_string()),
@@ -202,7 +207,7 @@ pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackS
     // Ancestor probing may itself consume the remaining time. A missing
     // root after that point cannot be confidently reported as zero.
     if budget.exhausted() { return exhausted_report(); }
-    let Some(base) = base else {
+    let Some((base, _ancestor_pins)) = base else {
         return ResourcePackStorage {
             manifested: 0, partial: false, issue: None,
             world_declarations: Some(WorldPackDeclarations {
@@ -228,6 +233,21 @@ pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackS
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn inventory_ancestor_chain_is_retained_until_report_finishes() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let base = parent.join("Roaming/Minecraft Education Edition/games/com.mojang");
+        fs::create_dir_all(&base).unwrap();
+        let (_, pins) = base_path(&private, InspectionBudget::new(Duration::from_secs(2)))
+            .unwrap().unwrap();
+        assert_eq!(pins.len(), 5);
+        assert!(base_path(&private, InspectionBudget::new(Duration::ZERO)).is_err());
+        drop(pins);
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
 
     #[test]
     fn exhausted_shared_budget_skips_resource_disk_work_and_reports_unknown_not_zero() {
