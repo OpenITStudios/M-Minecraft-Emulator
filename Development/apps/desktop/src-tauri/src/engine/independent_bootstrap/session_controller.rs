@@ -243,7 +243,7 @@ impl Sessions {
         // transaction. Cloning handles neither reopens paths nor seeds a profile.
         let cleanup = UnstartedCleanup::new();
         let attempt = (|| {
-            let child = create_unstarted_tracked_select(
+            let child = create_suspended_process(
                 Path::new(&path),
                 image.try_clone()?,
                 Some(self.stores[index].as_ref().unwrap().duplicate()?),

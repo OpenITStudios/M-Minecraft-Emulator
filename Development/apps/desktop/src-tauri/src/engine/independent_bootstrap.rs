@@ -177,74 +177,62 @@ fn interactive_session(pid: u32) -> io::Result<u32> {
     Ok(session)
 }
 
-// Private to the registered-target entry point and this module's own-executable tests.
-fn create_unstarted(
+// Test-only conveniences retain the fixture's original argument defaults.
+// Production callers use the single suspended-process creation owner directly.
+#[cfg(test)]
+fn create_fixture_unstarted(
     path: &Path,
     image: File,
     storage: Option<SlotStorage>,
 ) -> io::Result<PendingEducationBootstrap> {
-    create_unstarted_impl(
-        path,
-        image,
-        storage,
-        false,
-        #[cfg(test)]
-        None,
-    )
+    create_fixture_observed(path, image, storage, false, None)
 }
 
-fn create_unstarted_impl(
+#[cfg(test)]
+fn create_fixture_observed(
     path: &Path,
     image: File,
     storage: Option<SlotStorage>,
     observe: bool,
-    #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
+    proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
-    create_unstarted_configured(
-        path,
-        image,
-        storage,
-        observe,
-        None,
-        #[cfg(test)]
-        proof,
-    )
+    create_suspended_process(path, image, storage, observe, None, None,
+        #[cfg(feature="mc02-native-input")] None,
+        proof)
 }
 
-// A private caller supplies the already-pinned payload to opt into event pacing.
-// Only the reviewed registered replay opts in; plain preparation stays unpaced.
-fn create_unstarted_configured(
+#[cfg(test)]
+fn create_fixture_configured(
     path: &Path,
     image: File,
     storage: Option<SlotStorage>,
     observe: bool,
     presentation_library: Option<&BootstrapLibrary>,
-    #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
+    proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
-    create_unstarted_tracked(path, image, storage, observe, presentation_library, None,
-        #[cfg(test)] proof)
+    create_suspended_process(path, image, storage, observe, presentation_library, None,
+        #[cfg(feature="mc02-native-input")] None,
+        proof)
 }
 
-fn create_unstarted_tracked(
+#[cfg(test)]
+fn create_fixture_tracked(
     path: &Path,
     image: File,
     storage: Option<SlotStorage>,
     observe: bool,
     presentation_library: Option<&BootstrapLibrary>,
     cleanup: Option<UnstartedCleanup>,
-    #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
+    proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
-    create_unstarted_tracked_select(
-        path,image,storage,observe,presentation_library,cleanup,
+    create_suspended_process(path, image, storage, observe, presentation_library, cleanup,
         #[cfg(feature="mc02-native-input")] None,
-        #[cfg(test)] proof,
-    )
+        proof)
 }
 
-// Only explicit launch intent from the already-authenticated controller
-// may enable the MC02-only reader. The existing startup and fixture
-// callsites continue through the original wrapper with input OFF.
-fn create_unstarted_tracked_select(
+// Only explicit launch intent from the authenticated controller may enable
+// experimental input; all registered observation and fixture callers pass None.
+fn create_suspended_process(
     path: &Path,
     image: File,
     storage: Option<SlotStorage>,
@@ -528,12 +516,15 @@ fn prepare_registered_mode<const N: usize>(
         if observe {
             store.singleton_caller_rva = singleton_caller_rva;
         }
-        children.push(create_unstarted_configured(
+        children.push(create_suspended_process(
             path,
             image.try_clone()?,
             Some(store),
             observe,
             presentation_library,
+            None,
+            #[cfg(feature="mc02-native-input")]
+            None,
             #[cfg(test)]
             None,
         )?);
@@ -2629,7 +2620,7 @@ impl BootstrapLibrary {
         }
         let mut copied = store.duplicate()?;
         copied.singleton_caller_rva = 0;
-        let child = create_unstarted_impl(&path, image, Some(copied), false, Some(proof))?;
+        let child = create_fixture_observed(&path, image, Some(copied), false, Some(proof))?;
         let status = tests::prepare_fixture(self, &child, proof, true);
         if status != 0 {
             return Err(io::Error::from_raw_os_error(status as i32));
@@ -2921,10 +2912,10 @@ mod tests {
     #[test]
     fn startup_observation_requires_config_and_never_reads_a_live_writer() {
         let path = std::env::current_exe().unwrap().canonicalize().unwrap();
-        assert!(create_unstarted_impl(&path, pin_image(&path).unwrap(), None, true, None).is_err());
+        assert!(create_fixture_observed(&path, pin_image(&path).unwrap(), None, true, None).is_err());
         let [a, _b] = test_slots();
         let mut child =
-            create_unstarted_impl(&path, pin_image(&path).unwrap(), Some(a), true, None).unwrap();
+            create_fixture_observed(&path, pin_image(&path).unwrap(), Some(a), true, None).unwrap();
         assert_eq!(
             child.observation_bytes_after_exit().unwrap_err().kind(),
             io::ErrorKind::WouldBlock
@@ -2949,12 +2940,12 @@ mod tests {
         let mut stores=test_slots();
         for store in &mut stores {store.registry=product_profiles::open_hive(&store.private,store.slot,true).unwrap();}
         let proof=FixtureReceipt::new();let mut wrong=clone_store(&stores[0]);wrong.registry=clone_store(&stores[1]).registry;
-        let mut rejected=create_unstarted_impl(&path,pin_image(&path).unwrap(),Some(wrong),false,Some(&proof)).unwrap();
+        let mut rejected=create_fixture_observed(&path,pin_image(&path).unwrap(),Some(wrong),false,Some(&proof)).unwrap();
         assert_ne!(prepare_fixture(&library,&rejected,&proof,true),0);
         assert!(library.enroll(&rejected).is_err());rejected.cancel().unwrap();
         for _round in 1..=2 {for store in &stores {
             let proof=FixtureReceipt::new();
-            let child=create_unstarted_impl(&path,pin_image(&path).unwrap(),Some(clone_store(store)),false,Some(&proof)).unwrap();
+            let child=create_fixture_observed(&path,pin_image(&path).unwrap(),Some(clone_store(store)),false,Some(&proof)).unwrap();
             assert_eq!(prepare_fixture(&library,&child,&proof,true),0);
             library.enroll(&child).unwrap();finish_fixture(&child);
         }}
@@ -3040,7 +3031,7 @@ mod tests {
         }
         // A mismatched birth is rejected before mutation; original child remains cancellable.
         let proof = FixtureReceipt::new();
-        let mut rejected = create_unstarted_impl(
+        let mut rejected = create_fixture_observed(
             &path,
             pin_image(&path).unwrap(),
             Some(clone_store(&a)),
@@ -3057,7 +3048,7 @@ mod tests {
         // The same live handles for a different executable are rejected before any canary creation.
         let self_path = std::env::current_exe().unwrap().canonicalize().unwrap();
         let proof = FixtureReceipt::new();
-        let mut wrong_image = create_unstarted_impl(
+        let mut wrong_image = create_fixture_observed(
             &self_path,
             pin_image(&self_path).unwrap(),
             Some(clone_store(&a)),
@@ -3078,7 +3069,7 @@ mod tests {
         wrong_image.cancel().unwrap();
         // Positive unhooked control must observe all three host registry canaries.
         let proof = FixtureReceipt::new();
-        let baseline = create_unstarted_impl(
+        let baseline = create_fixture_observed(
             &path,
             pin_image(&path).unwrap(),
             Some(clone_store(&a)),
@@ -3120,7 +3111,7 @@ mod tests {
             };
             let first_proof = FixtureReceipt::new();
             let second_proof = FixtureReceipt::new();
-            let first = create_unstarted_impl(
+            let first = create_fixture_observed(
                 &path,
                 pin_image(&path).unwrap(),
                 Some(first_store),
@@ -3128,7 +3119,7 @@ mod tests {
                 Some(&first_proof),
             )
             .unwrap();
-            let second = create_unstarted_impl(
+            let second = create_fixture_observed(
                 &path,
                 pin_image(&path).unwrap(),
                 Some(second_store),
@@ -3349,7 +3340,7 @@ mod tests {
             )
             .unwrap();
             let proof = FixtureReceipt::new();
-            let mut parent = create_unstarted_impl(
+            let mut parent = create_fixture_observed(
                 &path,
                 pin_image(&path).unwrap(),
                 Some(store),
@@ -3505,7 +3496,7 @@ mod tests {
             let private = store.private_path.clone();
             let proof = FixtureReceipt::new();
             let helper_proof = FixtureReceipt::new();
-            let mut parent = create_unstarted_impl(
+            let mut parent = create_fixture_observed(
                 &path,
                 pin_image(&path).unwrap(),
                 Some(store),
@@ -3590,7 +3581,7 @@ mod tests {
             )
             .unwrap();
             let proof = FixtureReceipt::new();
-            let mut parent = create_unstarted_impl(
+            let mut parent = create_fixture_observed(
                 &path,
                 pin_image(&path).unwrap(),
                 Some(store),
@@ -3758,7 +3749,7 @@ mod tests {
                     b"HOST",
                 )
                 .unwrap();
-                let child = create_unstarted_impl(
+                let child = create_fixture_observed(
                     &path,
                     pin_image(&path).unwrap(),
                     Some(store),
@@ -3846,7 +3837,7 @@ mod tests {
         for preflight_failure in [true, false] {
             // No execution or enrollment in these ownership failure branches.
             let mut children =
-                [0, 1].map(|_| create_unstarted(&path, pin_image(&path).unwrap(), None).unwrap());
+                [0, 1].map(|_| create_fixture_unstarted(&path, pin_image(&path).unwrap(), None).unwrap());
             let held = children.each_ref().map(FixtureLifetime::new);
             if preflight_failure {
                 children[1].cancel().unwrap();
@@ -3891,19 +3882,19 @@ mod tests {
     fn tracked_startup_restores_retry_only_before_creation_or_after_confirmed_exit() {
         let path = std::env::current_exe().unwrap().canonicalize().unwrap();
         let before_creation = UnstartedCleanup::new();
-        assert!(create_unstarted_tracked(Path::new("relative.exe"), pin_image(&path).unwrap(),
+        assert!(create_fixture_tracked(Path::new("relative.exe"), pin_image(&path).unwrap(),
             None, false, None, Some(before_creation.clone()), None).is_err());
         assert!(before_creation.retry_safe());
 
         let missing = UnstartedCleanup::new();
         let absent = path.parent().unwrap().join(format!("absent-startup-{}.exe", std::process::id()));
         assert!(!absent.exists());
-        assert!(create_unstarted_tracked(&absent, pin_image(&path).unwrap(),
+        assert!(create_fixture_tracked(&absent, pin_image(&path).unwrap(),
             None, false, None, Some(missing.clone()), None).is_err());
         assert!(missing.retry_safe());
 
         let cleanup = UnstartedCleanup::new();
-        let child = create_unstarted_tracked(&path, pin_image(&path).unwrap(),
+        let child = create_fixture_tracked(&path, pin_image(&path).unwrap(),
             None, false, None, Some(cleanup.clone()), None).unwrap();
         let process = child.process.try_clone().unwrap();
         assert!(!cleanup.retry_safe());
@@ -3917,7 +3908,7 @@ mod tests {
         let path = std::env::current_exe().unwrap().canonicalize().unwrap();
         for attempted in [false, true] {
             let cleanup = UnstartedCleanup::new();
-            let mut child = create_unstarted_tracked(&path, pin_image(&path).unwrap(),
+            let mut child = create_fixture_tracked(&path, pin_image(&path).unwrap(),
                 None, false, None, Some(cleanup.clone()), None).unwrap();
             let full = child.process.try_clone().unwrap();
             if attempted {
@@ -3962,7 +3953,7 @@ mod tests {
         }
         let path = std::env::current_exe().unwrap().canonicalize().unwrap();
         let cleanup = UnstartedCleanup::new();
-        assert!(create_unstarted_tracked(Path::new("relative.exe"), pin_image(&path).unwrap(),
+        assert!(create_fixture_tracked(Path::new("relative.exe"), pin_image(&path).unwrap(),
             Some(duplicate), false, None, Some(cleanup.clone()), None).is_err());
         assert!(cleanup.retry_safe());
         let retry = store.duplicate().unwrap();
@@ -4071,7 +4062,7 @@ mod tests {
                 0
             );
             let proof = FixtureReceipt::new();
-            let child = create_unstarted_impl(
+            let child = create_fixture_observed(
                 &path,
                 pin_image(&path).unwrap(),
                 Some(store),
@@ -4324,8 +4315,8 @@ mod tests {
             &directory_id(&b.private).unwrap()
         ));
         let path = std::env::current_exe().unwrap().canonicalize().unwrap();
-        let mut first = create_unstarted(&path, pin_image(&path).unwrap(), Some(a)).unwrap();
-        let mut second = create_unstarted(&path, pin_image(&path).unwrap(), Some(b)).unwrap();
+        let mut first = create_fixture_unstarted(&path, pin_image(&path).unwrap(), Some(a)).unwrap();
+        let mut second = create_fixture_unstarted(&path, pin_image(&path).unwrap(), Some(b)).unwrap();
         for (slot, child) in [(1, &first), (2, &second)] {
             let c = read_config(child);
             assert_eq!(
@@ -4396,9 +4387,9 @@ mod tests {
         let [a, b] = test_slots();
         for round in 1..=2 {
             let first =
-                create_unstarted(&path, pin_image(&path).unwrap(), Some(clone_store(&a))).unwrap();
+                create_fixture_unstarted(&path, pin_image(&path).unwrap(), Some(clone_store(&a))).unwrap();
             let second =
-                create_unstarted(&path, pin_image(&path).unwrap(), Some(clone_store(&b))).unwrap();
+                create_fixture_unstarted(&path, pin_image(&path).unwrap(), Some(clone_store(&b))).unwrap();
             // Test-only resume: fixed trusted C++ fixture, no game target or injection.
             for child in [&first, &second] {
                 assert_eq!(
@@ -4446,7 +4437,7 @@ mod tests {
             if error.kind() == io::ErrorKind::InvalidData)
         );
         // A policy request without storage refuses before process creation.
-        assert!(create_unstarted_configured(
+        assert!(create_fixture_configured(
             &path,
             pin_image(&path).unwrap(),
             None,
@@ -4460,7 +4451,7 @@ mod tests {
         let mut barriers = Vec::new();
         let mut lifetimes = Vec::new();
         for (store, proof) in test_slots().into_iter().zip(&proofs) {
-            let mut child = create_unstarted_configured(
+            let mut child = create_fixture_configured(
                 &path,
                 pin_image(&path).unwrap(),
                 Some(store),
@@ -4542,7 +4533,7 @@ mod tests {
         let path = std::env::current_exe().unwrap().canonicalize().unwrap();
         let image = pin_image(&path).unwrap();
         let id = image_id(&image).unwrap();
-        let mut child = create_unstarted(&path, image, None).unwrap();
+        let mut child = create_fixture_unstarted(&path, image, None).unwrap();
         let identity = child.identity().unwrap();
         assert_ne!(identity.0, unsafe { GetCurrentProcessId() });
         assert!(identity.1 > 0);
@@ -4565,7 +4556,7 @@ mod tests {
     fn dropped_preparation_cancels_only_its_original_child() {
         use windows_sys::Win32::Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS};
         let path = std::env::current_exe().unwrap().canonicalize().unwrap();
-        let child = create_unstarted(&path, pin_image(&path).unwrap(), None).unwrap();
+        let child = create_fixture_unstarted(&path, pin_image(&path).unwrap(), None).unwrap();
         let current = unsafe { GetCurrentProcess() };
         let mut duplicate = ptr::null_mut();
         assert_ne!(

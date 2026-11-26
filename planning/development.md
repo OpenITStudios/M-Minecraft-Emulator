@@ -28,7 +28,10 @@ its existing game_preset operation. Settings observation and fresh admission
 share one idle predicate; explicit preset methods replace the boolean mode,
 and audio restoration has one path. Bootstrap and controller now share one
 startup existence-lease implementation and one stable controller gate name;
-profile preparation retains its separate gate. Next: audit startup wrappers.
+profile preparation retains its separate gate. Both managed launch and
+registered observation call the single suspended-process creation owner;
+fixture conveniences are test-only and name their purpose. Next: audit
+remaining bootstrap responsibilities and legacy observation entrypoints.
 
 ## Continue development outside Codex
 
