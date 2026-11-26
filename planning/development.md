@@ -60,7 +60,9 @@ assertion was confirmed stale and replaced by the two active overlay-shadow
 contracts; the unused token is removed. Visual runtime acceptance remains held.
 Audio session ownership checks now narrow candidates by retained PID/birth
 before fresh native identity/liveness verification; no cache or cadence change.
-Next: review native observation and frontend resource scheduling.
+Routine session snapshots reuse the HWND returned by fresh native validation
+instead of parsing its text three times. Malformed prefixes fail closed;
+close callers retain the same native checks. Next: review frontend scheduling.
 
 ## Continue development outside Codex
 

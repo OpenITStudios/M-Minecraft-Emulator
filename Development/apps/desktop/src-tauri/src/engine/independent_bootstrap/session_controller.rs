@@ -557,19 +557,15 @@ impl Sessions {
                     let child = &started.children[0];
                     child.identity().ok()?;
                     if let Some(previous) = &self.windows[index] {
-                        if valid_retained_window(previous) {
+                        if let Some(hwnd) = verified_retained_hwnd(previous) {
                             // The game can reset its caption after a desktop/workspace transition.
-                            let hwnd = usize::from_str_radix(&previous.window_handle[2..], 16).ok()?;
                             // Do not mutate game or dialog titles once full exit begins.
                             if relabel && !self.exiting {
                                 let _ = label_slot_window(hwnd as _, child.pid, index as u32 + 1);
                             }
                             let mut process = previous.clone();
                             process.responding = unsafe {
-                                windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(
-                                    usize::from_str_radix(&process.window_handle[2..], 16).ok()?
-                                        as _,
-                                )
+                                windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(hwnd)
                             } == 0;
                             return Some(process);
                         }
@@ -1016,21 +1012,26 @@ fn game_window_class(hwnd: windows_sys::Win32::Foundation::HWND) -> bool {
     count == 5 && class[..5] == ['O' as u16, 'G' as u16, 'L' as u16, 'E' as u16, 'S' as u16]
 }
 
-fn valid_retained_window(target: &OwnedProcess) -> bool {
+// Return the same HWND whose native ownership was verified. This is a
+// per-call observation, not a retained authorization or cached OS handle.
+fn verified_retained_hwnd(target: &OwnedProcess) -> Option<windows_sys::Win32::Foundation::HWND> {
     use windows_sys::Win32::UI::WindowsAndMessaging::*;
-    let Ok(number) = usize::from_str_radix(&target.window_handle[2..], 16) else {
-        return false;
-    };
+    let number = usize::from_str_radix(target.window_handle.strip_prefix("0x")?, 16).ok()?;
     let hwnd = number as windows_sys::Win32::Foundation::HWND;
     let mut pid = 0;
-    unsafe {
+    let valid = unsafe {
         IsWindow(hwnd) != 0
             && game_window_class(hwnd)
             && GetWindowThreadProcessId(hwnd, &mut pid) != 0
             && pid == target.pid
             && GetAncestor(hwnd, GA_ROOT) == hwnd
             && GetWindow(hwnd, GW_OWNER).is_null()
-    }
+    };
+    valid.then_some(hwnd)
+}
+
+fn valid_retained_window(target: &OwnedProcess) -> bool {
+    verified_retained_hwnd(target).is_some()
 }
 
 struct RequestedWindow {
