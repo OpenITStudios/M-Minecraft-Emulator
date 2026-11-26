@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Settings readability: grouped cache cleanup and folder access under Maintenance using the existing section/row styles; compact disclosure spacing and clarified FPS/audio guidance. Kept original native action admission, focus anchors and review controls. Removed redundant settings-only secondary hover override in favor of the shared hover owner. Source review only; tests NOT_EXECUTED.
+
 UI naming: use the complete joined LazyTester brand for CSS classes, IDs, design tokens and stylesheet filename; launcher card/preview names identify their owner. Svelte markup and selector fixtures migrate together; no native or installed-identity migration. Tests NOT_EXECUTED.
 
 Work: `desktop-ui-refinement`. Surface: `CHATGPT_GITHUB`. Existing Svelte owners and native contracts remain fixed. Neutral shared palette, compact settings spacing, visible launcher status and navigation/card hover are authored. Selected routine status uses the existing accent. Source and browser assertions updated for visible status; stale titlebar fixture reconciled with existing close-only owner. No new dependencies, UI state or native geometry rules. Tests NOT_EXECUTED; visual acceptance held. Next: settings/storage readability and bounded CSS consolidation; preserve stable selector consumers and native review geometry.

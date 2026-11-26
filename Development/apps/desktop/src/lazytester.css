@@ -217,7 +217,7 @@
                                                                                   .lazytester-group{
                                                                                     margin:12px 0 20px}
                                                                                     .lazytester-group+.lazytester-group{
-                                                                                      padding-top:22px;
+                                                                                      padding-top:16px;
                                                                                       border-top:1px solid var(--lazytester-line)}
                                                                                       .lazytester-setting{
                                                                                         display:flex;
@@ -260,7 +260,7 @@
                                                                                                             border:1px solid var(--lazytester-advanced-outline);
                                                                                                             border-radius:9px;
                                                                                                             background:var(--lazytester-panel);
-                                                                                                            margin:25px 0 0}
+                                                                                                            margin:16px 0 0}
                                                                                                             .lazytester-advanced summary{
                                                                                                               display:flex;
                                                                                                               justify-content:space-between;
@@ -295,8 +295,8 @@
                                                                                                                             .lazytester-danger-zone h3,.lazytester-app button.lazytester-danger{
                                                                                                                               color:var(--lazytester-danger)}
                                                                                                                               .lazytester-location-options{
-                                                                                                                                margin:26px 0 14px;
-                                                                                                                                padding-top:20px;
+                                                                                                                                margin:16px 0 14px;
+                                                                                                                                padding-top:12px;
                                                                                                                                 border-top:1px solid var(--lazytester-line)}
                                                                                                                                 .lazytester-location-options summary{
                                                                                                                                   cursor:pointer;
@@ -660,10 +660,6 @@
   line-height:1.4;
 }
 .lazytester-settings-layout .lazytester-group > h2{margin-bottom:12px}
-.lazytester-settings-layout .lazytester-actions > button.lazytester-secondary:hover:not(:disabled),
-.lazytester-settings-layout .lazytester-setting > button.lazytester-secondary:hover:not(:disabled){
-  background:var(--lazytester-selected-bg);
-}
 .lazytester-settings-layout .lazytester-cache-confirm{border-left:3px solid var(--lazytester-accent)}
 .lazytester-settings-layout .lazytester-delete-confirm{border-left-color:var(--lazytester-danger)}
 /* Status emphasis only: do not alter card geometry, thumbnail width or row height.
