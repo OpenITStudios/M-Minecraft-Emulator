@@ -1490,7 +1490,7 @@ mod windows {
         };
         if status != 0 || raw.is_null() {
             if !raw.is_null() {
-                let _ = unsafe { Closeunsafe { OwnedHandle::from_raw_handle(raw as _) } };
+                let _ = unsafe { CloseHandle(raw) };
             }
             return Err(invalid("Failed to open child relative to a directory HANDLE"));
         }
