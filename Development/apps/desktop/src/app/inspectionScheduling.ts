@@ -111,24 +111,14 @@ export function nextPendingUiAction(state: PendingUiQueueState): PendingUiAction
       state.closeInProgress || state.closeReviewPending ||
       state.busy || state.refreshing || state.resizing) return null;
 
-  if (!state.initializing) {
-    if (state.queuedAudio) return 'audio';
-    if (!state.queuedAudio && state.queuedPerformance) return 'performance';
-    if (!state.queuedAudio && !state.queuedPerformance && state.queuedPreset) return 'preset';
-    if (!state.queuedAudio && !state.queuedPerformance &&
-        !state.queuedPreset && state.queuedPage) return 'navigation';
-    // The original read-only refresh and Launch lanes do not separately
-    // require queuedAudio to be empty; the audio lane already runs first.
-    if (!state.queuedPerformance && !state.queuedPreset && !state.queuedPage) {
-      if (state.manualRefreshRequested) return 'manualRefresh';
-      if (state.queuedLaunch) return 'launch';
-    }
-  }
-
-  if (!state.queuedAudio && !state.queuedPerformance &&
-      !state.queuedPreset && !state.queuedPage) {
-    if (state.queuedSelection) return 'selection';
-    if (state.dirty) return 'layout';
-  }
+  // Each earlier return establishes that the higher-priority lane is empty.
+  if (state.queuedAudio) return 'audio';
+  if (state.queuedPerformance) return 'performance';
+  if (state.queuedPreset) return 'preset';
+  if (state.queuedPage) return 'navigation';
+  if (state.manualRefreshRequested) return 'manualRefresh';
+  if (state.queuedLaunch) return 'launch';
+  if (state.queuedSelection) return 'selection';
+  if (state.dirty) return 'layout';
   return null;
 }

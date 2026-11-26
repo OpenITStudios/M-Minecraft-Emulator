@@ -40,7 +40,9 @@ admission and absent-controller spawn; this closes the previous incomplete
 webview AI request exclusion. Transport validation is separated from the
 original worker lifecycle; completed-worker cleanup and previous-reply drain
 share one owner without replay or timeout cancellation. Next: audit IPC
-contract module boundaries and frontend scheduling.
+contract module boundaries and frontend scheduling. The frontend queue now
+uses a flat first-eligible priority list after the existing common gate;
+all payloads and the independent parity fixture remain unchanged.
 
 ## Continue development outside Codex
 
