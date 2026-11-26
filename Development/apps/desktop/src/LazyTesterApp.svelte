@@ -550,6 +550,9 @@
     if (closeOneSlot===null) return;
     const trigger=closeOneTrigger;
     closeOneSlot=null;closeOneTrigger=null;
+    // A review invalidates in-flight layout reports. Reconcile the latest
+    // viewport on Cancel even when ResizeObserver did not detect a size change.
+    dirty=true;
     // Restore keyboard context without scrolling the fixed five-card rail.
     void tick().then(()=>{
       if (!disposed && trigger?.isConnected && !trigger.disabled) trigger.focus({preventScroll:true});
@@ -577,6 +580,8 @@
     // another slot's queued launch/selection after the user presses Cancel.
     queuedLaunch=null;queued=null;queuedPage=null;
     closeOneTrigger=trigger;closeOneSlot=slot;
+    // Freeze lifecycle/preview admission during review; any pending geometry
+    // is reconciled by the existing scheduler on Cancel or close completion.
     // Cancel is the safe initial keyboard choice. Do not reselect/launch games.
     void tick().then(()=>{
       if (!disposed && closeOneSlot===slot && closeCancelButton?.isConnected) closeCancelButton.focus();

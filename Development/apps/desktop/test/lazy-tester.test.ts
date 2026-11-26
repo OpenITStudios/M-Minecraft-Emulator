@@ -125,6 +125,12 @@ describe('Lazy Tester profile contract', () => {
     expect(cleanup).toBeGreaterThan(begin);
     expect(invalidation).toBeGreaterThan(cleanup);
   });
+  it('reconciles invalidated geometry when selected close review is cancelled',()=>{
+    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const cancel=source.slice(source.indexOf('function cancelCloseOne()'),source.indexOf('function closeReviewKeydown('));
+    expect(cancel).toContain('closeOneSlot=null;closeOneTrigger=null;');
+    expect(cancel).toContain('dirty=true;');
+  });
   it('drops late preview layout observations on minimize, source swap or close review',()=>{
     const idle: CloseReview = {
       nativeExitReview:false,closeAllRunning:false,selectedReview:false,selectedCloseRunning:false,
