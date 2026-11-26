@@ -773,6 +773,8 @@ describe('Lazy Tester queue scheduling parity',()=>{
     const review=source.slice(source.indexOf('async function syncSelectedReviewGeometry()'),source.indexOf('async function syncLayout()'));
     expect(review).toContain('await lazyTester.clearPreviews()');
     expect(review.indexOf('await lazyTester.clearPreviews()')).toBeLessThan(review.indexOf('await workspaceSurface.update('));
+    expect(review).toContain('if (!sameWorkspaceGeometry(geometry,captureWorkspaceGeometry()))');
+    expect(review.indexOf('if (!sameWorkspaceGeometry(geometry,captureWorkspaceGeometry()))')).toBeLessThan(review.indexOf('await workspaceSurface.update('));
     expect(review).not.toContain('lazyTester.previews(');
     expect(review).not.toContain('lazyTester.inspect(');
   });

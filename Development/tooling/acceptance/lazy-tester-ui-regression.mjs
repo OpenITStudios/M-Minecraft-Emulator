@@ -1316,6 +1316,29 @@ try {
     call.args?.request?.operation==='Launch').length),0,
     'Explaining an unresolved recovery must never start Minecraft');
 
+  // Review resize uses only retained geometry and preview cleanup. Cancel
+  // must restore normal preview configuration, without closing any session.
+  await page.goto('http://lazy-tester.test/?preview-async=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await heading('Minecraft - 1').waitFor();
+  await page.waitForFunction(()=>window.__calls.some(c=>c.command==='lazy_tester_previews'));
+  await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
+  const resizeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
+  await resizeReview.waitFor();
+  const beforeReviewResize=await page.evaluate(()=>window.__calls.length);
+  await page.setViewportSize({width:1100,height:760});
+  await page.waitForFunction(start=>window.__calls.slice(start).some(c=>c.command==='desktop_update_workspace'),beforeReviewResize);
+  const reviewCalls=await page.evaluate(start=>window.__calls.slice(start),beforeReviewResize);
+  assert.ok(reviewCalls.some(c=>c.command==='lazy_tester_clear_previews'));
+  assert.equal(reviewCalls.some(c=>c.command==='lazy_tester_previews'||c.command==='lazy_tester_present'||c.command==='lazy_tester_session'||c.command==='lazy_tester_close_one'),false,
+    'Review resize must not inspect, adopt, select or close any session');
+  const beforeReviewCancel=await page.evaluate(()=>window.__calls.length);
+  await resizeReview.getByRole('button',{name:'Cancel',exact:true}).click();
+  await page.waitForFunction(start=>window.__calls.slice(start).some(c=>c.command==='lazy_tester_previews'),beforeReviewCancel);
+  assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.command==='lazy_tester_close_one')),false);
+  await page.setViewportSize({width:1280,height:900});
+
   // Synthetic CloseOne: a failed native recovery receipt remains unconfirmed
   // even when a later read-only session observation reports STOPPED.
   await page.goto('http://lazy-tester.test/?close-recovery=1');

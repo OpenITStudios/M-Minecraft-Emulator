@@ -23,6 +23,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(css).toContain('max-height:min(104px,18dvh);');
     expect(css).toContain('max-height:min(88px,16dvh);');
     expect(css).toContain('overflow:auto;overscroll-behavior:contain;');
+    expect(css).toContain('.lt-app .lt-alert.lt-workspace-action-feedback .lt-alert-footer{');
     expect(css).toContain('overscroll-behavior:contain;');
     expect(app).toContain('<div class="lt-alert" class:lt-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">');
     expect(app).toContain('tabindex="0" aria-label="Window recovery unconfirmed"');

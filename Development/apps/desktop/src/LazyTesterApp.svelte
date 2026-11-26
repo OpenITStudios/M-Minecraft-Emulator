@@ -171,7 +171,7 @@
   // Normal Play is already inspected automatically. Keep explicit Refresh
   // for exceptional states, settings/storage and an in-flight manual action.
   $: showHeaderRefresh = nativeBackend==='WindowsNative' &&
-    (page!=='workspace' || manualRefreshing || manualRefreshRequested ||
+    (page!=='workspace' || closeOneSlot!==null || closingOneSlot!==null || manualRefreshing || manualRefreshRequested ||
       (!initializing && (!available || !binding?.configured || issueKey!==null ||
         connectionIssueKey!==null || previewIssue!=='' || attentionCount>0 || !!closeFailure)));
   // Local display failures must not resize a retained game surface.
@@ -708,6 +708,10 @@
       previewStatuses=[];pendingPreviewInvalidations.clear();
       if (epoch!==observationEpoch || closeOneSlot===null || nativeExitReview ||
           closeInProgress || document.hidden || disposed) return;
+      if (!sameWorkspaceGeometry(geometry,captureWorkspaceGeometry())) {
+        dirty=true;
+        return;
+      }
       await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
       if (!disposed && !sameWorkspaceGeometry(geometry,captureWorkspaceGeometry())) dirty=true;
     } catch {

@@ -8,6 +8,9 @@ Review-only resize clears old preview destinations before retained placement;
 critical warnings share one bounded scroll region. Existing lifecycle, identity,
 profile data and normal close ownership are unchanged. Preview blanking during
 review is intentional; normal configuration resumes after Cancel or close.
+Final integration correction: review-only geometry rechecks the captured bounds
+after preview cleanup; Refresh remains present but disabled during selected
+review; compact feedback overrides keep their intended CSS precedence.
 Proof: source review only, all tests `NOT_EXECUTED`. Windows import/cancel,
 one-click switching, FPS, DPI and DWM stacking remain `NOT_VERIFIED`.
 Do not claim runtime acceptance or resume held tests without authorized PC-local
