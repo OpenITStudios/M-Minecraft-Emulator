@@ -568,9 +568,9 @@ try {
   // Source-authored browser geometry; does not prove native DPI, screen
   // reader, high contrast or game-window behavior until actually executed.
   const settingsTargets=await page.evaluate(()=>{
-    const selectors=['#graphics-preset','#active-fps','#background-fps',
+    const selectors=['#active-fps','#background-fps',
       '.lt-audio-toggle','.lt-sidebar nav button',
-      '.lt-settings-explanation > summary'];
+      '.lt-legacy-graphics > summary'];
     return selectors.map(selector=>{
       const element=document.querySelector(selector);
       return {selector,height:element?.getBoundingClientRect().height??0};
@@ -592,7 +592,10 @@ try {
     'Settings instructions remain readable; data paths belong only to Data Storage');
   assert.equal(await page.getByRole('button',{name:'Open Data Storage',exact:true}).count(),0,
     'General does not duplicate the Data Storage sidebar link');
-  const presetExplanation=page.locator('details.lt-settings-explanation');
+  const legacyGraphics=page.locator('details.lt-legacy-graphics');
+  assert.equal(await legacyGraphics.getAttribute('open'),null);
+  await legacyGraphics.locator(':scope > summary').click();
+  const presetExplanation=legacyGraphics.locator('details.lt-settings-explanation');
   assert.equal(await page.locator('#graphics-preset option[value="Preserve"]').textContent(),
     'Preserve Visuals (recommended)',
     'The safe default graphics choice should be clearly recommended');
@@ -635,6 +638,7 @@ try {
   await page.getByRole('button',{name:'Discard',exact:true}).click();
   assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
   assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
+  await page.locator('.lt-legacy-graphics > summary').click();
   await page.getByLabel('Graphics preset',{exact:true}).selectOption('High');
   await page.getByRole('button',{name:'Save graphics preference',exact:true}).click();
   await page.getByText(/High graphics preference saved/).waitFor();
@@ -715,8 +719,8 @@ try {
   await section('General').click();await heading('General').waitFor();
   assert.equal(await page.locator('#workspace-layout').count(),0,
     'No redundant Gameplay Focus/Monitoring selector belongs in Settings');
-  assert.equal(await page.getByLabel('Graphics preset',{exact:true}).count(),1,
-    'Actual Minecraft graphics settings remain independently available');
+  assert.equal(await page.locator('#graphics-preset').isVisible(),false,
+    'Legacy graphics preferences stay collapsed by default');
   await nav('Play').click();
   assert.equal(await page.locator('.lt-filmstrip .lt-card-picture').count(),5);
   const adaptivePreviews=await page.locator('.lt-card-picture').evaluateAll(nodes=>
@@ -739,6 +743,7 @@ try {
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await heading('Starting Minecraft - 1').first().waitFor();await nav('Settings').click();
   await page.evaluate(()=>{window.__runningSlots=[1,2];});await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.locator('.lt-legacy-graphics > summary').click();
   assert.equal(await page.getByRole('button',{name:'Save graphics preference',exact:true}).isDisabled(),true);
   // Current Play contract: release ONE selected Minecraft window, preserving
   // the other running peer. The next verified game becomes the selected view.

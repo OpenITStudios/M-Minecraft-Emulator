@@ -83,7 +83,9 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
   it('does not distract General Settings with a redundant workspace mode selector',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
-    expect(settings).toContain('<div class="lt-settings-content">\n          <section class="lt-group" aria-labelledby="lt-graphics-section">');
+    expect(settings).toContain('<div class="lt-settings-content">\n          <section class="lt-group" aria-labelledby="lt-frame-limits-section">');
+    expect(settings).toContain('<summary>Legacy graphics preferences</summary>');
+    expect(settings).not.toContain('When LazyTester closes');
     expect(settings).not.toContain('workspace-layout');
     expect(settings).not.toContain('onChooseWorkspaceLayout');
     expect(app).not.toContain('workspaceLayout');

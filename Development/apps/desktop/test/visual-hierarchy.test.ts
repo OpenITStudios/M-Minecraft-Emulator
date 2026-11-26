@@ -30,7 +30,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });
-  it('provides consistent accessible section hierarchy without hiding controls',()=>{
+  it('provides accessible section hierarchy and retains optional legacy controls',()=>{
     const settings=source('GeneralSettings.svelte');
     const storage=source('DataStorage.svelte');
     for (const id of ['lt-graphics-section','lt-frame-limits-section',
