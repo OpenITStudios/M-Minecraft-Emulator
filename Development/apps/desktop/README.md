@@ -108,3 +108,7 @@ and `GITHUB_RULES.md`. Retired designs remain in Git history, not active UI.
 Workspace placement and preview IPC share one captured geometry per layout pass.
 Position, size, target identity and pixel ratio are rechecked after native awaits;
 ancestor scroll events reuse the existing dirty scheduler.
+
+Play-wide preview feedback uses the existing fixed launcher action strip;
+redundant below-rail guidance is removed. The existing Refresh action remains
+available for explicit preview recovery.

@@ -554,12 +554,12 @@ try {
   await page.evaluate(()=>{
     window.__inspectDelay=150;window.__visualChanges=[];
     window.__previewBaseline=window.__calls.filter(c=>c.command==='lazy_tester_previews').length;
-    const refresh=document.querySelector('.lt-page-header button'),help=document.querySelector('.lt-help');
+    const refresh=document.querySelector('.lt-page-header button'),actionStrip=document.querySelector('.lt-launcher-action-strip');
     const cards=[...document.querySelectorAll('.lt-card')];
     window.__stableObserver=new MutationObserver(records=>{
       for(const record of records){const node=record.target.nodeType===3?record.target.parentElement:record.target;
         if(refresh.contains(node)||refresh===node)window.__visualChanges.push('refresh');
-        if(help.contains(node)||help===node)window.__visualChanges.push('help');
+        if(actionStrip.contains(node)||actionStrip===node)window.__visualChanges.push('action-strip');
         if(cards.includes(node))window.__visualChanges.push('card');
       }
     });window.__stableObserver.observe(document.querySelector('.lt-app'),{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['disabled']});

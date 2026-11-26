@@ -1078,6 +1078,10 @@
             </div>
           </section>
         {:else if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>
+        {:else if previewIssue}
+          <div class="lt-workspace-preview-feedback" role="status" tabindex="0">
+            <strong>Preview unavailable</strong><span>{previewIssue}</span>
+          </div>
         {:else}
           <span>Your games</span><span class="lt-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>
         {/if}
@@ -1089,8 +1093,6 @@
           reviewPending={closeReviewPending}
           observePreview={image} onSelect={select} onLaunch={launch}
           onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}/>
-        <p class="lt-help" hidden={active!==null&&!detached}>{!binding?.configured?'Saved profiles are checked automatically.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
-        {#if previewIssue}<details class="lt-preview-details"><summary>Preview unavailable</summary><p>{previewIssue}</p></details>{/if}
         {/if}
       </section>
       {#if page==='settings'}

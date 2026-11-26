@@ -89,6 +89,9 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(rail).toBeGreaterThan(review);
     expect(css).toContain('.lt-launcher-action-strip{height:56px;flex:0 0 56px;');
     expect(app).not.toContain('lt-single-close-confirm');
+    expect(app).toContain('class="lt-workspace-preview-feedback"');
+    expect(app).not.toContain('lt-preview-details');
+    expect(css).not.toContain('.lt-preview-details{');
   });
   it('uses one adaptive workspace without mode controls or a second stored state',()=>{
     const app=source('LazyTesterApp.svelte'),settings=source('GeneralSettings.svelte'),css=source('lazy-tester.css');
