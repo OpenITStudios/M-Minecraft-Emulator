@@ -567,7 +567,7 @@ mod native_workspace_windows {
     use std::{mem, ptr};
     use windows_sys::Win32::{
         Foundation::{
-            CloseHandle, FILETIME, HANDLE, ERROR_NO_MORE_FILES,
+            CloseHandle, HANDLE, ERROR_NO_MORE_FILES,
             INVALID_HANDLE_VALUE, WAIT_TIMEOUT,
         },
         Globalization::{CompareStringOrdinal, CSTR_EQUAL},
@@ -578,7 +578,7 @@ mod native_workspace_windows {
             },
             RemoteDesktop::ProcessIdToSessionId,
             Threading::{
-                GetProcessTimes, OpenProcess,
+                OpenProcess,
                 WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE,
             },
         },
@@ -675,15 +675,7 @@ mod native_workspace_windows {
             return Ok(None);
         }
 
-        let mut created: FILETIME = unsafe { mem::zeroed() };
-        let mut exited: FILETIME = unsafe { mem::zeroed() };
-        let mut kernel: FILETIME = unsafe { mem::zeroed() };
-        let mut user: FILETIME = unsafe { mem::zeroed() };
-        if unsafe { GetProcessTimes(process.0, &mut created, &mut exited, &mut kernel, &mut user) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let original_created = (u64::from(created.dwHighDateTime) << 32)
-            | u64::from(created.dwLowDateTime);
+        let original_created = crate::engine::windows_process_time::creation_filetime(process.0)?;
         if original_created == 0 {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Missing Minecraft process creation time"));
         }
@@ -701,12 +693,7 @@ mod native_workspace_windows {
         }
         // Recheck all process/window fields after enumeration. An exited or
         // PID-reused game must not be published as a live selection.
-        let mut again: FILETIME = unsafe { mem::zeroed() };
-        if unsafe { GetProcessTimes(process.0, &mut again, &mut exited, &mut kernel, &mut user) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        let current_created = (u64::from(again.dwHighDateTime) << 32)
-            | u64::from(again.dwLowDateTime);
+        let current_created = crate::engine::windows_process_time::creation_filetime(process.0)?;
         let mut again_session = 0;
         if unsafe { ProcessIdToSessionId(pid, &mut again_session) } == 0 {
             return Err(io::Error::last_os_error());

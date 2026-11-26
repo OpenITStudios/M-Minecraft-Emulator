@@ -288,19 +288,12 @@ impl BootstrapLibrary {
         let process = duplicate(wire.process)?;
         let thread = duplicate(wire.thread)?;
         let raw = process.as_raw_handle() as HANDLE;
-        let mut actual: FILETIME = unsafe { mem::zeroed() };
-        let mut exited = actual;
-        let mut kernel = actual;
-        let mut user = actual;
         if pid == parent.pid
             || birth == 0
             || unsafe { GetProcessId(raw) } != pid
             || unsafe { GetProcessIdOfThread(thread.as_raw_handle() as HANDLE) } != pid
             || unsafe { WaitForSingleObject(raw, 0) } != WAIT_TIMEOUT
-            || unsafe { GetProcessTimes(raw, &mut actual, &mut exited, &mut kernel, &mut user) }
-                == 0
-            || actual.dwLowDateTime != birth as u32
-            || actual.dwHighDateTime != (birth >> 32) as u32
+            || !crate::engine::windows_process_time::creation_filetime(raw).is_ok_and(|actual| actual == birth)
             || original_parent(raw)? != parent.pid
             || interactive_session(pid)? != interactive_session(parent.pid)?
         {

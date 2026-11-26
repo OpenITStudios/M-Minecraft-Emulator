@@ -14,7 +14,9 @@ creation-time read across bootstrap, identity, focus, IPC and workspace
 into `engine/windows_process_time.rs`; existing admission checks remain.
 Consolidated Windows executable attribute and file ID queries across bootstrap,
 process roles and session IPC; caller admission and file pins remain unchanged.
-Next: audit further duplicated active helpers and experimental entrypoints.
+Extended the same process-time reader to native observation, normal close
+and descendant handoff; independent test oracles remain unchanged.
+Next: review standard OwnedHandle adoption where resource ownership matches.
 
 ## Continue development outside Codex
 

@@ -1156,16 +1156,11 @@ fn pin_window_thread(target: &OwnedProcess) -> Option<OwnedHandle> {
 }
 
 fn close_verified_window(target:&OwnedProcess)->io::Result<()> {
-    use windows_sys::Win32::{Foundation::FILETIME,System::Threading::*,UI::WindowsAndMessaging::*};
+    use windows_sys::Win32::{System::Threading::*,UI::WindowsAndMessaging::*};
     let handle=unsafe{OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZATION_SYNCHRONIZE,0,target.pid)};
     if handle.is_null(){return Err(io::Error::last_os_error());}
     let handle=unsafe{OwnedHandle::from_raw_handle(handle as _)};
-    let mut birth:FILETIME=unsafe{std::mem::zeroed()};
-    let mut exited=birth;let mut kernel=birth;let mut user=birth;
-    if unsafe{GetProcessTimes(handle.as_raw_handle() as _,&mut birth,&mut exited,&mut kernel,&mut user)}==0 {
-        return Err(io::Error::last_os_error());
-    }
-    let created=(((birth.dwHighDateTime as u64)<<32)|birth.dwLowDateTime as u64).to_string();
+    let created = crate::engine::windows_process_time::creation_filetime(handle.as_raw_handle() as _)?.to_string();
     if created!=target.created_file_time || interactive_session(target.pid)?!=target.session_id || !valid_retained_window(target) {
         return Err(invalid("Game window identity changed; close it normally"));
     }
