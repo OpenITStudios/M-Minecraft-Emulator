@@ -1,8 +1,8 @@
 :root{
   font-family:"Segoe UI",sans-serif;
   font-size:15px;
-  color:#edf0f7;
-  background:#14171e;
+  color:#eff1f5;
+  background:#14161a;
   font-synthesis:none}
   *{
     box-sizing:border-box}
@@ -12,34 +12,34 @@
       body{
         overflow:hidden}
         .lt-app{
-          --lt-bg:#14171e;
-          --lt-panel:#1c2029;
-          --lt-line:#343b48;
-          --lt-muted:#b5bfd0;
+          --lt-bg:#14161a;
+          --lt-panel:#1c1f24;
+          --lt-line:#383e48;
+          --lt-muted:#b5bdca;
           --lt-accent:#bac2ff;
           /* Minimal Professional semantic palette: one canonical source. */
-          --lt-text:#edf0f7;
+          --lt-text:#eff1f5;
           --lt-on-accent:#18203a;
-          --lt-surface-raised:#242a36;
-          --lt-selected-bg:#303a5c;
+          --lt-surface-raised:#252930;
+          --lt-selected-bg:#2c344c;
           --lt-control-outline:#667387;
           --lt-success:#95dfbd;
           --lt-warning:#d3b480;
           --lt-danger:#efacb6;
-          --lt-viewport-bg:#101319;
+          --lt-viewport-bg:#101216;
           --lt-danger-hover:#c42b1c;
           --lt-control-min-height:36px;
           --lt-radius-control:6px;
           /* Semantic interactive surfaces and non-text distinctions. */
           --lt-advanced-outline:#6e7b9a;
           --lt-expanded-surface:#252d43;
-          --lt-preview-empty:#252c3a;
+          --lt-preview-empty:#232830;
           --lt-alert-outline:#aa785a;
           --lt-alert-surface:#342721;
           --lt-danger-surface:#943641;
           --lt-danger-outline:#b34a56;
           --lt-on-danger:#fff;
-          --lt-control-hover:#303a48;
+          --lt-control-hover:#303640;
           --lt-accent-hover:#d0d7ff;
           --lt-overlay-shadow:#0006;
           display:flex;
@@ -79,7 +79,7 @@
                         .lt-topbar{
                           display:flex;
                           align-items:center;
-                          gap:38px;
+                          gap:24px;
                           padding:0 24px;
                           height:56px;
                           flex-shrink:0;
@@ -105,7 +105,7 @@
                               .lt-topbar nav{
                                 display:flex;
                                 align-self:stretch;
-                                gap:26px}
+                                gap:20px}
                                 .lt-topbar nav button{
                                   background:transparent;
                                   color:var(--lt-muted);
@@ -163,7 +163,7 @@
                                                           flex-direction:column;
                                                           overflow:auto}
                                                           .lt-settings-layout main{
-                                                            padding:28px 32px}
+                                                            padding:24px 28px}
                                                             .lt-page-header{
                                                               display:flex;
                                                               justify-content:space-between;
@@ -173,9 +173,9 @@
                                                               flex-shrink:0}
                                                               .lt-page-header h1{
                                                                 margin:0;
-                                                                font-size:24px;
+                                                                font-size:20px;
                                                                 font-weight:600;
-                                                                letter-spacing:-.4px}
+                                                                letter-spacing:-.2px}
                                                                 .lt-header-actions{
                                                                   display:flex;
                                                                   align-items:center;
@@ -215,7 +215,7 @@
                                                                                   max-width:880px;
                                                                                   width:100%}
                                                                                   .lt-group{
-                                                                                    margin:14px 0 26px}
+                                                                                    margin:12px 0 20px}
                                                                                     .lt-group+.lt-group{
                                                                                       padding-top:22px;
                                                                                       border-top:1px solid var(--lt-line)}
@@ -223,8 +223,8 @@
                                                                                         display:flex;
                                                                                         align-items:center;
                                                                                         justify-content:space-between;
-                                                                                        gap:22px;
-                                                                                        padding:16px 0;
+                                                                                        gap:16px;
+                                                                                        padding:12px 0;
                                                                                         border-bottom:1px solid var(--lt-line)}
                                                                                         .lt-setting>div:first-child{
                                                                                           min-width:0;
@@ -249,7 +249,7 @@
                                                                                                       display:flex;
                                                                                                       gap:12px;
                                                                                                       align-items:center;
-                                                                                                      margin:22px 0}
+                                                                                                      margin:16px 0}
                                                                                                       .lt-launcher-heading select{
                                                                                                         font-size:18px;
                                                                                                         font-weight:600}
@@ -665,9 +665,9 @@
    Color is supplementary to the original exact native-observation text. */
 .lt-filmstrip .lt-card small.lt-status-attention{color:var(--lt-warning)}
 .lt-filmstrip .lt-card small.lt-status-pending{color:var(--lt-muted)}
-/* Keep preview geometry stable when a healthy running label is redundant.
-   The button still exposes status in its accessible name. */
-.lt-filmstrip .lt-card small.lt-status-routine{visibility:hidden}
+/* Keep the existing status row visible without changing preview geometry.
+   The button also exposes status in its accessible name. */
+.lt-filmstrip .lt-card small.lt-status-routine{color:var(--lt-muted)}
 /* Preview failure is an observation issue, not proof the game has stopped. */
 .lt-app .lt-preview-slot-issue{color:var(--lt-warning)!important}
 @media (forced-colors:active){
