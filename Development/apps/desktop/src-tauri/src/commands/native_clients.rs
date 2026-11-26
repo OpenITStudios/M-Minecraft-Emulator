@@ -134,10 +134,14 @@ pub async fn lazy_tester_close_one(
                 },
             };
         }
+        let (snapshot, issue) = match result {
+            Ok(snapshot) => (Some(snapshot), None),
+            Err(error) => (None, Some(error.to_string())),
+        };
         Ok(SelectedCloseReport {
             schema:1,presentation_released:true,
-            snapshot:result.as_ref().ok().cloned(),
-            issue:result.err().map(|error|error.to_string()),
+            snapshot,
+            issue,
         })
     })).await.map_err(|_|"Selected Minecraft close task failed".to_string())?
         .map_err(|error|error.to_string())

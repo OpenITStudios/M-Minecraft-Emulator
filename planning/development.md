@@ -11,6 +11,8 @@ Healthy idle Play now shares the existing 10s read-only inspection cadence; all 
 
 DWM preview admission now constructs the fallback tile report only on the no-source cleanup path. Live layout no longer builds and discards an unused status vector or clones its issue strings before dispatch; worker-generated statuses, cleanup epochs, native identity, deadlines and rollback remain unchanged. Existing preview status fixtures reviewed, NOT_EXECUTED. Foreground watcher and retained DWM worker lifetime remain unchanged pending native acceptance.
 
+Desktop CloseOne now moves the owned successful SessionSnapshot directly into SelectedCloseReport instead of cloning it. Error mapping and mutual exclusion of snapshot/issue remain identical. No request count, wire schema, native lifecycle, recovery or MCP change. Existing selected-close receipt fixtures remain NOT_EXECUTED. Shared IPC admission and fresh native inspections are retained because their safety and consumer contracts are not redundant.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track
