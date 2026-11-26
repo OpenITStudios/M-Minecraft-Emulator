@@ -53,7 +53,11 @@ bridge and scheduling contracts retained pending consumer audit. Next: audit
 remaining frontend bridge and CSS consumers. Retired nextProfile and the
 launchers scheduling alias after reviewing all 18 TS/Svelte sources and 25
 frontend test files; active stopped-state and cadence coverage retained.
-Next: audit CSS selectors against mounted components and regression contracts.
+CSS audit found every lt-prefixed class textually referenced in mounted
+components. Consolidated the unconditionally overridden filmstrip width and
+gap into its original rule, preserving media queries. A retired popup-shadow
+assertion remains a separate source-contract cleanup candidate; visual runtime
+acceptance remains held. Next: review stale visual contracts and remaining CSS.
 
 ## Continue development outside Codex
 

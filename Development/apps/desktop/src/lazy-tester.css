@@ -370,11 +370,11 @@
                                                                                                                                                         font-size:13px;
                                                                                                                                                       color:var(--lt-muted)}
                                                                                                                                                       .lt-filmstrip{
-                                                                                                                                                          width:min(100%,1320px);
+                                                                                                                                                          width:min(100%,1600px);
                                                                                                                                                           margin-inline:auto;
                                                                                                                                                         display:grid;
                                                                                                                                                         grid-template-columns:repeat(5,minmax(0,1fr));
-                                                                                                                                                        gap:9px;
+                                                                                                                                                        gap:12px;
                                                                                                                                                         flex-shrink:0}
                                                                                                                                                         .lt-filmstrip .lt-card{
                                                                                                                                                           display:flex;
@@ -472,9 +472,7 @@
 .lt-app .lt-window-close:hover{background:var(--lt-danger-hover);color:var(--lt-on-danger)}
 .lt-window-control svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1}
 .lt-app{color-scheme:dark;border:1px solid var(--lt-line)}
-/* Five stable native thumbnails; the active Play-only width budget below
-   replaces older broad and short-window preview-size overrides. */
-.lt-filmstrip{width:min(100%,1600px);gap:12px}
+
 
 .lt-delete-confirm {display:grid;gap:12px;justify-items:start}
 .lt-delete-confirm h3,.lt-delete-confirm p {margin:0}
