@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Profile Management follow-up: clear-all row uses shared panel styling and concise title-case action, with typed identity, acknowledgement, token, focus and native admission unchanged. Existing recovery controls remain until safe replacements are ready. Updated affected browser labels and location disclosure/order fixtures. No new cleanup capability; tests NOT_EXECUTED. Capture remains held.
+
 Data Storage presentation checkpoint: profile picker moved into Profile Management heading, full Minecraft names, profile size/path and Open Folder combined into the first shared panel row. Existing cache review, pack/recovery information, full-clear confirmation and native admission retained until selective/automatic cleanup owners are ready. No new deletion capability. Source only; tests NOT_EXECUTED. Capture held.
 
 Follow-up source consistency: bounded the relocated workspace summary text, retained accent for selected status, reconciled sticky feedback selector fixture with its actual wrapper. No native operations changed. Remaining narrow card geometry and Data Storage work still pending; capture held. Tests NOT_EXECUTED.

@@ -1012,3 +1012,8 @@ body{
 .lazytester-profile-management-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .lazytester-profile-management-heading h2{margin:0;font-size:15px}
 .lazytester-profile-management-heading .lazytester-launcher-heading{margin:0;gap:8px}
+
+/* Full-clear retains native confirmation but uses the shared profile row. */
+.lazytester-profile-clear-panel{margin-top:12px}
+.lazytester-profile-clear .lazytester-danger{color:var(--lazytester-danger);border-color:var(--lazytester-danger-outline);background:transparent}
+.lazytester-profile-clear .lazytester-danger:hover:not(:disabled){background:var(--lazytester-danger-surface);color:var(--lazytester-on-danger)}

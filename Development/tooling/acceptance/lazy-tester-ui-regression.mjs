@@ -615,7 +615,7 @@ try {
     'Long data paths remain readable within the one Data Storage owner');
   const storageOrder=await page.evaluate(()=>{
     const loc=document.querySelector('.lazytester-location-options');
-    const danger=document.querySelector('.lazytester-danger-zone');
+    const danger=document.querySelector('.lazytester-profile-clear');
     return loc&&danger&&Boolean(loc.compareDocumentPosition(danger)&Node.DOCUMENT_POSITION_FOLLOWING);
   });
   assert.equal(storageOrder,true,
@@ -643,7 +643,7 @@ try {
   await section('Data Storage').click();
   assert.equal(await page.getByLabel('Graphics preset',{exact:true}).count(),0);
   const advanced=page.locator('.lazytester-advanced');await advanced.locator('summary').click();
-  assert.equal(await page.getByRole('button',{name:'Clear all data…',exact:true}).isDisabled(),true);
+  assert.equal(await page.getByRole('button',{name:'Clear All…',exact:true}).isDisabled(),true);
   assert.equal(await page.getByRole('button',{name:'Restore settings…',exact:true}).isDisabled(),true);
   assert.match(await advanced.getAttribute('open')??'',/^$/);
   for(const size of [{width:920,height:620},{width:1280,height:900},{width:1366,height:728},{width:1920,height:1080},{width:2560,height:1378},{width:3440,height:1440},{width:1000,height:1200}]){
@@ -840,9 +840,9 @@ try {
     'A pending Storage review must block switching the selected launcher');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Refresh cannot invalidate a pending Storage confirmation');
-  assert.equal(await page.getByRole('button',{name:'Clear all data…',exact:true}).isDisabled(),true,
+  assert.equal(await page.getByRole('button',{name:'Clear All…',exact:true}).isDisabled(),true,
     'A second destructive review cannot replace cache confirmation');
-  assert.equal(await page.getByRole('button',{name:'Open folder',exact:true}).isDisabled(),true,
+  assert.equal(await page.getByRole('button',{name:'Open Folder',exact:true}).isDisabled(),true,
     'Unrelated Storage controls stay blocked until explicit Cancel');
   await cacheReview.getByRole('button',{name:'Cancel'}).click();
   await cacheReview.waitFor({state:'detached'});
@@ -860,7 +860,7 @@ try {
   await section('Data Storage').click();
   assert.equal(await page.locator('.lazytester-advanced').getAttribute('open'),'',
     'Advanced details still bind to the parent on page navigation');
-  await page.getByRole('button',{name:'Clear all data…',exact:true}).click();
+  await page.getByRole('button',{name:'Clear All…',exact:true}).click();
   const fullReview=page.getByRole('form',{name:'Confirm full launcher data deletion'});
   await fullReview.waitFor();
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
@@ -1419,7 +1419,7 @@ try {
     'Failed profile binding must never issue InspectStorage or reuse a previous report');
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'No storage mutation may be enabled from an unverified profile binding');
-  await page.getByText('Find existing profile data',{exact:true}).click();
+  if (!(await page.locator('.lazytester-location-options').evaluate(node=>node.open))) await page.getByText('Find existing profile data',{exact:true}).click();
   const locate=page.locator('.lazytester-location-options').getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
   await page.evaluate(()=>{window.__locateOutcome='invalid';});await locate.click();await page.getByText('Check the folder in Data Storage before retrying.',{exact:true}).waitFor();
   assert.equal(await page.getByText('The selected folder does not match the saved profile identities.',{exact:true}).count(),0,

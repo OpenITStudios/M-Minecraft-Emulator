@@ -69,10 +69,10 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
   });
   it('keeps full data deletion after connect/locate and recovery without bypassing its confirmation',()=>{
     const storage=source('DataStorage.svelte');
-    const location=storage.indexOf('<details class="lazytester-location-options">');
+    const location=storage.indexOf('<details class="lazytester-location-options"');
     const packs=storage.indexOf('<details class="lazytester-storage-packs">');
     const advanced=storage.indexOf('<details class="lazytester-advanced"');
-    const danger=storage.indexOf('class="lazytester-danger-zone"');
+    const danger=storage.indexOf('class="lazytester-setting lazytester-profile-clear"');
     expect(location).toBeGreaterThan(-1);
     expect(packs).toBeGreaterThan(location);
     expect(advanced).toBeGreaterThan(packs);
