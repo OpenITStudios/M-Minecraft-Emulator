@@ -578,11 +578,11 @@ impl Scene {
                     saved, self.manager, current_source, current_epoch,
                 ) {
                     old.viewport = saved.viewport;
-                    let playing = native::interactive_at(
+                    let native_visible = native::native_surface_visible_at(
                         &old.target, old.manager, saved.viewport);
                     // The previous observer can return only through its
                     // original exact source/HWND/DWM verification path.
-                    let show = saved.previously_visible(self.visibility()) && !playing;
+                    let show = saved.previously_visible(self.visibility()) && !native_visible;
                     if let Err(error) = old.refresh_verified(show) {
                         eprintln!("Minecraft - {} displaced primary DWM recovery unverified: {error}",
                             old.slot);
@@ -613,9 +613,9 @@ impl Scene {
                     || primary.last_applied.map(|(state, _)| state) != previous.applied;
                 primary.viewport = previous.viewport;
                 if changed {
-                    let playing = native::interactive_at(
+                    let native_visible = native::native_surface_visible_at(
                         &primary.target, primary.manager, previous.viewport);
-                    let show = previous.previously_visible(visible) && !playing;
+                    let show = previous.previously_visible(visible) && !native_visible;
                     if let Err(error) = primary.refresh_verified(show) {
                         eprintln!("Minecraft - {} primary DWM rollback unverified: {error}",
                             primary.slot);
@@ -801,9 +801,9 @@ impl Scene {
             }
         }
         let discard_primary = if let Some(primary) = &mut self.primary {
-            let playing = native::interactive_at(
+            let native_visible = native::native_surface_visible_at(
                 &primary.target, primary.manager, primary.viewport);
-            primary.refresh_verified(visible && !playing).is_err()
+            primary.refresh_verified(visible && !native_visible).is_err()
                 && !primary.source_and_destination_valid()
         } else { false };
         if discard_primary { self.primary = None; }
@@ -825,7 +825,7 @@ impl Scene {
             // both steps succeed, do not mutate the previous primary.
             let mut candidate = Thumbnail::create(manager, tile, target.clone())?;
             candidate.refresh_verified(visible &&
-                !native::interactive_at(&target, manager, tile.viewport))?;
+                !native::native_surface_visible_at(&target, manager, tile.viewport))?;
             if let Some(old) = self.primary.take() {
                 let proof = PreviousImage::capture(&old);
                 old.hide();
@@ -841,7 +841,7 @@ impl Scene {
         // Reused thumbnails keep their old snapshot even if this update
         // fails partway through and hides the image.
         image.refresh_verified(visible &&
-            !native::interactive_at(&target, manager, tile.viewport))
+            !native::native_surface_visible_at(&target, manager, tile.viewport))
     }
     fn layout(
         &mut self,

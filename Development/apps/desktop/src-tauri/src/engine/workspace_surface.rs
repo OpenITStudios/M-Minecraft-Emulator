@@ -62,6 +62,11 @@ fn interactive_surface(focused: bool, visible: bool, actual: Rectangle, expected
 fn foreground_surface_covered(foreground: u64, game: u64, manager: u64, point_root: u64) -> bool {
     (foreground == game || foreground == manager) && point_root != game
 }
+// Manager focus alone is not evidence that a native game is exposed.
+#[cfg(any(windows, test))]
+fn manager_exposes_game(foreground: u64, manager: u64, game: u64, point_root: u64, enabled: bool) -> bool {
+    enabled && foreground == manager && point_root == game
+}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 struct Saved {
     target: OwnedProcess,
@@ -417,6 +422,15 @@ mod tests {
         assert!(!interactive_surface(false,true,viewport,viewport));
         assert!(!interactive_surface(true,false,viewport,viewport));
         assert!(interactive_surface(true,true,viewport,viewport));
+    }
+    #[test]
+    fn manager_focus_requires_exposed_enabled_game() {
+        let (manager,game,other)=(10,20,30);
+        assert!(manager_exposes_game(manager,manager,game,game,true));
+        assert!(!manager_exposes_game(manager,manager,game,manager,true));
+        assert!(!manager_exposes_game(manager,manager,game,other,true));
+        assert!(!manager_exposes_game(other,manager,game,game,true));
+        assert!(!manager_exposes_game(manager,manager,game,game,false));
     }
     #[cfg(windows)]
     #[test]

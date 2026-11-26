@@ -317,14 +317,35 @@ pub(super) fn workspace_has_foreground(target: &OwnedProcess, manager: u64) -> b
         foreground == window || foreground == manager as usize as HWND
     })
 }
-pub(super) fn interactive_at(target: &OwnedProcess, manager: u64, viewport: Viewport) -> bool {
+// Shared live stacking check for preview visibility and the stricter FPS
+// lease proof. The caller must first verify the game identity and geometry.
+fn manager_foreground_exposes_game(target: &OwnedProcess, window: HWND, manager: u64, expected: Rectangle) -> bool {
+    unsafe {
+        let manager = manager as usize as HWND;
+        if GetForegroundWindow() != manager { return false; }
+        let hit = WindowFromPoint(POINT {
+            x: expected.x + expected.width / 2,
+            y: expected.y + expected.height / 2,
+        });
+        let root = GetAncestor(hit, GA_ROOT);
+        super::manager_exposes_game(
+            GetForegroundWindow() as usize as u64, manager as usize as u64,
+            window as usize as u64, root as usize as u64,
+            GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0,
+        ) && hwnd(target).is_ok_and(|(_pin,current)| current == window)
+    }
+}
+pub(super) fn native_surface_visible_at(target: &OwnedProcess, manager: u64, viewport: Viewport) -> bool {
     let Ok((_pin, window)) = hwnd(target) else { return false; };
     let Ok(expected) = rectangle(manager, viewport) else { return false; };
     unsafe {
         let mut rect: RECT = std::mem::zeroed();
-        if GetWindowRect(window, &mut rect) == 0 { return false; }
-        super::interactive_surface(GetForegroundWindow() == window, IsWindowVisible(window) != 0,
-            Rectangle { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top }, expected)
+        if GetWindowRect(window, &mut rect) == 0 || IsIconic(window) != 0 { return false; }
+        let visible = IsWindowVisible(window) != 0;
+        let actual = Rectangle { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top };
+        if !super::interactive_surface(true, visible, actual, expected) { return false; }
+        GetForegroundWindow() == window ||
+            manager_foreground_exposes_game(target,window,manager,expected)
     }
 }
 pub(super) fn clear_aperture(manager: u64) -> io::Result<()> {
@@ -503,22 +524,7 @@ pub(super) fn placed_at(saved: &Saved, expected: Rectangle) -> bool {
 pub(super) fn presented_under_manager(saved: &Saved, expected: Rectangle, manager: u64) -> bool {
     if !placed_at(saved, expected) { return false; }
     let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
-    let manager = manager as usize as HWND;
-    unsafe {
-        if GetForegroundWindow() != manager ||
-            GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize != 0 {
-            return false;
-        }
-        let hit = WindowFromPoint(POINT {
-            x: expected.x + expected.width / 2,
-            y: expected.y + expected.height / 2,
-        });
-        let root = GetAncestor(hit, GA_ROOT);
-        // Recheck after the OS read: stale/changed HWND or foreground loses
-        // priority rather than promoting an unrelated game.
-        root == window && GetForegroundWindow() == manager
-            && hwnd(&saved.target).is_ok_and(|(_pin, current)|current == window)
-    }
+    manager_foreground_exposes_game(&saved.target,window,manager,expected)
 }
 pub(super) fn parked_at(saved: &Saved, rect: Rectangle) -> bool {
     let Ok(expected) = parking_rectangle(rect) else { return false; };
