@@ -348,9 +348,9 @@ mod workspace_foreground {
     ) {
         // Reconcile current owned-game geometry on focus changes, without inspecting
         // the foreground application's title, PID, or contents.
-        if event == EVENT_SYSTEM_FOREGROUND && object == 0 && child == 0 {
-            crate::engine::workspace_surface::refresh_previews();
-        }
+        // One accepted event gets one immediate preview wake. The existing
+        // queued placement worker reconciles geometry and wakes previews again
+        // after successful placement, including modal/foreground transitions.
         if accepts(
             event,
             window as usize as u64,
