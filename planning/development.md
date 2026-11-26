@@ -29,6 +29,8 @@ Global settings simplification (SIM-01/02): the reviewed Low graphics preset is 
 
 Global settings retirement: removed the individual graphics storage reader/writer, selected-profile preset mutation and unused desktop bridge method. Retained legacy request decoding with explicit controller refusal and five-value response compatibility; no legacy preference file is read, modified or deleted by this policy. Tests for obsolete writers retired, report fixture covers intact mixed and malformed legacy bytes. MCP implementation and schema unchanged; native legacy individual mutation is refused. Source review only; tests NOT_EXECUTED. Next: remaining Data Storage controls and unused compatibility consumers.
 
+Retired the inactive High/Preserve renderer branches and preset-selection argument. Launch, reset/restore preparation, backup validation and fixtures now use the same fixed reviewed renderer; options key values, unrelated bytes, identity checks and backup behavior remain unchanged. Replaced obsolete mode-switch tests with optimized-policy idempotence and unrelated-option preservation coverage. Wire vocabulary unchanged; MCP implementation untouched. Tests NOT_EXECUTED. Next: inspect remaining bridge/CSS and storage controls.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

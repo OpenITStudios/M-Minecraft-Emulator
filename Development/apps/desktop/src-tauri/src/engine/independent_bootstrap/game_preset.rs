@@ -48,7 +48,7 @@ fn backup_bytes(path: &std::path::Path) -> io::Result<Option<Vec<u8>>> {
     if settings_hash(&bytes) != backup.sha256 {
         return Err(invalid("Settings backup verification failed; no settings changed"));
     }
-    render_preset(&bytes, crate::engine::manager_settings::GraphicsPreset::Low)?;
+    render(&bytes)?;
     Ok(Some(bytes))
 }
 
@@ -90,7 +90,7 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
         };
         match read_bounded(&path,LIMIT) {
             Ok(bytes) => {
-                render_preset(&bytes, crate::engine::manager_settings::GraphicsPreset::Low)?;
+                render(&bytes)?;
                 // A historical Education leak report makes this one optional
                 // video key worth observing; inspection never changes it.
                 input_response = observed_input_response(&bytes);
@@ -112,13 +112,13 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
 }
 
 pub(super) fn reset_settings(private: &File) -> io::Result<bool> {
-    let mut prepared=Prepared::read_preset(private, crate::engine::manager_settings::GraphicsPreset::Low)?;
+    let mut prepared=Prepared::read(private)?;
     prepared.after=Vec::new();
     prepared.commit_with_backup(true)
 }
 
 pub(super) fn restore_settings(private: &File) -> io::Result<bool> {
-    let mut prepared=Prepared::read_preset(private, crate::engine::manager_settings::GraphicsPreset::Low)?;
+    let mut prepared=Prepared::read(private)?;
     prepared.after=backup_bytes(&prepared.path)?.ok_or_else(||invalid("No verified settings backup is available"))?;
     prepared.commit_with_backup(true)
 }
@@ -224,23 +224,7 @@ const PRESET: [(&str, &str); 8] = [
     ("gfx_bubble_particles", "0"),
 ];
 
-#[cfg(test)]
 fn render(original: &[u8]) -> io::Result<Vec<u8>> {
-    render_preset(original, crate::engine::manager_settings::GraphicsPreset::Low)
-}
-
-fn render_preset(original: &[u8], preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<Vec<u8>> {
-    if preset == crate::engine::manager_settings::GraphicsPreset::Preserve {
-        // Do not create/alter an options.txt, including an absent one.
-        return Ok(original.to_vec());
-    }
-    let mut entries = PRESET;
-    if preset == crate::engine::manager_settings::GraphicsPreset::High {
-        // Keep the reviewed distance/MSAA units; enable the known visual-effect options.
-        for (key, value) in &mut entries {
-            if *key != "gfx_viewdistance" && *key != "gfx_msaa" { *value = "1"; }
-        }
-    }
     if original.len() > LIMIT || original.contains(&0) {
         return Err(invalid("Unsupported Minecraft options file"));
     }
@@ -273,13 +257,13 @@ fn render_preset(original: &[u8], preset: crate::engine::manager_settings::Graph
             seen[index] = true;
             output.push_str(PRESET[index].0);
             output.push(':');
-            output.push_str(entries[index].1);
+            output.push_str(PRESET[index].1);
             output.push_str(ending);
         } else {
             output.push_str(line); // Preserve all other settings byte-for-byte, including duplicates.
         }
     }
-    for (index, (key, value)) in entries.iter().enumerate() {
+    for (index, (key, value)) in PRESET.iter().enumerate() {
         if !seen[index] {
             if !output.is_empty() && output != "\u{feff}" && !output.ends_with('\n') {
                 output.push_str(newline);
@@ -315,12 +299,7 @@ fn options_file(path: &std::path::Path) -> io::Result<File> {
 }
 
 impl Prepared {
-    #[cfg(test)]
     fn read(private: &File) -> io::Result<Self> {
-        Self::read_preset(private, crate::engine::manager_settings::GraphicsPreset::Low)
-    }
-
-    fn read_preset(private: &File, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<Self> {
         let (path, directories) = options_path(private,true)?;
         let mut original = match options_file(&path) {
             Ok(file) => Some(file),
@@ -331,7 +310,7 @@ impl Prepared {
         if let Some(file) = original.as_mut() {
             file.take((LIMIT + 1) as u64).read_to_end(&mut before)?;
         }
-        let after = render_preset(&before, preset)?;
+        let after = render(&before)?;
         Ok(Self {
             path,
             _directories: directories,
@@ -451,7 +430,7 @@ pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
     // One reviewed graphics policy for every managed profile. Legacy
     // graphics.json is retained on disk, but no longer selects launch behavior.
     let prepared = stores.iter()
-        .map(|store| Prepared::read_preset(&store.private, crate::engine::manager_settings::GraphicsPreset::Low))
+        .map(|store| Prepared::read(&store.private))
         .collect::<io::Result<Vec<_>>>()?;
     let mut changed = 0;
     for preset in prepared { changed += usize::from(preset.commit()?); }
@@ -580,24 +559,6 @@ mod tests {
         }
         assert_eq!(observed_texture_streaming(b"gfx_texture_streaming:0\ngfx_texture_streaming:0\n"), None);
         assert_eq!(observed_texture_streaming(b"unknown:1\n"), None);
-    }
-
-    #[test]
-    fn preserve_visuals_keeps_exact_options_bytes_and_creates_no_graphics_override() {
-        use crate::engine::manager_settings::GraphicsPreset::{Preserve, High, Low};
-        let original=b"gfx_viewdistance:720\r\ngfx_msaa:4\r\ngfx_smoothlighting:1\r\nvolume:0.8\r\n";
-        assert_eq!(render_preset(original, Preserve).unwrap(), original);
-        assert!(render_preset(&[], Preserve).unwrap().is_empty());
-        assert_ne!(render_preset(original, Low).unwrap(), original);
-        assert_ne!(render_preset(original, High).unwrap(), original);
-        let root=super::super::fresh_root(&std::env::temp_dir()).unwrap();
-        let private=open_directory(&root,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY).unwrap();
-        assert!(!root.join("Roaming").exists());
-        // A Preserve selection does not create any Minecraft options directories.
-        let unchanged = render_preset(original, Preserve).unwrap();
-        assert_eq!(unchanged, original);
-        drop(private);
-        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -754,15 +715,15 @@ mod tests {
     }
 
     #[test]
-    fn high_low_preserve_world_settings_and_switch_idempotently() {
-        use crate::engine::manager_settings::GraphicsPreset::{High, Low};
-        let original = b"gfx_simulationdistance:8\naccount:kept\ngfx_viewdistance:720\n";
-        let high = render_preset(original, High).unwrap();
-        assert!(String::from_utf8_lossy(&high).contains("graphics_mode:1\n"));
-        assert!(String::from_utf8_lossy(&high).contains("gfx_toggleclouds:1\n"));
-        assert!(String::from_utf8_lossy(&high).contains("account:kept\n"));
-        assert_eq!(render_preset(&high, High).unwrap(), high);
-        assert_eq!(render_preset(&high, Low).unwrap(), render(original).unwrap());
+    fn optimized_preset_preserves_unmanaged_options_and_is_idempotent() {
+        let original = b"gfx_simulationdistance:8\naccount:kept\ngfx_viewdistance:720\ngraphics_mode:1\ngfx_toggleclouds:1\n";
+        let optimized = render(original).unwrap();
+        let text = String::from_utf8_lossy(&optimized);
+        assert!(text.contains("graphics_mode:0\n"));
+        assert!(text.contains("gfx_toggleclouds:0\n"));
+        assert!(text.contains("gfx_simulationdistance:8\n"));
+        assert!(text.contains("account:kept\n"));
+        assert_eq!(render(&optimized).unwrap(), optimized);
     }
 
     #[test]
