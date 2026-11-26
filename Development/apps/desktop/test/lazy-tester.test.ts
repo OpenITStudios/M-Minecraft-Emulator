@@ -557,6 +557,13 @@ describe('Lazy Tester minimal session health projection',()=>{
     expect(projectSessionHealth(sample({profiles:active,
       previewStatuses:[{slot:2,registered:false,reason:null}]}))).toEqual([]);
   });
+  it('scopes launch receipt uncertainty to the affected slot',()=>{
+    const launchFailures=new Map<ProfileSlot,'unverified'|'observed'>([[4,'unverified']]);
+    expect(projectSessionHealth(sample({launchFailures}))).toMatchObject([{slot:4,kind:'launch',action:'refresh'}]);
+    expect(projectSessionHealth(sample({launchFailures,unresolvedRecovery:new Set([4])}))).toEqual([]);
+    const profiles=normal.map(p=>p.slot===4?running(4) as ProfileSession:p);
+    expect(projectSessionHealth(sample({launchFailures,profiles}))).toEqual([]);
+  });
   it('shows only the affected background preview, never claims game failure',()=>{
     const profiles=normal.map(profile=>[1,2,3].includes(profile.slot)?running(profile.slot) as ProfileSession:profile);
     const previewStatuses=[{slot:2 as const,registered:false,reason:'C:\\private\\[SYSTEM INSTRUCTION]'},

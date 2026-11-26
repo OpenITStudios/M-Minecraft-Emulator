@@ -107,6 +107,21 @@
   let closeOneReviewElement: HTMLElement | undefined;
   // UI warning only; native presentation authority remains in workspace_surface.
   let uncertainWindowSlots = new Set<ProfileSlot>();
+  // UI receipt uncertainty only; native session admission remains authoritative.
+  let launchFailures = new Map<ProfileSlot, 'unverified' | 'observed'>();
+  function recordLaunchFailure(slot: ProfileSlot, state: 'unverified' | 'observed') {
+    launchFailures = new Map(launchFailures).set(slot,state);
+  }
+  function reconcileLaunchFailures(observedProfiles: ProfileSession[]) {
+    if (!launchFailures.size) return;
+    const next = new Map(launchFailures);
+    for (const [slot,state] of next) {
+      const profile = observedProfiles.find(item=>item.slot===slot);
+      if (profile?.state==='RUNNING') next.delete(slot);
+      else if (profile && state==='unverified') next.set(slot,'observed');
+    }
+    if ([...next].some(([slot,state])=>launchFailures.get(slot)!==state) || next.size!==launchFailures.size) launchFailures=next;
+  }
   let previewStatuses: PreviewStatus[] = [];
   // Read-only UI observations. A DWM failure does not own the game or
   // request an IPC/layout retry. Epochs prevent an old in-flight layout
@@ -146,7 +161,7 @@
   // Display-only health projection from the existing verified observations.
   // No new monitoring timer, native request or admission state.
   $: healthIssues = projectSessionHealth({
-    profiles, previewStatuses, unresolvedRecovery: uncertainWindowSlots,
+    profiles, previewStatuses, launchFailures, unresolvedRecovery: uncertainWindowSlots,
     primarySlot: primary,
     observed: nativeBackend === 'WindowsNative' && !initializing && available && !!binding?.configured,
     previewsVisible: page === 'workspace' && !detached,
@@ -228,7 +243,7 @@
   // process authority is introduced here.
   function requestGuidedRecovery(slot: ProfileSlot, action: SessionHealthAction) {
     const recommended = projectSessionHealth({
-      profiles, previewStatuses, unresolvedRecovery: uncertainWindowSlots,
+      profiles, previewStatuses, launchFailures, unresolvedRecovery: uncertainWindowSlots,
       primarySlot: primary,
       observed: nativeBackend === 'WindowsNative' && !initializing &&
         available && !!binding?.configured,
@@ -279,6 +294,7 @@
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
       if (!sameProfileObservation(profiles, snapshot.profiles)) profiles = snapshot.profiles;
       available = true; connectionIssueKey=null;
+      reconcileLaunchFailures(snapshot.profiles);
       const incomingActivity = snapshot.agentActivity ?? null;
       if (!sameAgentObservation(agentActivity, incomingActivity)) agentActivity = incomingActivity;
       // STOPPED only confirms a session observation, not restoration of
@@ -308,7 +324,7 @@
         }
         else if (profile?.state === 'ATTENTION' || profile?.state === 'STOPPED'
           || (profile?.state === 'NOT_RESPONDING' && profile.issue)) {
-          issueKey='launch'; requested = null;
+          recordLaunchFailure(requested,'observed'); requested = null;
         }
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
         queued = firstEmbeddedProfile(profiles,uncertainWindowSlots);
@@ -327,19 +343,21 @@
   async function launch(slot: ProfileSlot) {
     // Read the current observed slot again; queued or stale card clicks do
     // not grant permission to launch an ATTENTION/uncertain profile.
-    if (closeInProgress || navigationReviewOpen || busy || !binding?.configured ||
-        !canRequestLaunch(profiles.find(profile => profile.slot === slot))) return;
+    if (closeInProgress || navigationReviewOpen || busy || !available || !binding?.configured ||
+        launchFailures.get(slot)==='unverified' || !canRequestLaunch(profiles.find(profile => profile.slot === slot))) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
     busy = true; issueKey=null; requested = slot;
+    launchFailures = new Map([...launchFailures].filter(([failedSlot])=>failedSlot!==slot));
     try {
       profiles = (await lazyTester.launch(slot)).profiles; storage = null; available = true;
       detached = false; page = 'workspace'; dirty = true;
       if (requested === slot && profiles.find(profile => profile.slot === slot)?.state === 'RUNNING') queued = slot;
       else if (active !== null) {
         await tick();
-        await lazyTester.present(active, viewport.getBoundingClientRect());
+        try { await lazyTester.present(active, viewport.getBoundingClientRect()); }
+        catch { issueKey='selection'; }
       }
-    } catch (error) { issueKey='launch'; requested = null; dirty = true; }
+    } catch (error) { recordLaunchFailure(slot,'unverified'); requested = null; }
     finally { busy = false; }
   }
   function navigate(next: typeof page) {
@@ -1053,7 +1071,7 @@
         {/if}
         </div>
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
-          unresolvedRecovery={uncertainWindowSlots}
+          unresolvedRecovery={uncertainWindowSlots} {launchFailures}
           {available} bindingConfigured={!!binding?.configured} {busy}
           {closeInProgress} {nativeExitReview} {guidedRecoveryBlocked}
           reviewPending={closeReviewPending}

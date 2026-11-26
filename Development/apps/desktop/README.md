@@ -14,6 +14,8 @@ The fixed-height launcher action strip hosts selected-game close review and
 pending-close status without inserting a new workspace row. Native close
 admission and recovery remain unchanged. Every launcher reserves a bounded
 health row so a warning does not resize the rail or shift native previews.
+Unconfirmed launch receipts are scoped to the affected slot and block its
+retry until a fresh session inspection succeeds.
 Native Windows Minecraft Education has five
 fixed profile identities and an explicit manual launch path; the old
 Sandboxie/VMware provider route is retired.

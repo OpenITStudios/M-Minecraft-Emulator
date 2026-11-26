@@ -13,6 +13,7 @@
   export let primary: ProfileSlot;
   export let detached: boolean;
   export let unresolvedRecovery: ReadonlySet<ProfileSlot>;
+  export let launchFailures: ReadonlyMap<ProfileSlot, 'unverified' | 'observed'>;
   export let available: boolean;
   export let bindingConfigured: boolean;
   export let busy: boolean;
@@ -43,6 +44,7 @@
     const name = 'Minecraft - ' + profile.slot;
     if (!available || !bindingConfigured) return name + ' · ' + statusLabel;
     if (profile.state === 'RUNNING') return 'Select ' + name + ' · ' + statusLabel;
+    if (launchFailures.get(profile.slot)==='unverified') return name + ' · Launch not confirmed';
     if (canRequestLaunch(profile)) return 'Launch ' + name + ' · ' + statusLabel;
     return name + ' · ' + statusLabel;
   }
@@ -57,6 +59,7 @@
     )}
     {@const statusLabel = !observedSlot || !available || !bindingConfigured
       ? 'Status unavailable'
+      : launchFailures.get(profile.slot)==='unverified' && profile.state!=='RUNNING' ? 'Launch not confirmed'
       : active === profile.slot && !detached && profile.state === 'RUNNING'
         ? 'Selected in Play'
           : profile.state === 'RUNNING'
@@ -70,13 +73,13 @@
         aria-label={cardActionName(profile, statusLabel)}
         aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
         disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured||
-          (profile.state!=='RUNNING'&&!canRequestLaunch(profile))}
+          (profile.state!=='RUNNING'&&(launchFailures.get(profile.slot)==='unverified'||!canRequestLaunch(profile)))}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
         <!-- Compact visual identity, full Minecraft slot stays in accessible names and dialogs. -->
         <strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}</strong>
         <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!observedSlot||!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
         <small class={observedSlot&&available&&bindingConfigured
-          ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'
+          ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'||launchFailures.has(profile.slot)
             ? 'lt-status-attention'
             : profile.state==='STARTING'
               ? 'lt-status-pending'

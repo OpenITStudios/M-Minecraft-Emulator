@@ -18,6 +18,7 @@ export interface SessionHealthObservation {
   readonly previewStatuses: readonly PreviewStatus[];
   readonly unresolvedRecovery: ReadonlySet<ProfileSlot>;
   readonly primarySlot: ProfileSlot;
+  readonly launchFailures?: ReadonlyMap<ProfileSlot, 'unverified' | 'observed'>;
   readonly observed: boolean;
   readonly previewsVisible: boolean;
 }
@@ -35,7 +36,9 @@ export function projectSessionHealth(observation: SessionHealthObservation): Ses
     // Original native restoration has its own persistent, higher-priority
     // warning in Play. Repeating it here would confuse the user.
     if (observation.unresolvedRecovery.has(slot)) continue;
-    if (profile.state === 'NOT_RESPONDING') {
+    if (observation.launchFailures?.has(slot) && profile.state !== 'RUNNING') {
+      issues.push({slot,kind:'launch',title:'Launch not confirmed',guidance:userMessage('launch'),action:'refresh'});
+    } else if (profile.state === 'NOT_RESPONDING') {
       issues.push({
         slot, kind: 'window',
         title: profile.process ? 'Window not responding' : 'Game window unavailable',
