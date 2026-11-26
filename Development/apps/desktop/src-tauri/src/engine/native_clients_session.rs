@@ -682,6 +682,27 @@ pub enum SessionRequest {
     CloseAll,
 }
 
+impl SessionRequest {
+    // These requests belong to an existing controller and never to the desktop.
+    pub(crate) fn is_agent_report(&self) -> bool {
+        matches!(self, Self::PublishAgentActivity { .. } |
+            Self::TestingReserve { .. } | Self::TestingFinalize { .. } |
+            Self::TestingInspect { .. })
+    }
+
+    pub(crate) fn is_experimental_input(&self) -> bool {
+        #[cfg(feature="mc02-native-input")]
+        {
+            matches!(self, Self::Mc02Input { .. } | Self::AiInputGroup { .. } |
+                Self::AiLeasedInput { .. } | Self::AiLeaseAcquire { .. } |
+                Self::AiLeaseRelease { .. } | Self::LaunchMc02Experiment { .. } |
+                Self::LaunchAiExperiment { .. })
+        }
+        #[cfg(not(feature="mc02-native-input"))]
+        { false }
+    }
+}
+
 // Correlation-only original child witness for the existing legacy
 // Mc02Input request. Not an authority delegated to the CLI: the
 // retained actor compares it to its own original process/channel
@@ -1406,25 +1427,14 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     // A report or Testing correlation cannot cause fresh game/profile
     // construction if the original controller disappeared after the
     // one-shot CLI's existence gate. Fail closed on this TOCTOU race.
-    if matches!(request,
-        SessionRequest::PublishAgentActivity{..} |
-        SessionRequest::TestingReserve{..} |
-        SessionRequest::TestingFinalize{..} |
-        SessionRequest::TestingInspect{..}) {
+    if request.is_agent_report() {
         return Err(io::Error::new(io::ErrorKind::NotFound,
             "No retained controller; status or Testing reservation refused"));
     }
     // Input operations require an already retained authenticated controller.
     // Do not invent a new owner, replay an old channel or adopt a game
     // merely because an input command mentions its numerical slot.
-    #[cfg(feature="mc02-native-input")]
-    if matches!(request,SessionRequest::Mc02Input{..} |
-        SessionRequest::AiInputGroup{..} |
-        SessionRequest::AiLeasedInput{..} |
-        SessionRequest::AiLeaseAcquire{..} |
-        SessionRequest::AiLeaseRelease{..} |
-        SessionRequest::LaunchMc02Experiment{..} |
-        SessionRequest::LaunchAiExperiment{..}) {
+    if request.is_experimental_input() {
         return Err(io::Error::new(io::ErrorKind::NotFound,
             "No retained controller; experimental input refused"));
     }
@@ -2590,6 +2600,41 @@ mod tests {
         assert_eq!(admit_native_input_frame(2,1|4|16|64,0,0,150).unwrap(),
             NativeInputIntent::Active);
     }
+    #[test]
+    fn agent_request_classes_keep_private_routes_out_of_desktop_and_spawn() {
+        for request in [
+            SessionRequest::TestingInspect { slot: 1, owner_id: String::new() },
+            SessionRequest::TestingReserve { slot: 1, owner_id: String::new(),
+                run_id: String::new(), replace_run_id: None },
+            SessionRequest::TestingFinalize { slot: 1, owner_id: String::new(),
+                run_id: String::new(), reported_status: String::new(), report_digest: String::new() },
+        ] {
+            assert!(request.is_agent_report());
+            assert!(!request.is_experimental_input());
+        }
+        for request in [SessionRequest::Inspect, SessionRequest::Launch { slot: 1 }] {
+            assert!(!request.is_agent_report());
+            assert!(!request.is_experimental_input());
+        }
+        #[cfg(feature="mc02-native-input")]
+        for request in [
+            SessionRequest::LaunchMc02Experiment { slot: 2 },
+            SessionRequest::LaunchAiExperiment { slot: 2, mode: AgentControlMode::HumanPlusFourAi },
+            SessionRequest::Mc02Input { slot: 2, keys: 0, dx: 0, dy: 0,
+                ttl_ms: 350, issued_at_ms: 1, batch_origin: None },
+            SessionRequest::AiLeasedInput { slot: 2, keys: 0, dx: 0, dy: 0,
+                ttl_ms: 350, issued_at_ms: 1, owner_id: String::new(), lease_epoch: String::new() },
+            SessionRequest::AiLeaseAcquire { slots: vec![2], owner_id: String::new(),
+                mode: AgentControlMode::HumanPlusFourAi, lease_epoch: String::new(), neutral_only: true },
+            SessionRequest::AiLeaseRelease { slots: vec![2], owner_id: String::new(), lease_epoch: String::new() },
+            SessionRequest::AiInputGroup { frames: vec![], issued_at_ms: 1, deadline_at_ms: 2,
+                owner_id: String::new(), lease_epoch: String::new() },
+        ] {
+            assert!(request.is_experimental_input());
+            assert!(!request.is_agent_report());
+        }
+    }
+
     #[test]
     fn protocol_rejects_paths_unknown_operations_and_unbounded_input() {
         for input in [
