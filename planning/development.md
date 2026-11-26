@@ -30,8 +30,11 @@ and audio restoration has one path. Bootstrap and controller now share one
 startup existence-lease implementation and one stable controller gate name;
 profile preparation retains its separate gate. Both managed launch and
 registered observation call the single suspended-process creation owner;
-fixture conveniences are test-only and name their purpose. Next: audit
-remaining bootstrap responsibilities and legacy observation entrypoints.
+fixture conveniences are test-only and name their purpose. Historical startup
+CLI dispatch and observation loop now have a separate named source owner;
+product entrypoint naming reflects its real purpose. CLI flags and shared
+journal/profile contracts remain unchanged. Next: audit remaining bootstrap
+responsibilities and active IPC ownership.
 
 ## Continue development outside Codex
 

@@ -87,9 +87,9 @@ pub fn profile_binding(_: bool) -> io::Result<ProfileBinding> {
 }
 
 // Internal same-executable mode, never a Tauri command or Launch admission.
-pub fn maybe_run_education_startup_observation() -> bool {
+pub fn maybe_run_native_entrypoint() -> bool {
     #[cfg(all(windows, target_arch = "x86_64"))]
-    { independent_bootstrap::maybe_run_startup_observation() }
+    { independent_bootstrap::maybe_run_native_entrypoint() }
     #[cfg(not(all(windows, target_arch = "x86_64")))]
     { false }
 }
@@ -987,7 +987,7 @@ mod native_workspace_tests {
                 io::ErrorKind::Unsupported,
             );
         }
-        assert!(!maybe_run_education_startup_observation());
+        assert!(!maybe_run_native_entrypoint());
     }
 
     #[test]
