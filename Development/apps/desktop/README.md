@@ -5,7 +5,8 @@ The mounted UI is `src/LazyTesterApp.svelte`, not the historical
 `UnifiedManagerApp.svelte`. Play keeps the selected game in the workspace; manual window separation is not offered.
 Native recovery remains available through the original controller. Healthy running
 launchers use their preview and selection highlight; connection and exceptional
-status remain visible when attention is needed. General Settings prioritizes frame
+status remain visible when attention is needed. The AI & Testing disclosure
+appears only for attention or terminal Probe results, not routine activity. General Settings prioritizes frame
 limits and audio; existing per-profile graphics preferences remain available in a
 collapsed legacy disclosure. Native settings and stored values are unchanged. Profile data-location inspection
 runs on Data Storage navigation, not when opening General Settings.

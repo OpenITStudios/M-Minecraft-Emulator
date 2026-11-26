@@ -269,6 +269,10 @@ try {
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
   const statusDisclosure=page.locator('.lt-agent-activity');
+  await heading('Ready when you are').waitFor();
+  assert.equal(await statusDisclosure.count(),0,'Routine AI activity must not occupy the topbar');
+  await page.evaluate(()=>{window.__agentReport={...window.__agentReport,displayHint:'ATTENTION',items:[{kind:'AI_INPUT',slot:2,status:'NATIVE_RELEASE_UNCONFIRMED',importance:'ATTENTION',evidence:'LOCAL_MCP_RECOVERY_HOLD'}]};});
+  await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await statusDisclosure.waitFor();
   await statusDisclosure.locator('summary').focus();
   await page.keyboard.press('Enter');
@@ -284,7 +288,7 @@ try {
   assert.equal(await statusDisclosure.locator('summary')
     .evaluate(node=>document.activeElement===node),true,
     'AI disclosure Escape returns to its own summary while WebView focus is active');
-  assert.match(await statusDisclosure.textContent(),/Testing · Waiting · MC02/);
+  assert.match(await statusDisclosure.textContent(),/AI & Testing · Needs attention/);
   assert.doesNotMatch(await statusDisclosure.textContent(),/\bQA\b/,
     'All visible AI and Testing labels use the agreed English terminology');
   assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5);
@@ -323,12 +327,12 @@ try {
   await statusDisclosure.locator('summary').click();
   await page.setViewportSize({width:920,height:620});
   await statusDisclosure.locator('summary').click();
-  assert.match(await statusDisclosure.textContent(),/awaiting command or evidence/);
+  assert.match(await statusDisclosure.textContent(),/Native AI input release unconfirmed/);
   assert.doesNotMatch(await statusDisclosure.textContent(),/AI controlling PC|Testing running verified/);
 
   // Results available opens the original Probe summary in ONE click, not
   // a separate page or an inferred map acceptance result.
-  await statusDisclosure.locator('summary').click(); // close waiting details
+  await statusDisclosure.locator('summary').click(); // close attention details
   await page.evaluate(()=>{window.__agentReport={
       schema:1,source:'CURRENT_MCP_PROCESS_MEMORY_ONLY',
       snapshotAt:new Date().toISOString(),displayHint:'ACTIVITY',

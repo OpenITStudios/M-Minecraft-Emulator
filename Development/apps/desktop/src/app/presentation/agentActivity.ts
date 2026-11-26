@@ -52,8 +52,13 @@ export function presentAgentActivity(report:AgentActivityReport|null):ActivityVi
     lines:['An earlier local agent report needed attention, but its current status is unknown.'],
     testingSummaries:[],urgent:true,stale:true,
   };
-  const sorted=[...report.items].sort((a,b)=>a.slot-b.slot);
   const urgent=report.displayHint==='ATTENTION';
+  // Routine observation/preparation is not a user-facing task. Keep every
+  // attention item and terminal Probe result, without changing the report.
+  const sorted=report.items.filter(item=>item.importance==='ATTENTION' ||
+    (item.kind==='SKILLS_PROBE' && item.status==='PROBE_REPORT_AVAILABLE'))
+    .sort((a,b)=>a.slot-b.slot);
+  if(!sorted.length)return null;
   const completed=sorted.filter(isCompleteProbe);
   const testingSummaries=completed.map(item=>({
     slot:'MC'+String(item.slot).padStart(2,'0'),
@@ -62,7 +67,7 @@ export function presentAgentActivity(report:AgentActivityReport|null):ActivityVi
   }));
   // Avoid repeating the exact result as both a text line and a summary.
   const lines=sorted.filter(item=>!isCompleteProbe(item)).map(line);
-  let summary=urgent?'AI & Testing · Needs attention':'AI & Testing · Activity';
+  let summary=urgent?'AI & Testing · Needs attention':'Testing · Results available';
   if(sorted.length===1) {
     const item=sorted[0];
     const slot='MC'+String(item.slot).padStart(2,'0');
@@ -77,14 +82,7 @@ export function presentAgentActivity(report:AgentActivityReport|null):ActivityVi
       summary=item.reportedOutcome==='INCOMPLETE'?
         'Testing · Incomplete · '+slot:
         'Testing · Blocked · '+slot;
-    } else if(!urgent) {
-      summary=item.kind==='VISUAL_OBSERVATION'?'Observing · '+slot:
-        item.kind==='AI_INPUT'?'AI input request · '+slot:
-        item.status==='LOCAL_QA_PREPARATION_IN_PROGRESS'?
-          'Testing · Preparing · '+slot:
-        item.status==='LOCAL_QA_REVIEW_IN_PROGRESS'?
-          'Testing · Reviewing · '+slot:
-          'Testing · Waiting · '+slot;
+
     }
   }
   return {summary,lines,testingSummaries,urgent,stale:false};

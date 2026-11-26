@@ -46,6 +46,7 @@ describe('Lazy Tester optional activity status stays inside fixed-height topbar'
   });
   it('authors CSS viewport checks separately from real Windows DPI verification',()=>{
     const journey=browser();
+    expect(journey).toContain('Routine AI activity must not occupy the topbar');
     expect(journey).toContain('for(const width of [920,720,620,480])');
     expect(journey).toContain('Optional AI summary must not overlap navigation');
     expect(journey).toContain('Optional AI summary must not change the fixed-height topbar');
