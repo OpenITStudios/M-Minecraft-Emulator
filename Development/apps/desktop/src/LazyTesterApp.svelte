@@ -368,7 +368,7 @@
     busy = true; issueKey=null; requested = slot;
     launchFailures = new Map([...launchFailures].filter(([failedSlot])=>failedSlot!==slot));
     try {
-      profiles = (await lazyTester.launch(slot)).profiles; storage = null; available = true;
+      publishProfiles((await lazyTester.launch(slot)).profiles); storage = null; available = true;
       detached = false; page = 'workspace'; dirty = true;
       if (requested === slot && profiles.find(profile => profile.slot === slot)?.state === 'RUNNING') queued = slot;
       else if (active !== null) {
@@ -416,7 +416,7 @@
       if(next==='settings') {
         const snapshot=await lazyTester.settings();
         if (!current()) return;
-        profiles=snapshot.profiles;settings=snapshot.settings;available=true;
+        publishProfiles(snapshot.profiles);settings=snapshot.settings;available=true;
         if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
         graphicsPreset=graphicsChoice(selectedSlot);
       }
@@ -521,7 +521,7 @@
     if(busy||!available||!settings?.backgroundAudio)return;
     if(refreshing||resizing){queuedAudio=mode;return;}
     busy=true;issueKey=null;settingsNotice='';
-    try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;profiles=snapshot.profiles;settingsNotice='Background audio saved and applied to managed games.';}
+    try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;publishProfiles(snapshot.profiles);settingsNotice='Background audio saved and applied to managed games.';}
     catch(error){issueKey='audio';}
     finally{busy=false;}
   }
@@ -534,7 +534,7 @@
     busy=true;applyingPreset=true;issueKey=null;settingsNotice='';
     try {
       const snapshot=await lazyTester.applyGraphics(request.slot,request.preset);
-      profiles=snapshot.profiles;settings=snapshot.settings;
+      publishProfiles(snapshot.profiles);settings=snapshot.settings;
       if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
       graphicsDrafts.delete(request.slot);
       settingsNotice=request.preset==='Preserve'
@@ -558,7 +558,7 @@
     busy=true;savingPerformance=true;issueKey=null;performanceNotice='';
     try{
       const snapshot=await lazyTester.savePerformance(limits.active,limits.background);
-      profiles=snapshot.profiles;settings=snapshot.settings;
+      publishProfiles(snapshot.profiles);settings=snapshot.settings;
       activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;
       performanceNotice='FPS limits saved. Applies when each game next starts.';
     }catch(error){issueKey='performance';}
@@ -608,7 +608,7 @@
   // Read-only reconciliation never confirms native window restoration.
   async function reconcileCloseObservation() {
     try {
-      profiles = (await lazyTester.inspect()).profiles;
+      publishProfiles((await lazyTester.inspect()).profiles);
       available = true; connectionIssueKey = null;
     } catch {
       available = false; connectionIssueKey = 'connection';
@@ -651,7 +651,7 @@
         active=null;selectedIdentity='';requested=null;queued=null;
       }
       if (report.snapshot) {
-        profiles=report.snapshot.profiles;available=true;connectionIssueKey=null;storage=null;
+        publishProfiles(report.snapshot.profiles);available=true;connectionIssueKey=null;storage=null;
         if (wasActive) {
           // Existing background games may still be parked offscreen with
           // WS_EX_TOOLWINDOW. Promote another verified responsive peer into
@@ -789,8 +789,13 @@
     } catch (error) { previewStatuses = [];previewIssue = userMessage('preview'); }
     finally { resizing = false; }
   }
+  // Reuse the validated full-field comparison for action receipts too.
+  // Keep caller-specific status, timestamps and recovery effects independent.
+  function publishProfiles(incoming: ProfileSession[]) {
+    if (!sameProfileObservation(profiles, incoming)) profiles = incoming;
+  }
   function applyStorageSnapshot(snapshot: {profiles: ProfileSession[]; storage: ProfileStorage[] | null}) {
-    profiles = snapshot.profiles;
+    publishProfiles(snapshot.profiles);
     storage = snapshot.storage;
     storageReportReceivedAt = storageReportReceivedTime();
   }
