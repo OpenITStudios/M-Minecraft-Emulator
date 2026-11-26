@@ -45,7 +45,8 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Allowlisted native commands / heavy-operation admission | `src-tauri/src/commands/native_clients.rs` | Session and workspace owners |
 | App startup / normal manager exit | `src-tauri/src/app_bootstrap.rs` | `engine/app_instance.rs`, native close command |
 | Manual game launch / reaping / normal CloseOne and CloseAll | `src-tauri/src/engine/independent_bootstrap/session_controller.rs` | `independent_bootstrap.rs` |
-| Game image, native enrollment and reviewed DLL checks | `src-tauri/src/engine/independent_bootstrap.rs` | `independent_bootstrap/owned_handoff.rs` |
+| Registered Education image validation and version compatibility | `src-tauri/src/engine/independent_bootstrap/registered_image.rs` | Existing registered target resolver and retained file pin/digest helpers. |
+| Native enrollment and reviewed DLL checks | `src-tauri/src/engine/independent_bootstrap.rs` | `independent_bootstrap/owned_handoff.rs` |
 | Profile data, binding, settings and storage inspection | `src-tauri/src/engine/independent_bootstrap/` | `product_profiles.rs`, `profile_binding.rs`, `profile_storage.rs`, `game_preset.rs` |
 | Windows file identity metadata | `src-tauri/src/engine/windows_file_identity.rs` | Read-only attributes and full file ID from an existing file pin; bootstrap, helper roles and IPC retain separate admission/error policies. |
 | Windows process creation time | `src-tauri/src/engine/windows_process_time.rs` | Read-only FILETIME query on an existing process handle; callers retain identity, session, liveness and ownership checks. |

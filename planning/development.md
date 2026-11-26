@@ -17,6 +17,8 @@ Profile size traversal and its existing regression fixture now live in `independ
 
 Window caption policy and its native fixture now live in `independent_bootstrap/window_caption.rs`; both session observation and legacy startup observation explicitly call that owner. Existing slot bounds, HWND/PID validation, timeout, caption repair and fail-closed behavior are unchanged. No native lifecycle or MCP contract change. Relocated tests NOT_EXECUTED.
 
+Registered Education installation validation and its four existing preflight fixtures now live in `independent_bootstrap/registered_image.rs`. Bootstrap and controller call the same owner explicitly; registered target resolution, pinning, signature, digest, reviewed recipe and refusal behavior are unchanged. Developer source routing and implementation map updated. Tests NOT_EXECUTED; MCP unchanged.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

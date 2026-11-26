@@ -274,6 +274,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/registered_image.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs'
       ],inspectFiles:[
         'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs',
@@ -294,6 +295,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/registered_image.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
         'Development/apps/desktop/src-tauri/src/engine/instance_identity.rs',
         'Development/apps/desktop/src-tauri/src/engine/process_identity.rs',

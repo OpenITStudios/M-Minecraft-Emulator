@@ -110,8 +110,8 @@ impl Sessions {
         }
         // An unsupported game version blocks Launch, not settings or profile observation.
         // Release this temporary image pin before retaining the idle controller.
-        let (path, image, _) = registered_image(false)?;
-        let launch_issue = match reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?) {
+        let (path, image, _) = registered_image::registered_image(false)?;
+        let launch_issue = match registered_image::reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?) {
             Ok(_) => None,
             Err(error) if error.kind() == io::ErrorKind::Unsupported => Some(error.to_string()),
             Err(error) => return Err(error),
@@ -229,7 +229,7 @@ impl Sessions {
         crate::engine::manager_settings::load_performance()?;
         // Each attempt selects the current signed registration and pins its exact
         // reviewed bytes before touching settings or creating a game process.
-        let (path, image, singleton_caller_rva) = match registered_image(true) {
+        let (path, image, singleton_caller_rva) = match registered_image::registered_image(true) {
             Ok(target) => target,
             Err(error) => { self.issues[index] = Some(error.to_string()); return Err(error); }
         };
