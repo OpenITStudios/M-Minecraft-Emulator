@@ -383,7 +383,7 @@
         if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
         graphicsPreset=graphicsChoice(selectedSlot);
       }
-      if(next==='storage'||next==='settings') {
+      if(next==='storage') {
         try {
           const location=await lazyTester.dataLocation();
           if (!current()) return;
@@ -744,7 +744,7 @@
         await loadBinding();
         // Binding already verifies every existing profile and registry hive.
         // Data-location Inspect would open all five stores a second time
-        // before Play needs them. Settings/Storage inspect on navigation.
+        // before Play needs them. Data Storage inspects on navigation.
         if(binding?.configured){await refresh();return;}
       }
       if(!disposed)await refresh();

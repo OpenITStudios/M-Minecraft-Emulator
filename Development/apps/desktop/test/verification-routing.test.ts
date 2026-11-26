@@ -7,7 +7,7 @@ const router = readFileSync(new URL("../../../tooling/windows-toolchain/dev.ps1"
 
 describe("Emulator source verification routing", () => {
 
-  it("defers redundant five-hive DataLocation inspection until Settings/Storage navigation", () => {
+  it("defers redundant five-hive DataLocation inspection until Data Storage navigation", () => {
     const ui = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
     const startup = ui.split("async function initializeLaunchers() {")[1]
       ?.split("  async function checkBinding(")[0] ?? "";
@@ -20,9 +20,10 @@ describe("Emulator source verification routing", () => {
     expect(startup).not.toMatch(/\b(?:loadLocation|lazyTester\.dataLocation)\s*\(/);
     // The canonical binding retains full product profile/hive verification.
     // Only the redundant *location display* inspection is deferred.
-    expect(navigate).toContain("if(next==='storage'||next==='settings')");
-    expect(navigate).toContain("dataLocation=await lazyTester.dataLocation()");
-    expect(explicitStorage).toContain("dataLocation=await lazyTester.dataLocation()");
+    expect(navigate).not.toContain("if(next==='storage'||next==='settings')");
+    expect(navigate).toContain("if(next==='storage') {");
+    expect(navigate).toContain("const location=await lazyTester.dataLocation()");
+    expect(explicitStorage).toContain("const location=await lazyTester.dataLocation()");
     expect(ui).toContain("dataLocation=await lazyTester.dataLocation(action)");
     expect(ui).toContain("if(action==='Inspect')");
     expect(ui).toContain("binding=null;if(!bindingIssue)bindingIssue=locationIssue");
@@ -79,7 +80,7 @@ describe("Emulator source verification routing", () => {
     // DataLocation may be readable even when the original private profile
     // binding is not. The previous measurements must not masquerade as fresh.
     expect(refresh).toContain("if(!binding?.configured)await checkBinding()");
-    expect(refresh).toContain("dataLocation=await lazyTester.dataLocation()");
+    expect(refresh).toContain("const location=await lazyTester.dataLocation()");
     expect(refresh).toContain("if(!binding?.configured){");
     expect(refresh).toContain("storage=null;storageNotice='';issueKey='binding';");
     expect(refresh).toContain("const snapshot=await lazyTester.storage();");
