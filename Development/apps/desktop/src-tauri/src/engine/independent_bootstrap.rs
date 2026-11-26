@@ -1278,25 +1278,33 @@ pub(super) fn maybe_run_startup_observation() -> bool {
     std::process::exit(code);
 }
 
-fn run_startup_observation(count: usize) -> io::Result<i32> {
+// Retain a named existence lease, not mutex ownership. Do not wait or
+// release the mutex: the original handle keeps the gate alive for its caller.
+// Preserve the OS last-error immediately after creation.
+fn acquire_startup_gate(name: &str, already_exists: io::Error) -> io::Result<OwnedHandle> {
     use windows_sys::Win32::{
         Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
         System::Threading::CreateMutexW,
     };
-    // One experiment process per interactive session; no persisted readiness/account state.
-    let name = wide(OsStr::new("Local\\MivubiEducationStartupObservation"))?;
+    let name = wide(OsStr::new(name))?;
     let raw = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
     if raw.is_null() {
         return Err(io::Error::last_os_error());
     }
     let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
-    let _gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+    let gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
     if existed {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "Startup experiment already active",
-        ));
+        return Err(already_exists);
     }
+    Ok(gate)
+}
+
+fn run_startup_observation(count: usize) -> io::Result<i32> {
+    // One experiment process per interactive session; no persisted readiness/account state.
+    let _gate = acquire_startup_gate(
+        crate::engine::native_clients_session::CONTROLLER_GATE_NAME,
+        io::Error::new(io::ErrorKind::AlreadyExists, "Startup experiment already active"),
+    )?;
     let mut launch_guard = super::acquire_native_launch()?;
     // Preserve existing games; no termination, sign-out or activation fallback.
     if !super::inspect_native_workspace()?.processes.is_empty() {
@@ -2014,23 +2022,10 @@ fn five_replay_bytes(pair: &[u8], stores: &[SlotStorage]) -> io::Result<Vec<u8>>
 fn prepare_five_profiles() -> io::Result<i32> {
     use sha2::{Digest, Sha256};
     use std::io::{Read, Write};
-    use windows_sys::Win32::{
-        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
-        System::Threading::CreateMutexW,
-    };
-    let name = wide(OsStr::new("Local\\MivubiEducationFiveProfilePreparation"))?;
-    let raw = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
-    if raw.is_null() {
-        return Err(io::Error::last_os_error());
-    }
-    let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
-    let _gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
-    if existed {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "Five-profile preparation already active",
-        ));
-    }
+    let _gate = acquire_startup_gate(
+        "Local\\MivubiEducationFiveProfilePreparation",
+        io::Error::new(io::ErrorKind::AlreadyExists, "Five-profile preparation already active"),
+    )?;
     // Existing pair replay is the trust anchor; no root path or profile override is accepted.
     let pair = registered_slots::<2>(true)?;
     let payload_root = std::env::current_exe()?

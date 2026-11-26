@@ -1480,25 +1480,13 @@ impl ReplySnapshot {
 }
 
 fn run() -> io::Result<()> {
-    use windows_sys::Win32::{
-        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
-        System::Threading::CreateMutexW,
-    };
     crate::engine::workspace_surface::verify_same_executable_parent()?;
     crate::engine::dpi::configure()?;
     // Same gate as historical pair/five CLI: no parallel lifecycle authority.
-    let name = wide(OsStr::new("Local\\MivubiEducationStartupObservation"))?;
-    let raw = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
-    if raw.is_null() {
-        return Err(io::Error::last_os_error());
-    }
-    let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
-    let _gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
-    if existed {
-        return Err(invalid(
-            "Another Minecraft controller is still active; existing games are preserved",
-        ));
-    }
+    let _gate = acquire_startup_gate(
+        crate::engine::native_clients_session::CONTROLLER_GATE_NAME,
+        invalid("Another Minecraft controller is still active; existing games are preserved"),
+    )?;
     let mut sessions = Sessions::prepare()?;
     // Only the original actor keeps one ephemeral UI report mirror.
     // This does not own Probe progress, games, input, or agent processes.

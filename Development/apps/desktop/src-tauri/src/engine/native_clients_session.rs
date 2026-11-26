@@ -1,4 +1,8 @@
 //! Lazy Tester transport. The existing bootstrap owns games in one retained helper.
+// Stable cross-build existence gate; keep the original Windows object name.
+#[cfg(windows)]
+pub(crate) const CONTROLLER_GATE_NAME: &str = "Local\\MivubiEducationStartupObservation";
+
 use super::process_identity::OwnedProcess;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -1369,7 +1373,7 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     }
     // Another build or the historical private runner may retain the same profiles.
     // An absent compatible endpoint must not be presented as five stopped profiles.
-    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+    if existing_controller_gate(CONTROLLER_GATE_NAME)? {
         return Err(io::Error::new(io::ErrorKind::WouldBlock,
             "An existing Minecraft controller uses another build or is still starting. Its games are preserved; no replacement was started."));
     }

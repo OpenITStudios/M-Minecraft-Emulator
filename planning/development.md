@@ -26,7 +26,9 @@ behavior and the existing actor. Profile cache, full clear and game settings
 now share fresh mutation admission; each settings request maps directly to
 its existing game_preset operation. Settings observation and fresh admission
 share one idle predicate; explicit preset methods replace the boolean mode,
-and audio restoration has one path. Next: audit controller/bootstrap boundaries.
+and audio restoration has one path. Bootstrap and controller now share one
+startup existence-lease implementation and one stable controller gate name;
+profile preparation retains its separate gate. Next: audit startup wrappers.
 
 ## Continue development outside Codex
 
