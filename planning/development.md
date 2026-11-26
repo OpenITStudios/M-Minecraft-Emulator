@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+HTTP cache lifecycle source checkpoint: successful exit code and successful journal save queue one optional cleanup per retained profile. Existing idle maintenance consumes at most one candidate after queued requests; fresh native data admission and pending full-clear check are required. Relaunch/manual clear/full clear supersede pending cache work. Terminal CloseAll skips optional work; no new worker or timer. Native filesystem calls already underway can still delay subsequent requests, and failed cleanup is not retried. No new deletion categories. Tests NOT_EXECUTED; capture held.
+
 Native cleanup safety checkpoint: existing HTTP cache preflight now rejects explicit reparse entries and checks the same bounded deadline for mutating ancestor traversal and final preflight, before any disposition. Authored expired-mutating-budget fixture; NOT_EXECUTED. No automatic deletion enabled, no new categories or path-based deletion. Download cache and old logs still require verified paths; pack/world selective cleanup requires identity-bound review and dependency handling. Capture held.
 
 Profile Management follow-up: clear-all row uses shared panel styling and concise title-case action, with typed identity, acknowledgement, token, focus and native admission unchanged. Existing recovery controls remain until safe replacements are ready. Updated affected browser labels and location disclosure/order fixtures. No new cleanup capability; tests NOT_EXECUTED. Capture remains held.
