@@ -24,8 +24,9 @@ resource cleanup is retained. Consolidated session response routing into one
 ReplySnapshot policy (Full / Close / Receipt), preserving journal and label
 behavior and the existing actor. Profile cache, full clear and game settings
 now share fresh mutation admission; each settings request maps directly to
-its existing game_preset operation. Next: audit remaining settings and audio
-operation ownership without adding a controller.
+its existing game_preset operation. Settings observation and fresh admission
+share one idle predicate; explicit preset methods replace the boolean mode,
+and audio restoration has one path. Next: audit controller/bootstrap boundaries.
 
 ## Continue development outside Codex
 

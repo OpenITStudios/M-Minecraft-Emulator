@@ -898,34 +898,45 @@ impl Sessions {
         result.map_err(|error|io::Error::new(error.kind(),format!("Full clear did not finish. Refresh Data Storage to review its recovery status. {error}")))
     }
 
-    // Read-only UI settings observation. The exact registered image path was
-    // signature-checked at controller preparation or the last launch; reusing
-    // that path avoids launching the full PowerShell registration preflight
-    // on every idle Settings refresh. It is a DISPLAY HINT, not permission
-    // to alter profiles. settings() below keeps the original fresh check.
-    fn settings_observation(&mut self) -> io::Result<SettingsReport> {
+    // A display hint may reuse the previously verified image path; mutations
+    // must use fresh native observation. Both retain the same idle predicate.
+    fn settings_report(&mut self, inspect: impl FnOnce(&Self) -> io::Result<bool>) -> io::Result<SettingsReport> {
         self.reap();
         let idle = self.running.iter().all(Option::is_none)
             && self.stores.iter().all(Option::is_some)
-            && super::super::inspect_native_workspace_for_pinned_settings(&self.path)?
-                .processes.is_empty();
+            && inspect(self)?;
         SettingsReport::policy(idle, None)
     }
 
-    fn settings(&mut self, apply: bool) -> io::Result<SettingsReport> {
-        self.reap();
-        let idle = self.running.iter().all(Option::is_none)
-            && self.stores.iter().all(Option::is_some)
-            && super::super::inspect_native_workspace()?.processes.is_empty();
-        let mut report = SettingsReport::policy(idle, None)?;
-        let changed = if apply {
-            require_preset_idle(idle)?;
-            // Retain the original directory/registry pins; never open or seed replacement profiles.
-            let stores = self.stores.iter().map(|store| store.as_ref().unwrap().duplicate())
-                .collect::<io::Result<Vec<_>>>()?;
-            Some(game_preset::apply(&stores)? as u32)
-        } else { None };
-        report.changed_profiles = changed;
+    fn settings_observation(&mut self) -> io::Result<SettingsReport> {
+        self.settings_report(|sessions| Ok(
+            super::super::inspect_native_workspace_for_pinned_settings(&sessions.path)?
+                .processes.is_empty()))
+    }
+
+    fn fresh_settings_report(&mut self) -> io::Result<SettingsReport> {
+        self.settings_report(|_| Ok(super::super::inspect_native_workspace()?.processes.is_empty()))
+    }
+
+    fn apply_preset(&mut self) -> io::Result<SettingsReport> {
+        let mut report = self.fresh_settings_report()?;
+        require_preset_idle(report.can_apply_preset)?;
+        // Retain original directory/registry pins; never seed replacement profiles.
+        let stores = self.stores.iter().map(|store| store.as_ref().unwrap().duplicate())
+            .collect::<io::Result<Vec<_>>>()?;
+        report.changed_profiles = Some(game_preset::apply(&stores)? as u32);
+        Ok(report)
+    }
+
+    fn apply_graphics_preset(&mut self, slot: u32, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<SettingsReport> {
+        let report = self.fresh_settings_report()?;
+        require_preset_idle(report.can_apply_preset)?;
+        let mut values = crate::engine::manager_settings::load_graphics()?;
+        let changed = game_preset::apply_selected(self.store(slot)?, preset)?;
+        values[slot as usize - 1] = preset;
+        crate::engine::manager_settings::save_graphics(values)?;
+        let mut report = self.fresh_settings_report()?;
+        report.changed_profiles = Some(changed as u32);
         Ok(report)
     }
 }
@@ -1402,12 +1413,16 @@ fn audio_maintenance_needed(
 fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
     mode:crate::engine::manager_settings::BackgroundAudio, foreground:Option<u32>)->io::Result<()> {
     use crate::engine::manager_settings::BackgroundAudio;
-    if mode==BackgroundAudio::Keep {
-        if let Some(current)=audio.as_mut(){current.restore()?;}
-        *audio=None;return Ok(());
+    let targets = if mode == BackgroundAudio::Keep {
+        Vec::new()
+    } else {
+        sessions.running.iter().flatten().filter_map(|s| s.children[0].identity().ok()).collect::<Vec<_>>()
+    };
+    if targets.is_empty() {
+        if let Some(current) = audio.as_mut() { current.restore()?; }
+        *audio = None;
+        return Ok(());
     }
-    let targets=sessions.running.iter().flatten().filter_map(|s|s.children[0].identity().ok()).collect::<Vec<_>>();
-    if targets.is_empty(){if let Some(current)=audio.as_mut(){current.restore()?;}*audio=None;return Ok(());}
     if audio.is_none(){*audio=Some(super::session_audio::Audio::new()?);}
     audio.as_mut().unwrap().sync(&targets,foreground,|pid,born|sessions.running.iter().flatten().any(|s|s.children[0].identity().ok()==Some((pid,born))))
 }
@@ -1606,23 +1621,15 @@ fn run() -> io::Result<()> {
                     settings = Some(sessions.settings_observation().map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ApplyPreset => {
-                    settings = Some(sessions.settings(true).map_err(|error| error.to_string())?);
+                    settings = Some(sessions.apply_preset().map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ApplyGraphicsPreset { slot, preset } => {
-                    let report = sessions.settings(false).map_err(|error| error.to_string())?;
-                    require_preset_idle(report.can_apply_preset).map_err(|error| error.to_string())?;
-                    let mut values = crate::engine::manager_settings::load_graphics().map_err(|error| error.to_string())?;
-                    let changed = game_preset::apply_selected(sessions.store(slot).map_err(|error| error.to_string())?, preset).map_err(|error| error.to_string())?;
-                    values[slot as usize - 1] = preset;
-                    crate::engine::manager_settings::save_graphics(values).map_err(|error| error.to_string())?;
-                    let mut report = sessions.settings(false).map_err(|error| error.to_string())?;
-                    report.changed_profiles = Some(changed as u32);
-                    settings = Some(report);
+                    settings = Some(sessions.apply_graphics_preset(slot, preset).map_err(|error| error.to_string())?);
                 }
                 SessionRequest::SavePerformance {active_fps,background_fps} => {
                     crate::engine::manager_settings::save_performance(crate::engine::manager_settings::PerformanceSettings {active_fps,background_fps})
                         .map_err(|error|error.to_string())?;
-                    settings=Some(sessions.settings(false).map_err(|error|error.to_string())?);
+                    settings=Some(sessions.fresh_settings_report().map_err(|error|error.to_string())?);
                 }
                 SessionRequest::SaveAudio {mode}=>{
                     // Explicit user audio changes remain immediate and are
@@ -1634,7 +1641,7 @@ fn run() -> io::Result<()> {
                     crate::engine::manager_settings::save_audio(mode).map_err(|e|e.to_string())?;
                     audio_mode=mode;audio_issue=None;
                     audio_idle.success(Instant::now(),foreground,audio_roster(&sessions));
-                    settings=Some(sessions.settings(false).map_err(|e|e.to_string())?);
+                    settings=Some(sessions.fresh_settings_report().map_err(|e|e.to_string())?);
                 }
                 SessionRequest::Launch { slot } => {
                     sessions.launch(slot).map_err(|error| error.to_string())?
@@ -2297,7 +2304,7 @@ mod tests {
             issues:vec![None;5], windows:vec![None;5], path:String::new(),
             exiting:false,
         };
-        assert!(sessions.settings(true).unwrap_err().to_string().contains("Close all Minecraft"));
+        assert!(sessions.apply_preset().unwrap_err().to_string().contains("Close all Minecraft"));
         assert!(sessions.running.iter().all(Option::is_none));
         assert!(sessions.snapshot().profiles.iter().all(|profile|profile.state=="ATTENTION"));
     }
