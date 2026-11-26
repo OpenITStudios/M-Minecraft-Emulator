@@ -4,7 +4,7 @@ use crate::engine::native_clients_session::{CacheStorage, DiskSpace, ProfileStor
 use std::{
     fs::{self, File, OpenOptions},
     io, mem,
-    os::windows::{fs::OpenOptionsExt, io::AsRawHandle},
+    os::windows::{fs::{MetadataExt, OpenOptionsExt}, io::AsRawHandle},
     path::Path,
     time::Duration,
 };
@@ -139,6 +139,9 @@ impl CachePlan {
             self.bounded(depth)?;
             let path = entry?.path();
             let metadata = fs::symlink_metadata(&path)?;
+            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return Err(invalid("Linked cache entry; nothing was deleted"));
+            }
             if metadata.is_dir() {
                 self.visit(&path, depth + 1)?;
             } else {
@@ -188,27 +191,26 @@ impl CachePlan {
 
 fn plan(private: &File, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {
     let mut plan = CachePlan::new(deleting, budget);
-    // Check the read-only deadline before every ancestor inspection. The
-    // mutating clear path gets its own unchanged two-second local budget.
-    if !deleting { plan.bounded(0)?; }
+    // Both observation and deletion preflight must finish within their budget.
+    plan.bounded(0)?;
     let mut path = directory_path(private)?;
     plan.directories.push(private.try_clone()?);
     for part in CACHE_PARTS {
-        if !deleting { plan.bounded(0)?; }
+        plan.bounded(0)?;
         path.push(part);
         match open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
             Ok(pin) => plan.directories.push(pin),
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                if !deleting { plan.bounded(0)?; }
+                plan.bounded(0)?;
                 return Ok(plan);
             }
             Err(error) => return Err(error),
         }
     }
     plan.visit(&path, 0)?;
-    // A scan that consumed the budget on its final OS call is not a complete
-    // observation and must never advertise cache cleanup eligibility.
-    if !deleting { plan.bounded(0)?; }
+    // A final OS call may consume the budget. Refuse incomplete preflight
+    // before marking any file for deletion, even on the mutating path.
+    plan.bounded(0)?;
     Ok(plan)
 }
 
@@ -394,6 +396,17 @@ mod tests {
         assert!(status.partial);
         assert!(!status.can_clear);
         assert!(cache.join("retained").exists());
+    }
+
+    #[test]
+    fn expired_mutating_preflight_never_marks_files_for_deletion() {
+        let fixture = Fixture::new();
+        let cache = fixture.cache();
+        fs::create_dir_all(&cache).unwrap();
+        let leaf = cache.join("retained");
+        fs::write(&leaf, b"must survive").unwrap();
+        assert!(plan(&fixture.pin(), true, InspectionBudget::new(Duration::ZERO)).is_err());
+        assert_eq!(fs::read(&leaf).unwrap(), b"must survive");
     }
 
     #[test]
