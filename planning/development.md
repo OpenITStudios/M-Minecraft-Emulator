@@ -18,8 +18,9 @@ Extended the same process-time reader to native observation, normal close
 and descendant handoff; independent test oracles remain unchanged.
 Replaced redundant process/snapshot handle wrappers in native observation and
 workspace with Rust's standard OwnedHandle; DWM retains the original process
-pin and explicit failure checks remain. Next: review remaining identity owner
-and larger session-controller responsibilities.
+pin and explicit failure checks remain. The identity observer now uses the
+same standard OwnedHandle for process and token handles; specialized Windows
+resource cleanup is retained. Next: audit session-controller responsibilities.
 
 ## Continue development outside Codex
 

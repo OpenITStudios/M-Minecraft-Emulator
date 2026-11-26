@@ -904,7 +904,7 @@ mod windows {
         ObservedProcessPackageForm, ObservedPackageFamilyRelation,
         classify_package_probe, classify_package_family_pair, finish_file_signature_review,
     };
-    use std::{io, mem::size_of, os::windows::io::AsRawHandle, ptr};
+    use std::{io, mem::size_of, os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle}, ptr};
     use sha2::{Digest, Sha256};
     use std::os::windows::{ffi::OsStringExt, fs::OpenOptionsExt};
     use windows_sys::Win32::{
@@ -1054,7 +1054,7 @@ mod windows {
         };
         if result != 0 || !raw.is_null() {
             if !raw.is_null() {
-                let _owned = Handle(raw);
+                let _owned = unsafe { OwnedHandle::from_raw_handle(raw as _) };
             }
             return Err(invalid("AppContainer folder lookup forbidden under impersonation"));
         }
@@ -1069,7 +1069,8 @@ mod windows {
         if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut raw) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        let token = Handle(raw);
+        if raw.is_null() { return Err(invalid("Missing token handle")); }
+        let token = unsafe { OwnedHandle::from_raw_handle(raw as _) };
         let manager = user_sid_from_token(&token)?;
         Ok(manager == target_user)
     }
@@ -1489,7 +1490,7 @@ mod windows {
         };
         if status != 0 || raw.is_null() {
             if !raw.is_null() {
-                let _ = unsafe { CloseHandle(raw) };
+                let _ = unsafe { Closeunsafe { OwnedHandle::from_raw_handle(raw as _) } };
             }
             return Err(invalid("Failed to open child relative to a directory HANDLE"));
         }
@@ -1662,19 +1663,11 @@ mod windows {
         })
     }
 
-    struct Handle(HANDLE);
-    impl Drop for Handle {
-        fn drop(&mut self) {
-            unsafe {
-                CloseHandle(self.0);
-            }
-        }
-    }
     fn invalid(message: &'static str) -> io::Error {
         io::Error::new(io::ErrorKind::InvalidData, message)
     }
-    fn live(process: &Handle) -> io::Result<()> {
-        match unsafe { WaitForSingleObject(process.0, 0) } {
+    fn live(process: &OwnedHandle) -> io::Result<()> {
+        match unsafe { WaitForSingleObject(process.as_raw_handle() as _, 0) } {
             WAIT_TIMEOUT => Ok(()),
             0 => Err(io::Error::new(
                 io::ErrorKind::NotFound,
@@ -1683,10 +1676,10 @@ mod windows {
             _ => Err(io::Error::last_os_error()),
         }
     }
-    fn created(process: &Handle) -> io::Result<u64> {
-        crate::engine::windows_process_time::creation_filetime(process.0)
+    fn created(process: &OwnedHandle) -> io::Result<u64> {
+        crate::engine::windows_process_time::creation_filetime(process.as_raw_handle() as _)
     }
-    fn pin(key: &ProcessKey) -> io::Result<Handle> {
+    fn pin(key: &ProcessKey) -> io::Result<OwnedHandle> {
         let expected = key
             .created_file_time
             .parse::<u64>()
@@ -1704,7 +1697,7 @@ mod windows {
         if raw.is_null() {
             return Err(io::Error::last_os_error());
         }
-        let process = Handle(raw);
+        let process = unsafe { OwnedHandle::from_raw_handle(raw as _) };
         if created(&process)? != expected {
             return Err(invalid("Process creation time changed"));
         }
@@ -1719,7 +1712,7 @@ mod windows {
         let process = pin(key)?;
         let mut size = 0u32;
         let first = unsafe {
-            GetPackageFullName(process.0, &mut size, ptr::null_mut())
+            GetPackageFullName(process.as_raw_handle() as _, &mut size, ptr::null_mut())
         };
         let needed = classify_package_probe(first, size)
             .map_err(|_| invalid("Windows process package query failed"))?;
@@ -1727,7 +1720,7 @@ mod windows {
             let mut name = vec![0u16; count];
             let mut written = count as u32;
             let result = unsafe {
-                GetPackageFullName(process.0, &mut written, name.as_mut_ptr())
+                GetPackageFullName(process.as_raw_handle() as _, &mut written, name.as_mut_ptr())
             };
             if result != 0 || written < 2 || written as usize > count
                 || name[written as usize - 1] != 0
@@ -1747,10 +1740,10 @@ mod windows {
 
     /// One read-only OS package-family query against an already pinned
     /// process HANDLE. Cap the UTF-16 buffer and never log or return names.
-    fn package_family_name(process: &Handle) -> io::Result<Option<String>> {
+    fn package_family_name(process: &OwnedHandle) -> io::Result<Option<String>> {
         let mut required = 0u32;
         let first = unsafe {
-            GetPackageFamilyName(process.0, &mut required, ptr::null_mut())
+            GetPackageFamilyName(process.as_raw_handle() as _, &mut required, ptr::null_mut())
         };
         let Some(capacity) = classify_package_probe(first, required)
             .map_err(|_| invalid("Windows package-family query failed"))?
@@ -1760,7 +1753,7 @@ mod windows {
         let mut name = vec![0u16; capacity];
         let mut written = capacity as u32;
         let status = unsafe {
-            GetPackageFamilyName(process.0, &mut written, name.as_mut_ptr())
+            GetPackageFamilyName(process.as_raw_handle() as _, &mut written, name.as_mut_ptr())
         };
         if status != 0 || written < 2 || written as usize > capacity
             || name[written as usize - 1] != 0
@@ -1894,7 +1887,7 @@ mod windows {
         }
 
         let process = pin(key)?;
-        let path = crate::engine::windows_process_image::query(process.0)?;
+        let path = crate::engine::windows_process_image::query(process.as_raw_handle() as _)?;
         let pathname = std::path::PathBuf::from(std::ffi::OsString::from_wide(&path));
         let file = std::fs::OpenOptions::new()
             .read(true)
@@ -1944,7 +1937,7 @@ mod windows {
             signer_result.map_err(|_| ()),
         ).map_err(invalid)?;
         let after = file_identity(&file)?;
-        if before != after || crate::engine::windows_process_image::query(process.0)? != path {
+        if before != after || crate::engine::windows_process_image::query(process.as_raw_handle() as _)? != path {
             return Err(invalid("On-disk process image changed during inspection"));
         }
         live(&process)?;
@@ -1957,16 +1950,17 @@ mod windows {
     ) -> io::Result<(bool, bool)> {
         let process = pin(key)?;
         let mut raw = ptr::null_mut();
-        if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut raw) } == 0 {
+        if unsafe { OpenProcessToken(process.as_raw_handle() as _, TOKEN_QUERY, &mut raw) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        let token = Handle(raw);
+        if raw.is_null() { return Err(invalid("Missing token handle")); }
+        let token = unsafe { OwnedHandle::from_raw_handle(raw as _) };
         let query = |kind| -> io::Result<bool> {
             let mut value = 0u32;
             let mut length = 0u32;
             if unsafe {
                 GetTokenInformation(
-                    token.0,
+                    token.as_raw_handle() as _,
                     kind,
                     (&mut value as *mut u32).cast(),
                     size_of::<u32>() as u32,
@@ -1996,20 +1990,21 @@ mod windows {
     }
     /// One read-only token handle per process observation. The same token
     /// is reused for user/profile/session and AppContainer SID in compare_pair.
-    fn query_token(process: &Handle) -> io::Result<Handle> {
+    fn query_token(process: &OwnedHandle) -> io::Result<OwnedHandle> {
         let mut raw = ptr::null_mut();
-        if unsafe { OpenProcessToken(process.0, TOKEN_QUERY, &mut raw) } == 0 {
+        if unsafe { OpenProcessToken(process.as_raw_handle() as _, TOKEN_QUERY, &mut raw) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        Ok(Handle(raw))
+        if raw.is_null() { return Err(invalid("Missing token handle")); }
+        Ok(unsafe { OwnedHandle::from_raw_handle(raw as _) })
     }
 
     // Read the user SID only. A private-root comparison does not need a
     // profile path or a Windows session query.
-    fn user_sid_from_token(token: &Handle) -> io::Result<Vec<u8>> {
+    fn user_sid_from_token(token: &OwnedHandle) -> io::Result<Vec<u8>> {
         let mut needed = 0;
         let first =
-            unsafe { GetTokenInformation(token.0, TokenUser, ptr::null_mut(), 0, &mut needed) };
+            unsafe { GetTokenInformation(token.as_raw_handle() as _, TokenUser, ptr::null_mut(), 0, &mut needed) };
         if first != 0
             || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
             || needed < size_of::<TOKEN_USER>() as u32
@@ -2021,7 +2016,7 @@ mod windows {
         let mut buffer = vec![0usize; (needed as usize).div_ceil(size_of::<usize>())];
         if unsafe {
             GetTokenInformation(
-                token.0,
+                token.as_raw_handle() as _,
                 TokenUser,
                 buffer.as_mut_ptr().cast(),
                 needed,
@@ -2042,13 +2037,13 @@ mod windows {
         Ok(unsafe { std::slice::from_raw_parts(sid.cast::<u8>(), length) }.to_vec())
     }
 
-    fn context_from_token(token: &Handle) -> io::Result<Context> {
+    fn context_from_token(token: &OwnedHandle) -> io::Result<Context> {
         let user = user_sid_from_token(token)?;
         let mut needed = 0u32;
         let mut session = 0u32;
         if unsafe {
             GetTokenInformation(
-                token.0,
+                token.as_raw_handle() as _,
                 TokenSessionId,
                 (&mut session as *mut u32).cast(),
                 size_of::<u32>() as u32,
@@ -2059,7 +2054,7 @@ mod windows {
             return Err(io::Error::last_os_error());
         }
         let mut count = 0;
-        let first = unsafe { GetUserProfileDirectoryW(token.0, ptr::null_mut(), &mut count) };
+        let first = unsafe { GetUserProfileDirectoryW(token.as_raw_handle() as _, ptr::null_mut(), &mut count) };
         if first != 0
             || unsafe { GetLastError() } != ERROR_INSUFFICIENT_BUFFER
             || !(2..=32768).contains(&count)
@@ -2067,7 +2062,7 @@ mod windows {
             return Err(invalid("Windows profile directory is unavailable"));
         }
         let mut profile = vec![0u16; count as usize];
-        if unsafe { GetUserProfileDirectoryW(token.0, profile.as_mut_ptr(), &mut count) } == 0 {
+        if unsafe { GetUserProfileDirectoryW(token.as_raw_handle() as _, profile.as_mut_ptr(), &mut count) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let end = profile
@@ -2084,19 +2079,19 @@ mod windows {
             session,
         })
     }
-    fn context(process: &Handle) -> io::Result<Context> {
+    fn context(process: &OwnedHandle) -> io::Result<Context> {
         let token = query_token(process)?;
         context_from_token(&token)
     }
 
     // An independent, bounded token inspection. Reuses the existing pinned
     // process handles; never reads folders, broker stores or account data.
-    fn appcontainer_sid_from_token(token: &Handle) -> io::Result<Option<Vec<u8>>> {
+    fn appcontainer_sid_from_token(token: &OwnedHandle) -> io::Result<Option<Vec<u8>>> {
         let mut flag = 0u32;
         let mut needed = 0u32;
         if unsafe {
             GetTokenInformation(
-                token.0,
+                token.as_raw_handle() as _,
                 TokenIsAppContainer,
                 (&mut flag as *mut u32).cast(),
                 size_of::<u32>() as u32,
@@ -2110,7 +2105,7 @@ mod windows {
         }
         let first = unsafe {
             GetTokenInformation(
-                token.0,
+                token.as_raw_handle() as _,
                 TokenAppContainerSid,
                 ptr::null_mut(),
                 0,
@@ -2128,7 +2123,7 @@ mod windows {
         let mut buffer = vec![0usize; (needed as usize).div_ceil(size_of::<usize>())];
         if unsafe {
             GetTokenInformation(
-                token.0,
+                token.as_raw_handle() as _,
                 TokenAppContainerSid,
                 buffer.as_mut_ptr().cast(),
                 needed,
@@ -2152,7 +2147,7 @@ mod windows {
         }.to_vec()))
     }
 
-    fn appcontainer_sid(process: &Handle) -> io::Result<Option<Vec<u8>>> {
+    fn appcontainer_sid(process: &OwnedHandle) -> io::Result<Option<Vec<u8>>> {
         let token = query_token(process)?;
         appcontainer_sid_from_token(&token)
     }
@@ -2252,14 +2247,15 @@ mod windows {
     mod tests {
         use super::*;
         fn own_key() -> ProcessKey {
-            let process = Handle(unsafe {
+            let raw = unsafe {
                 OpenProcess(
                     PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
                     0,
                     std::process::id(),
                 )
-            });
-            assert!(!process.0.is_null());
+            };
+            assert!(!raw.is_null());
+            let process = unsafe { OwnedHandle::from_raw_handle(raw as _) };
             ProcessKey {
                 pid: std::process::id(),
                 created_file_time: created(&process).unwrap().to_string(),
@@ -2669,14 +2665,15 @@ mod windows {
         fn unbound_fixture_reader_checks_process_before_open_file_bytes() {
             use virtual_clients_core::independent_engine::ProcessIdentity;
             let key = own_key();
-            let process = Handle(unsafe {
+            let raw = unsafe {
                 OpenProcess(
                     PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
                     0,
                     key.pid,
                 )
-            });
-            assert!(!process.0.is_null());
+            };
+            assert!(!raw.is_null());
+            let process = unsafe { OwnedHandle::from_raw_handle(raw as _) };
             // A normal desktop test process is not a synthetic AppContainer;
             // do not attempt to interpret arbitrary files as fixture evidence.
             if appcontainer_sid(&process).unwrap().is_none() {
@@ -2733,14 +2730,15 @@ mod windows {
                     .spawn()
                     .unwrap(),
             );
-            let process = Handle(unsafe {
+            let raw = unsafe {
                 OpenProcess(
                     PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE,
                     0,
                     fixture.0.id(),
                 )
-            });
-            assert!(!process.0.is_null());
+            };
+            assert!(!raw.is_null());
+            let process = unsafe { OwnedHandle::from_raw_handle(raw as _) };
             let child_key = ProcessKey {
                 pid: fixture.0.id(),
                 created_file_time: created(&process).unwrap().to_string(),
