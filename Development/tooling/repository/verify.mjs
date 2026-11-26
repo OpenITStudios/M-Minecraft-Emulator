@@ -340,10 +340,10 @@ export function verifyRepository(root,g0=false) {
     && gameSource.includes('validate_native_workspace_observation(observation)')
     && !gameSource.includes('serde_json::to_string(&observation)')
     && gameSessions.includes('fn settings_observation(&mut self) -> io::Result<SettingsReport>')
-    && gameSessions.includes('inspect_native_workspace_for_pinned_settings(&self.path)')
+    && gameSessions.includes('inspect_native_workspace_for_pinned_settings(&sessions.path)')
     && /SessionRequest::InspectSettings\s*=>\s*\{[\s\S]*?settings_observation\(\)/.test(gameSessions)
-    && /SessionRequest::ApplyPreset\s*=>\s*\{[\s\S]*?sessions\.settings\(true\)/.test(gameSessions)
-    && /SessionRequest::ApplyGraphicsPreset\s*\{[^}]*\}\s*=>\s*\{[\s\S]*?sessions\.settings\(false\)/.test(gameSessions)
+    && /SessionRequest::ApplyPreset\s*=>\s*\{[\s\S]*?sessions\.apply_preset\(\)/.test(gameSessions)
+    && /SessionRequest::ApplyGraphicsPreset\s*\{[^}]*\}\s*=>\s*\{[\s\S]*?sessions\.apply_graphics_preset\(slot, preset\)/.test(gameSessions)
     && gameSessions.includes('super::super::inspect_native_workspace()?.processes.is_empty()'),
     'Read-only Settings may reuse pinned image but all mutation admission must still perform fresh registration checks');
   // Inspect the live shared 0/1 parser, not the retired one-off parser:

@@ -750,10 +750,10 @@ describe('Lazy Tester queue scheduling parity',()=>{
     mounted:true,nativeBackend:'WindowsNative',closeInProgress:false,
     closeReviewPending:false,initializing:false,busy:false,refreshing:false,
     resizing:false,queuedAudio:false,queuedPerformance:false,
-    queuedPreset:false,queuedPage:false,manualRefreshRequested:false,
+    queuedPage:false,manualRefreshRequested:false,
     queuedLaunch:false,queuedSelection:false,dirty:false,
   };
-  // The former eight Svelte reactive admission clauses, preserved here as
+  // The remaining seven Svelte reactive admission clauses, preserved here as
   // independent regression truth, not as a second runtime dispatcher.
   function previousFirst(s:PendingUiQueueState):PendingUiAction|null {
     const common=s.mounted&&s.nativeBackend==='WindowsNative'&&!s.closeInProgress&&
@@ -762,22 +762,21 @@ describe('Lazy Tester queue scheduling parity',()=>{
     const eligible=[
       strict&&s.queuedAudio?'audio':null,
       strict&&!s.queuedAudio&&s.queuedPerformance?'performance':null,
-      strict&&!s.queuedAudio&&!s.queuedPerformance&&s.queuedPreset?'preset':null,
-      strict&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPreset&&s.queuedPage?'navigation':null,
-      strict&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&s.manualRefreshRequested?'manualRefresh':null,
-      strict&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&s.queuedLaunch?'launch':null,
-      common&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&s.queuedSelection?'selection':null,
-      common&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPreset&&!s.queuedPage&&!s.queuedSelection&&s.dirty?'layout':null,
+      strict&&!s.queuedAudio&&!s.queuedPerformance&&s.queuedPage?'navigation':null,
+      strict&&!s.queuedPerformance&&!s.queuedPage&&s.manualRefreshRequested?'manualRefresh':null,
+      strict&&!s.queuedPerformance&&!s.queuedPage&&s.queuedLaunch?'launch':null,
+      common&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPage&&s.queuedSelection?'selection':null,
+      common&&!s.queuedAudio&&!s.queuedPerformance&&!s.queuedPage&&!s.queuedSelection&&s.dirty?'layout':null,
     ];
     return (eligible.find((item):item is PendingUiAction=>item!==null)??null);
   }
 
-  it('preserves first-eligible lane and priority for all 256 queue combinations',()=>{
+  it('preserves first-eligible lane and priority for all 128 queue combinations',()=>{
     const queueKeys=[
-      'queuedAudio','queuedPerformance','queuedPreset','queuedPage',
+      'queuedAudio','queuedPerformance','queuedPage',
       'manualRefreshRequested','queuedLaunch','queuedSelection','dirty',
     ] as const;
-    for(let flags=0;flags<256;flags++){
+    for(let flags=0;flags<128;flags++){
       const mask=Object.fromEntries(queueKeys.map((key,index)=>[key,!!(flags&(1<<index))]));
       for(const variants of [
         {},{initializing:true},{busy:true},{refreshing:true},

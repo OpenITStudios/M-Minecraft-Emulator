@@ -448,12 +448,10 @@ pub(super) fn apply(stores: &[SlotStorage]) -> io::Result<usize> {
 // The retained session owner proves these particular profiles have no resumed child.
 // Other profiles may be running; never pass their stores here.
 pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
-    let values = crate::engine::manager_settings::load_graphics()?;
-    // Preserve never resolves, creates, or rewrites a game's options directory.
-    // Existing explicit High/Low selections retain their legacy behavior.
-    let prepared = stores.iter().filter(|store| values[store.slot as usize - 1]
-        != crate::engine::manager_settings::GraphicsPreset::Preserve)
-        .map(|store| Prepared::read_preset(&store.private, values[store.slot as usize - 1]))
+    // One reviewed graphics policy for every managed profile. Legacy
+    // graphics.json is retained on disk, but no longer selects launch behavior.
+    let prepared = stores.iter()
+        .map(|store| Prepared::read_preset(&store.private, crate::engine::manager_settings::GraphicsPreset::Low))
         .collect::<io::Result<Vec<_>>>()?;
     let mut changed = 0;
     for preset in prepared { changed += usize::from(preset.commit()?); }

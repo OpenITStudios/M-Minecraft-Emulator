@@ -7,8 +7,9 @@ Native recovery remains available through the original controller. Healthy runni
 launchers use their preview and selection highlight; connection and exceptional
 status remain visible when attention is needed. The AI & Testing disclosure
 appears only for attention or terminal Probe results, not routine activity. General Settings prioritizes frame
-limits and audio; existing per-profile graphics preferences remain available in a
-collapsed legacy disclosure. Native settings and stored values are unchanged. Profile data-location inspection
+limits and audio. All five launchers use the same reviewed Low graphics preset
+at next launch; individual graphics controls are retired. Legacy graphics.json
+and existing options backups are preserved. Profile data-location inspection
 runs on Data Storage navigation, not when opening General Settings.
 The fixed-height launcher action strip hosts selected-game close review and
 pending-close status without inserting a new workspace row. Native close

@@ -159,7 +159,8 @@ pub(super) fn load_report_preferences() -> io::Result<(PerformanceSettings, Back
 fn read_report_preferences(directory: &std::path::Path) -> io::Result<(PerformanceSettings, BackgroundAudio, [GraphicsPreset; 5])> {
     let performance = read_performance(&directory.join("performance.json"))?;
     let audio = read_audio(&directory.join("audio.json"))?;
-    let graphics = read_graphics(&directory.join("graphics.json"))?;
+    // Compatibility projection of the global policy, not saved per-slot choices.
+    let graphics = [GraphicsPreset::Low; 5];
     Ok((performance, audio, graphics))
 }
 fn performance_path() -> io::Result<PathBuf> {
@@ -327,14 +328,17 @@ mod tests {
             std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir(&root).unwrap();
         assert_eq!(read_report_preferences(&root).unwrap(),
-            (PerformanceSettings::default(), BackgroundAudio::Keep, [GraphicsPreset::Preserve; 5]));
+            (PerformanceSettings::default(), BackgroundAudio::Keep, [GraphicsPreset::Low; 5]));
         let limits = PerformanceSettings {active_fps: 60, background_fps: 5};
-        let graphics = [GraphicsPreset::High; 5];
+        let graphics = [GraphicsPreset::Low; 5];
         write_performance(&root.join("performance.json"), limits).unwrap();
         write_audio(&root.join("audio.json"), BackgroundAudio::Mute).unwrap();
-        write_graphics(&root.join("graphics.json"), graphics).unwrap();
+        let legacy = [GraphicsPreset::High, GraphicsPreset::Preserve, GraphicsPreset::Low, GraphicsPreset::High, GraphicsPreset::Preserve];
+        write_graphics(&root.join("graphics.json"), legacy).unwrap();
+        let old_bytes = fs::read(root.join("graphics.json")).unwrap();
         assert_eq!(read_report_preferences(&root).unwrap(), (limits, BackgroundAudio::Mute, graphics));
-        for name in ["performance.json", "audio.json", "graphics.json"] {
+        assert_eq!(fs::read(root.join("graphics.json")).unwrap(), old_bytes);
+        for name in ["performance.json", "audio.json"] {
             let path = root.join(name);
             let original = fs::read(&path).unwrap();
             fs::write(&path, b"invalid").unwrap();

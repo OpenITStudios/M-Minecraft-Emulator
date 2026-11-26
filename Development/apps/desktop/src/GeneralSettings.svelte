@@ -1,48 +1,31 @@
 <script lang="ts">
   // Presentation only; parent owns state, saved settings, admission and native IPC.
   import {tick} from 'svelte';
-  import type {BackgroundAudio, GraphicsPreset, ProfileSession, ProfileSlot, SettingsReport} from './app/bridge/lazyTester.js';
+  import type {BackgroundAudio, SettingsReport} from './app/bridge/lazyTester.js';
   import {userMessage} from './app/presentation/sessionFeedback.js';
 
-  export let profiles: ProfileSession[];
-  export let selectedSlot: ProfileSlot;
   export let settings: SettingsReport | null;
-  export let graphicsPreset: GraphicsPreset;
   export let activeFps: number | undefined;
   export let backgroundFps: number | undefined;
   export let busy: boolean;
   export let available: boolean;
-  export let bindingConfigured: boolean;
   export let refreshing: boolean;
   export let resizing: boolean;
-  export let presetQueued: boolean;
   export let performanceQueued: boolean;
   export let audioQueued: boolean;
-  export let applyingPreset: boolean;
   export let savingPerformance: boolean;
-  export let graphicsDirty: boolean;
   export let performanceDirty: boolean;
   export let performanceValid: boolean;
-  export let runningCount: number;
   export let settingsNotice: string;
   export let performanceNotice: string;
-  export let onChooseSlot: (slot: ProfileSlot) => void;
-  export let onRequestPreset: () => void;
-  export let onDiscardGraphics: () => void;
   export let onRequestPerformanceSave: () => void;
   export let onSaveAudio: (mode: BackgroundAudio) => Promise<void>;
 
   // Preserve a deliberate user's keyboard context when an existing save
   // disables its own control. These headings remain outside the Tab order;
   // saving and the native receipt still belong to LazyTesterApp.
-  let graphicsHeading: HTMLHeadingElement | undefined;
   let frameHeading: HTMLHeadingElement | undefined;
   let audioHeading: HTMLHeadingElement | undefined;
-  function saveGraphicsWithFocus(event: MouseEvent): void {
-    if (document.hasFocus() && document.activeElement === event.currentTarget)
-      graphicsHeading?.focus({preventScroll:true});
-    onRequestPreset();
-  }
   function savePerformanceWithFocus(event: SubmitEvent): void {
     const form = event.currentTarget;
     if (document.hasFocus() && form instanceof HTMLFormElement &&
@@ -88,19 +71,6 @@
             <div class="lt-actions"><button type="submit" disabled={busy||performanceQueued||!available||!performanceDirty||!performanceValid}>{savingPerformance||performanceQueued?'Saving…':'Save FPS limits'}</button>{#if performanceDirty}<button type="button" class="lt-secondary" disabled={busy||performanceQueued} on:click={()=>{activeFps=settings!.activeFps;backgroundFps=settings!.backgroundFps;}}>Discard</button>{/if}</div>{#if performanceNotice}<p role="status">{performanceNotice}</p>{/if}
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
           <section class="lt-group" aria-labelledby="lt-app-behavior-section"><h2 id="lt-app-behavior-section">Audio</h2><div class="lt-setting"><div><h3 bind:this={audioHeading} tabindex="-1">Background game audio</h3><p>Applies immediately after saving. Existing mute and volume settings stay.</p>{#if settings?.audioIssue}<p class="lt-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Audio control is unavailable in this controller.</p>{/if}</div><label class="lt-audio-toggle"><input type="checkbox" checked={settings?.backgroundAudio==='Mute'} disabled={busy||audioQueued||refreshing||resizing||!available||!settings?.backgroundAudio} aria-label="Mute background games" on:change={changeAudioWithFocus}/>Mute background games</label></div></section>
-          <details class="lt-settings-explanation lt-legacy-graphics">
-            <summary>Legacy graphics preferences</summary>
-            <section class="lt-group" aria-labelledby="lt-graphics-section"><h2 id="lt-graphics-section" bind:this={graphicsHeading} tabindex="-1">Graphics <small>Selected launcher</small></h2><label class="lt-target">Applies to <select value={selectedSlot} disabled={busy||presetQueued} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>MC0{p.slot}</option>{/each}</select></label>
-            <div class="lt-setting"><div><h3><label for="graphics-preset">Graphics preset</label></h3><p>Choose this launcher's visuals for its next start.</p></div><select id="graphics-preset" bind:value={graphicsPreset} disabled={busy||presetQueued||!settings?.graphicsPresets}><option value="Preserve">Preserve Visuals (recommended)</option><option value="High">High (legacy)</option><option value="Low">Low (legacy)</option></select></div>
-            <div class="lt-actions"><button disabled={busy||presetQueued||!available||!bindingConfigured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0} on:click={saveGraphicsWithFocus}>{applyingPreset||presetQueued?'Saving…':'Save graphics preference'}</button>{#if graphicsDirty}<button type="button" class="lt-secondary" disabled={busy||presetQueued} on:click={onDiscardGraphics}>Discard draft</button>{/if}</div>
-            <p class="lt-help">{runningCount>0?'Close all games before saving graphics.':'Applies to this launcher at its next start.'}</p>
-            {#if graphicsDirty}<p class="lt-help" role="status">Unsaved choice. You can return to it until LazyTester closes.</p>{/if}
-            {#if settings?.graphicsPresets && !settings.canApplyPreset && runningCount===0}<p class="lt-help">Graphics changes unavailable. Refresh to check again.</p>{/if}
-            <details class="lt-settings-explanation"><summary>About legacy graphics presets</summary>
-              <p>Preserve Visuals leaves Minecraft graphics unchanged and does not undo earlier edits. Legacy High/Low both set 12 chunks and MSAA 1; simulation distance is unchanged. Neither guarantees higher FPS.</p>
-            </details>
-            {#if settings&&!settings.graphicsPresets}<p class="lt-error">Update the running controller before changing graphics presets. Existing games are preserved.</p>{/if}
-          </section>
-          </details>
+          <section class="lt-group" aria-labelledby="lt-graphics-policy"><h2 id="lt-graphics-policy">Graphics <small>All launchers</small></h2><p class="lt-help">All five launchers use the optimized graphics preset at their next launch. No individual graphics preferences are needed.</p></section>
           {#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
         </div>

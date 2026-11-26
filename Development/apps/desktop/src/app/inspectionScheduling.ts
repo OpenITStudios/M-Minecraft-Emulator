@@ -132,7 +132,6 @@ export interface PendingUiQueueState {
   readonly resizing: boolean;
   readonly queuedAudio: boolean;
   readonly queuedPerformance: boolean;
-  readonly queuedPreset: boolean;
   readonly queuedPage: boolean;
   readonly manualRefreshRequested: boolean;
   readonly queuedLaunch: boolean;
@@ -141,7 +140,7 @@ export interface PendingUiQueueState {
 }
 
 export type PendingUiAction =
-  | 'audio' | 'performance' | 'preset' | 'navigation'
+  | 'audio' | 'performance' | 'navigation'
   | 'manualRefresh' | 'launch' | 'selection' | 'layout';
 
 export function nextPendingUiAction(state: PendingUiQueueState): PendingUiAction | null {
@@ -159,7 +158,6 @@ export function nextPendingUiAction(state: PendingUiQueueState): PendingUiAction
   // Each earlier return establishes that the higher-priority lane is empty.
   if (state.queuedAudio) return 'audio';
   if (state.queuedPerformance) return 'performance';
-  if (state.queuedPreset) return 'preset';
   if (state.queuedPage) return 'navigation';
   if (state.manualRefreshRequested) return 'manualRefresh';
   if (state.queuedLaunch) return 'launch';

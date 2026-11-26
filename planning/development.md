@@ -25,6 +25,8 @@ Reconciled the exact Tauri handler assertion with the prior retirement decision 
 
 Settings reports now resolve and validate the settings directory once per report rather than three times, and perform one directory-creation call rather than two. Individual file validation, default values, read order, write admission and wire schema are unchanged. No cross-request cache or MCP implementation change. Regression fixture authored NOT_EXECUTED; runtime savings unmeasured. Next: workspace request flow and remaining startup costs.
 
+Global settings simplification (SIM-01/02): the reviewed Low graphics preset is applied for every managed launch; the legacy graphics.json file is preserved, no longer read by launch/report policy. The compatibility report projects five identical Low values. Desktop individual graphics mutation is refused and the UI selector, per-slot drafts and preset queue lane are retired. FPS/audio, account/world and recovery remain independent of this change. Shared legacy native request variants and bridge parser retained pending complete compatibility consumer review; MCP implementation untouched, shared launch policy intentionally changes. Source fixtures updated, NOT_EXECUTED. Next: review remaining legacy command consumers and storage settings recovery UI.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

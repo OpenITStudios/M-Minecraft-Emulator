@@ -33,6 +33,10 @@ pub async fn lazy_tester_session(
     request: crate::engine::native_clients_session::SessionRequest,
 ) -> Result<crate::engine::native_clients_session::SessionSnapshot, String> {
     if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {return Err("Startup diagnostic cannot launch or modify games".into());}
+    // Retired individual graphics controls cannot bypass the global desktop policy.
+    if matches!(request, crate::engine::native_clients_session::SessionRequest::ApplyGraphicsPreset { .. }) {
+        return Err("Individual graphics preferences are retired; all launchers use the optimized preset.".into());
+    }
     // Untrusted webview code may not forge agent-reported activity.
     if request.is_agent_report() {
         return Err("Desktop cannot publish agent activity or arbitrate Testing runs".into());

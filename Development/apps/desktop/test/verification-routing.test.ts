@@ -93,15 +93,18 @@ describe("Emulator source verification routing", () => {
   it("delegates General Settings rendering without duplicating form state or native authority", () => {
     const parent = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
     const child = readFileSync(new URL("../src/GeneralSettings.svelte", import.meta.url), "utf8");
-    expect(parent).toContain("<GeneralSettings {profiles} {selectedSlot} {settings}");
-    expect(parent).toContain("bind:graphicsPreset bind:activeFps bind:backgroundFps");
+    expect(parent).toContain("<GeneralSettings {settings}");
+    expect(parent).toContain("bind:activeFps bind:backgroundFps");
     expect(parent).toContain("onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}");
-    expect(parent).toContain("onDiscardGraphics={discardGraphicsDraft}");
+    expect(parent).not.toContain("graphicsDrafts");
+    expect(parent).not.toContain("queuedPreset");
+    expect(child).not.toContain("graphics-preset");
+    expect(child).toContain("All five launchers use the optimized graphics preset");
     expect(parent).toContain("on:click={()=>navigate('storage')}>Data Storage</button>");
     expect(parent).not.toContain('id="graphics-preset"');
-    for(const control of ['graphics-preset','active-fps','background-fps'])
+    for(const control of ['active-fps','background-fps'])
       expect(child).toContain('id="'+control+'"');
-    for(const bound of ['graphicsPreset','activeFps','backgroundFps'])
+    for(const bound of ['activeFps','backgroundFps'])
       expect(child).toContain('bind:value={'+bound+'}');
     expect(child).toContain("on:submit|preventDefault={savePerformanceWithFocus}");
     expect(child).toContain("function savePerformanceWithFocus(event: SubmitEvent): void");

@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -22,44 +22,22 @@
   let bindingIssue = '', locationIssue = '';
   let dataLocation:DataLocation|null=null;
   let settings:SettingsReport|null=null, settingsNotice='';
-  let applyingPreset=false;
-  let queuedPreset:{slot:ProfileSlot;preset:GraphicsPreset}|null=null;
   let queuedAudio:'Keep'|'Mute'|null=null;
-  let selectedSlot:ProfileSlot=1, graphicsPreset:GraphicsPreset='Preserve';
-  // Unsaved graphics choices belong to this mounted UI only; they never write profile data.
-  const graphicsDrafts = new Map<ProfileSlot, GraphicsPreset>();
-  function rememberGraphicsDraft(): void {
-    const saved = settings?.graphicsPresets?.[selectedSlot - 1];
-    if (!saved) return;
-    if (graphicsPreset !== saved) graphicsDrafts.set(selectedSlot, graphicsPreset);
-    else graphicsDrafts.delete(selectedSlot);
-  }
-  function discardGraphicsDraft(): void {
-    // A UI draft is not a persisted graphics setting; discard only this profile.
-    graphicsDrafts.delete(selectedSlot);
-    graphicsPreset=settings?.graphicsPresets?.[selectedSlot - 1] ?? 'Preserve';
-    settingsNotice='';
-  }
-  function graphicsChoice(slot: ProfileSlot): GraphicsPreset {
-    return graphicsDrafts.get(slot) ?? settings?.graphicsPresets?.[slot - 1] ?? 'Preserve';
-  }
+  let selectedSlot:ProfileSlot=1;
   let advanced=false;
   $: selectedStorage=storage?.find(item=>item.slot===selectedSlot);
   $: selectedProfile=profiles.find(item=>item.slot===selectedSlot);
   $: selectedPath=dataLocation?.profiles.find(item=>item.slot===selectedSlot)?.path;
-  $: graphicsDirty=!!settings?.graphicsPresets&&graphicsPreset!==settings.graphicsPresets[selectedSlot-1];
   function chooseSlot(slot:ProfileSlot){
     // A profile switch is display-only. It must never silently dismiss
     // an active CloseOne/Storage confirmation or an in-flight mutation.
-    if (slot===selectedSlot || busy || queuedPreset!==null ||
+    if (slot===selectedSlot || busy ||
         closeReviewActive(reviewState()) || clearingData ||
         clearSlot!==null || recovery!==null || fullReview!==null) return;
-    if (page==='settings') rememberGraphicsDraft();
     selectedSlot=slot;
     // Per-profile success receipts are not native session or storage truth.
     // Do not show the prior slot's receipt under the newly selected slot.
     settingsNotice='';storageNotice='';
-    graphicsPreset=graphicsChoice(slot);
   }
   let savingPerformance=false;
   let queuedPerformance:{active:number;background:number}|null=null;
@@ -208,7 +186,6 @@
       initializing, busy, refreshing, resizing,
       queuedAudio: queuedAudio !== null,
       queuedPerformance: queuedPerformance !== null,
-      queuedPreset: queuedPreset !== null,
       queuedPage: queuedPage !== null,
       manualRefreshRequested,
       queuedLaunch: queuedLaunch !== null,
@@ -224,11 +201,6 @@
       case 'performance': {
         const limits = queuedPerformance;
         if (limits !== null) {queuedPerformance = null; void savePerformance(limits);}
-        break;
-      }
-      case 'preset': {
-        const request = queuedPreset;
-        if (request !== null) {queuedPreset = null; void applyPreset(request);}
         break;
       }
       case 'navigation':
@@ -387,7 +359,6 @@
     // Settings and storage require the Windows native session owner.
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) ||
         clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;
-    if (page==='settings') rememberGraphicsDraft();
     closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
     // A queued Refresh belongs to its original page; moving to another
     // page cancels only the undispatched UI request, never a native action.
@@ -422,7 +393,6 @@
         if (!current()) return;
         publishProfiles(snapshot.profiles);settings=snapshot.settings;available=true;
         if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
-        graphicsPreset=graphicsChoice(selectedSlot);
       }
       if(next==='storage') {
         try {
@@ -528,30 +498,6 @@
     try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;publishProfiles(snapshot.profiles);settingsNotice='Background audio saved and applied to managed games.';}
     catch(error){issueKey='audio';}
     finally{busy=false;}
-  }
-  function requestPreset() {
-    if(busy||queuedPreset!==null||!available||!binding?.configured||!settings?.canApplyPreset||!graphicsDirty||runningCount>0)return;
-    queuedPreset={slot:selectedSlot,preset:graphicsPreset};
-  }
-  async function applyPreset(request:{slot:ProfileSlot;preset:GraphicsPreset}) {
-    if(!available||!binding?.configured||!settings?.canApplyPreset||runningCount>0){issueKey='graphicsBlocked';return;}
-    busy=true;applyingPreset=true;issueKey=null;settingsNotice='';
-    try {
-      const snapshot=await lazyTester.applyGraphics(request.slot,request.preset);
-      publishProfiles(snapshot.profiles);settings=snapshot.settings;
-      if(settings.changedProfiles===null)throw new Error('The preset update was not confirmed. Refresh settings before trying again.');
-      graphicsDrafts.delete(request.slot);
-      settingsNotice=request.preset==='Preserve'
-        ? 'Minecraft - '+request.slot+': Preserve Visuals saved. Future launches leave existing graphics unchanged.'
-        : 'Minecraft - '+request.slot+': '+request.preset+' graphics preference saved for next launch.';
-    }catch(error){
-      // An unconfirmed controller receipt must not erase the user's pending
-      // choice. Keep a UI-only draft until a later Settings refresh can
-      // distinguish whether the native update actually persisted.
-      graphicsDrafts.set(request.slot,request.preset);
-      issueKey='settings';settings=null;
-    }
-    finally{applyingPreset=false;busy=false;}
   }
   function requestPerformanceSave() {
     if(busy||queuedPerformance!==null||!available||!settings||!performanceValid||!performanceDirty)return;
@@ -916,7 +862,7 @@
           ? 'Minecraft - '+pending.slot+': Texture Streaming disabled in saved settings. Restart to apply; GPU use may increase. Settings backed up.'
         : pending.action==='DisableInputResponse'
           ? 'Minecraft - '+pending.slot+': Improved Input Response disabled. Restart to apply; RAM benefit unverified. Settings backed up for Restore.'
-          : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. Applies next launch with saved graphics preference. Previous settings remain available through Restore.`;
+          : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. The global optimized graphics preset applies at next launch. Previous settings remain available through Restore.`;
     } catch(error) {issueKey='settings';storage=null;}
     finally {busy=false;}
   }
@@ -1177,16 +1123,13 @@
         {/if}
       </section>
       {#if page==='settings'}
-        <GeneralSettings {profiles} {selectedSlot} {settings}
-          bind:graphicsPreset bind:activeFps bind:backgroundFps
+        <GeneralSettings {settings}
+          bind:activeFps bind:backgroundFps
           {busy} {available} {refreshing} {resizing}
-          presetQueued={queuedPreset!==null} performanceQueued={queuedPerformance!==null}
-          audioQueued={queuedAudio!==null} {applyingPreset} {savingPerformance}
-          {graphicsDirty} {performanceDirty} {performanceValid} {runningCount}
+          performanceQueued={queuedPerformance!==null}
+          audioQueued={queuedAudio!==null} {savingPerformance}
+          {performanceDirty} {performanceValid}
           {settingsNotice} {performanceNotice}
-          bindingConfigured={!!binding?.configured}
-          onChooseSlot={chooseSlot} onRequestPreset={requestPreset}
-          onDiscardGraphics={discardGraphicsDraft}
           onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}/>
       {:else if page==='storage'}
         <DataStorage {profiles} {selectedSlot} {selectedProfile} {selectedStorage} {selectedPath}
