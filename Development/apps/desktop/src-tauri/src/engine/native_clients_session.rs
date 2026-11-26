@@ -1100,6 +1100,33 @@ struct Controller {
     uncertain: bool,
 }
 #[cfg(windows)]
+impl Controller {
+    // Only after the original receiver reports a result or disconnect.
+    fn join_finished_request(&mut self) {
+        let pending = self.pending.take().expect("Original pending request");
+        let _ = pending.worker.join();
+    }
+
+    fn drain_previous_request(&mut self) -> io::Result<()> {
+        if let Some(pending) = &self.pending {
+            match pending.replies.try_recv() {
+                Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WouldBlock,
+                        "The previous session request is still running; games are preserved",
+                    ));
+                }
+                Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                    // A previous reply never becomes a new caller's receipt.
+                    self.join_finished_request();
+                    self.uncertain = true;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+#[cfg(windows)]
 static CONTROLLER: Mutex<Controller> = Mutex::new(Controller {
     pending: None,
     uncertain: false,
@@ -1136,8 +1163,8 @@ fn can_reconcile_pending_transport(request:&SessionRequest)->bool {
 }
 
 #[cfg(windows)]
-pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
-    match &request {
+fn validate_request(request: &SessionRequest) -> io::Result<()> {
+    match request {
         SessionRequest::TestingInspect {slot,owner_id} => {
             if !(1..=5).contains(slot)||!valid_testing_id(owner_id) {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput,
@@ -1164,21 +1191,21 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         }
         _=>{}
     }
-    if let SessionRequest::PublishAgentActivity {ref activity}=request {
+    if let SessionRequest::PublishAgentActivity {ref activity}=*request {
         if !activity.valid_ingress() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Invalid agent activity report"));
         }
     }
-    if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name}=request {
+    if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name}=*request {
         if !(1..=5).contains(&slot) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|byte|byte.is_ascii_hexdigit()) || *confirmation_name!=format!("Minecraft - {slot}") {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Confirm the exact launcher name before clearing all data"));
         }
     }
-    if let SessionRequest::SavePerformance {active_fps,background_fps}=request {
+    if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -1186,14 +1213,14 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         ));
     }
     #[cfg(feature="mc02-native-input")]
-    if let SessionRequest::LaunchMc02Experiment {slot}=request {
+    if let SessionRequest::LaunchMc02Experiment {slot}=*request {
         if slot!=2 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Legacy experimental input launch only creates MC02"));
         }
     }
     #[cfg(feature="mc02-native-input")]
-    if let SessionRequest::LaunchAiExperiment {slot,mode}=request {
+    if let SessionRequest::LaunchAiExperiment {slot,mode}=*request {
         if !(1..=5).contains(&slot) ||
            (mode==AgentControlMode::HumanPlusFourAi && slot==1) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
@@ -1203,7 +1230,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::Mc02Input {
         slot,keys,dx,dy,ttl_ms,issued_at_ms,batch_origin,
-    }=request {
+    }=*request {
         // Native IPC must not trust CLI-provided control values or a
         // caller-supplied PID/birth claim. The actor separately verifies
         // this original-process witness before any legacy state change.
@@ -1217,7 +1244,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::AiInputGroup {
         ref frames,issued_at_ms,deadline_at_ms,
         ref owner_id,ref lease_epoch,
-    } = request {
+    } = *request {
         validate_ai_input_group(frames,issued_at_ms,deadline_at_ms)?;
         if !valid_ai_writer_id(owner_id)||!valid_ai_writer_id(lease_epoch) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
@@ -1228,7 +1255,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     if let SessionRequest::AiLeasedInput {
         slot,keys,dx,dy,ttl_ms,issued_at_ms,
         ref owner_id,ref lease_epoch,
-    } = request {
+    } = *request {
         admit_native_input_frame(slot,keys,dx,dy,ttl_ms)?;
         if issued_at_ms==0||!valid_ai_writer_id(owner_id)||
            !valid_ai_writer_id(lease_epoch) {
@@ -1239,7 +1266,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::AiLeaseAcquire {
         ref slots,ref owner_id,mode,ref lease_epoch,neutral_only:_,
-    }=request {
+    }=*request {
         validate_ai_lease_slots(slots,owner_id)?;
         if !valid_ai_writer_id(lease_epoch) ||
            (mode==AgentControlMode::HumanPlusFourAi && slots.contains(&1)) {
@@ -1250,13 +1277,19 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::AiLeaseRelease {
         ref slots,ref owner_id,ref lease_epoch,
-    }=request {
+    }=*request {
         validate_ai_lease_slots(slots,owner_id)?;
         if !valid_ai_writer_id(lease_epoch) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Invalid AI release fencing epoch"));
         }
     }
+    Ok(())
+}
+
+#[cfg(windows)]
+pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
+    validate_request(&request)?;
     let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
     // Both reads remain available while a previous mutation is uncertain;
     // only a complete session Inspect may reconcile that uncertainty.
@@ -1268,25 +1301,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     #[cfg(not(feature="mc02-native-input"))]
     let neutral_mc02_release = false;
     let mut owner = admit_controller(&CONTROLLER)?;
-    if let Some(pending) = &owner.pending {
-        match pending.replies.try_recv() {
-            Err(std::sync::mpsc::TryRecvError::Empty) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::WouldBlock,
-                    "The previous session request is still running; games are preserved",
-                ))
-            }
-            Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                // This exact receiver belongs to the PREVIOUS worker,
-                // not the current caller. A late native reply or broken
-                // sender is drained and joined without replaying it,
-                // pretending success or releasing the uncertainty gate.
-                let pending = owner.pending.take().unwrap();
-                let _ = pending.worker.join();
-                owner.uncertain = true;
-            }
-        }
-    }
+    owner.drain_previous_request()?;
     // A failed heartbeat IPC may leave MC02 controls held until native
     // TTL expires. Do not let that uncertainty suppress a best-effort
     // exact-owner neutral write from the SAME batch CLI. An in-flight
@@ -1310,8 +1325,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             .recv_timeout(std::time::Duration::from_secs(45)));
     match outcome {
         PendingWorkerWait::Completed(result) => {
-            let pending = owner.pending.take().unwrap();
-            let _ = pending.worker.join();
+            owner.join_finished_request();
             match result {
                 Ok(reply) => {
                     if reconciling && reply.is_ok() {
@@ -1341,8 +1355,7 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             // unknown even though its local worker can now be joined.
             // The next safe Inspect still observes current native state;
             // no old reply can be synthesized or retried here.
-            let pending = owner.pending.take().unwrap();
-            let _ = pending.worker.join();
+            owner.join_finished_request();
             owner.uncertain = true;
             Err(io::Error::new(
                 io::ErrorKind::BrokenPipe,
@@ -1813,6 +1826,26 @@ mod tests {
             classify_pending_worker_wait(receiver.recv_timeout(Duration::ZERO)),
             PendingWorkerWait::ResultChannelLost
         ));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn previous_worker_drain_never_replays_or_clears_uncertainty() {
+        let (sender, replies) = std::sync::mpsc::sync_channel(1);
+        let worker = std::thread::spawn(|| {});
+        let mut controller = Controller {
+            pending: Some(PendingRequest { replies, worker }),
+            uncertain: false,
+        };
+        assert_eq!(controller.drain_previous_request().unwrap_err().kind(),
+            io::ErrorKind::WouldBlock);
+        assert!(controller.pending.is_some());
+        sender.send(Ok(Ok(SessionSnapshot::stopped()))).unwrap();
+        controller.drain_previous_request().unwrap();
+        assert!(controller.pending.is_none());
+        assert!(controller.uncertain);
+        controller.drain_previous_request().unwrap();
+        assert!(controller.uncertain);
     }
 
     #[cfg(windows)]

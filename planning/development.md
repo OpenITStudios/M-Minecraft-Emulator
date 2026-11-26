@@ -37,7 +37,10 @@ journal/profile contracts remain unchanged. Next: audit remaining bootstrap
 responsibilities and active IPC ownership. Shared request classification now
 keeps agent reports and every experimental input operation out of desktop
 admission and absent-controller spawn; this closes the previous incomplete
-webview AI request exclusion. Next: review pending IPC transport lifecycle.
+webview AI request exclusion. Transport validation is separated from the
+original worker lifecycle; completed-worker cleanup and previous-reply drain
+share one owner without replay or timeout cancellation. Next: audit IPC
+contract module boundaries and frontend scheduling.
 
 ## Continue development outside Codex
 
