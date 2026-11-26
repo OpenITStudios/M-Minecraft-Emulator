@@ -64,7 +64,7 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(app).toContain('storageReportReceivedAt=storageReportReceivedTime()');
     expect(storage).toContain('storageReportReceivedAt');
     expect(storage).not.toContain('storageCheckedAt');
-    expect(settings).not.toContain('onChooseWorkspaceLayout');
+    expect(settings).toContain('onChooseWorkspaceLayout');
     expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');
   });
   it('keeps full data deletion after connect/locate and recovery without bypassing its confirmation',()=>{

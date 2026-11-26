@@ -711,8 +711,9 @@ try {
   // Its preview sizes follow available viewport height without touching
   // native session admission or replacing any of the five DWM destinations.
   await section('General').click();await heading('General').waitFor();
-  assert.equal(await page.locator('#workspace-layout').count(),0,
-    'No redundant Gameplay Focus/Monitoring selector belongs in Settings');
+  assert.equal(await page.locator('#workspace-layout').count(),1,
+    'General exposes one global workspace layout preference');
+  assert.equal(await page.getByRole('group',{name:'Workspace Layout'}).getByRole('button',{name:'Bottom',exact:true}).getAttribute('aria-pressed'),'true');
   assert.equal(await page.locator('#graphics-preset').count(),0,
     'Individual graphics preferences are retired');
   await nav('Back').click();

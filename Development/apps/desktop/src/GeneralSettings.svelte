@@ -5,6 +5,9 @@
   import {userMessage} from './app/presentation/sessionFeedback.js';
 
   export let settings: SettingsReport | null;
+  export let workspaceLayout: 'Bottom' | 'Right';
+  export let layoutPersistenceIssue: string;
+  export let onChooseWorkspaceLayout: (value: 'Bottom' | 'Right') => void;
   export let activeFps: number | undefined;
   export let backgroundFps: number | undefined;
   export let busy: boolean;
@@ -59,6 +62,18 @@
 </script>
 
         <div class="lazytester-settings-content">
+          <section class="lazytester-group" aria-labelledby="workspace-layout">
+            <h2 id="workspace-layout">Workspace Layout</h2>
+            <div class="lazytester-layout-options" role="group" aria-label="Workspace Layout">
+              {#each ['Bottom', 'Right'] as layout}
+                <button type="button" class="lazytester-layout-option" class:chosen={workspaceLayout===layout} aria-pressed={workspaceLayout===layout} on:click={()=>onChooseWorkspaceLayout(layout==='Right'?'Right':'Bottom')}>
+                  <span class="lazytester-layout-diagram" class:lazytester-layout-diagram-right={layout==='Right'} aria-hidden="true"><span></span><span>{#each [1,2,3,4,5] as slot}<i></i>{/each}</span></span>
+                  <span>{layout}</span>
+                </button>
+              {/each}
+            </div>
+            {#if layoutPersistenceIssue}<p role="status">{layoutPersistenceIssue}</p>{/if}
+          </section>
           <section class="lazytester-group" aria-labelledby="lazytester-frame-limits-section"><h2 id="lazytester-frame-limits-section" bind:this={frameHeading} tabindex="-1">Frame Rate</h2>{#if settings}<form class="lazytester-settings-panel" on:submit|preventDefault={savePerformanceWithFocus}>
             <div class="lazytester-setting"><div><h3><label for="active-fps">Active FPS</label></h3><p>Minecraft window in use.</p></div><div class="lazytester-fps"><input id="active-fps" type="number" min="5" max="1000" required bind:value={activeFps} disabled={busy||performanceQueued} aria-invalid={activeFpsFieldInvalid} aria-describedby={activeFpsFieldInvalid?'lazytester-fps-guidance lazytester-active-fps-error':'lazytester-fps-guidance'}/> FPS</div></div>
             <div class="lazytester-setting"><div><h3><label for="background-fps">Background FPS</label></h3><p>Other running Minecraft windows.</p></div><div class="lazytester-fps"><input id="background-fps" type="number" min="5" max={activeFps??1000} required bind:value={backgroundFps} disabled={busy||performanceQueued} aria-invalid={backgroundFpsFieldInvalid} aria-describedby={backgroundFpsFieldInvalid?'lazytester-fps-guidance lazytester-background-fps-error':'lazytester-fps-guidance'}/> FPS</div></div>

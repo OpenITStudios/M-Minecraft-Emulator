@@ -61,15 +61,15 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(app).not.toContain('onShowDataStorage={() => navigate(\'storage\')}');
     expect(settings).toContain("?'Saving…':'Save Changes'");
   });
-  it('does not distract General Settings with a redundant workspace mode selector',()=>{
+  it('places the approved workspace choice before frame rate',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
-    expect(settings).toContain('<div class="lazytester-settings-content">\n          <section class="lazytester-group" aria-labelledby="lazytester-frame-limits-section">');
+    expect(settings.indexOf('id="workspace-layout"')).toBeLessThan(settings.indexOf('id="lazytester-frame-limits-section"'));
     expect(settings).not.toContain('Legacy graphics preferences');
     expect(settings).not.toContain('When LazyTester closes');
-    expect(settings).not.toContain('workspace-layout');
-    expect(settings).not.toContain('onChooseWorkspaceLayout');
-    expect(app).not.toContain('workspaceLayout');
+    expect(settings).toContain('workspace-layout');
+    expect(settings).toContain('onChooseWorkspaceLayout');
+    expect(app).toContain('workspaceLayout');
     expect(settings).not.toContain('invokeRuntime(');
   });
   it('explains FPS limits without a graphics setting',()=>{

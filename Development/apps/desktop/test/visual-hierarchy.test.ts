@@ -105,19 +105,20 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(app).not.toContain('lazytester-preview-details');
     expect(css).not.toContain('.lazytester-preview-details{');
   });
-  it('uses one adaptive workspace without mode controls or a second stored state',()=>{
+  it('uses one adaptive workspace with a single saved layout preference',()=>{
     const app=source('LazyTesterApp.svelte'),settings=source('GeneralSettings.svelte'),css=source('lazytester.css');
     expect(app).toContain("<main class={page==='workspace'?'lazytester-play-main':undefined}>");
     expect(css).toContain('clamp(72px,11vh,108px)');
     expect(css).toContain('aspect-ratio:16/9;');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
-    expect(app).not.toContain('workspaceLayout');
-    expect(app).not.toContain('layoutPersistenceIssue');
-    expect(app).not.toContain('window.localStorage');
+    expect(app).toContain("let workspaceLayout: 'Bottom' | 'Right' = 'Bottom'");
+    expect(app).toContain('layoutPersistenceIssue');
+    expect(app).toContain('window.localStorage.setItem(workspaceLayoutKey, value)');
     expect(app).not.toContain('lazytester-workspace-monitoring');
-    expect(settings).not.toContain('id="workspace-layout"');
-    expect(settings).not.toContain('onChooseWorkspaceLayout');
+    expect(settings).toContain('id="workspace-layout"');
+    expect(settings).toContain('onChooseWorkspaceLayout');
+    expect(css).toContain('@container (min-width:960px) and (min-height:1050px)');
     expect(css).not.toContain('lazytester-workspace-monitoring');
     expect(css).not.toContain('clamp(96px,15vh,136px)');
     expect(css).not.toContain('clamp(80px,16vh,180px)');

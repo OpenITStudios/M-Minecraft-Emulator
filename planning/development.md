@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Adaptive workspace source checkpoint: one Bottom/Right preference in local WebView storage, default Bottom, explicit persistence-failure feedback; a single CSS size-container gate selects Right only for sufficiently large workspace dimensions, preserving the preference on fallback. Existing viewport, five keyed previews, observer and native layout scheduler retained. Fixed review strip remains separate and below the grid. Conservative initial gate 960×1050 CSS px requires runtime geometry acceptance; compact card header and density refinement remain pending. Capture held; tests NOT_EXECUTED.
+
 Homepage source checkpoint: brand and Settings on workspace; Back and Settings title on settings pages. Removed duplicate sidebar heading and routine Your games heading; running summary moved to workspace header. Compact launcher state labels; fixed review strip and native preview geometry retained. Activity expiry restores keyboard focus to Settings instead of retired Play tab. Capture remains held. Adaptive layout/card header geometry and remaining consumer review pending; tests NOT_EXECUTED.
 
 Approved redesign implementation: General Frame Rate and Audio now use shared compact panel/row/footer styling; Active FPS / Background FPS, Save Changes, and native-confirmed audio switch. Graphics removed from UI only. FPS timing and validation retained; no new dependencies or native IPC. Layout choice, homepage/card redesign, storage safety and selected-only measured FPS remain pending. Screenshot/video, capture keybinds and media management explicitly deferred to the operator's special task. Tests NOT_EXECUTED. No release.

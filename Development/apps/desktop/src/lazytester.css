@@ -861,8 +861,7 @@ body{
   }
 }
 
-/* One adaptive Play layout, not selectable modes. The game occupies the
-   remaining 16:9 stage; five keyed DWM previews use a bounded 16:9 size. */
+/* One workspace grid with a size-gated rail direction. */
 .lazytester-app main.lazytester-play-main{padding:10px 16px 12px;overflow-x:hidden}
 .lazytester-play-main .lazytester-play-header{gap:10px;margin-bottom:7px;align-items:center}
 .lazytester-play-main .lazytester-play-header > div:first-child{min-width:0}
@@ -971,3 +970,25 @@ body{
 .lazytester-settings-panel .lazytester-audio-toggle input:checked::after{left:17px;background:var(--lazytester-on-accent)}
 .lazytester-settings-panel .lazytester-audio-toggle input:disabled{opacity:.68;cursor:default}
 @media (forced-colors:active){.lazytester-settings-panel .lazytester-audio-toggle input{appearance:auto;width:24px;height:24px}.lazytester-settings-panel .lazytester-audio-toggle input::after{display:none}}
+
+/* The workspace itself is the size container; CSS fallback never rewrites the preference. */
+.lazytester-workspace{container-type:size}
+.lazytester-workspace-grid{display:flex;flex:1;min-height:0;min-width:0;flex-direction:column;gap:10px}
+.lazytester-workspace > .lazytester-launcher-action-strip{order:1}
+.lazytester-workspace > .lazytester-launcher-action-strip:empty{visibility:hidden}
+@container (min-width:960px) and (min-height:1050px){
+  .lazytester-workspace-right .lazytester-workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 230px;grid-template-rows:minmax(0,1fr)}
+  .lazytester-workspace-right .lazytester-filmstrip{width:100%;height:100%;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(5,minmax(0,1fr));gap:6px}
+  .lazytester-workspace-right .lazytester-launcher-entry{min-height:0}
+  .lazytester-workspace-right .lazytester-filmstrip .lazytester-launcher-card{min-height:0;gap:3px;padding:6px;align-items:stretch}
+  .lazytester-workspace-right .lazytester-launcher-preview{width:min(100%,96px);flex:none}
+}
+.lazytester-layout-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.lazytester-app .lazytester-layout-option{background:var(--lazytester-panel);color:var(--lazytester-text);border:1px solid var(--lazytester-line);border-radius:8px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:8px;font-size:13px}
+.lazytester-app .lazytester-layout-option.chosen{border-color:var(--lazytester-accent);background:var(--lazytester-selected-bg)}
+.lazytester-layout-diagram{display:grid;grid-template-rows:minmax(0,1fr) 14px;gap:4px;width:100%;max-width:220px;aspect-ratio:16/9;padding:6px;background:var(--lazytester-viewport-bg);border-radius:5px}
+.lazytester-layout-diagram > span:first-child{background:var(--lazytester-surface-raised);border-radius:3px;min-width:0;min-height:0}
+.lazytester-layout-diagram > span:last-child{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:3px}
+.lazytester-layout-diagram i{background:var(--lazytester-control-outline);border-radius:2px}
+.lazytester-layout-diagram-right{grid-template-columns:minmax(0,1fr) 23%;grid-template-rows:minmax(0,1fr)}
+.lazytester-layout-diagram-right > span:last-child{grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(5,minmax(0,1fr))}

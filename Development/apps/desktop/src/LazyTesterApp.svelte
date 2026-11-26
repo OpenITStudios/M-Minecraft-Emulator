@@ -65,6 +65,15 @@
   }
   let active: ProfileSlot | null = null, requested: ProfileSlot | null = null, queued: ProfileSlot | null = null;
   let viewport: HTMLDivElement, stageSpace: HTMLDivElement, observer: ResizeObserver | undefined;
+  let workspaceLayout: 'Bottom' | 'Right' = 'Bottom';
+  let layoutPersistenceIssue = '';
+  const workspaceLayoutKey = 'lazytester.workspace-layout';
+  function chooseWorkspaceLayout(value: 'Bottom' | 'Right') {
+    if (page !== 'settings' || navigationReviewOpen) return;
+    workspaceLayout = value;
+    try { window.localStorage.setItem(workspaceLayoutKey, value); layoutPersistenceIssue = ''; }
+    catch { layoutPersistenceIssue = 'Layout applied for this session only. Preference could not be saved.'; }
+  }
   let busy = false, refreshing = false, resizing = false, available = false;
   let manualRefreshRequested=false, manualRefreshing=false;
   // One clock for the same Inspect/InspectSettings path, including startup
@@ -879,6 +888,8 @@
     finally {busy=false;clearingData=false;}
   }
   onMount(() => {
+    try { workspaceLayout = window.localStorage.getItem(workspaceLayoutKey) === 'Right' ? 'Right' : 'Bottom'; }
+    catch { layoutPersistenceIssue = 'Saved layout unavailable. Using Bottom.'; }
     mounted = true; void initializeLaunchers();
     // Keep a review stable while the user decides; the backend rechecks admission on action.
     // Reuse this observer rather than adding another interval or process watcher.
@@ -1076,12 +1087,7 @@
         </section>
       {:else if !binding?.configured&&!initializing}<section class="lazytester-binding" tabindex="0" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lazytester-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lazytester-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
       </div>
-      <section class="lazytester-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
-        <div class="lazytester-stage-space" bind:this={stageSpace}>
-        <div class="lazytester-viewport" class:lazytester-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lazytester-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Choose a Minecraft to play'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some games may still be running. Check their windows before returning to Play.':'Choose a running game below, or launch a stopped game.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lazytester-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lazytester-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Checking existing profiles. No setup needed.':nativeBackend==='Unsupported'?'Minecraft session management is not supported on this OS.':!binding?.configured?'Retry connection. Accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
-        </div>
-        </div>
+      <section class="lazytester-workspace" class:lazytester-workspace-right={workspaceLayout==='Right' && nativeBackend==='WindowsNative'} hidden={page!=='workspace'} aria-label="Minecraft play area">
         {#if nativeBackend === 'WindowsNative'}
         <div class="lazytester-games-heading lazytester-launcher-action-strip">
         {#if closeOneSlot!==null}
@@ -1102,6 +1108,14 @@
           </div>
         {/if}
         </div>
+        {/if}
+        <div class="lazytester-workspace-grid">
+        <div class="lazytester-stage-space" bind:this={stageSpace}>
+        <div class="lazytester-viewport" class:lazytester-desktop={detached} bind:this={viewport}>
+          {#if detached}<div class="lazytester-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Choose a Minecraft to play'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some games may still be running. Check their windows before returning to Play.':'Choose a running game below, or launch a stopped game.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lazytester-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lazytester-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Checking existing profiles. No setup needed.':nativeBackend==='Unsupported'?'Minecraft session management is not supported on this OS.':!binding?.configured?'Retry connection. Accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+        </div>
+        </div>
+        {#if nativeBackend === 'WindowsNative'}
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
           unresolvedRecovery={uncertainWindowSlots} {launchFailures}
           {available} bindingConfigured={!!binding?.configured} {busy}
@@ -1110,9 +1124,10 @@
           observePreview={image} onSelect={select} onLaunch={launch}
           onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}/>
         {/if}
+        </div>
       </section>
       {#if page==='settings'}
-        <GeneralSettings {settings}
+        <GeneralSettings {settings} {workspaceLayout} {layoutPersistenceIssue} onChooseWorkspaceLayout={chooseWorkspaceLayout}
           bind:activeFps bind:backgroundFps
           {busy} {available} {refreshing} {resizing}
           performanceQueued={queuedPerformance!==null}
