@@ -271,6 +271,9 @@
     } catch (error) { issueKey='selection'; dirty = true; }
     finally { busy = false; }
   }
+  function isCurrentObservation(issued: number): boolean {
+    return !disposed && observationStillCurrent(issued, observationEpoch, reviewState());
+  }
   async function refresh() {
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || disposed) return;
     const issued = observationEpoch;
@@ -278,7 +281,7 @@
     try {
       const snapshot = page === 'settings' ? await lazyTester.settings() : await lazyTester.inspect();
       // A close review starting mid-request invalidates this old snapshot.
-      if (disposed || !observationStillCurrent(issued, observationEpoch, reviewState())) return;
+      if (!isCurrentObservation(issued)) return;
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
       profiles = snapshot.profiles; available = true; connectionIssueKey=null;
       agentActivity=snapshot.agentActivity??null;
@@ -318,7 +321,7 @@
         previewStatuses=[];pendingPreviewInvalidations.clear();dirty=true;
       }
     } catch (error) {
-      if (!disposed && observationStillCurrent(issued, observationEpoch, reviewState())) {
+      if (isCurrentObservation(issued)) {
         if (available) dirty = true;
         available = false;agentActivity=null;previewStatuses=[];pendingPreviewInvalidations.clear();
         connectionIssueKey='connection';
@@ -364,8 +367,7 @@
     // Navigation reads share the original close-review epoch with Inspect.
     // A completed native suspend/present is not itself a UI or game receipt.
     const issued = observationEpoch;
-    const current = () => !disposed &&
-      observationStillCurrent(issued, observationEpoch, reviewState());
+    const current = () => isCurrentObservation(issued);
     busy = true; loadingPage = next; issueKey=null;
     try {
       if (next !== 'workspace') await workspaceSurface.suspend();
@@ -399,8 +401,7 @@
       if(next==='storage'&&binding?.configured) {
         const snapshot=await lazyTester.storage();
         if (!current()) return;
-        profiles=snapshot.profiles;storage=snapshot.storage;
-        storageReportReceivedAt=storageReportReceivedTime();
+        applyStorageSnapshot(snapshot);
       }
       if (current()) dirty = true;
     } catch (error) {
@@ -426,8 +427,7 @@
     if (nativeBackend !== 'WindowsNative' || navigationReviewOpen ||
         busy || refreshing || resizing) return;
     const issued = observationEpoch;
-    const current = () => !disposed &&
-      observationStillCurrent(issued, observationEpoch, reviewState());
+    const current = () => isCurrentObservation(issued);
     manualRefreshing=true;
     try {
     issueKey=null;
@@ -454,8 +454,7 @@
         }
         const snapshot=await lazyTester.storage();
         if (!current()) return;
-        profiles=snapshot.profiles;storage=snapshot.storage;
-        storageReportReceivedAt=storageReportReceivedTime();
+        applyStorageSnapshot(snapshot);
         available=true;connectionIssueKey=null;
       }catch(error){
         if (current()) {issueKey='storage';storage=null;}
@@ -738,13 +737,18 @@
     if (slot) select(slot);
     else { detached = false; dirty = true; }
   }
+  function applyStorageSnapshot(snapshot: {profiles: ProfileSession[]; storage: ProfileStorage[] | null}) {
+    profiles = snapshot.profiles;
+    storage = snapshot.storage;
+    storageReportReceivedAt = storageReportReceivedTime();
+  }
   async function inspectStorage() {
     if (busy || refreshing || resizing) return;
     busy = true; checkingStorage = true; issueKey=null; clearSlot = null; recovery=null; fullReview=null; storageNotice = '';
     try {
-      const snapshot = await lazyTester.storage(); profiles = snapshot.profiles; storage = snapshot.storage;
+      const snapshot = await lazyTester.storage();
+      applyStorageSnapshot(snapshot);
       available = true; connectionIssueKey=null;
-      storageReportReceivedAt = storageReportReceivedTime();
     }
     catch (error) { issueKey='storage'; storage = null; }
     finally { checkingStorage = false; busy = false; }
@@ -828,8 +832,7 @@
     busy = true; issueKey=null; storageNotice = ''; clearSlot = null;
     try {
       const snapshot = await lazyTester.clearCache(slot);
-      profiles = snapshot.profiles; storage = snapshot.storage;
-      storageReportReceivedAt = storageReportReceivedTime();
+      applyStorageSnapshot(snapshot);
       storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
       issueKey='cache'; storage = null;
@@ -856,8 +859,7 @@
         : pending.action==='DisableInputResponse'
           ? await lazyTester.disableImprovedInputResponse(pending.slot)
           : await lazyTester.recoverSettings(pending.slot,pending.action);
-      profiles=snapshot.profiles;storage=snapshot.storage;
-      storageReportReceivedAt=storageReportReceivedTime();
+      applyStorageSnapshot(snapshot);
       storageNotice=pending.action==='EnableTextureStreaming'
         ? 'Minecraft - '+pending.slot+': Texture Streaming enabled in saved settings. Restart to apply. Memory benefit unverified; settings backed up.'
         : pending.action==='DisableTextureStreaming'
@@ -893,8 +895,7 @@
     busy=true;clearingData=true;issueKey=null;storageNotice='';fullReview=null;
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
-      profiles=snapshot.profiles;storage=snapshot.storage;
-      storageReportReceivedAt=storageReportReceivedTime();
+      applyStorageSnapshot(snapshot);
       storageNotice=`Minecraft - ${pending.slot}: local data cleared. Next launch uses an empty profile. Other launchers, Minecraft installation and app preferences stay.`;
     } catch(error) {issueKey='clearData';storage=null;}
     finally {busy=false;clearingData=false;}
