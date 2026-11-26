@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -10,7 +10,7 @@
   import {presentAgentActivity} from './app/presentation/agentActivity.js';
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
-  import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
+  import {canRequestProfileLaunch, projectSessionHealth, type LaunchReceiptState, type SessionHealthAction} from './app/presentation/sessionHealth.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
@@ -108,8 +108,8 @@
   // UI warning only; native presentation authority remains in workspace_surface.
   let uncertainWindowSlots = new Set<ProfileSlot>();
   // UI receipt uncertainty only; native session admission remains authoritative.
-  let launchFailures = new Map<ProfileSlot, 'unverified' | 'observed'>();
-  function recordLaunchFailure(slot: ProfileSlot, state: 'unverified' | 'observed') {
+  let launchFailures = new Map<ProfileSlot, LaunchReceiptState>();
+  function recordLaunchFailure(slot: ProfileSlot, state: LaunchReceiptState) {
     launchFailures = new Map(launchFailures).set(slot,state);
   }
   function reconcileLaunchFailures(observedProfiles: ProfileSession[]) {
@@ -344,7 +344,7 @@
     // Read the current observed slot again; queued or stale card clicks do
     // not grant permission to launch an ATTENTION/uncertain profile.
     if (closeInProgress || navigationReviewOpen || busy || !available || !binding?.configured ||
-        launchFailures.get(slot)==='unverified' || !canRequestLaunch(profiles.find(profile => profile.slot === slot))) return;
+        !canRequestProfileLaunch(profiles.find(profile => profile.slot === slot),launchFailures)) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
     busy = true; issueKey=null; requested = slot;
     launchFailures = new Map([...launchFailures].filter(([failedSlot])=>failedSlot!==slot));

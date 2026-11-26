@@ -6,13 +6,13 @@ const source=(name:string)=>readFileSync(new URL('../src/'+name,import.meta.url)
 describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
   it('describes launcher actions accurately without claiming gameplay readiness',()=>{
     const rail=source('LauncherRail.svelte');
-    expect(rail).toContain('function cardActionName(profile: ProfileSession, statusLabel: string): string');
-    expect(rail).toContain("if (!available || !bindingConfigured) return name + ' · ' + statusLabel;");
+    expect(rail).toContain('function cardActionName(profile: ProfileSession, statusLabel: string, launchAllowed: boolean, observed: boolean): string');
+    expect(rail).toContain("if (!observed) return name + ' · ' + statusLabel;");
     expect(rail).toContain("if (profile.state === 'RUNNING') return 'Select ' + name + ' · ' + statusLabel;");
-    expect(rail).toContain("if (canRequestLaunch(profile)) return 'Launch ' + name + ' · ' + statusLabel;");
+    expect(rail).toContain("if (launchAllowed) return 'Launch ' + name + ' · ' + statusLabel;");
     expect(rail).toContain('return name + \' · \' + statusLabel;');
-    expect(rail).toContain('aria-label={cardActionName(profile, statusLabel)}');
-    expect(rail).toContain('on:click={()=>profile.state===\'RUNNING\'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}');
+    expect(rail).toContain('aria-label={cardActionName(profile, statusLabel, launchAllowed, observed)}');
+    expect(rail).toContain('on:click={()=>profile.state===\'RUNNING\'?onSelect(profile.slot):launchAllowed&&onLaunch(profile.slot)}');
     expect(rail).not.toContain('invokeRuntime(');
   });
   it('keeps the five native preview targets and their status text stable',()=>{

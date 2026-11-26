@@ -1,8 +1,8 @@
 <script lang="ts">
   // Presentation only; native game/session ownership and scheduling stay in LazyTesterApp.
-  import {canRequestLaunch, profileSlots, type ProfileSession, type ProfileSlot} from './app/bridge/lazyTester.js';
+  import {profileSlots, type ProfileSession, type ProfileSlot} from './app/bridge/lazyTester.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
-  import {launcherCardGuidance} from './app/presentation/sessionHealth.js';
+  import {canRequestProfileLaunch, launcherCardGuidance, type LaunchReceiptState} from './app/presentation/sessionHealth.js';
   import type {SessionHealthIssue, SessionHealthAction} from './app/presentation/sessionHealth.js';
   import SessionHealthNotice from './SessionHealthNotice.svelte';
 
@@ -13,7 +13,7 @@
   export let primary: ProfileSlot;
   export let detached: boolean;
   export let unresolvedRecovery: ReadonlySet<ProfileSlot>;
-  export let launchFailures: ReadonlyMap<ProfileSlot, 'unverified' | 'observed'>;
+  export let launchFailures: ReadonlyMap<ProfileSlot, LaunchReceiptState>;
   export let available: boolean;
   export let bindingConfigured: boolean;
   export let busy: boolean;
@@ -40,12 +40,11 @@
 
   // Accessible action names describe what is currently possible. A blocked or
   // unobserved launcher is never announced as a ready-to-launch button.
-  function cardActionName(profile: ProfileSession, statusLabel: string): string {
+  function cardActionName(profile: ProfileSession, statusLabel: string, launchAllowed: boolean, observed: boolean): string {
     const name = 'Minecraft - ' + profile.slot;
-    if (!available || !bindingConfigured) return name + ' · ' + statusLabel;
+    if (!observed) return name + ' · ' + statusLabel;
     if (profile.state === 'RUNNING') return 'Select ' + name + ' · ' + statusLabel;
-    if (launchFailures.get(profile.slot)==='unverified') return name + ' · Launch not confirmed';
-    if (canRequestLaunch(profile)) return 'Launch ' + name + ' · ' + statusLabel;
+    if (launchAllowed) return 'Launch ' + name + ' · ' + statusLabel;
     return name + ' · ' + statusLabel;
   }
 </script>
@@ -53,6 +52,8 @@
 <div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">
   {#each orderedProfiles as profile (profile.slot)}
     {@const observedSlot = profiles.some(item => item.slot === profile.slot)}
+    {@const observed = observedSlot && available && bindingConfigured}
+    {@const launchAllowed = observed && canRequestProfileLaunch(profile,launchFailures)}
     {@const healthItem = observedSlot ? healthIssues.find(item => item.slot === profile.slot) : undefined}
     {@const guidance = launcherCardGuidance(
       profile, observedSlot && available && bindingConfigured && !unresolvedRecovery.has(profile.slot)
@@ -70,14 +71,14 @@
       title={guidance??undefined}>
       <button class="lt-card" class:selected={observedSlot&&active===profile.slot&&!detached}
         aria-pressed={observedSlot&&profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
-        aria-label={cardActionName(profile, statusLabel)}
+        aria-label={cardActionName(profile, statusLabel, launchAllowed, observed)}
         aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
         disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured||
-          (profile.state!=='RUNNING'&&(launchFailures.get(profile.slot)==='unverified'||!canRequestLaunch(profile)))}
-        on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):canRequestLaunch(profile)&&onLaunch(profile.slot)}>
+          (profile.state!=='RUNNING'&&!launchAllowed)}
+        on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):launchAllowed&&onLaunch(profile.slot)}>
         <!-- Compact visual identity, full Minecraft slot stays in accessible names and dialogs. -->
         <strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}</strong>
-        <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!observedSlot||!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'?'Needs attention':'▷ Launch'}</span>
+        <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!observedSlot||!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'||!launchAllowed?'Needs attention':'▷ Launch'}</span>
         <small class={observedSlot&&available&&bindingConfigured
           ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'||launchFailures.has(profile.slot)
             ? 'lt-status-attention'

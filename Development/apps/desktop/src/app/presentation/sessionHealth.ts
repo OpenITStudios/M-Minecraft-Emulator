@@ -1,7 +1,18 @@
 // Pure, read-only projection of the already validated native session/preview reports.
 // This module does not authorize launch, close, window recovery or data changes.
-import type {ProfileSession, ProfileSlot, PreviewStatus} from '../bridge/lazyTester.js';
+import {canRequestLaunch, type ProfileSession, type ProfileSlot, type PreviewStatus} from '../bridge/lazyTester.js';
 import {userMessage} from './sessionFeedback.js';
+
+export type LaunchReceiptState = 'unverified' | 'observed';
+
+// Shared UI admission only. Native launch still independently validates the slot.
+export function canRequestProfileLaunch(
+  profile: ProfileSession | undefined,
+  launchFailures: ReadonlyMap<ProfileSlot, LaunchReceiptState>,
+): boolean {
+  return !!profile && launchFailures.get(profile.slot) !== 'unverified' &&
+    canRequestLaunch(profile);
+}
 
 export type SessionHealthKind = 'window' | 'launch' | 'launcher' | 'preview';
 export type SessionHealthAction = 'refresh' | 'open';
@@ -18,7 +29,7 @@ export interface SessionHealthObservation {
   readonly previewStatuses: readonly PreviewStatus[];
   readonly unresolvedRecovery: ReadonlySet<ProfileSlot>;
   readonly primarySlot: ProfileSlot;
-  readonly launchFailures?: ReadonlyMap<ProfileSlot, 'unverified' | 'observed'>;
+  readonly launchFailures?: ReadonlyMap<ProfileSlot, LaunchReceiptState>;
   readonly observed: boolean;
   readonly previewsVisible: boolean;
 }

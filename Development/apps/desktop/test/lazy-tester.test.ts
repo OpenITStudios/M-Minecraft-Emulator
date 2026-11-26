@@ -2,7 +2,7 @@ import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {lazyTester, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
-import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
+import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
@@ -559,6 +559,10 @@ describe('Lazy Tester minimal session health projection',()=>{
   });
   it('scopes launch receipt uncertainty to the affected slot',()=>{
     const launchFailures=new Map<ProfileSlot,'unverified'|'observed'>([[4,'unverified']]);
+    expect(canRequestProfileLaunch(normal[3],launchFailures)).toBe(false);
+    expect(canRequestProfileLaunch(normal[0],launchFailures)).toBe(true);
+    expect(canRequestProfileLaunch(normal[3],new Map([[4,'observed']]))).toBe(true);
+    expect(canRequestProfileLaunch(undefined,launchFailures)).toBe(false);
     expect(projectSessionHealth(sample({launchFailures}))).toMatchObject([{slot:4,kind:'launch',action:'refresh'}]);
     expect(projectSessionHealth(sample({launchFailures,unresolvedRecovery:new Set([4])}))).toEqual([]);
     const profiles=normal.map(p=>p.slot===4?running(4) as ProfileSession:p);
