@@ -250,10 +250,10 @@ export function verifyRepository(root,g0=false) {
   const exposed=[...invoked.matchAll(/commands::native_clients::([a-z_]+),/g)].map(m=>m[1]);
   assert.deepEqual(exposed,[
     'lazy_tester_backend_support','lazy_tester_session','lazy_tester_close_one','lazy_tester_profile_binding',
-    'lazy_tester_data_location','lazy_tester_present','lazy_tester_previews',
+    'lazy_tester_data_location','lazy_tester_coordinate_bookmarks','lazy_tester_present','lazy_tester_previews',
     'lazy_tester_clear_previews','desktop_update_workspace',
     'desktop_release_workspace','desktop_suspend_workspace',
-  ],'Only mounted Lazy Tester handlers may be exposed; retired provider IPC forbidden');
+  ],'Only reviewed Lazy Tester handlers, including retained bookmark compatibility, may be exposed; retired provider IPC forbidden');
 
   for(const path of [
     'Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs',

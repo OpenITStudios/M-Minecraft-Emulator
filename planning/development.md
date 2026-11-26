@@ -21,6 +21,8 @@ Registered Education installation validation and its four existing preflight fix
 
 Startup, explicit Refresh and automatic Refresh now use one start timestamp for the same Inspect/InspectSettings path. The healthy idle cadence no longer schedules an extra read immediately after a recent startup/manual read; live and disconnected recovery cadence stays unchanged. Updated stale repository cadence assertion and added source/cadence regression fixture, NOT_EXECUTED. A separate pre-existing discrepancy remains between the registered dormant coordinate-bookmark command and the repository allowlist assertion; no IPC permissions or bookmark behavior changed. MCP unchanged.
 
+Reconciled the exact Tauri handler assertion with the prior retirement decision to retain the native bookmark command and storage. Registration, handler admission, data format and MCP remain unchanged; no new access granted. Repository assertion now matches the observed ordered allowlist, NOT_EXECUTED. Next: desktop startup and inspection cost review.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

@@ -78,7 +78,8 @@ pub fn run() {
             }
             Ok(())
         })
-        // Only the mounted Lazy Tester UI's current IPC commands are exposed.
+        // Expose mounted UI commands and the explicitly retained native
+        // bookmark compatibility command; no additional provider handlers.
         // Dormant Sandboxie/VMware and developer inspection handlers are not
         // reachable through Tauri until independently reviewed and reauthorized.
         .invoke_handler(tauri::generate_handler![
