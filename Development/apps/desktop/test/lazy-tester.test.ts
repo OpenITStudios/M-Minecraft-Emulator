@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseSelectedClose, firstEmbeddedProfile, separateSlotsForCurrentProfiles, nextProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseSelectedClose, firstEmbeddedProfile, separateSlotsForCurrentProfiles, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -33,10 +33,8 @@ describe('Lazy Tester profile contract', () => {
       expect(periodicInspectionDue(page, 1, true, 0)).toBe(true);
       expect(periodicInspectionDue(page, 0, false, 0)).toBe(true);
     }
-    for (const page of ['workspace', 'launchers'] as const) {
-      expect(periodicInspectionDue(page, 0, true, 0)).toBe(true);
-      expect(periodicInspectionDue(page, 0, false, 0)).toBe(true);
-    }
+    expect(periodicInspectionDue('workspace', 0, true, 0)).toBe(true);
+    expect(periodicInspectionDue('workspace', 0, false, 0)).toBe(true);
   });
   it('suspends automatic inspection through every close review and drops stale results', () => {
     const idle: CloseReview = {
@@ -405,7 +403,7 @@ describe('Lazy Tester profile contract', () => {
   it('keeps all five stopped profiles without deriving login or starting a game', () => {
     const snapshot = parseSession(stopped());
     expect(snapshot.profiles.map(profile => profile.slot)).toEqual([1,2,3,4,5]);
-    expect(nextProfile(snapshot.profiles, null, 1)).toBeNull();
+    expect(snapshot.profiles.every(profile => profile.state === 'STOPPED' && profile.process === null)).toBe(true);
   });
   it('rejects duplicate profile/process identities, forged running state and unknown fields', () => {
     const cases: unknown[] = [];
@@ -415,17 +413,6 @@ describe('Lazy Tester profile contract', () => {
     Object.assign(duplicatePid.profiles[1]!, {...running(2), process: running(1).process}); cases.push(duplicatePid);
     cases.push({...stopped(), authenticated: true}, {...stopped(), schema: 2});
     for (const value of cases) expect(() => parseSession(value)).toThrow();
-  });
-  it('cycles only playable profiles in stable order, including profile five', () => {
-    const snapshot = stopped();
-    for (const slot of [1,3,5]) Object.assign(snapshot.profiles[slot - 1]!, running(slot));
-    const profiles = parseSession(snapshot).profiles;
-    expect(nextProfile(profiles, 1, 1)).toBe(3);
-    expect(nextProfile(profiles, 3, 1)).toBe(5);
-    expect(nextProfile(profiles, 5, 1)).toBe(1);
-    expect(nextProfile(profiles, 1, -1)).toBe(5);
-    expect(nextProfile(profiles, null, -1)).toBe(5);
-    expect(nextProfile(profiles.map(profile => ({...profile, state: 'STARTING'} as ProfileSession)), 1, 1)).toBeNull();
   });
 });
 

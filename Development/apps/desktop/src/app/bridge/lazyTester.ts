@@ -350,14 +350,6 @@ export function separateSlotsForCurrentProfiles(
 export function firstEmbeddedProfile(profiles:ProfileSession[],separate:ReadonlySet<ProfileSlot>):ProfileSlot|null {
   return profiles.find(profile=>profile.state==='RUNNING'&&!separate.has(profile.slot))?.slot??null;
 }
-export function nextProfile(profiles: ProfileSession[], active: ProfileSlot | null, direction: 1 | -1): ProfileSlot | null {
-  const playable = profiles.filter(profile => profile.state === 'RUNNING' && profile.process?.responding);
-  if (!playable.length) return null;
-  const index = playable.findIndex(profile => profile.slot === active);
-  return playable[index < 0 ? (direction === 1 ? 0 : playable.length - 1) :
-    (index + direction + playable.length) % playable.length]!.slot;
-}
-
 export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):PreviewReport {
   if(!record(value)||!exact(value,['schema','tiles'])||value.schema!==1||!Array.isArray(value.tiles)||value.tiles.length!==slots.length||slots.length>4)throw new TypeError('Invalid preview response');
   const seen=new Set<number>();

@@ -50,7 +50,10 @@ refresh and navigation share the current-observation predicate while preserving
 caller-specific connection and recovery effects. Removed three unreferenced
 mounted-component handlers and its unreachable launchers route alias; shared
 bridge and scheduling contracts retained pending consumer audit. Next: audit
-remaining frontend bridge and CSS consumers.
+remaining frontend bridge and CSS consumers. Retired nextProfile and the
+launchers scheduling alias after reviewing all 18 TS/Svelte sources and 25
+frontend test files; active stopped-state and cadence coverage retained.
+Next: audit CSS selectors against mounted components and regression contracts.
 
 ## Continue development outside Codex
 

@@ -65,12 +65,12 @@ export function releasedSelectionStillCurrent(
  // game use a bounded 10s read-only cadence; user actions still refresh
  // immediately and Rust rechecks all admissions before mutations.
 export function periodicInspectionDue(
-  page: 'workspace' | 'launchers' | 'storage' | 'settings',
+  page: 'workspace' | 'storage' | 'settings',
   runningCount: number,
   available: boolean,
   elapsedMs: number,
 ): boolean {
-  return page === 'workspace' || page === 'launchers' ||
+  return page === 'workspace' ||
     runningCount > 0 || !available || elapsedMs >= 10_000;
 }
 
