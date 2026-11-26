@@ -501,9 +501,15 @@
   border:1px solid var(--lt-control-outline);border-radius:6px;
 }
 .lt-app .lt-preview-slot-issue{display:block;min-width:0;max-height:38px;overflow:auto;overflow-wrap:anywhere;line-height:1.35}
-.lt-single-close-confirm{flex:none;background:var(--lt-panel);border:1px solid var(--lt-line);border-radius:8px;padding:10px 14px;margin-top:10px;font-size:13px}
-.lt-single-close-confirm h3,.lt-single-close-confirm p{margin:0 0 6px}
-.lt-single-close-confirm .lt-actions{display:flex;flex-wrap:wrap;gap:8px}
+/* The rail header owns confirmation space. Opening a review never inserts
+   another flex row or overlays a native game/thumbnail HWND. */
+.lt-launcher-action-strip{height:56px;flex:0 0 56px;align-items:center;min-width:0}
+.lt-launcher-close-review{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:100%;min-width:0;overflow:auto}
+.lt-launcher-close-copy{min-width:0;flex:1}
+.lt-launcher-close-copy h3,.lt-launcher-close-copy p{margin:0;line-height:1.3}
+.lt-launcher-close-copy p{font-size:12px;color:var(--lt-muted)}
+.lt-launcher-close-review .lt-actions{display:flex;flex:none;gap:6px;align-items:center;white-space:nowrap}
+.lt-launcher-close-review .lt-actions button{min-height:32px;font-size:12px;padding:5px 9px}
 
 /* Collapsed support references contain only authored categories/codes. */
 .lt-alert .lt-feedback-reference{margin-top:5px;font-size:12px;line-height:1.4}

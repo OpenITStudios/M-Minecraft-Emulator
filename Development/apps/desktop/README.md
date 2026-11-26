@@ -10,6 +10,9 @@ appears only for attention or terminal Probe results, not routine activity. Gene
 limits and audio; existing per-profile graphics preferences remain available in a
 collapsed legacy disclosure. Native settings and stored values are unchanged. Profile data-location inspection
 runs on Data Storage navigation, not when opening General Settings.
+The fixed-height launcher action strip hosts selected-game close review and
+pending-close status without inserting a new workspace row. Native close
+admission and recovery remain unchanged.
 Native Windows Minecraft Education has five
 fixed profile identities and an explicit manual launch path; the old
 Sandboxie/VMware provider route is retired.

@@ -1184,9 +1184,16 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   const affectedCard=page.locator('.lt-launcher-entry').nth(1);
   assert.match(await affectedCard.getAttribute('title')??'',/Refresh/);
+  const closeReviewGeometry=()=>page.evaluate(()=>['.lt-viewport','.lt-filmstrip',...Array.from({length:5},(_,i)=>'.lt-launcher-entry[data-slot="'+(i+1)+'"] .lt-card-picture')].map(selector=>{
+    const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
+    return {x,y,width,height};
+  }));
+  const beforeCloseReview=await closeReviewGeometry();
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   const closeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
   await page.waitForFunction(()=>document.activeElement?.textContent?.trim()==='Cancel');
+  assert.deepEqual(await closeReviewGeometry(),beforeCloseReview,
+    'Opening close review must not move the viewport or native preview targets');
   const otherLauncher=page.getByRole('button',{name:/^Launch Minecraft - 1 · /});
   assert.equal(await otherLauncher.isDisabled(),true,
     'Another launcher cannot start and discard the pending CloseOne review');
@@ -1211,6 +1218,8 @@ try {
   await closeReview.getByRole('button',{name:'Cancel',exact:true}).focus();
   await page.keyboard.press('Escape');
   await closeReview.waitFor({state:'detached'});
+  assert.deepEqual(await closeReviewGeometry(),beforeCloseReview,
+    'Cancel must preserve viewport and native preview geometry');
   assert.equal(await page.getByRole('button',{name:'Close Minecraft - 2 normally'})
     .evaluate(node=>document.activeElement===node),true,
     'Escape cancels the review and returns focus to its original launcher');

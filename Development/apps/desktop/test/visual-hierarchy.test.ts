@@ -77,6 +77,17 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
   });
+  it('keeps selected close review inside the fixed launcher action strip',()=>{
+    const app=source('LazyTesterApp.svelte'),css=source('lazy-tester.css');
+    const strip=app.indexOf('class="lt-games-heading lt-launcher-action-strip"');
+    const review=app.indexOf('class="lt-launcher-close-review"');
+    const rail=app.indexOf('<LauncherRail');
+    expect(strip).toBeGreaterThan(-1);
+    expect(review).toBeGreaterThan(strip);
+    expect(rail).toBeGreaterThan(review);
+    expect(css).toContain('.lt-launcher-action-strip{height:56px;flex:0 0 56px;');
+    expect(app).not.toContain('lt-single-close-confirm');
+  });
   it('uses one adaptive workspace without mode controls or a second stored state',()=>{
     const app=source('LazyTesterApp.svelte'),settings=source('GeneralSettings.svelte'),css=source('lazy-tester.css');
     expect(app).toContain("<main class={page==='workspace'?'lt-play-main':undefined}>");

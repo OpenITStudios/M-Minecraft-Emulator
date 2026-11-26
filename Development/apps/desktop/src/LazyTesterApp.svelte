@@ -1037,7 +1037,21 @@
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
-        <div class="lt-games-heading"><span>Your games</span><span class="lt-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span></div>
+        <div class="lt-games-heading lt-launcher-action-strip">
+        {#if closeOneSlot!==null}
+          <section class="lt-launcher-close-review" aria-label="Confirm one Minecraft close" bind:this={closeOneReviewElement}>
+            <div class="lt-launcher-close-copy"><h3>Close Minecraft - {closeOneSlot}?</h3>
+            <p>Save your work first. Only this game closes; other games keep running.</p></div>
+            <div class="lt-actions">
+              <button disabled={busy||refreshing||resizing||closeInProgress||nativeExitReview} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
+              <button class="lt-secondary" bind:this={closeCancelButton} disabled={busy||closeInProgress||nativeExitReview} on:click={cancelCloseOne}>Cancel</button>
+            </div>
+          </section>
+        {:else if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>
+        {:else}
+          <span>Your games</span><span class="lt-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>
+        {/if}
+        </div>
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
           unresolvedRecovery={uncertainWindowSlots}
           {available} bindingConfigured={!!binding?.configured} {busy}
@@ -1045,17 +1059,6 @@
           reviewPending={closeReviewPending}
           observePreview={image} onSelect={select} onLaunch={launch}
           onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}/>
-        {#if closeOneSlot!==null}
-          <section class="lt-single-close-confirm" aria-label="Confirm one Minecraft close" bind:this={closeOneReviewElement}>
-            <h3>Close Minecraft - {closeOneSlot}?</h3>
-            <p>Only this Minecraft session will close normally. Other games keep running. Save your work first; Cancel before changing pages.</p>
-            <div class="lt-actions">
-              <button disabled={busy||refreshing||resizing||closeInProgress||nativeExitReview} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
-              <button class="lt-secondary" bind:this={closeCancelButton} disabled={busy||closeInProgress||nativeExitReview} on:click={cancelCloseOne}>Cancel</button>
-            </div>
-          </section>
-        {/if}
-        {#if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>{/if}
         <p class="lt-help" hidden={active!==null&&!detached}>{!binding?.configured?'Saved profiles are checked automatically.':detached?'Select a running game to bring it into Play.':'Click a game to switch. Other games keep running.'}</p>
         {#if previewIssue}<details class="lt-preview-details"><summary>Preview unavailable</summary><p>{previewIssue}</p></details>{/if}
         {/if}
