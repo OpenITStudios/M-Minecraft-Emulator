@@ -842,12 +842,25 @@ impl Sessions {
         Ok(())
     }
 
-    fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
+    // Every profile mutation takes a fresh observation inside the sole actor.
+    // Read-only storage reports must never substitute their cached admission.
+    fn admit_profile_mutation(&mut self, slot: u32) -> io::Result<()> {
         self.reap();
         let observed = super::super::inspect_native_workspace()?.processes;
-        self.data_admission(slot, &observed)?;
-        // The sole session actor serializes admission, exact-directory deletion and launch.
+        self.data_admission(slot, &observed)
+    }
+
+    fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
+        self.admit_profile_mutation(slot)?;
         profile_storage::clear(&self.store(slot)?.private, true)
+    }
+
+    fn change_game_settings(
+        &mut self, slot: u32, change: fn(&File) -> io::Result<bool>,
+    ) -> io::Result<Vec<ProfileStorage>> {
+        self.admit_profile_mutation(slot)?;
+        change(&self.store(slot)?.private)?;
+        self.storage()
     }
 
     fn data_admission(&self, slot: u32, observed: &[OwnedProcess]) -> io::Result<()> {
@@ -862,9 +875,7 @@ impl Sessions {
     }
 
     fn clear_data(&mut self,slot:u32,token:&str)->io::Result<()> {
-        self.reap();
-        let observed=super::super::inspect_native_workspace()?.processes;
-        self.data_admission(slot,&observed)?;
+        self.admit_profile_mutation(slot)?;
         let index=slot as usize-1;
         let store=self.store(slot)?;
         if product_profiles::clear::confirmation(store)?!=token {
@@ -1687,24 +1698,16 @@ fn run() -> io::Result<()> {
                         .map_err(|error| error.to_string())?;
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?);
                 }
-                SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } => {
-                    sessions.reap();
-                    let observed=super::super::inspect_native_workspace().map_err(|error|error.to_string())?.processes;
-                    sessions.data_admission(slot,&observed).map_err(|error|error.to_string())?;
-                    let store=sessions.store(slot).map_err(|error|error.to_string())?;
-                    if matches!(envelope.request,SessionRequest::ResetGameSettings {..}) {
-                        game_preset::reset_settings(&store.private)
-                    } else if matches!(envelope.request,SessionRequest::DisableImprovedInputResponse {..}) {
-                        game_preset::disable_input_response(&store.private)
-                    } else if matches!(envelope.request,SessionRequest::EnableTextureStreaming {..}) {
-                        game_preset::enable_texture_streaming(&store.private)
-                    } else if matches!(envelope.request,SessionRequest::DisableTextureStreaming {..}) {
-                        game_preset::disable_texture_streaming(&store.private)
-                    } else {
-                        game_preset::restore_settings(&store.private)
-                    }.map_err(|error|error.to_string())?;
-                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
-                }
+                SessionRequest::ResetGameSettings { slot } =>
+                    storage = Some(sessions.change_game_settings(slot, game_preset::reset_settings).map_err(|error|error.to_string())?),
+                SessionRequest::RestoreGameSettings { slot } =>
+                    storage = Some(sessions.change_game_settings(slot, game_preset::restore_settings).map_err(|error|error.to_string())?),
+                SessionRequest::DisableImprovedInputResponse { slot } =>
+                    storage = Some(sessions.change_game_settings(slot, game_preset::disable_input_response).map_err(|error|error.to_string())?),
+                SessionRequest::EnableTextureStreaming { slot } =>
+                    storage = Some(sessions.change_game_settings(slot, game_preset::enable_texture_streaming).map_err(|error|error.to_string())?),
+                SessionRequest::DisableTextureStreaming { slot } =>
+                    storage = Some(sessions.change_game_settings(slot, game_preset::disable_texture_streaming).map_err(|error|error.to_string())?),
                 SessionRequest::ClearProfileData {slot,confirmation_token,confirmation_name}=>{
                     if confirmation_name!=format!("Minecraft - {slot}") {return Err("Launcher confirmation does not match".into());}
                     sessions.clear_data(slot,&confirmation_token).map_err(|error|error.to_string())?;

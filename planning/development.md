@@ -22,7 +22,10 @@ pin and explicit failure checks remain. The identity observer now uses the
 same standard OwnedHandle for process and token handles; specialized Windows
 resource cleanup is retained. Consolidated session response routing into one
 ReplySnapshot policy (Full / Close / Receipt), preserving journal and label
-behavior and the existing actor. Next: audit session operation ownership.
+behavior and the existing actor. Profile cache, full clear and game settings
+now share fresh mutation admission; each settings request maps directly to
+its existing game_preset operation. Next: audit remaining settings and audio
+operation ownership without adding a controller.
 
 ## Continue development outside Codex
 
