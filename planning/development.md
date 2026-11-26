@@ -43,6 +43,9 @@ share one owner without replay or timeout cancellation. Next: audit IPC
 contract module boundaries and frontend scheduling. The frontend queue now
 uses a flat first-eligible priority list after the existing common gate;
 all payloads and the independent parity fixture remain unchanged.
+Selected-close failure paths now share one read-only reconciliation and one
+presentation-uncertainty transition; no additional IPC or close is issued.
+Next: audit frontend snapshot and page-navigation ownership.
 
 ## Continue development outside Codex
 

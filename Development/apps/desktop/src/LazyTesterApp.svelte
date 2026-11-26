@@ -569,6 +569,23 @@
       if (!disposed && closeOneSlot===slot && closeCancelButton?.isConnected) closeCancelButton.focus();
     });
   }
+  // Read-only reconciliation never confirms native window restoration.
+  async function reconcileCloseObservation() {
+    try {
+      profiles = (await lazyTester.inspect()).profiles;
+      available = true; connectionIssueKey = null;
+    } catch {
+      available = false; connectionIssueKey = 'connection';
+    }
+  }
+  function markClosePresentationUncertain(slot: ProfileSlot) {
+    uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
+    issueKey = 'recovery';
+    if (active === slot) {
+      active = null; selectedIdentity = ''; requested = null; queued = null;
+      detached = true; previewStatuses = [];
+    }
+  }
   async function confirmCloseOne() {
     const slot=closeOneSlot;
     if (slot===null || closeInProgress || nativeExitReview || busy ||
@@ -586,14 +603,8 @@
       if (!report.presentationReleased) {
         // Release was attempted but did not confirm restoration. Do not
         // pretend the previous Play surface still owns the original HWND.
-        uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
-        issueKey='recovery';
-        if (active===slot) {
-          active=null;selectedIdentity='';requested=null;queued=null;detached=true;
-          previewStatuses=[];
-        }
-        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssueKey=null;}
-        catch(refreshError){available=false;connectionIssueKey='connection';}
+        markClosePresentationUncertain(slot);
+        await reconcileCloseObservation();
         return;
       }
       uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, true);
@@ -615,8 +626,7 @@
         }
       } else {
         issueKey='close';
-        try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssueKey=null;}
-        catch(refreshError){available=false;connectionIssueKey='connection';}
+        await reconcileCloseObservation();
         if (wasActive) {
           // Never automatically reselect the game whose exit outcome is
           // uncertain; a different responding peer can still be presented.
@@ -629,16 +639,10 @@
       // A transport failure or invalid receipt cannot establish whether the
       // Rust command reached native window restoration. The UI must stop
       // claiming an embedded selected HWND; no extra close/retry is sent.
-      uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
-      issueKey='recovery';
-      if (active===slot) {
-        active=null;selectedIdentity='';requested=null;queued=null;detached=true;
-        previewStatuses=[];
-      }
+      markClosePresentationUncertain(slot);
       // Read-only reconciliation cannot certify window restoration and must
       // not clear uncertainWindowSlots, even when the game has stopped.
-      try {profiles=(await lazyTester.inspect()).profiles;available=true;connectionIssueKey=null;}
-      catch(refreshError){available=false;connectionIssueKey='connection';}
+      await reconcileCloseObservation();
     } finally {
       closingOneSlot=null;busy=false;dirty=true;
     }
