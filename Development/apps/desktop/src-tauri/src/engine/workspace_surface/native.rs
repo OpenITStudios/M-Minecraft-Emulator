@@ -308,8 +308,14 @@ pub(super) fn place(
     }
     Ok(())
 }
-pub(super) fn receiving_input(target: &OwnedProcess) -> bool {
-    hwnd(target).is_ok_and(|(_pin, window)| unsafe { GetForegroundWindow() == window })
+// A click on the manager's launcher can leave Windows foreground on the
+// manager until the native game accepts focus. Keep its selected surface
+// presented during that interval; actual input ownership is unchanged.
+pub(super) fn workspace_has_foreground(target: &OwnedProcess, manager: u64) -> bool {
+    hwnd(target).is_ok_and(|(_pin, window)| unsafe {
+        let foreground = GetForegroundWindow();
+        foreground == window || foreground == manager as usize as HWND
+    })
 }
 pub(super) fn interactive_at(target: &OwnedProcess, manager: u64, viewport: Viewport) -> bool {
     let Ok((_pin, window)) = hwnd(target) else { return false; };

@@ -1233,12 +1233,18 @@ pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
         Err(error) => return Err(error),
     };
     lease.viewport = next_viewport;
-    let result = if live && lease.saved.as_ref().is_some_and(|saved| !native::receiving_input(&saved.target)) {
-        // Keep native gameplay independent; a click on its DWM image reuses present_bound.
-        // The parked surface stays live while the manager is moved/resized or configured.
+    let result = if live && lease.saved.as_ref().is_some_and(|saved|
+        !native::workspace_has_foreground(&saved.target, manager)) {
+        // A native modal can own foreground while its game is disabled.
+        // Keep the original lease and do not park it behind the dialog.
+        // The existing foreground watcher reconciles placement on return.
+        if let Some(saved) = lease.saved.as_ref() {
+            if !native::can_park(&saved.target)? { return Ok(()); }
+        }
         lease.background(rect, true).and_then(|()| {
             // Focus can change while the helper is parking the game.
-            if lease.saved.as_ref().is_some_and(|saved| native::receiving_input(&saved.target)) {
+            if lease.saved.as_ref().is_some_and(|saved|
+                native::workspace_has_foreground(&saved.target, manager)) {
                 lease.place(rect, false)
             } else { Ok(()) }
         })
