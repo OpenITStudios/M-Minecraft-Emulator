@@ -596,15 +596,15 @@ try {
       const node=document.querySelector(selector);
       return node?Number.parseFloat(getComputedStyle(node).fontSize):0;
     };
-    return {help:size('.lazytester-settings-layout .lazytester-help')};
+    return {help:size('.lazytester-settings-layout .lazytester-settings-note')};
   });
-  assert.ok(settingsCopy.help>=13,
+  assert.ok(settingsCopy.help>=12,
     'Settings instructions remain readable; data paths belong only to Data Storage');
   assert.equal(await page.getByRole('button',{name:'Open Data Storage',exact:true}).count(),0,
     'General does not duplicate the Data Storage sidebar link');
   assert.equal(await page.locator('#graphics-preset').count(),0);
-  assert.match(await page.locator('#lazytester-graphics-policy').textContent(),/All launchers/);
-  await page.getByLabel('While playing',{exact:true}).fill('60');await page.getByLabel('In the background',{exact:true}).fill('5');
+  assert.equal(await page.locator('#lazytester-graphics-policy').count(),0);
+  await page.getByLabel('Active FPS',{exact:true}).fill('60');await page.getByLabel('Background FPS',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
   await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
   assert.match(await page.locator('[aria-labelledby="lazytester-storage-overview-section"] .lazytester-help').textContent()??'',
@@ -620,24 +620,24 @@ try {
   });
   assert.equal(storageOrder,true,
     'Connect/locate must appear before the final permanent-delete danger zone');
-  await section('General').click();assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
-  await page.getByRole('button',{name:'Save FPS limits',exact:true}).click();
+  await section('General').click();assert.equal(await page.getByLabel('Active FPS',{exact:true}).inputValue(),'60');
+  await page.getByRole('button',{name:'Save Changes',exact:true}).click();
   await page.getByText('FPS limits saved. Applies when each game next starts.').waitFor();
   assert.equal(await page.locator('#lazytester-frame-limits-section').evaluate(
     node=>document.activeElement===node),true,
     'A completed FPS limits save must retain focus on its persistent Frame Limits heading');
-  assert.equal(await page.getByRole('button',{name:'Save FPS limits',exact:true}).isDisabled(),true,
+  assert.equal(await page.getByRole('button',{name:'Save Changes',exact:true}).isDisabled(),true,
     'The now-clean settings Save button must remain disabled; focus must not make it actionable');
   // Component-to-parent bindings: draft preset and Discard share one state owner.
-  await page.getByLabel('While playing',{exact:true}).fill('120');
-  await page.getByLabel('In the background',{exact:true}).fill('5');
-  assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'120');
-  assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
+  await page.getByLabel('Active FPS',{exact:true}).fill('120');
+  await page.getByLabel('Background FPS',{exact:true}).fill('5');
+  assert.equal(await page.getByLabel('Active FPS',{exact:true}).inputValue(),'120');
+  assert.equal(await page.getByLabel('Background FPS',{exact:true}).inputValue(),'5');
   assert.equal(await page.getByRole('button',{name:'Use 120 / 5',exact:true}).count(),0,
     'An unsaved quick preset must not masquerade as a Save action');
   await page.getByRole('button',{name:'Discard',exact:true}).click();
-  assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
-  assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
+  assert.equal(await page.getByLabel('Active FPS',{exact:true}).inputValue(),'60');
+  assert.equal(await page.getByLabel('Background FPS',{exact:true}).inputValue(),'5');
   assert.equal(await page.getByRole('button',{name:'Save graphics preference',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='ApplyGraphicsPreset').length),0);
   await section('Data Storage').click();

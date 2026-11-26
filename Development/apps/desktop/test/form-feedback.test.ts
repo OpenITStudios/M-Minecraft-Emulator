@@ -51,11 +51,11 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     const app=source('LazyTesterApp.svelte');
     const settings=source('GeneralSettings.svelte');
     const storage=source('DataStorage.svelte');
-    expect(settings).toContain('Save graphics preference');
-    expect(settings).toContain('Save FPS limits');
-    expect(settings).toContain('Applies to');
-    expect(settings).toContain('All launchers');
-    expect(settings).toContain('Save graphics preference');
+    expect(settings).not.toContain('Save graphics preference');
+    expect(settings).toContain('Save Changes');
+    expect(settings).toContain('Applies on next launch.');
+    expect(settings).toContain('These are limits, not measured FPS.');
+    expect(settings).not.toContain('Save graphics preference');
     expect(settings).not.toContain('Use 120 / 5');
     expect(settings).not.toContain('onOpenDataFolder');
     expect(settings).not.toContain('dataLocation?.path');

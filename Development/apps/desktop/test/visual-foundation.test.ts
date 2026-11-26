@@ -62,7 +62,7 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     const play=asset('src/LazyTesterApp.svelte');
     const settings=asset('src/GeneralSettings.svelte');
     expect(play).not.toContain('graphicsDrafts');
-    expect(settings).toContain('All five launchers use the optimized graphics preset');
+    expect(settings).not.toContain('lazytester-graphics-policy');
     expect(play).not.toContain('CoordinatePastePanel');
     expect(play).not.toContain('F3InspectorPanel');
     expect(play).not.toContain('projectF3Inspector');

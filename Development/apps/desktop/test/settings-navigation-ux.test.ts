@@ -4,12 +4,12 @@ import {describe,expect,it} from 'vitest';
 const load=(path:string)=>readFileSync(new URL('../src/'+path,import.meta.url),'utf8');
 
 describe('General / Data Storage navigation UX — source contracts',()=>{
-  it('uses a read-only shared graphics policy without individual drafts',()=>{
+  it('keeps graphics automatic without exposing a setting',()=>{
     const app=load('LazyTesterApp.svelte'), settings=load('GeneralSettings.svelte');
     expect(app).not.toContain('graphicsDrafts');
     expect(app).not.toContain('queuedPreset');
     expect(settings).not.toContain('graphics-preset');
-    expect(settings).toContain('All five launchers use the optimized graphics preset');
+    expect(settings).not.toContain('lazytester-graphics-policy');
   });
   it('keeps profile-specific Storage receipts and pending reviews scoped to the original slot',()=>{
     const app=load('LazyTesterApp.svelte');
@@ -59,7 +59,7 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(settings).not.toContain('dataLocation?.path');
     expect(app).toContain('on:click={()=>navigate(\'storage\')}>Data Storage</button>');
     expect(app).not.toContain('onShowDataStorage={() => navigate(\'storage\')}');
-    expect(settings).toContain("?'Saving…':'Save FPS limits'");
+    expect(settings).toContain("?'Saving…':'Save Changes'");
   });
   it('does not distract General Settings with a redundant workspace mode selector',()=>{
     const settings=load('GeneralSettings.svelte');
@@ -72,14 +72,14 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(app).not.toContain('workspaceLayout');
     expect(settings).not.toContain('invokeRuntime(');
   });
-  it('explains global graphics and FPS policy',()=>{
+  it('explains FPS limits without a graphics setting',()=>{
     const general=load('GeneralSettings.svelte');
     const storage=load('DataStorage.svelte');
     expect(general).toContain('FPS limits: 5–1000.');
-    expect(general).toContain('These are caps, not measured FPS; they apply at the next launch.');
+    expect(general).toContain('These are limits, not measured FPS.');
     expect(storage).toContain('<summary>Find existing profile data</summary>');
     expect(storage).toContain('<strong>Advanced recovery</strong>');
-    expect(general).toContain('Save FPS limits');
+    expect(general).toContain('Save Changes');
     expect(general).not.toContain('Use 120 / 5');
   });
   it('wraps only settings and storage rows without changing the game viewport',()=>{

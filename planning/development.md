@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Approved redesign implementation: General Frame Rate and Audio now use shared compact panel/row/footer styling; Active FPS / Background FPS, Save Changes, and native-confirmed audio switch. Graphics removed from UI only. FPS timing and validation retained; no new dependencies or native IPC. Layout choice, homepage/card redesign, storage safety and selected-only measured FPS remain pending. Screenshot/video, capture keybinds and media management explicitly deferred to the operator's special task. Tests NOT_EXECUTED. No release.
+
 Settings readability: grouped cache cleanup and folder access under Maintenance using the existing section/row styles; compact disclosure spacing and clarified FPS/audio guidance. Kept original native action admission, focus anchors and review controls. Removed redundant settings-only secondary hover override in favor of the shared hover owner. Source review only; tests NOT_EXECUTED.
 
 UI naming: use the complete joined LazyTester brand for CSS classes, IDs, design tokens and stylesheet filename; launcher card/preview names identify their owner. Svelte markup and selector fixtures migrate together; no native or installed-identity migration. Tests NOT_EXECUTED.

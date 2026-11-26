@@ -44,7 +44,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
   it('provides accessible section hierarchy and uses global settings',()=>{
     const settings=source('GeneralSettings.svelte');
     const storage=source('DataStorage.svelte');
-    for (const id of ['lazytester-graphics-policy','lazytester-frame-limits-section',
+    for (const id of ['lazytester-frame-limits-section',
       'lazytester-app-behavior-section']) {
       expect(settings).toContain('aria-labelledby="'+id+'"');
       expect(settings).toContain('id="'+id+'"');

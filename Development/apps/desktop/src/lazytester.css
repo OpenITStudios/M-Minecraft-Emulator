@@ -962,3 +962,18 @@ body{
 @media(forced-colors:active){
   .lazytester-app .lazytester-settings-layout main > .lazytester-global-feedback > .lazytester-alert{border-color:Highlight}
 }
+
+/* Shared settings panels: presentation only, no native workspace geometry. */
+.lazytester-settings-panel{background:var(--lazytester-panel);border:1px solid var(--lazytester-line);border-radius:8px;overflow:hidden;padding:0 16px}
+.lazytester-settings-panel .lazytester-setting{min-height:60px;padding:12px 0;align-items:center}
+.lazytester-settings-panel .lazytester-setting:last-child{border-bottom:0}
+.lazytester-settings-panel .lazytester-setting p{font-size:12px;margin:3px 0 0}
+.lazytester-settings-panel-footer{margin:0 -16px;padding:10px 16px;align-items:center;justify-content:flex-end;border-top:1px solid var(--lazytester-line);background:#191c21}
+.lazytester-settings-note{font-size:12px;color:var(--lazytester-muted);margin-right:auto}
+.lazytester-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.lazytester-settings-panel .lazytester-audio-toggle input{appearance:none;position:relative;box-sizing:border-box;width:36px;height:22px;border-radius:12px;padding:0;margin:0;background:var(--lazytester-control-hover);border:1px solid var(--lazytester-control-outline);cursor:pointer}
+.lazytester-settings-panel .lazytester-audio-toggle input::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--lazytester-muted)}
+.lazytester-settings-panel .lazytester-audio-toggle input:checked{background:var(--lazytester-accent);border-color:var(--lazytester-accent)}
+.lazytester-settings-panel .lazytester-audio-toggle input:checked::after{left:17px;background:var(--lazytester-on-accent)}
+.lazytester-settings-panel .lazytester-audio-toggle input:disabled{opacity:.68;cursor:default}
+@media (forced-colors:active){.lazytester-settings-panel .lazytester-audio-toggle input{appearance:auto;width:24px;height:24px}.lazytester-settings-panel .lazytester-audio-toggle input::after{display:none}}
