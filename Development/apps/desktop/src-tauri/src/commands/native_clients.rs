@@ -37,6 +37,10 @@ pub async fn lazy_tester_session(
     if matches!(request, crate::engine::native_clients_session::SessionRequest::ApplyGraphicsPreset { .. }) {
         return Err("Individual graphics preferences are retired; all launchers use the optimized preset.".into());
     }
+    // Optional per-profile performance experiments are no longer desktop controls.
+    if matches!(request, crate::engine::native_clients_session::SessionRequest::DisableImprovedInputResponse { .. } | crate::engine::native_clients_session::SessionRequest::EnableTextureStreaming { .. } | crate::engine::native_clients_session::SessionRequest::DisableTextureStreaming { .. }) {
+        return Err("Individual performance controls are retired.".into());
+    }
     // Untrusted webview code may not forge agent-reported activity.
     if request.is_agent_report() {
         return Err("Desktop cannot publish agent activity or arbitrate Testing runs".into());

@@ -171,7 +171,6 @@ try {
           return {...snapshot(), settings: {...settings, canApplyPreset: !(window.__runningSlot || window.__runningSlots?.length)}};
         }
         if (operation === 'Launch') return {...snapshot(), profiles: profiles.map(profile => profile.slot === args.request.slot ? {...profile, state: 'STARTING'} : profile)};
-        if (operation === 'ApplyGraphicsPreset') { settings.graphicsPresets[args.request.slot-1] = args.request.preset; return {...snapshot(), settings:{...settings,changedProfiles:1}}; }
         if (operation === 'SavePerformance') {
           settings.activeFps = args.request.activeFps; settings.backgroundFps = args.request.backgroundFps;
           return {...snapshot(), settings};
@@ -581,8 +580,7 @@ try {
   // reader, high contrast or game-window behavior until actually executed.
   const settingsTargets=await page.evaluate(()=>{
     const selectors=['#active-fps','#background-fps',
-      '.lt-audio-toggle','.lt-sidebar nav button',
-      '.lt-legacy-graphics > summary'];
+      '.lt-audio-toggle','.lt-sidebar nav button'];
     return selectors.map(selector=>{
       const element=document.querySelector(selector);
       return {selector,height:element?.getBoundingClientRect().height??0};
@@ -590,7 +588,7 @@ try {
   });
   assert.ok(settingsTargets.every(({height})=>height>=24),
     'Settings control and disclosure targets must provide at least 24 CSS px height');
-  assert.ok(settingsTargets.filter(item=>['#graphics-preset','#active-fps','#background-fps']
+  assert.ok(settingsTargets.filter(item=>['#active-fps','#background-fps']
     .includes(item.selector)).every(({height})=>height>=36),
     'Settings form inputs should use the shared 36px control height');
   const settingsCopy=await page.evaluate(()=>{
@@ -604,18 +602,8 @@ try {
     'Settings instructions remain readable; data paths belong only to Data Storage');
   assert.equal(await page.getByRole('button',{name:'Open Data Storage',exact:true}).count(),0,
     'General does not duplicate the Data Storage sidebar link');
-  const legacyGraphics=page.locator('details.lt-legacy-graphics');
-  assert.equal(await legacyGraphics.getAttribute('open'),null);
-  await legacyGraphics.locator(':scope > summary').click();
-  const presetExplanation=legacyGraphics.locator('details.lt-settings-explanation');
-  assert.equal(await page.locator('#graphics-preset option[value="Preserve"]').textContent(),
-    'Preserve Visuals (recommended)',
-    'The safe default graphics choice should be clearly recommended');
-  assert.equal(await presetExplanation.getAttribute('open'),null,
-    'Technical preset explanations stay out of the default Settings path');
-  await presetExplanation.locator('summary').click();
-  assert.match(await presetExplanation.textContent(),/simulation distance is unchanged/,
-    'Advanced graphics explanation remains accessible on demand');
+  assert.equal(await page.locator('#graphics-preset').count(),0);
+  assert.match(await page.locator('#lt-graphics-policy').textContent(),/All launchers/);
   await page.getByLabel('While playing',{exact:true}).fill('60');await page.getByLabel('In the background',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
   await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
@@ -650,14 +638,8 @@ try {
   await page.getByRole('button',{name:'Discard',exact:true}).click();
   assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
   assert.equal(await page.getByLabel('In the background',{exact:true}).inputValue(),'5');
-  await page.locator('.lt-legacy-graphics > summary').click();
-  await page.getByLabel('Graphics preset',{exact:true}).selectOption('High');
-  await page.getByRole('button',{name:'Save graphics preference',exact:true}).click();
-  await page.getByText(/High graphics preference saved/).waitFor();
-  assert.equal(await page.locator('#lt-graphics-section').evaluate(
-    node=>document.activeElement===node),true,
-    'A completed graphics preset save must retain focus on Graphics, not a disabled button');
-  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='ApplyGraphicsPreset').length),1);
+  assert.equal(await page.getByRole('button',{name:'Save graphics preference',exact:true}).count(),0);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='ApplyGraphicsPreset').length),0);
   await section('Data Storage').click();
   assert.equal(await page.getByLabel('Graphics preset',{exact:true}).count(),0);
   const advanced=page.locator('.lt-advanced');await advanced.locator('summary').click();
@@ -731,8 +713,8 @@ try {
   await section('General').click();await heading('General').waitFor();
   assert.equal(await page.locator('#workspace-layout').count(),0,
     'No redundant Gameplay Focus/Monitoring selector belongs in Settings');
-  assert.equal(await page.locator('#graphics-preset').isVisible(),false,
-    'Legacy graphics preferences stay collapsed by default');
+  assert.equal(await page.locator('#graphics-preset').count(),0,
+    'Individual graphics preferences are retired');
   await nav('Play').click();
   assert.equal(await page.locator('.lt-filmstrip .lt-card-picture').count(),5);
   const adaptivePreviews=await page.locator('.lt-card-picture').evaluateAll(nodes=>
@@ -755,8 +737,7 @@ try {
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await heading('Starting Minecraft - 1').first().waitFor();await nav('Settings').click();
   await page.evaluate(()=>{window.__runningSlots=[1,2];});await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.locator('.lt-legacy-graphics > summary').click();
-  assert.equal(await page.getByRole('button',{name:'Save graphics preference',exact:true}).isDisabled(),true);
+  assert.equal(await page.getByRole('button',{name:'Save graphics preference',exact:true}).count(),0);
   // Current Play contract: release ONE selected Minecraft window, preserving
   // the other running peer. The next verified game becomes the selected view.
   await nav('Play').click();

@@ -31,6 +31,8 @@ Global settings retirement: removed the individual graphics storage reader/write
 
 Retired the inactive High/Preserve renderer branches and preset-selection argument. Launch, reset/restore preparation, backup validation and fixtures now use the same fixed reviewed renderer; options key values, unrelated bytes, identity checks and backup behavior remain unchanged. Replaced obsolete mode-switch tests with optimized-policy idempotence and unrelated-option preservation coverage. Wire vocabulary unchanged; MCP implementation untouched. Tests NOT_EXECUTED. Next: inspect remaining bridge/CSS and storage controls.
 
+Desktop retirement: removed individual Texture Streaming/Improved Input Response controls, review branches and bridge methods, and the unused global apply bridge. Desktop IPC refuses the retired optional performance requests; shared native compatibility implementation and response fields remain unchanged pending consumer review (MCP excluded). Existing Minecraft options are not migrated; Reset/Restore, backup and data maintenance remain. Retired graphics CSS and updated affected source/browser fixtures including stale draft and focus assertions. Tests NOT_EXECUTED; broader integration remains open.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

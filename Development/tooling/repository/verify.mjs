@@ -362,7 +362,9 @@ export function verifyRepository(root,g0=false) {
     && !/const PRESET:[^;]*(?:ctrl_improvedInputResponse|gfx_texture_streaming)/s.test(gamePreset)
     && gameWire.includes('pub improved_input_response_enabled: Option<bool>')
     && gameWire.includes('pub texture_streaming_enabled: Option<bool>')
-    && mountedUI.includes('Improved Input Response: unknown or not recorded'),
+    && !mountedUI.includes('lazyTester.disableImprovedInputResponse(')
+    && !mountedUI.includes('lazyTester.enableTextureStreaming(')
+    && !mountedUI.includes('lazyTester.disableTextureStreaming('),
     'Optional settings must share strict 0/1 parsing with no forced graphics preset');
   const settingsRead = gamePreset.slice(
     gamePreset.indexOf('pub(super) fn inspect_settings('),

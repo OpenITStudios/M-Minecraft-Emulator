@@ -37,14 +37,14 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(storage).toContain('<summary><strong>Resource pack details</strong></summary>');
     expect(storage).toContain('Counts pack folders with manifests, not packs loaded in the game.');
     expect(storage).toContain('Active packs and memory usage are unknown.');
-    expect(storage).toContain('Texture Streaming — off');
-    expect(storage).toContain('Improved Input Response — on');
+    expect(storage).not.toContain('Texture Streaming — off');
+    expect(storage).not.toContain('Improved Input Response — on');
     expect(css).not.toContain('.lt-storage-packs summary small');
   });
-  it('provides accessible section hierarchy and retains optional legacy controls',()=>{
+  it('provides accessible section hierarchy and uses global settings',()=>{
     const settings=source('GeneralSettings.svelte');
     const storage=source('DataStorage.svelte');
-    for (const id of ['lt-graphics-section','lt-frame-limits-section',
+    for (const id of ['lt-graphics-policy','lt-frame-limits-section',
       'lt-app-behavior-section']) {
       expect(settings).toContain('aria-labelledby="'+id+'"');
       expect(settings).toContain('id="'+id+'"');

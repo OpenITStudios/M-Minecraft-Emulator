@@ -59,14 +59,11 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(play).toContain('startingCount');
     expect(play).toContain('{runningCount}');
   });
-  it('retains graphics drafts without any in-app F3 or coordinate feature',()=>{
+  it('retires graphics drafts without any in-app F3 or coordinate feature',()=>{
     const play=asset('src/LazyTesterApp.svelte');
     const settings=asset('src/GeneralSettings.svelte');
-    expect(play).toContain('graphicsDrafts = new Map<ProfileSlot, GraphicsPreset>()');
-    expect(play).toContain("if (page==='settings') rememberGraphicsDraft()");
-    expect(play).toContain('graphicsPreset=graphicsChoice(selectedSlot)');
-    expect(play).toContain('graphicsDrafts.delete(request.slot)');
-    expect(settings).toContain('Unsaved choice.');
+    expect(play).not.toContain('graphicsDrafts');
+    expect(settings).toContain('All five launchers use the optimized graphics preset');
     expect(play).not.toContain('CoordinatePastePanel');
     expect(play).not.toContain('F3InspectorPanel');
     expect(play).not.toContain('projectF3Inspector');

@@ -4,28 +4,12 @@ import {describe,expect,it} from 'vitest';
 const load=(path:string)=>readFileSync(new URL('../src/'+path,import.meta.url),'utf8');
 
 describe('General / Data Storage navigation UX — source contracts',()=>{
-  it('provides an explicitly cancelable, per-profile graphics draft without native calls',()=>{
-    const app=load('LazyTesterApp.svelte');
-    const settings=load('GeneralSettings.svelte');
-    expect(app).toContain('function discardGraphicsDraft(): void');
-    expect(app).toContain('graphicsDrafts.delete(selectedSlot)');
-    expect(app).toContain("settings?.graphicsPresets?.[selectedSlot - 1] ?? 'Preserve'");
-    expect(app).toContain('onDiscardGraphics={discardGraphicsDraft}');
-    expect(settings).toContain('on:click={onDiscardGraphics}>Discard draft</button>');
-    expect(settings).toContain('{#if graphicsDirty}<button');
-    expect(settings).not.toContain('invokeRuntime(');
-  });
-  it('keeps a user graphics draft if its native save receipt is unconfirmed',()=>{
-    const app=load('LazyTesterApp.svelte');
-    const apply=app.split('async function applyPreset(')[1]
-      ?.split('  function requestPerformanceSave()')[0] ?? '';
-    expect(apply).toContain('graphicsDrafts.delete(request.slot)');
-    expect(apply).toContain('graphicsDrafts.set(request.slot,request.preset)');
-    expect(apply).toContain("issueKey='settings';settings=null;");
-    expect(apply).toContain("settings.changedProfiles===null");
-    expect(app).toContain("if (page==='settings') rememberGraphicsDraft()");
-    expect(app).toContain("graphicsPreset=graphicsChoice(selectedSlot)");
-    expect(app).toContain('Preserve Visuals saved. Future launches leave existing graphics unchanged.');
+  it('uses a read-only shared graphics policy without individual drafts',()=>{
+    const app=load('LazyTesterApp.svelte'), settings=load('GeneralSettings.svelte');
+    expect(app).not.toContain('graphicsDrafts');
+    expect(app).not.toContain('queuedPreset');
+    expect(settings).not.toContain('graphics-preset');
+    expect(settings).toContain('All five launchers use the optimized graphics preset');
   });
   it('keeps profile-specific Storage receipts and pending reviews scoped to the original slot',()=>{
     const app=load('LazyTesterApp.svelte');
@@ -35,10 +19,8 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     // controls were disabled before the pending review began.
     expect(choose).toContain('closeReviewActive(reviewState()) || clearingData ||');
     expect(choose).toContain('clearSlot!==null || recovery!==null || fullReview!==null) return;');
-    expect(choose).toContain('queuedPreset!==null');
     expect(choose).not.toContain('clearSlot=null;recovery=null;fullReview=null;');
     expect(choose).toContain("settingsNotice='';storageNotice='';");
-    expect(choose).toContain('graphicsPreset=graphicsChoice(slot);');
   });
   it('moves screen-reader focus only to Settings / Storage headings on explicit navigation',()=>{
     const app=load('LazyTesterApp.svelte');
@@ -78,31 +60,25 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(app).toContain('on:click={()=>navigate(\'storage\')}>Data Storage</button>');
     expect(app).not.toContain('onShowDataStorage={() => navigate(\'storage\')}');
     expect(settings).toContain("?'Saving…':'Save FPS limits'");
-    expect(settings).toContain("?'Saving…':'Save graphics preference'");
   });
   it('does not distract General Settings with a redundant workspace mode selector',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
     expect(settings).toContain('<div class="lt-settings-content">\n          <section class="lt-group" aria-labelledby="lt-frame-limits-section">');
-    expect(settings).toContain('<summary>Legacy graphics preferences</summary>');
+    expect(settings).not.toContain('Legacy graphics preferences');
     expect(settings).not.toContain('When LazyTester closes');
     expect(settings).not.toContain('workspace-layout');
     expect(settings).not.toContain('onChooseWorkspaceLayout');
     expect(app).not.toContain('workspaceLayout');
     expect(settings).not.toContain('invokeRuntime(');
   });
-  it('explains unfamiliar graphics and FPS options without changing their native values',()=>{
+  it('explains global graphics and FPS policy',()=>{
     const general=load('GeneralSettings.svelte');
     const storage=load('DataStorage.svelte');
-    expect(general).toContain('<option value="Preserve">Preserve Visuals (recommended)</option>');
-    expect(general).toContain('About legacy graphics presets');
-    expect(general).toContain('both set 12 chunks and MSAA 1');
-    expect(general).toContain('Neither guarantees higher FPS.');
     expect(general).toContain('FPS limits: 5–1000.');
     expect(general).toContain('These are caps, not measured FPS; they apply at the next launch.');
     expect(storage).toContain('<summary>Find existing profile data</summary>');
     expect(storage).toContain('<strong>Advanced recovery</strong>');
-    expect(general).toContain('Save graphics preference');
     expect(general).toContain('Save FPS limits');
     expect(general).not.toContain('Use 120 / 5');
   });

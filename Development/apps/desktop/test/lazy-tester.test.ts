@@ -397,15 +397,9 @@ describe('Lazy Tester profile contract', () => {
       {schema:1,presentationReleased:true,snapshot,issue:null,process:123},
     ])expect(()=>parseSelectedClose(invalid)).toThrow();
   });
-  it('rejects a forged texture-streaming profile before game IPC',async()=>{
-    for(const slot of [0,-1,6,99] as number[]) {
-      await expect(lazyTester.enableTextureStreaming(slot as 1)).rejects.toThrow('Unknown Minecraft profile');
-    }
-  });
-  it('refuses a forged RAM workaround slot without contacting the native controller', async()=>{
-    for (const slot of [0,6,-1,10] as number[]) {
-      await expect(lazyTester.disableImprovedInputResponse(slot as 1)).rejects.toThrow('Unknown Minecraft profile');
-    }
+  it('does not expose retired individual performance methods',()=>{
+    for(const name of ['applyPreset','applyGraphics','enableTextureStreaming','disableTextureStreaming','disableImprovedInputResponse'])
+      expect(Object.hasOwn(lazyTester,name)).toBe(false);
   });
   it('refuses a forged per-launcher close slot before invoking Tauri', async()=>{
     for (const slot of [0,6,-1,10] as number[]) {

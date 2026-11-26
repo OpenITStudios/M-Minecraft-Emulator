@@ -72,7 +72,7 @@ describe('Minimal Professional color and control state source contracts',()=>{
     expect(css).toContain('.lt-settings-layout .lt-delete-confirm button.lt-danger:hover:not(:disabled)');
     expect(css).toContain('.lt-settings-layout :is(.lt-audio-toggle,.lt-delete-ack){');
     expect(css).toContain('min-height:32px;');
-    expect(css).toContain('.lt-settings-layout :is(.lt-target select,.lt-launcher-heading select,#graphics-preset,.lt-fps input){');
+    expect(css).toContain('.lt-settings-layout :is(.lt-launcher-heading select,.lt-fps input){');
     expect(css).toContain('min-height:var(--lt-control-min-height);');
     expect(css).toContain('.lt-app :is(button,a,input,textarea,select,summary):focus-visible{');
     expect(css).not.toContain('outline-offset:-3px}');

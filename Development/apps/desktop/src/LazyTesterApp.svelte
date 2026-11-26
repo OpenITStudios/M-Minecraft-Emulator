@@ -45,7 +45,7 @@
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
-  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming'|'DisableTextureStreaming'}|null=null;
+  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'}|null=null;
   let fullReview:{slot:ProfileSlot;token:string;pending:boolean}|null=null,fullName='',fullAck=false,clearingData=false;
   type Page = 'workspace' | 'storage' | 'settings';
   let page: Page = 'workspace';
@@ -838,31 +838,13 @@
     const pending=recovery;
     if(!pending||busy||refreshing||resizing||pending.slot!==selectedSlot)return;
     const status=selectedStorage?.gameSettings;
-    const allowed=pending.action==='EnableTextureStreaming'
-      ? status?.canReset===true&&status?.textureStreamingEnabled===false&&selectedProfile?.state==='STOPPED'
-      : pending.action==='DisableTextureStreaming'
-        ? status?.canReset===true&&status?.textureStreamingEnabled===true&&selectedProfile?.state==='STOPPED'
-      : pending.action==='DisableInputResponse'
-        ? status?.canReset===true&&status?.improvedInputResponseEnabled===true&&selectedProfile?.state==='STOPPED'
-        : pending.action==='Reset'?status?.canReset:status?.canRestore;
+    const allowed=pending.action==='Reset'?status?.canReset:status?.canRestore;
     if(!allowed)return;
     busy=true;issueKey=null;storageNotice='';recovery=null;
     try {
-      const snapshot=pending.action==='EnableTextureStreaming'
-        ? await lazyTester.enableTextureStreaming(pending.slot)
-        : pending.action==='DisableTextureStreaming'
-          ? await lazyTester.disableTextureStreaming(pending.slot)
-        : pending.action==='DisableInputResponse'
-          ? await lazyTester.disableImprovedInputResponse(pending.slot)
-          : await lazyTester.recoverSettings(pending.slot,pending.action);
+      const snapshot=await lazyTester.recoverSettings(pending.slot,pending.action);
       applyStorageSnapshot(snapshot);
-      storageNotice=pending.action==='EnableTextureStreaming'
-        ? 'Minecraft - '+pending.slot+': Texture Streaming enabled in saved settings. Restart to apply. Memory benefit unverified; settings backed up.'
-        : pending.action==='DisableTextureStreaming'
-          ? 'Minecraft - '+pending.slot+': Texture Streaming disabled in saved settings. Restart to apply; GPU use may increase. Settings backed up.'
-        : pending.action==='DisableInputResponse'
-          ? 'Minecraft - '+pending.slot+': Improved Input Response disabled. Restart to apply; RAM benefit unverified. Settings backed up for Restore.'
-          : `Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. The global optimized graphics preset applies at next launch. Previous settings remain available through Restore.`;
+      storageNotice=`Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. The global optimized graphics preset applies at next launch. Previous settings remain available through Restore.`;
     } catch(error) {issueKey='settings';storage=null;}
     finally {busy=false;}
   }
@@ -873,7 +855,7 @@
     fullReview={slot:selectedSlot,token:status.confirmationToken,pending:status.pending};
     void tick().then(()=>document.getElementById('full-clear-name')?.focus());
   }
-  function reviewSettings(action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming'|'DisableTextureStreaming') {
+  function reviewSettings(action:'Reset'|'Restore') {
     if(navigationReviewOpen||busy||refreshing||resizing||!available)return;
     fullReview=null;clearSlot=null;recovery={slot:selectedSlot,action};
   }
