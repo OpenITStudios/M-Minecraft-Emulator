@@ -4,328 +4,329 @@
   color:#eff1f5;
   background:#14161a;
   font-synthesis:none}
-  *{
-    box-sizing:border-box}
-    html,body,#app{
-      margin:0;
-      height:100%}
-      body{
-        overflow:hidden}
-        .lazytester-app{
-          --lazytester-bg:#14161a;
-          --lazytester-panel:#1c1f24;
-          --lazytester-line:#383e48;
-          --lazytester-muted:#b5bdca;
-          --lazytester-accent:#bac2ff;
-          /* Minimal Professional semantic palette: one canonical source. */
-          --lazytester-text:#eff1f5;
-          --lazytester-on-accent:#18203a;
-          --lazytester-surface-raised:#252930;
-          --lazytester-selected-bg:#2c344c;
-          --lazytester-control-outline:#667387;
-          --lazytester-success:#95dfbd;
-          --lazytester-warning:#d3b480;
-          --lazytester-danger:#efacb6;
-          --lazytester-viewport-bg:#101216;
-          --lazytester-danger-hover:#c42b1c;
-          --lazytester-control-min-height:36px;
-          --lazytester-radius-control:6px;
-          /* Semantic interactive surfaces and non-text distinctions. */
-          --lazytester-advanced-outline:#6e7b9a;
-          --lazytester-expanded-surface:#252d43;
-          --lazytester-preview-empty:#232830;
-          --lazytester-alert-outline:#aa785a;
-          --lazytester-alert-surface:#342721;
-          --lazytester-danger-surface:#943641;
-          --lazytester-danger-outline:#b34a56;
-          --lazytester-on-danger:#fff;
-          --lazytester-control-hover:#303640;
-          --lazytester-accent-hover:#d0d7ff;
-          --lazytester-overlay-shadow:#0006;
-          display:flex;
-          flex-direction:column;
-          height:100vh;
-          background:var(--lazytester-bg);
-          color:var(--lazytester-text)}
-          .lazytester-app button,.lazytester-app input,.lazytester-app select{
-            font:inherit}
-            .lazytester-app button{
-              cursor:pointer;
-              border:1px solid transparent;
-              border-radius:6px;
-              background:var(--lazytester-accent);
-              color:var(--lazytester-on-accent);
-              padding:9px 13px;
-              font-weight:600;
-              flex-shrink:0}
-              .lazytester-app button:disabled{
-                cursor:default;
-                opacity:.68}
-                .lazytester-app button.lazytester-secondary{
-                  background:var(--lazytester-surface-raised);
-                  color:inherit;
-                  border-color:var(--lazytester-control-outline)}
-                  .lazytester-app :is(button,a,input,select,summary):focus-visible{
-                    outline:2px solid var(--lazytester-accent);
-                    outline-offset:3px}
-                    .lazytester-app input,.lazytester-app select{
-                      border:1px solid var(--lazytester-control-outline);
-                      border-radius:6px;
-                      padding:8px 10px;
-                      background:var(--lazytester-bg);
-                      color:inherit}
-                      .lazytester-app [hidden]{
-                        display:none!important}
-                        .lazytester-topbar{
-                          display:flex;
-                          align-items:center;
-                          gap:24px;
-                          padding:0 24px;
-                          height:56px;
-                          flex-shrink:0;
-                          background:var(--lazytester-panel);
-                          border-bottom:1px solid var(--lazytester-line)}
-                          .lazytester-brand{
-                            display:flex;
-                            align-items:center;
-                            gap:10px;
-                            color:inherit;
-                            font-size:15px;
-                            font-weight:600;
-                            text-decoration:none}
-                            .lazytester-brand>.lazytester-brand-mark{
-                              display:grid;
-                              place-items:center;
-                              width:29px;
-                              height:29px;
-                              border-radius:7px;
-                              background:var(--lazytester-selected-bg);
-                              color:var(--lazytester-accent);
-                              font-size:12px}
-                              .lazytester-topbar nav{
-                                display:flex;
-                                align-self:stretch;
-                                gap:20px}
-                                .lazytester-topbar nav button{
-                                  background:transparent;
-                                  color:var(--lazytester-muted);
-                                  padding:0;
-                                  border:0;
-                                  border-bottom:3px solid transparent;
-                                  border-radius:0}
-                                  .lazytester-topbar nav button.chosen{
-                                    color:inherit;
-                                    border-bottom-color:var(--lazytester-accent)}
-                                    .lazytester-connection{
-                                      margin-left:auto;
-                                      font-size:12px;
-                                      color:var(--lazytester-muted)}
-                                      .lazytester-dot{
-                                        display:inline-block;
-                                        width:7px;
-                                        height:7px;
-                                        margin-right:6px;
-                                        background:var(--lazytester-success);
-                                        border-radius:50%}
-                                        .lazytester-dot.waiting{
-                                          background:var(--lazytester-warning)}
-                                          .lazytester-layout{
-                                            flex:1;
-                                            min-height:0;
-                                            display:flex}
-                                            .lazytester-settings-layout{
-                                              display:grid;
-                                              grid-template-columns:180px minmax(0,1fr)}
-                                              .lazytester-sidebar{
-                                                background:var(--lazytester-panel);
-                                                border-right:1px solid var(--lazytester-line);
-                                                padding:25px 12px}
-                                                .lazytester-sidebar h2{
-                                                  font-size:14px;
-                                                  margin:0 12px 18px}
-                                                  .lazytester-sidebar nav{
-                                                    display:grid;
-                                                    gap:5px}
-                                                    .lazytester-sidebar button{
-                                                      text-align:left;
-                                                      background:transparent;
-                                                      color:var(--lazytester-muted);
-                                                      font-weight:400}
-                                                      .lazytester-sidebar button.chosen{
-                                                        background:var(--lazytester-selected-bg);
-                                                        color:inherit}
-                                                        .lazytester-app main{
-                                                          flex:1;
-                                                          min-width:0;
-                                                          min-height:0;
-                                                          padding:24px;
-                                                          display:flex;
-                                                          flex-direction:column;
-                                                          overflow:auto}
-                                                          .lazytester-settings-layout main{
-                                                            padding:24px 28px}
-                                                            .lazytester-page-header{
-                                                              display:flex;
-                                                              justify-content:space-between;
-                                                              align-items:center;
-                                                              gap:16px;
-                                                              margin-bottom:12px;
-                                                              flex-shrink:0}
-                                                              .lazytester-page-header h1{
-                                                                margin:0;
-                                                                font-size:20px;
-                                                                font-weight:600;
-                                                                letter-spacing:-.2px}
-                                                                .lazytester-header-actions{
-                                                                  display:flex;
-                                                                  align-items:center;
-                                                                  gap:8px}
-                                                                .lazytester-play-header h1{
-                                                                  font-size:20px}
-                                                                .lazytester-page-header button{
-                                                                  font-size:12px;
-                                                                  padding:7px 11px}
-                                                                  .lazytester-app h2{
-                                                                    font-size:16px;
-                                                                    font-weight:600;
-                                                                    margin:0 0 10px}
-                                                                    .lazytester-app h3{
-                                                                      font-size:14px;
-                                                                      font-weight:600;
-                                                                      margin:0}
-                                                                      .lazytester-app p{
-                                                                        font-size:14px;
-                                                                        line-height:1.55;
-                                                                        color:var(--lazytester-muted);
-                                                                        margin:6px 0}
-                                                                        .lazytester-app small{
-                                                                          font-size:13px;
-                                                                          color:var(--lazytester-muted);
-                                                                          font-weight:400}
-                                                                          .lazytester-group>h2 small{
-                                                                            margin-left:10px}
-                                                                            .lazytester-actions{
-                                                                              display:flex;
-                                                                              gap:8px;
-                                                                              flex-wrap:wrap;
-                                                                              margin-top:14px}
-                                                                              .lazytester-help{
-                                                                                font-size:13px!important}
-                                                                                .lazytester-settings-content{
-                                                                                  max-width:880px;
-                                                                                  width:100%}
-                                                                                  .lazytester-group{
-                                                                                    margin:12px 0 20px}
-                                                                                    .lazytester-group+.lazytester-group{
-                                                                                      padding-top:16px;
-                                                                                      border-top:1px solid var(--lazytester-line)}
-                                                                                      .lazytester-setting{
-                                                                                        display:flex;
-                                                                                        align-items:center;
-                                                                                        justify-content:space-between;
-                                                                                        gap:16px;
-                                                                                        padding:12px 0;
-                                                                                        border-bottom:1px solid var(--lazytester-line)}
-                                                                                        .lazytester-setting>div:first-child{
-                                                                                          min-width:0;
-                                                                                          flex:1}
-                                                                                          .lazytester-setting p{
-                                                                                            max-width:570px}
+*{
+  box-sizing:border-box}
+html,body,#app{
+  margin:0;
+  height:100%}
+body{
+  overflow:hidden}
+.lazytester-app{
+  --lazytester-bg:#14161a;
+  --lazytester-panel:#1c1f24;
+  --lazytester-line:#383e48;
+  --lazytester-muted:#b5bdca;
+  --lazytester-accent:#bac2ff;
+  /* Minimal Professional semantic palette: one canonical source. */
+  --lazytester-text:#eff1f5;
+  --lazytester-on-accent:#18203a;
+  --lazytester-surface-raised:#252930;
+  --lazytester-selected-bg:#2c344c;
+  --lazytester-control-outline:#667387;
+  --lazytester-success:#95dfbd;
+  --lazytester-warning:#d3b480;
+  --lazytester-danger:#efacb6;
+  --lazytester-viewport-bg:#101216;
+  --lazytester-danger-hover:#c42b1c;
+  --lazytester-control-min-height:36px;
+  --lazytester-radius-control:6px;
+  /* Semantic interactive surfaces and non-text distinctions. */
+  --lazytester-advanced-outline:#6e7b9a;
+  --lazytester-expanded-surface:#252d43;
+  --lazytester-preview-empty:#232830;
+  --lazytester-alert-outline:#aa785a;
+  --lazytester-alert-surface:#342721;
+  --lazytester-danger-surface:#943641;
+  --lazytester-danger-outline:#b34a56;
+  --lazytester-on-danger:#fff;
+  --lazytester-control-hover:#303640;
+  --lazytester-accent-hover:#d0d7ff;
+  --lazytester-overlay-shadow:#0006;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+  background:var(--lazytester-bg);
+  color:var(--lazytester-text)}
+/* Shared controls */
+.lazytester-app button,.lazytester-app input,.lazytester-app select{
+  font:inherit}
+.lazytester-app button{
+  cursor:pointer;
+  border:1px solid transparent;
+  border-radius:6px;
+  background:var(--lazytester-accent);
+  color:var(--lazytester-on-accent);
+  padding:9px 13px;
+  font-weight:600;
+  flex-shrink:0}
+.lazytester-app button:disabled{
+  cursor:default;
+  opacity:.68}
+.lazytester-app button.lazytester-secondary{
+  background:var(--lazytester-surface-raised);
+  color:inherit;
+  border-color:var(--lazytester-control-outline)}
+.lazytester-app input,.lazytester-app select{
+  border:1px solid var(--lazytester-control-outline);
+  border-radius:6px;
+  padding:8px 10px;
+  background:var(--lazytester-bg);
+  color:inherit}
+.lazytester-app [hidden]{
+  display:none!important}
+/* Application navigation */
+.lazytester-topbar{
+  display:flex;
+  align-items:center;
+  gap:24px;
+  padding:0 24px;
+  height:56px;
+  flex-shrink:0;
+  background:var(--lazytester-panel);
+  border-bottom:1px solid var(--lazytester-line)}
+.lazytester-brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  color:inherit;
+  font-size:15px;
+  font-weight:600;
+  text-decoration:none}
+.lazytester-brand>.lazytester-brand-mark{
+  display:grid;
+  place-items:center;
+  width:29px;
+  height:29px;
+  border-radius:7px;
+  background:var(--lazytester-selected-bg);
+  color:var(--lazytester-accent);
+  font-size:12px}
+.lazytester-topbar nav{
+  display:flex;
+  align-self:stretch;
+  gap:20px}
+.lazytester-topbar nav button{
+  background:transparent;
+  color:var(--lazytester-muted);
+  padding:0;
+  border:0;
+  border-bottom:3px solid transparent;
+  border-radius:0}
+.lazytester-topbar nav button.chosen{
+  color:inherit;
+  border-bottom-color:var(--lazytester-accent)}
+.lazytester-connection{
+  margin-left:auto;
+  font-size:12px;
+  color:var(--lazytester-muted)}
+.lazytester-dot{
+  display:inline-block;
+  width:7px;
+  height:7px;
+  margin-right:6px;
+  background:var(--lazytester-success);
+  border-radius:50%}
+.lazytester-dot.waiting{
+  background:var(--lazytester-warning)}
+/* Page layout and settings navigation */
+.lazytester-layout{
+  flex:1;
+  min-height:0;
+  display:flex}
+.lazytester-settings-layout{
+  display:grid;
+  grid-template-columns:180px minmax(0,1fr)}
+.lazytester-sidebar{
+  background:var(--lazytester-panel);
+  border-right:1px solid var(--lazytester-line);
+  padding:25px 12px}
+.lazytester-sidebar h2{
+  font-size:14px;
+  margin:0 12px 18px}
+.lazytester-sidebar nav{
+  display:grid;
+  gap:5px}
+.lazytester-sidebar button{
+  text-align:left;
+  background:transparent;
+  color:var(--lazytester-muted);
+  font-weight:400}
+.lazytester-sidebar button.chosen{
+  background:var(--lazytester-selected-bg);
+  color:inherit}
+.lazytester-app main{
+  flex:1;
+  min-width:0;
+  min-height:0;
+  padding:24px;
+  display:flex;
+  flex-direction:column;
+  overflow:auto}
+.lazytester-settings-layout main{
+  padding:24px 28px}
+.lazytester-page-header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:16px;
+  margin-bottom:12px;
+  flex-shrink:0}
+.lazytester-page-header h1{
+  margin:0;
+  font-size:20px;
+  font-weight:600;
+  letter-spacing:-.2px}
+.lazytester-header-actions{
+  display:flex;
+  align-items:center;
+  gap:8px}
+.lazytester-page-header button{
+  font-size:12px;
+  padding:7px 11px}
+.lazytester-app h2{
+  font-size:16px;
+  font-weight:600;
+  margin:0 0 10px}
+.lazytester-app h3{
+  font-size:14px;
+  font-weight:600;
+  margin:0}
+.lazytester-app p{
+  font-size:14px;
+  line-height:1.55;
+  color:var(--lazytester-muted);
+  margin:6px 0}
+.lazytester-app small{
+  font-size:13px;
+  color:var(--lazytester-muted);
+  font-weight:400}
+.lazytester-group>h2 small{
+  margin-left:10px}
+.lazytester-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:14px}
+.lazytester-help{
+  font-size:13px!important}
+/* General Settings and Data Storage */
+.lazytester-settings-content{
+  max-width:880px;
+  width:100%}
+.lazytester-group{
+  margin:12px 0 20px}
+.lazytester-group+.lazytester-group{
+  padding-top:16px;
+  border-top:1px solid var(--lazytester-line)}
+.lazytester-setting{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:12px 0;
+  border-bottom:1px solid var(--lazytester-line)}
+.lazytester-setting>div:first-child{
+  min-width:0;
+  flex:1}
+.lazytester-setting p{
+  max-width:570px}
 
-                                                                                              .lazytester-fps{
-                                                                                                display:flex;
-                                                                                                align-items:center;
-                                                                                                gap:8px;
-                                                                                                color:var(--lazytester-muted);
-                                                                                                font-size:13px}
-                                                                                                .lazytester-fps input{
-                                                                                                  width:85px}
-                                                                                                  .lazytester-data-path{
-                                                                                                    overflow-wrap:anywhere;
-                                                                                                    user-select:text;
-                                                                                                    font-family:Consolas,monospace;
-                                                                                                    font-size:13px!important}
-                                                                                                    .lazytester-launcher-heading{
-                                                                                                      display:flex;
-                                                                                                      gap:12px;
-                                                                                                      align-items:center;
-                                                                                                      margin:16px 0}
-                                                                                                      .lazytester-launcher-heading select{
-                                                                                                        font-size:18px;
-                                                                                                        font-weight:600}
-                                                                                                        .lazytester-launcher-heading>span{
-                                                                                                          font-size:13px;
-                                                                                                          color:var(--lazytester-muted)}
-                                                                                                          .lazytester-advanced{
-                                                                                                            border:1px solid var(--lazytester-advanced-outline);
-                                                                                                            border-radius:9px;
-                                                                                                            background:var(--lazytester-panel);
-                                                                                                            margin:16px 0 0}
-                                                                                                            .lazytester-advanced summary{
-                                                                                                              display:flex;
-                                                                                                              justify-content:space-between;
-                                                                                                              align-items:center;
-                                                                                                              padding:16px 18px;
-                                                                                                              cursor:pointer;
-                                                                                                              color:var(--lazytester-accent);
-                                                                                                              list-style:none}
-                                                                                                              .lazytester-advanced summary::-webkit-details-marker{
-                                                                                                                display:none}
-                                                                                                                .lazytester-advanced summary small{
-                                                                                                                  display:block;
-                                                                                                                  margin-top:4px}
-                                                                                                                  .lazytester-advanced summary>span:last-child{
-                                                                                                                    font-size:23px}
-                                                                                                                    .lazytester-advanced[open] summary{
-                                                                                                                      border-bottom:1px solid var(--lazytester-line);
-                                                                                                                      background:var(--lazytester-expanded-surface);
-                                                                                                                      border-radius:9px 9px 0 0}
-                                                                                                                      .lazytester-advanced-body{
-                                                                                                                        padding:0 18px}
-                                                                                                                        .lazytester-danger-zone{
-                                                                                                                          margin-top:26px;
-                                                                                                                          padding-top:22px;
-                                                                                                                          border-top:1px solid var(--lazytester-line);
-                                                                                                                          display:flex;
-                                                                                                                          align-items:center;
-                                                                                                                          gap:20px}
-                                                                                                                          .lazytester-danger-zone>div{
-                                                                                                                            flex:1;
-                                                                                                                            min-width:0}
-                                                                                                                            .lazytester-danger-zone h3,.lazytester-app button.lazytester-danger{
-                                                                                                                              color:var(--lazytester-danger)}
-                                                                                                                              .lazytester-location-options{
-                                                                                                                                margin:16px 0 14px;
-                                                                                                                                padding-top:12px;
-                                                                                                                                border-top:1px solid var(--lazytester-line)}
-                                                                                                                                .lazytester-location-options summary{
-                                                                                                                                  cursor:pointer;
-                                                                                                                                  color:var(--lazytester-accent)}
-                                                                                                                                  .lazytester-workspace{
-                                                                                                                                    flex:1;
-                                                                                                                                    min-height:0;
-                                                                                                                                    display:flex;
-                                                                                                                                    flex-direction:column}
-                                                                                                                                          .lazytester-stage-space{
-                                                                                                                                            flex:1;
-                                                                                                                                            min-height:140px;
-                                                                                                                                            container-type:size;
-                                                                                                                                            display:grid;
-                                                                                                                                            place-items:center;
-                                                                                                                                            background:var(--lazytester-viewport-bg);
-                                                                                                                                            border-radius:9px}
-                                                                                                                                          .lazytester-viewport{
-                                                                                                                                            /* This exact element also supplies native placement and input bounds. */
-                                                                                                                                            width:min(100cqw,calc(100cqh * 16 / 9));
-                                                                                                                                            aspect-ratio:16/9;
-                                                                                                                                            flex:none;
-                                                                                                                                            border:1px solid var(--lazytester-line);
-                                                                                                                                            border-radius:9px;
-                                                                                                                                            background:var(--lazytester-viewport-bg);
-                                                                                                                                            overflow:hidden}
-                                                                                                                                            .lazytester-viewport.lazytester-desktop{
-                                                                                                                                              background:var(--lazytester-panel)}
-                                                                                                                                              .lazytester-empty{
+.lazytester-fps{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  color:var(--lazytester-muted);
+  font-size:13px}
+.lazytester-fps input{
+  width:85px}
+.lazytester-data-path{
+  overflow-wrap:anywhere;
+  user-select:text;
+  font-family:Consolas,monospace;
+  font-size:13px!important}
+.lazytester-launcher-heading{
+  display:flex;
+  gap:12px;
+  align-items:center;
+  margin:16px 0}
+.lazytester-launcher-heading select{
+  font-size:18px;
+  font-weight:600}
+.lazytester-launcher-heading>span{
+  font-size:13px;
+  color:var(--lazytester-muted)}
+.lazytester-advanced{
+  border:1px solid var(--lazytester-advanced-outline);
+  border-radius:9px;
+  background:var(--lazytester-panel);
+  margin:16px 0 0}
+.lazytester-advanced summary{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:16px 18px;
+  cursor:pointer;
+  color:var(--lazytester-accent);
+  list-style:none}
+.lazytester-advanced summary::-webkit-details-marker{
+  display:none}
+.lazytester-advanced summary small{
+  display:block;
+  margin-top:4px}
+.lazytester-advanced summary>span:last-child{
+  font-size:23px}
+.lazytester-advanced[open] summary{
+  border-bottom:1px solid var(--lazytester-line);
+  background:var(--lazytester-expanded-surface);
+  border-radius:9px 9px 0 0}
+.lazytester-advanced-body{
+  padding:0 18px}
+.lazytester-danger-zone{
+  margin-top:26px;
+  padding-top:22px;
+  border-top:1px solid var(--lazytester-line);
+  display:flex;
+  align-items:center;
+  gap:20px}
+.lazytester-danger-zone>div{
+  flex:1;
+  min-width:0}
+.lazytester-danger-zone h3,.lazytester-app button.lazytester-danger{
+  color:var(--lazytester-danger)}
+.lazytester-location-options{
+  margin:16px 0 14px;
+  padding-top:12px;
+  border-top:1px solid var(--lazytester-line)}
+.lazytester-location-options summary{
+  cursor:pointer;
+  color:var(--lazytester-accent)}
+/* Play workspace and native preview geometry */
+.lazytester-workspace{
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column}
+.lazytester-stage-space{
+  flex:1;
+  min-height:140px;
+  container-type:size;
+  display:grid;
+  place-items:center;
+  background:var(--lazytester-viewport-bg);
+  border-radius:9px}
+.lazytester-viewport{
+  /* This exact element also supplies native placement and input bounds. */
+  width:min(100cqw,calc(100cqh * 16 / 9));
+  aspect-ratio:16/9;
+  flex:none;
+  border:1px solid var(--lazytester-line);
+  border-radius:9px;
+  background:var(--lazytester-viewport-bg);
+  overflow:hidden}
+.lazytester-viewport.lazytester-desktop{
+  background:var(--lazytester-panel)}
+
+.lazytester-empty{
   height:100%;
   min-width:0;
   min-height:0;
