@@ -1215,19 +1215,20 @@ pub(super) fn apply(
     unavailable: Vec<(u32, String)>,
     issued_epochs: [u64; 5],
 ) -> io::Result<PreviewReport> {
-    let base = PreviewReport {
-        schema: 1,
-        tiles: tiles
-            .iter()
-            .map(|tile| initial_tile_status(tile, &profiles, &unavailable))
-            .collect(),
-    };
     if primary.is_none() && !tiles.iter().any(|tile| {
         profiles.iter().any(|(slot, _)| *slot == tile.slot)
             && !unavailable.iter().any(|(slot, _)| *slot == tile.slot)
     }) {
         clear()?;
-        return Ok(base);
+        // Only the no-source path needs this fallback report. The live
+        // worker builds its own statuses from the verified layout result.
+        return Ok(PreviewReport {
+            schema: 1,
+            tiles: tiles
+                .iter()
+                .map(|tile| initial_tile_status(tile, &profiles, &unavailable))
+                .collect(),
+        });
     }
     send(
         |reply, deadline| Job::Layout {

@@ -9,6 +9,8 @@ Explicit launch, navigation, settings, close reconciliation and storage receipts
 
 Healthy idle Play now shares the existing 10s read-only inspection cadence; all five profiles must be STOPPED with no process/issue, no selected/pending launch, no recovery or active agent report. Live/uncertain Play and connection recovery retain 2s observation. Explicit actions and native validation remain unchanged; external changes during healthy idle can take up to the next idle inspection to appear. Cadence fixtures extended, NOT_EXECUTED; actual savings and UI acceptance remain unmeasured. MCP implementation/contract unchanged.
 
+DWM preview admission now constructs the fallback tile report only on the no-source cleanup path. Live layout no longer builds and discards an unused status vector or clones its issue strings before dispatch; worker-generated statuses, cleanup epochs, native identity, deadlines and rollback remain unchanged. Existing preview status fixtures reviewed, NOT_EXECUTED. Foreground watcher and retained DWM worker lifetime remain unchanged pending native acceptance.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track
