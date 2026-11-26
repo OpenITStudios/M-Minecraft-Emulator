@@ -83,7 +83,8 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
     expect(css).toContain('.lazytester-app main.lazytester-play-main{padding:10px 16px 12px;overflow-x:hidden}');
     expect(css).toContain('clamp(72px,11vh,108px)');
-    expect(css).toContain('min-height:32px;line-height:32px;padding-right:36px;');
+    expect(rail).toContain('class="lazytester-launcher-header"');
+    expect(css).toContain('padding-right:29px');
     expect(css).toContain('.lazytester-play-main .lazytester-health-notice{display:flex;');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
@@ -118,7 +119,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(app).not.toContain('lazytester-workspace-monitoring');
     expect(settings).toContain('id="workspace-layout"');
     expect(settings).toContain('onChooseWorkspaceLayout');
-    expect(css).toContain('@container (min-width:960px) and (min-height:1050px)');
+    expect(css).toContain('@container (min-width:960px) and (min-height:840px)');
     expect(css).not.toContain('lazytester-workspace-monitoring');
     expect(css).not.toContain('clamp(96px,15vh,136px)');
     expect(css).not.toContain('clamp(80px,16vh,180px)');

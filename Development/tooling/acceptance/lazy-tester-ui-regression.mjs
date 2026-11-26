@@ -424,7 +424,7 @@ try {
   assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card:not(:disabled)').count(),0,
     'Unobserved startup placeholders must not allow Launch');
   assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card small')
-    .filter({hasText:'Status unavailable'}).count(),5,
+    .filter({hasText:'Unavailable'}).count(),5,
     'An unobserved placeholder is not a reported STOPPED session');
   await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
@@ -477,7 +477,7 @@ try {
   await page.evaluate(()=>{window.__offline=true;});
   // Wait for the existing automatic session inspection below.
   await page.waitForFunction(()=>document.querySelector('.lazytester-games-heading')?.textContent?.includes('Session status unavailable'));
-  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card small').filter({hasText:'Status unavailable'}).count(),5,
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card small').filter({hasText:'Unavailable'}).count(),5,
     'Stale native observations must be labeled unavailable, not verified running');
   assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count(),5,
     'Connection loss must never remove stable launcher cards');
@@ -1398,7 +1398,7 @@ try {
   assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="1"] > .lazytester-launcher-card').isDisabled(),true);
   assert.equal((await page.locator('[data-slot="1"] .lazytester-launcher-preview').textContent())?.trim(),'Unavailable',
     'Disconnected profiles cannot advertise a misleading Launch action');
-  assert.equal((await page.locator('[data-slot="1"] .lazytester-launcher-card small').textContent())?.trim(),'Status unavailable',
+  assert.equal((await page.locator('[data-slot="1"] .lazytester-launcher-card small').textContent())?.trim(),'Unavailable',
     'Disconnected cards must not claim the last known native state');
   // A transient first check must recover through a deliberate Refresh, without import/reset.
   await page.evaluate(()=>{window.__bindingFailure='';window.__locationFailure='';window.__finishBinding=()=>{};});

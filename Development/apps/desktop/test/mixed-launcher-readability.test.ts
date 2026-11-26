@@ -13,7 +13,8 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(rail).toContain('aria-label={cardActionName(profile, statusLabel, launchAllowed, observed)}');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
-    expect(css).toContain('min-height:32px;line-height:32px;padding-right:36px;');
+    expect(rail).toContain('class="lazytester-launcher-header"');
+    expect(css).toContain('padding-right:29px');
   });
 
   it('limits global Play warnings without obscuring their text or shrinking the native game owner',()=>{
@@ -53,7 +54,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(app).toContain("startingCount > 0 ? ' · ' + startingCount + ' starting'");
     expect(app).toContain("attentionCount > 0 ? ' · ' + attentionCount + ' need attention'");
     expect(app).toContain('class="lazytester-games-count" title={gamesStatusSummary}');
-    expect(css).toContain('.lazytester-games-heading .lazytester-games-count{');
+    expect(css).toContain('.lazytester-play-header .lazytester-games-count{');
     expect(css).toContain('text-overflow:ellipsis;');
   });
 
