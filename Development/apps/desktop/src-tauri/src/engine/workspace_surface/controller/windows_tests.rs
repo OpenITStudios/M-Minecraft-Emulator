@@ -518,6 +518,7 @@ fn actual_surface_helper_restores_on_release_pipe_loss_and_helper_crash() {
         "Stale minimize event hid a restored session"
     );
     // Simulate a modal dialog disabling its main window between updates.
+    let before_modal = native::capture(target.clone()).unwrap();
     unsafe {
         SetWindowLongPtrW(
             game_window,
@@ -525,12 +526,27 @@ fn actual_surface_helper_restores_on_release_pipe_loss_and_helper_crash() {
             GetWindowLongPtrW(game_window, GWL_STYLE) | WS_DISABLED as isize,
         );
     }
-    update(manager as usize as u64, Some(viewport)).unwrap();
+    let modal_viewport = Viewport { x: viewport.x + 10.0, ..viewport };
+    update(manager as usize as u64, Some(modal_viewport)).unwrap();
     assert_ne!(
         unsafe { GetWindowLongPtrW(game_window, GWL_STYLE) & WS_DISABLED as isize },
         0,
         "Placement overrode the game's modal disabled state"
     );
+    assert_eq!(native::capture(target.clone()).unwrap().rect, before_modal.rect,
+        "Passive resize moved the game while its modal was active");
+    {
+        let state = SURFACE.lock().unwrap();
+        let lease = state.active.as_ref().expect("Modal lost the active lease");
+        assert_eq!(lease.viewport.x, modal_viewport.x);
+        assert!(lease.last_confirmed_place.is_none(),
+            "Modal must invalidate prior placement proof");
+    }
+    unsafe { ShowWindow(manager, SW_SHOWMINNOACTIVE); }
+    update(manager as usize as u64, None).unwrap();
+    assert_eq!(native::capture(target.clone()).unwrap().rect, before_modal.rect,
+        "Minimize parked the game during its modal");
+    unsafe { ShowWindow(manager, SW_SHOWNOACTIVATE); }
     release().unwrap();
     assert_ne!(
         unsafe { GetWindowLongPtrW(game_window, GWL_STYLE) & WS_DISABLED as isize },

@@ -1220,6 +1220,16 @@ pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
         Some(value) => value.validate()?,
         None => lease.viewport,
     };
+    // A game-owned modal disables the main HWND. Passive geometry updates
+    // must not move, raise, hide or park it, even if the manager has focus
+    // or is minimized. Keep the requested viewport for the next native wake.
+    if let Some(saved) = lease.saved.as_ref() {
+        if !native::can_park(&saved.target)? {
+            lease.viewport = next_viewport;
+            lease.last_confirmed_place = None;
+            return Ok(());
+        }
+    }
     if native::minimized(manager)? {
         native::clear_aperture(manager)?;
         return lease.background(Rectangle { x:0,y:0,
@@ -1235,16 +1245,17 @@ pub fn update(manager: u64, viewport: Option<Viewport>) -> io::Result<()> {
     lease.viewport = next_viewport;
     let result = if live && lease.saved.as_ref().is_some_and(|saved|
         !native::workspace_has_foreground(&saved.target, manager)) {
-        // A native modal can own foreground while its game is disabled.
-        // Keep the original lease and do not park it behind the dialog.
-        // The existing foreground watcher reconciles placement on return.
-        if let Some(saved) = lease.saved.as_ref() {
-            if !native::can_park(&saved.target)? { return Ok(()); }
-        }
         lease.background(rect, true).and_then(|()| {
             // Focus can change while the helper is parking the game.
             if lease.saved.as_ref().is_some_and(|saved|
                 native::workspace_has_foreground(&saved.target, manager)) {
+                // A modal may have opened during the ordered helper call.
+                if let Some(saved) = lease.saved.as_ref() {
+                    if !native::can_park(&saved.target)? {
+                        lease.last_confirmed_place = None;
+                        return Ok(());
+                    }
+                }
                 lease.place(rect, false)
             } else { Ok(()) }
         })
