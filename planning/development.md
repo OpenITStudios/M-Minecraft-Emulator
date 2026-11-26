@@ -19,6 +19,8 @@ Window caption policy and its native fixture now live in `independent_bootstrap/
 
 Registered Education installation validation and its four existing preflight fixtures now live in `independent_bootstrap/registered_image.rs`. Bootstrap and controller call the same owner explicitly; registered target resolution, pinning, signature, digest, reviewed recipe and refusal behavior are unchanged. Developer source routing and implementation map updated. Tests NOT_EXECUTED; MCP unchanged.
 
+Startup, explicit Refresh and automatic Refresh now use one start timestamp for the same Inspect/InspectSettings path. The healthy idle cadence no longer schedules an extra read immediately after a recent startup/manual read; live and disconnected recovery cadence stays unchanged. Updated stale repository cadence assertion and added source/cadence regression fixture, NOT_EXECUTED. A separate pre-existing discrepancy remains between the registered dormant coordinate-bookmark command and the repository allowlist assertion; no IPC permissions or bookmark behavior changed. MCP unchanged.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

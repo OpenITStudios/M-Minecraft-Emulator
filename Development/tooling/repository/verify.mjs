@@ -223,12 +223,17 @@ export function verifyRepository(root,g0=false) {
     read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs'));
   const inspectionPolicy=read('Development/apps/desktop/src/app/inspectionScheduling.ts');
   assert.ok(inspectionPolicy.includes('export function periodicInspectionDue(') &&
+    inspectionPolicy.includes("(page === 'workspace' && !workspaceSettledIdle) ||") &&
     inspectionPolicy.includes('runningCount > 0 || !available || elapsedMs >= 10_000;'),
-    'Idle settings/storage observer must throttle without delaying live sessions or recovery');
+    'Healthy idle observer must throttle without delaying live sessions or recovery');
   const mountedUI=read('Development/apps/desktop/src/LazyTesterApp.svelte');
   const titlebar=read('Development/apps/desktop/src/WindowTitlebar.svelte');
   assert.ok(mountedUI.includes("if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured") &&
-    mountedUI.includes('periodicInspectionDue(page, runningCount, available, now - lastAutomaticInspectionAt)') &&
+    /periodicInspectionDue\(page, runningCount, available,\s*now - lastInspectionStartedAt, workspaceSettledIdle\)/.test(mountedUI) &&
+    /refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/.test(mountedUI) &&
+    mountedUI.includes("profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null)") &&
+    mountedUI.includes('active === null && requested === null && queued === null && queuedLaunch === null') &&
+    mountedUI.includes("previewIssue === '' && !closeFailure && agentActivity === null") &&
     mountedUI.includes('!busy && !refreshing && !resizing && !initializing') &&
     mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState())") &&

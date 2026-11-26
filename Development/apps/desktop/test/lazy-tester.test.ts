@@ -98,6 +98,21 @@ describe('Lazy Tester profile contract', () => {
     expect(periodicInspectionDue('workspace', 1, true, 0, true)).toBe(true);
     expect(periodicInspectionDue('workspace', 0, false, 0, true)).toBe(true);
   });
+  it('shares the idle inspection clock across startup, explicit and automatic Refresh', () => {
+    const start = 1200;
+    // Same validated Inspect was just issued by startup or explicit Refresh.
+    expect(periodicInspectionDue('workspace', 0, true, 2000 - start, true)).toBe(false);
+    expect(periodicInspectionDue('settings', 0, true, 2000 - start)).toBe(false);
+    expect(periodicInspectionDue('workspace', 0, true, 11200 - start, true)).toBe(true);
+    // Recent reads must never delay live, unresolved or disconnected Play.
+    expect(periodicInspectionDue('workspace', 1, true, 2000 - start, false)).toBe(true);
+    expect(periodicInspectionDue('workspace', 0, true, 2000 - start, false)).toBe(true);
+    expect(periodicInspectionDue('workspace', 0, false, 2000 - start, true)).toBe(true);
+    const mounted = readFileSync(new URL('../src/LazyTesterApp.svelte', import.meta.url), 'utf8');
+    expect(mounted).toMatch(/async function refresh\(\)[\s\S]*?refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/);
+    expect(mounted).toMatch(/periodicInspectionDue\(page, runningCount, available,\s*now - lastInspectionStartedAt, workspaceSettledIdle\)/);
+    expect(mounted).not.toContain('lastAutomaticInspectionAt');
+  });
   it('suspends automatic inspection through every close review and drops stale results', () => {
     const idle: CloseReview = {
       nativeExitReview:false, closeAllRunning:false,

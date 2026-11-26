@@ -89,6 +89,9 @@
   let viewport: HTMLDivElement, stageSpace: HTMLDivElement, observer: ResizeObserver | undefined;
   let busy = false, refreshing = false, resizing = false, available = false;
   let manualRefreshRequested=false, manualRefreshing=false;
+  // One clock for the same Inspect/InspectSettings path, including startup
+  // and explicit Refresh. It throttles idle scheduling only, not mutations.
+  let lastInspectionStartedAt = Number.NEGATIVE_INFINITY;
   let queuedLaunch:ProfileSlot|null=null;
   let mounted = false, disposed = false, dirty = false, detached = false;
   // Alert context is authored, not a retained raw backend exception.
@@ -302,6 +305,7 @@
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || disposed) return;
     const issued = observationEpoch;
     refreshing = true;
+    lastInspectionStartedAt = performance.now();
     try {
       const snapshot = page === 'settings' ? await lazyTester.settings() : await lazyTester.inspect();
       // A close review starting mid-request invalidates this old snapshot.
@@ -950,7 +954,6 @@
     mounted = true; void initializeLaunchers();
     // Keep a review stable while the user decides; the backend rechecks admission on action.
     // Reuse this observer rather than adding another interval or process watcher.
-    let lastAutomaticInspectionAt = Number.NEGATIVE_INFINITY;
     const interval = setInterval(() => {
       // Unsupported, hidden and closing views never schedule Minecraft IPC.
       if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
@@ -965,8 +968,7 @@
           !detached && attentionCount === 0 && issueKey === null && connectionIssueKey === null &&
           previewIssue === '' && !closeFailure && agentActivity === null;
         if (periodicInspectionDue(page, runningCount, available,
-          now - lastAutomaticInspectionAt, workspaceSettledIdle)) {
-          lastAutomaticInspectionAt = now;
+          now - lastInspectionStartedAt, workspaceSettledIdle)) {
           void refresh();
         }
       }
