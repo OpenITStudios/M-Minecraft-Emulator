@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, separateSlotsForCurrentProfiles, nextProfile, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, separateSlotsForCurrentProfiles, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -68,7 +68,7 @@
   let clearSlot: ProfileSlot | null = null, storageNotice = '';
   let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'|'DisableInputResponse'|'EnableTextureStreaming'|'DisableTextureStreaming'}|null=null;
   let fullReview:{slot:ProfileSlot;token:string;pending:boolean}|null=null,fullName='',fullAck=false,clearingData=false;
-  type Page = 'workspace' | 'launchers' | 'storage' | 'settings';
+  type Page = 'workspace' | 'storage' | 'settings';
   let page: Page = 'workspace';
   let queuedPage: Page | null = null;
   // Ephemeral route feedback only; not another session or settings owner.
@@ -352,7 +352,6 @@
         clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;
     if (page==='settings') rememberGraphicsDraft();
     closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
-    if(next==='launchers')next='workspace';
     // A queued Refresh belongs to its original page; moving to another
     // page cancels only the undispatched UI request, never a native action.
     if (next !== page) {
@@ -729,29 +728,10 @@
     } catch (error) { previewStatuses = [];previewIssue = userMessage('preview'); }
     finally { resizing = false; }
   }
-  function step(direction: 1 | -1) {
-    const next = nextProfile(profiles, active, direction); if (next !== null) select(next);
-  }
-  function returnToWorkspace() {
-    const slot = profiles.find(profile => profile.state === 'RUNNING')?.slot;
-    if (slot) select(slot);
-    else { detached = false; dirty = true; }
-  }
   function applyStorageSnapshot(snapshot: {profiles: ProfileSession[]; storage: ProfileStorage[] | null}) {
     profiles = snapshot.profiles;
     storage = snapshot.storage;
     storageReportReceivedAt = storageReportReceivedTime();
-  }
-  async function inspectStorage() {
-    if (busy || refreshing || resizing) return;
-    busy = true; checkingStorage = true; issueKey=null; clearSlot = null; recovery=null; fullReview=null; storageNotice = '';
-    try {
-      const snapshot = await lazyTester.storage();
-      applyStorageSnapshot(snapshot);
-      available = true; connectionIssueKey=null;
-    }
-    catch (error) { issueKey='storage'; storage = null; }
-    finally { checkingStorage = false; busy = false; }
   }
   async function loadBinding(importProfiles = false) {
     if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing || disposed) return;

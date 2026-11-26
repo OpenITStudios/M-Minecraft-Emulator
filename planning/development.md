@@ -47,7 +47,10 @@ Selected-close failure paths now share one read-only reconciliation and one
 presentation-uncertainty transition; no additional IPC or close is issued.
 Storage snapshot publication now shares one profile/storage/timestamp update;
 refresh and navigation share the current-observation predicate while preserving
-caller-specific connection and recovery effects. Next: audit remaining UI state.
+caller-specific connection and recovery effects. Removed three unreferenced
+mounted-component handlers and its unreachable launchers route alias; shared
+bridge and scheduling contracts retained pending consumer audit. Next: audit
+remaining frontend bridge and CSS consumers.
 
 ## Continue development outside Codex
 
