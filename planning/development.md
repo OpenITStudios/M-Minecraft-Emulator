@@ -1,5 +1,10 @@
 # Current Development Handoff — Lazy Tester
 
+## Desktop runtime simplification — 26 November 2026
+
+Work: `desktop-runtime-efficiency`. MCP and AI integration are explicitly out of scope.
+Routine refresh now compares validated profile observations first and constructs layout identities only when a profile field changes or layout comparison is needed; unavailable connection still forces layout invalidation. Issue-only changes still update UI without invalidating geometry. Existing polling cadence, native admission, IPC, preview epochs and close recovery remain unchanged. Source review only; tests and native performance NOT_EXECUTED. Next source audit: desktop-specific redundant inspections and resource work; do not modify MCP or shared transport without preserving its consumers.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

@@ -306,8 +306,12 @@
       const snapshot = page === 'settings' ? await lazyTester.settings() : await lazyTester.inspect();
       // A close review starting mid-request invalidates this old snapshot.
       if (!isCurrentObservation(issued)) return;
-      const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
-      if (!sameProfileObservation(profiles, snapshot.profiles)) profiles = snapshot.profiles;
+      const profilesChanged = !sameProfileObservation(profiles, snapshot.profiles);
+      // Identical validated observations cannot change layout. Avoid building
+      // two layout identity strings on the normal unchanged polling path.
+      const layoutChanged = !available || (profilesChanged &&
+        layoutIdentity(profiles) !== layoutIdentity(snapshot.profiles));
+      if (profilesChanged) profiles = snapshot.profiles;
       available = true; connectionIssueKey=null;
       reconcileLaunchFailures(snapshot.profiles);
       const incomingActivity = snapshot.agentActivity ?? null;
