@@ -1417,27 +1417,40 @@ fn receive_before_maintenance<T>(
     result
 }
 
-// Only a successful coordinated close has already reaped its selected slots.
-// The reply must not re-enter global journal persistence for unrelated games.
-// Ordinary Inspect and other operations retain their existing full reaping.
-fn response_reaps_all(request: &SessionRequest) -> bool {
-    if matches!(request, SessionRequest::CloseOne { .. } |
-        SessionRequest::CloseAll | SessionRequest::PublishAgentActivity {..} |
-        SessionRequest::TestingReserve {..} | SessionRequest::TestingFinalize {..} |
-        SessionRequest::TestingInspect {..}) {
-        return false;
+// Keep reply work in one policy: coordinated close already reaps the selected
+// slots; status and input receipts must not flush unrelated journals or
+// rewrite window labels. All ordinary operations retain full observation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReplySnapshot {
+    Full,
+    Close,
+    Receipt,
+}
+impl ReplySnapshot {
+    fn for_request(request: &SessionRequest) -> Self {
+        match request {
+            SessionRequest::CloseOne { .. } | SessionRequest::CloseAll => Self::Close,
+            SessionRequest::PublishAgentActivity { .. } |
+            SessionRequest::TestingReserve { .. } |
+            SessionRequest::TestingFinalize { .. } |
+            SessionRequest::TestingInspect { .. } => Self::Receipt,
+            #[cfg(feature="mc02-native-input")]
+            SessionRequest::Mc02Input { .. } |
+            SessionRequest::AiLeasedInput { .. } |
+            SessionRequest::AiInputGroup { .. } |
+            SessionRequest::AiLeaseAcquire { .. } |
+            SessionRequest::AiLeaseRelease { .. } => Self::Receipt,
+            _ => Self::Full,
+        }
     }
-    #[cfg(feature="mc02-native-input")]
-    if matches!(request, SessionRequest::Mc02Input { .. } |
-        SessionRequest::AiLeasedInput { .. } |
-        SessionRequest::AiInputGroup { .. } |
-        SessionRequest::AiLeaseAcquire { .. } |
-        SessionRequest::AiLeaseRelease { .. }) {
-        // A multi-client group and single-slot pulse share the original
-        // short-lived input receipt rule. Never wait for unrelated journals.
-        return false;
+
+    fn collect(self, sessions: &mut Sessions) -> SessionSnapshot {
+        match self {
+            Self::Full => sessions.snapshot(),
+            Self::Close => sessions.snapshot_without_reaping(true),
+            Self::Receipt => sessions.snapshot_without_reaping(false),
+        }
     }
-    true
 }
 
 fn run() -> io::Result<()> {
@@ -1546,27 +1559,7 @@ fn run() -> io::Result<()> {
         let reply = (|| {
             let mut storage = None;
             let mut settings = None;
-            let reap_all_for_reply = response_reaps_all(&envelope.request);
-            // The native MC02 input owner has already pinned and checked
-            // both live game processes. Preserve truthful five-slot reply
-            // verification but skip unrelated title writes per heartbeat.
-            #[cfg(feature="mc02-native-input")]
-            let relabel_on_reply = !matches!(&envelope.request,
-                SessionRequest::TestingReserve{..} |
-                SessionRequest::TestingFinalize{..} |
-                SessionRequest::TestingInspect{..} |
-                SessionRequest::PublishAgentActivity{..} |
-                SessionRequest::Mc02Input {..} |
-                SessionRequest::AiLeasedInput {..} |
-                SessionRequest::AiInputGroup {..} |
-                SessionRequest::AiLeaseAcquire {..} |
-                SessionRequest::AiLeaseRelease {..});
-            #[cfg(not(feature="mc02-native-input"))]
-            let relabel_on_reply = !matches!(&envelope.request,
-                SessionRequest::PublishAgentActivity{..} |
-                SessionRequest::TestingReserve{..} |
-                SessionRequest::TestingFinalize{..} |
-                SessionRequest::TestingInspect{..});
+            let reply_snapshot = ReplySnapshot::for_request(&envelope.request);
             let mut testing_reply=None;
             let mut inspection_reply=None;
             match envelope.request {
@@ -1721,14 +1714,7 @@ fn run() -> io::Result<()> {
                     .open_folder(slot)
                     .map_err(|error| error.to_string())?,
             }
-            let mut snapshot = if reap_all_for_reply {
-                sessions.snapshot()
-            } else {
-                // CloseOne has already persisted its selected journal; CloseAll
-                // has already persisted all five. Never flush a peer again here.
-                // MC02 input receipts also skip unrelated window title writes.
-                sessions.snapshot_without_reaping(relabel_on_reply)
-            };
+            let mut snapshot = reply_snapshot.collect(&mut sessions);
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
             snapshot.settings = settings;
@@ -1900,14 +1886,14 @@ mod tests {
     }
 
     #[test]
-    fn close_replies_do_not_trigger_unrelated_journal_reap() {
+    fn reply_snapshot_policy_distinguishes_close_receipts_and_full_observation() {
         // Pure routing assertions; do not launch a game or touch profile data.
         for request in [
             SessionRequest::CloseOne { slot: 1 },
             SessionRequest::CloseOne { slot: 5 },
             SessionRequest::CloseAll,
         ] {
-            assert!(!response_reaps_all(&request));
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Close);
         }
         for request in [
             SessionRequest::Inspect,
@@ -1915,7 +1901,16 @@ mod tests {
             SessionRequest::InspectStorage,
             SessionRequest::Launch { slot: 2 },
         ] {
-            assert!(response_reaps_all(&request));
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Full);
+        }
+        for request in [
+            SessionRequest::TestingInspect { slot: 1, owner_id: String::new() },
+            SessionRequest::TestingReserve { slot: 1, owner_id: String::new(),
+                run_id: String::new(), replace_run_id: None },
+            SessionRequest::TestingFinalize { slot: 1, owner_id: String::new(),
+                run_id: String::new(), reported_status: String::new(), report_digest: String::new() },
+        ] {
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Receipt);
         }
         #[cfg(feature="mc02-native-input")]
         {
@@ -1927,7 +1922,7 @@ mod tests {
                 owner_id:"a".repeat(32),
                 lease_epoch:"1".repeat(32),
             };
-            assert!(!response_reaps_all(&request));
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Receipt);
         }
         // CloseOne reaps one verified slot; CloseAll still reaps all five.
         for slot in 1..=5 {

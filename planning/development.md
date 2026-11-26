@@ -20,7 +20,9 @@ Replaced redundant process/snapshot handle wrappers in native observation and
 workspace with Rust's standard OwnedHandle; DWM retains the original process
 pin and explicit failure checks remain. The identity observer now uses the
 same standard OwnedHandle for process and token handles; specialized Windows
-resource cleanup is retained. Next: audit session-controller responsibilities.
+resource cleanup is retained. Consolidated session response routing into one
+ReplySnapshot policy (Full / Close / Receipt), preserving journal and label
+behavior and the existing actor. Next: audit session operation ownership.
 
 ## Continue development outside Codex
 
