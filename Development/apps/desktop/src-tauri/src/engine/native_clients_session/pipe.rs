@@ -157,31 +157,12 @@ fn image(path: &std::path::Path) -> io::Result<(File, ImageId)> {
         .share_mode(FILE_SHARE_READ)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)?;
-    let mut tag: FILE_ATTRIBUTE_TAG_INFO = unsafe { mem::zeroed() };
-    let mut id: FILE_ID_INFO = unsafe { mem::zeroed() };
-    if unsafe {
-        GetFileInformationByHandleEx(
-            file.as_raw_handle() as _,
-            FileAttributeTagInfo,
-            (&mut tag as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
-            mem::size_of_val(&tag) as u32,
-        )
-    } == 0
-        || tag.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0
+    if !crate::engine::windows_file_identity::attributes(&file).is_ok_and(|attributes|
+        attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) == 0)
     {
         return Err(refused("Controller executable is not an ordinary file"));
     }
-    if unsafe {
-        GetFileInformationByHandleEx(
-            file.as_raw_handle() as _,
-            FileIdInfo,
-            (&mut id as *mut FILE_ID_INFO).cast(),
-            mem::size_of_val(&id) as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
+    let id = crate::engine::windows_file_identity::file_id(&file)?;
     Ok((
         file,
         ImageId {

@@ -1,13 +1,12 @@
 //! Human-readable helper names, with the same pinned executable file identity.
 use serde::Deserialize;
-use std::os::windows::io::AsRawHandle;
 use std::{
     fs::{File, OpenOptions},
     io,
     os::windows::fs::OpenOptionsExt,
     path::{Path, PathBuf},
 };
-use windows_sys::Win32::{Foundation::HANDLE, Storage::FileSystem::*};
+use windows_sys::Win32::Storage::FileSystem::*;
 
 #[derive(Deserialize)]
 struct Role {
@@ -29,34 +28,11 @@ fn pin(path: &Path) -> io::Result<(File, (u64, [u8; 16]))> {
         .share_mode(FILE_SHARE_READ)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
         .open(path)?;
-    let mut tag: FILE_ATTRIBUTE_TAG_INFO = unsafe { std::mem::zeroed() };
-    let mut id: FILE_ID_INFO = unsafe { std::mem::zeroed() };
-    let handle = file.as_raw_handle() as HANDLE;
-    if unsafe {
-        GetFileInformationByHandleEx(
-            handle,
-            FileAttributeTagInfo,
-            (&mut tag as *mut FILE_ATTRIBUTE_TAG_INFO).cast(),
-            std::mem::size_of_val(&tag) as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    if tag.FileAttributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0 {
+    let attributes = crate::engine::windows_file_identity::attributes(&file)?;
+    if attributes & (FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_DIRECTORY) != 0 {
         return Err(io::Error::other("Helper image must be an ordinary file"));
     }
-    if unsafe {
-        GetFileInformationByHandleEx(
-            handle,
-            FileIdInfo,
-            (&mut id as *mut FILE_ID_INFO).cast(),
-            std::mem::size_of_val(&id) as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
+    let id = crate::engine::windows_file_identity::file_id(&file)?;
     Ok((file, (id.VolumeSerialNumber, id.FileId.Identifier)))
 }
 fn at(current: &Path, role: &str) -> io::Result<Image> {

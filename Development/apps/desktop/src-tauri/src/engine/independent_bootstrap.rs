@@ -51,36 +51,11 @@ fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
 }
 
 fn image_id(file: &File) -> io::Result<FILE_ID_INFO> {
-    let handle = file.as_raw_handle() as HANDLE;
-    let mut tag: FILE_ATTRIBUTE_TAG_INFO = unsafe { mem::zeroed() };
-    let mut id: FILE_ID_INFO = unsafe { mem::zeroed() };
-    // SAFETY: File owns the handle and both output buffers have their exact ABI sizes.
-    if unsafe {
-        GetFileInformationByHandleEx(
-            handle,
-            FileAttributeTagInfo,
-            &mut tag as *mut _ as _,
-            mem::size_of_val(&tag) as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    if tag.FileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
+    let attributes = crate::engine::windows_file_identity::attributes(file)?;
+    if attributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT) != 0 {
         return Err(invalid("Bootstrap image must be an ordinary file"));
     }
-    if unsafe {
-        GetFileInformationByHandleEx(
-            handle,
-            FileIdInfo,
-            &mut id as *mut _ as _,
-            mem::size_of_val(&id) as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    Ok(id)
+    crate::engine::windows_file_identity::file_id(file)
 }
 
 fn same_image(a: &FILE_ID_INFO, b: &FILE_ID_INFO) -> bool {

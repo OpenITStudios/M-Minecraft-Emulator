@@ -12,6 +12,8 @@ Grouped six retained Windows test-only isolation primitives under
 No fixture behavior changed. Consolidated the repeated Windows process
 creation-time read across bootstrap, identity, focus, IPC and workspace
 into `engine/windows_process_time.rs`; existing admission checks remain.
+Consolidated Windows executable attribute and file ID queries across bootstrap,
+process roles and session IPC; caller admission and file pins remain unchanged.
 Next: audit further duplicated active helpers and experimental entrypoints.
 
 ## Continue development outside Codex
