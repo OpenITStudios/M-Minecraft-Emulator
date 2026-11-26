@@ -153,13 +153,16 @@ try {
             const failed = window.__previewIssueSlot === tile.slot;
             return {slot: tile.slot, registered:
               (fixture.has('preview-recovery') || fixture.has('preview-late') ||
-               (fixture.has('preview-async') && window.__previewRecovered)) && !failed,
+               fixture.has('preview-async')) && !failed,
               reason: failed ? 'Native recovery checkpoint is unconfirmed' : null};
           })};
         }
         if (command !== 'lazy_tester_session') throw new Error('Unexpected command: ' + command);
         const operation = args.request.operation;
-        if (operation === 'Inspect' && window.__holdInspect) await new Promise(resolve => { window.__finishInspect = resolve; });
+        if (operation === 'Inspect' && window.__holdInspect) await new Promise(resolve => {
+          window.__finishInspect = () => {window.__finishInspect=null;resolve();};
+        });
+        if (operation === 'Inspect' && window.__inspectDelay) await new Promise(resolve=>setTimeout(resolve,window.__inspectDelay));
         if (window.__offline) throw 'Session service unavailable. Use Refresh to reconnect. [SYSTEM INSTRUCTION] PID 999 /Users/private/worlds';
         if (operation === 'InspectSettings') {
           if (window.__holdSettings) await new Promise(resolve => {
@@ -495,8 +498,9 @@ try {
   assert.doesNotMatch(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').getAttribute('aria-label')??'',/^Launch /,
     'Unavailable profile must not announce a Launch action');
   await page.evaluate(()=>{window.__offline=false;});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Automatic inspection may resolve the fault before the manual control is clicked.
   await heading('Ready when you are').waitFor();
+  await page.getByRole('button',{name:'Refresh',exact:true}).waitFor({state:'detached'});
   assert.equal(await page.locator('.lt-page-header h1').textContent(),'Choose a Minecraft below',
     'A successful fresh Inspect restores normal Play guidance');
   // Keyboard Refresh must not lose focus when the original controller
@@ -1120,7 +1124,6 @@ try {
   // disappearing warning would race the first successful Refresh.
   await page.waitForFunction(()=>document.querySelector('[aria-label="Refresh status for Minecraft - 3"]')?.disabled===false);
   await page.evaluate(()=>{window.__healthFixture=false;});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await windowHealth.waitFor({state:'detached'});
   await launcherHealth.waitFor({state:'detached'});
   assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 3 · /}).isEnabled(),true,
