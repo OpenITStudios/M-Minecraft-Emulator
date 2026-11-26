@@ -9,8 +9,10 @@ process identity parser, native F3, controller, profile data and packaging
 are preserved. Proof: source review only; tests and CI remain held.
 Grouped six retained Windows test-only isolation primitives under
 `engine/native_isolation_fixtures/`, with domain names and one compile gate.
-No fixture behavior or native runtime changed. Next: audit remaining
-experimental source and consolidate duplicated active runtime helpers.
+No fixture behavior changed. Consolidated the repeated Windows process
+creation-time read across bootstrap, identity, focus, IPC and workspace
+into `engine/windows_process_time.rs`; existing admission checks remain.
+Next: audit further duplicated active helpers and experimental entrypoints.
 
 ## Continue development outside Codex
 

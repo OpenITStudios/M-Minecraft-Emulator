@@ -206,22 +206,8 @@ impl Peer {
     }
     pub(crate) fn alive(&self) -> bool {
         // Original handle remains pinned; PID reuse cannot turn it into another peer.
-        let mut created: FILETIME = unsafe { mem::zeroed() };
-        let mut exit = created;
-        let mut kernel = created;
-        let mut user = created;
-        unsafe {
-            WaitForSingleObject(raw(&self.process), 0) == WAIT_TIMEOUT
-                && GetProcessTimes(
-                    raw(&self.process),
-                    &mut created,
-                    &mut exit,
-                    &mut kernel,
-                    &mut user,
-                ) != 0
-                && (((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
-                    == self.birth
-        }
+        (unsafe { WaitForSingleObject(raw(&self.process), 0) == WAIT_TIMEOUT })
+            && crate::engine::windows_process_time::creation_filetime(raw(&self.process)).is_ok_and(|birth| birth == self.birth)
     }
 }
 
@@ -242,13 +228,7 @@ impl McpOwnerLifetime {
         let wait=unsafe {WaitForSingleObject(raw(&self.process),0)};
         if wait==WAIT_OBJECT_0 {return "BOUND_PARENT_EXIT_CONFIRMED";}
         if wait!=WAIT_TIMEOUT {return "BOUND_PARENT_STATUS_UNKNOWN";}
-        let mut created:FILETIME=unsafe {mem::zeroed()};
-        let mut exit=created;
-        let mut kernel=created;
-        let mut user=created;
-        if unsafe {GetProcessTimes(raw(&self.process),&mut created,
-             &mut exit,&mut kernel,&mut user)}==0 ||
-           ((created.dwHighDateTime as u64)<<32 | created.dwLowDateTime as u64)!=self.birth {
+        if !crate::engine::windows_process_time::creation_filetime(raw(&self.process)).is_ok_and(|birth| birth == self.birth) {
             return "BOUND_PARENT_STATUS_UNKNOWN";
         }
         "BOUND_PARENT_RUNNING_AT_INSPECTION"
@@ -292,15 +272,7 @@ impl Peer {
            .is_some_and(|name|name.eq_ignore_ascii_case("node.exe")) {
             return Err(refused("Testing MCP direct parent is not Node"));
         }
-        let mut created:FILETIME=unsafe {mem::zeroed()};
-        let mut exit=created;
-        let mut kernel=created;
-        let mut user=created;
-        if unsafe {GetProcessTimes(raw(&process),&mut created,
-           &mut exit,&mut kernel,&mut user)}==0 {
-            return Err(io::Error::last_os_error());
-        }
-        let birth=(created.dwHighDateTime as u64)<<32 | created.dwLowDateTime as u64;
+        let birth = crate::engine::windows_process_time::creation_filetime(raw(&process))?;
         if birth==0||birth>self.birth {
             return Err(refused("Testing MCP parent creation is inconsistent"));
         }
@@ -368,23 +340,7 @@ impl Endpoint {
         if identity != self.image {
             return Err(refused("Controller peer executable differs"));
         }
-        let mut created: FILETIME = unsafe { mem::zeroed() };
-        let mut exit = created;
-        let mut kernel = created;
-        let mut user = created;
-        if unsafe {
-            GetProcessTimes(
-                raw(&process),
-                &mut created,
-                &mut exit,
-                &mut kernel,
-                &mut user,
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        let birth = ((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64;
+        let birth = crate::engine::windows_process_time::creation_filetime(raw(&process))?;
         let mut repeated = 0;
         if birth == 0 || unsafe { get_peer(pipe, &mut repeated) } == 0 || pid != repeated {
             return Err(refused("Controller peer identity changed"));

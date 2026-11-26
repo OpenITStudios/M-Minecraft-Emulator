@@ -909,7 +909,7 @@ mod windows {
     use std::os::windows::{ffi::OsStringExt, fs::OpenOptionsExt};
     use windows_sys::Win32::{
         Foundation::{
-            CloseHandle, GetLastError, ERROR_INSUFFICIENT_BUFFER, FILETIME, HANDLE, WAIT_TIMEOUT,
+            CloseHandle, GetLastError, ERROR_INSUFFICIENT_BUFFER, HANDLE, WAIT_TIMEOUT,
         },
         Globalization::{CompareStringOrdinal, CSTR_EQUAL},
         Security::WinTrust::{
@@ -930,7 +930,7 @@ mod windows {
             GetProcAddress, LoadLibraryExW, LOAD_LIBRARY_SEARCH_SYSTEM32,
         },
         System::Threading::{
-            GetCurrentProcess, GetCurrentThread, GetProcessTimes, OpenProcess,
+            GetCurrentProcess, GetCurrentThread, OpenProcess,
             OpenProcessToken, WaitForSingleObject,
             PROCESS_QUERY_LIMITED_INFORMATION,
             PROCESS_SYNCHRONIZE,
@@ -1684,15 +1684,7 @@ mod windows {
         }
     }
     fn created(process: &Handle) -> io::Result<u64> {
-        let mut times = [FILETIME {
-            dwLowDateTime: 0,
-            dwHighDateTime: 0,
-        }; 4];
-        let [a, b, c, d] = &mut times;
-        if unsafe { GetProcessTimes(process.0, a, b, c, d) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok((u64::from(a.dwHighDateTime) << 32) | u64::from(a.dwLowDateTime))
+        crate::engine::windows_process_time::creation_filetime(process.0)
     }
     fn pin(key: &ProcessKey) -> io::Result<Handle> {
         let expected = key

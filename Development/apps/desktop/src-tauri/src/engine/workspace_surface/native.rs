@@ -100,21 +100,16 @@ pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(ProcessHandle, HWND)> {
             return Err(io::Error::last_os_error());
         }
         let pin = ProcessHandle(process);
-        let mut created: FILETIME = std::mem::zeroed();
-        let mut a = created;
-        let mut b = created;
-        let mut c = created;
-        let ok = GetProcessTimes(process, &mut created, &mut a, &mut b, &mut c);
+        let birth = crate::engine::windows_process_time::creation_filetime(process);
         let mut session = 0;
         let mut own_session = 0;
-        if ok == 0
+        if birth.is_err()
             || ProcessIdToSessionId(pid, &mut session) == 0
             || session != target.session_id
             || ProcessIdToSessionId(std::process::id(), &mut own_session) == 0
             || own_session != session
             || pid != key.pid
-            || ((created.dwHighDateTime as u64) << 32 | created.dwLowDateTime as u64)
-                != key.created_file_time
+            || !birth.is_ok_and(|value| value == key.created_file_time)
             || IsWindow(window) == 0
             || !GetParent(window).is_null()
             || GetAncestor(window, GA_ROOT) != window
@@ -567,14 +562,7 @@ pub(super) fn original_game_process_exited(target: &OwnedProcess) -> io::Result<
             return Err(error);
         }
         let pin=ProcessHandle(raw);
-        let mut created:FILETIME=std::mem::zeroed();
-        let mut exited:FILETIME=std::mem::zeroed();
-        let mut kernel:FILETIME=std::mem::zeroed();
-        let mut user:FILETIME=std::mem::zeroed();
-        if GetProcessTimes(pin.0,&mut created,&mut exited,&mut kernel,&mut user)==0 {
-            return Err(io::Error::last_os_error());
-        }
-        let observed=((created.dwHighDateTime as u64)<<32)|created.dwLowDateTime as u64;
+        let observed = crate::engine::windows_process_time::creation_filetime(pin.0)?;
         if observed!=expected {
             // PID was reused; the original lifetime has ended, and the
             // replacement is not a window-recovery target.
@@ -838,15 +826,9 @@ pub(super) fn retired(target: &OwnedProcess) -> bool {
             // unchanged game. Deny retention until Windows can attest it.
             return true;
         }
-        let mut created: FILETIME = std::mem::zeroed();
-        let mut a = created;
-        let mut b = created;
-        let mut c = created;
-        let ok = GetProcessTimes(process, &mut created, &mut a, &mut b, &mut c);
+        let birth = crate::engine::windows_process_time::creation_filetime(process);
         CloseHandle(process);
-        ok == 0
-            || (((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64)
-                != key.created_file_time
+        !birth.is_ok_and(|value| value == key.created_file_time)
     }
 }
 pub(super) fn rectangle(manager: u64, viewport: Viewport) -> io::Result<Rectangle> {

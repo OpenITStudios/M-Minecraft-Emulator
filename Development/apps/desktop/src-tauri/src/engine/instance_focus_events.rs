@@ -39,12 +39,12 @@ mod windows {
     };
     use windows_sys::Win32::System::Threading::SYNCHRONIZATION_SYNCHRONIZE as SYNCHRONIZE;
     use windows_sys::Win32::{
-        Foundation::{DuplicateHandle, FILETIME, HANDLE, HWND, WAIT_OBJECT_0, WAIT_TIMEOUT},
+        Foundation::{DuplicateHandle, HANDLE, HWND, WAIT_OBJECT_0, WAIT_TIMEOUT},
         System::{
             RemoteDesktop::ProcessIdToSessionId,
             Threading::{
                 CreateEventW, GetCurrentProcess, GetCurrentProcessId, GetCurrentThreadId,
-                GetProcessId, GetProcessTimes, ResetEvent, SetEvent, WaitForSingleObject,
+                GetProcessId, ResetEvent, SetEvent, WaitForSingleObject,
                 PROCESS_QUERY_LIMITED_INFORMATION,
             },
         },
@@ -102,25 +102,7 @@ mod windows {
         owned(unsafe { CreateEventW(ptr::null(), manual as i32, 0, ptr::null()) })
     }
     fn birth(process: &OwnedHandle) -> io::Result<u64> {
-        let (mut created, mut exited, mut kernel, mut user): (
-            FILETIME,
-            FILETIME,
-            FILETIME,
-            FILETIME,
-        ) = unsafe { std::mem::zeroed() };
-        if unsafe {
-            GetProcessTimes(
-                process.as_raw_handle() as _,
-                &mut created,
-                &mut exited,
-                &mut kernel,
-                &mut user,
-            )
-        } == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        Ok((u64::from(created.dwHighDateTime) << 32) | u64::from(created.dwLowDateTime))
+        crate::engine::windows_process_time::creation_filetime(process.as_raw_handle() as _)
     }
     struct Binding {
         process: OwnedHandle,

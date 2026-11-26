@@ -27,7 +27,7 @@ use windows_sys::Win32::{
     },
     System::RemoteDesktop::ProcessIdToSessionId,
     System::Threading::{
-        CreateProcessW, GetCurrentProcessId, GetProcessId, GetProcessIdOfThread, GetProcessTimes,
+        CreateProcessW, GetCurrentProcessId, GetProcessId, GetProcessIdOfThread,
         IsWow64Process2, TerminateProcess, WaitForSingleObject,
         CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, PROCESS_INFORMATION, STARTUPINFOW,
     },
@@ -137,17 +137,8 @@ pub(super) struct PendingEducationBootstrap {
 impl PendingEducationBootstrap {
     pub(super) fn identity(&self) -> io::Result<(u32, u64)> {
         let process = self.process.as_raw_handle() as HANDLE;
-        let mut created: FILETIME = unsafe { mem::zeroed() };
-        let mut exited: FILETIME = unsafe { mem::zeroed() };
-        let mut kernel: FILETIME = unsafe { mem::zeroed() };
-        let mut user: FILETIME = unsafe { mem::zeroed() };
-        // SAFETY: Query only the retained newly created process, never an existing PID.
-        if unsafe { GetProcessTimes(process, &mut created, &mut exited, &mut kernel, &mut user) }
-            == 0
-        {
-            return Err(io::Error::last_os_error());
-        }
-        let birth = ((created.dwHighDateTime as u64) << 32) | created.dwLowDateTime as u64;
+        // Query only the retained newly created process, never an existing PID.
+        let birth = crate::engine::windows_process_time::creation_filetime(process)?;
         if unsafe { GetProcessId(process) } != self.pid
             || birth == 0
             || (self.created != 0 && self.created != birth)
