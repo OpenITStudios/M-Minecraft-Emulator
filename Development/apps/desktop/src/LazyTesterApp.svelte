@@ -188,6 +188,8 @@
   $: {
     const nextAction = nextPendingUiAction({
       mounted, nativeBackend, closeInProgress, closeReviewPending,
+      selectedReviewGeometryOnly: closeOneSlot!==null && closingOneSlot===null &&
+        !nativeExitReview && page==='workspace' && active!==null && !detached && available,
       initializing, busy, refreshing, resizing,
       queuedAudio: queuedAudio !== null,
       queuedPerformance: queuedPerformance !== null,
@@ -676,8 +678,30 @@
     return {viewport:viewport.getBoundingClientRect(),tiles,pixelRatio:window.devicePixelRatio};
   }
 
+  async function syncSelectedReviewGeometry() {
+    // The existing update IPC only addresses the retained workspace lease.
+    // Do not inspect sessions, configure previews, or activate another game.
+    if (closeOneSlot===null || closingOneSlot!==null || nativeExitReview ||
+        closeInProgress || page!=='workspace' || active===null || detached || !available) return;
+    const epoch = observationEpoch;
+    dirty=false; resizing=true;
+    try {
+      await tick();
+      if (epoch!==observationEpoch || closeOneSlot===null || nativeExitReview ||
+          closeInProgress || document.hidden || disposed) return;
+      await workspaceSurface.update(viewport.getBoundingClientRect());
+    } catch {
+      // Report through the existing feedback owner after review ends.
+      previewIssue=userMessage('preview');
+    } finally { resizing=false; }
+  }
+
   async function syncLayout() {
-    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
+    if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing || !mounted) return;
+    if (closeReviewActive(reviewState())) {
+      await syncSelectedReviewGeometry();
+      return;
+    }
     // This UI snapshot grants no native process/window authority. The
     // original selected slot and process set must still match on return.
     const issued = {

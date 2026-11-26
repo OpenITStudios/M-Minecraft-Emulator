@@ -768,6 +768,15 @@ describe('Lazy Tester queue scheduling parity',()=>{
       }
     }
   });
+  it('allows only retained geometry during an eligible selected close review',()=>{
+    const review={...idle,closeReviewPending:true,selectedReviewGeometryOnly:true,
+      queuedLaunch:true,queuedSelection:true,manualRefreshRequested:true,dirty:true};
+    expect(nextPendingUiAction(review)).toBe('layout');
+    expect(nextPendingUiAction({...review,dirty:false})).toBeNull();
+    expect(nextPendingUiAction({...review,selectedReviewGeometryOnly:false})).toBeNull();
+    expect(nextPendingUiAction({...review,closeInProgress:true})).toBeNull();
+    expect(nextPendingUiAction({...review,resizing:true})).toBeNull();
+  });
   it('keeps layout and selection out of initial profile/session inspection',()=>{
     expect(nextPendingUiAction({...idle,manualRefreshRequested:true,queuedLaunch:true})).toBe('manualRefresh');
     expect(nextPendingUiAction({...idle,queuedAudio:true,manualRefreshRequested:true})).toBe('audio');

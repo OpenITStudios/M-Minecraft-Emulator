@@ -125,6 +125,7 @@ export interface PendingUiQueueState {
   readonly nativeBackend: 'WindowsNative' | 'Unsupported' | null;
   readonly closeInProgress: boolean;
   readonly closeReviewPending: boolean;
+  readonly selectedReviewGeometryOnly?: boolean;
   readonly initializing: boolean;
   readonly busy: boolean;
   readonly refreshing: boolean;
@@ -148,8 +149,12 @@ export function nextPendingUiAction(state: PendingUiQueueState): PendingUiAction
   // initializeLaunchers performs its first session inspection.
   if (!state.mounted || state.nativeBackend !== 'WindowsNative' ||
       state.initializing ||
-      state.closeInProgress || state.closeReviewPending ||
+      state.closeInProgress ||
       state.busy || state.refreshing || state.resizing) return null;
+  // A selected close confirmation may move the retained native surface,
+  // but must never dispatch inspection, selection or lifecycle actions.
+  if (state.closeReviewPending)
+    return state.selectedReviewGeometryOnly && state.dirty ? 'layout' : null;
 
   // Each earlier return establishes that the higher-priority lane is empty.
   if (state.queuedAudio) return 'audio';
