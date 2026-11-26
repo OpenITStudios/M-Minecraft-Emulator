@@ -15,6 +15,8 @@ Desktop CloseOne now moves the owned successful SessionSnapshot directly into Se
 
 Profile size traversal and its existing regression fixture now live in `independent_bootstrap/profile_storage.rs`, alongside disk/cache observation. The session controller retains admission, shared two-second budget and report assembly; the storage module owns recursive metadata traversal and depth. No changed traversal limits, data operations, IPC or MCP contracts. Test relocated unchanged except owner/function naming, NOT_EXECUTED.
 
+Window caption policy and its native fixture now live in `independent_bootstrap/window_caption.rs`; both session observation and legacy startup observation explicitly call that owner. Existing slot bounds, HWND/PID validation, timeout, caption repair and fail-closed behavior are unchanged. No native lifecycle or MCP contract change. Relocated tests NOT_EXECUTED.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

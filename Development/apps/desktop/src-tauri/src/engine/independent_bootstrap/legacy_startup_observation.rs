@@ -112,7 +112,7 @@ fn label_started_windows<const N: usize>(started: &StartedEducationObservation<N
             continue;
         }
         // The immutable store slot, never enumeration order or a matching title, assigns the number.
-        let _ = label_slot_window(selection.window, child.pid, store.slot);
+        let _ = window_caption::label_slot_window(selection.window, child.pid, store.slot);
     }
 }
 

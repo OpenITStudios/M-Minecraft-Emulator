@@ -561,7 +561,7 @@ impl Sessions {
                             // The game can reset its caption after a desktop/workspace transition.
                             // Do not mutate game or dialog titles once full exit begins.
                             if relabel && !self.exiting {
-                                let _ = label_slot_window(hwnd as _, child.pid, index as u32 + 1);
+                                let _ = window_caption::label_slot_window(hwnd as _, child.pid, index as u32 + 1);
                             }
                             let mut process = previous.clone();
                             process.responding = unsafe {
@@ -1305,7 +1305,7 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
     child.identity().ok()?;
     let slot = child.storage.as_ref()?.slot;
     if label {
-        let _ = label_slot_window(selected.hwnd, child.pid, slot);
+        let _ = window_caption::label_slot_window(selected.hwnd, child.pid, slot);
     }
     let process=OwnedProcess {
         pid: child.pid,

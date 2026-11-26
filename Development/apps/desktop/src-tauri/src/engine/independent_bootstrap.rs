@@ -480,6 +480,8 @@ mod session_controller;
 mod mc02_input;
 #[path = "independent_bootstrap/session_audio.rs"]
 mod session_audio;
+#[path = "independent_bootstrap/window_caption.rs"]
+mod window_caption;
 #[path = "independent_bootstrap/profile_storage.rs"]
 mod profile_storage;
 #[path = "independent_bootstrap/resource_pack_inventory.rs"]
@@ -1257,51 +1259,6 @@ fn acquire_startup_gate(name: &str, already_exists: io::Error) -> io::Result<Own
         return Err(already_exists);
     }
     Ok(gate)
-}
-
-
-fn slot_caption(slot: u32) -> io::Result<Vec<u16>> {
-    if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
-        return Err(invalid("Invalid Minecraft window slot"));
-    }
-    wide(OsStr::new(&format!("Minecraft - {slot}")))
-}
-
-fn label_slot_window(
-    hwnd: windows_sys::Win32::Foundation::HWND,
-    pid: u32,
-    slot: u32,
-) -> io::Result<()> {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowTextW, SendMessageTimeoutW, SMTO_ABORTIFHUNG, SMTO_BLOCK, SMTO_ERRORONEXIT,
-        WM_SETTEXT,
-    };
-    let caption = slot_caption(slot)?;
-    super::verify_live_client_02_window(hwnd, pid)?;
-    let mut current = [0u16; 32];
-    let length = unsafe { GetWindowTextW(hwnd, current.as_mut_ptr(), current.len() as i32) };
-    if length > 0 && current[..length as usize] == caption[..caption.len() - 1] {
-        return Ok(());
-    }
-    // System-message marshalling, bounded wait; never inject another game hook for presentation.
-    super::verify_live_client_02_window(hwnd, pid)?;
-    let mut result = 0;
-    if unsafe {
-        SendMessageTimeoutW(
-            hwnd,
-            WM_SETTEXT,
-            0,
-            caption.as_ptr() as isize,
-            SMTO_ABORTIFHUNG | SMTO_BLOCK | SMTO_ERRORONEXIT,
-            200,
-            &mut result,
-        )
-    } == 0
-        || result == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
-    super::verify_live_client_02_window(hwnd, pid)
 }
 
 
@@ -3812,62 +3769,6 @@ mod tests {
             &parent,
         )
         .unwrap()
-    }
-
-    #[test]
-    fn slot_captions_use_stable_numbers_and_reject_foreign_windows() {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            CreateWindowExW, DestroyWindow, GetWindowTextW, SetWindowTextW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
-        };
-        for slot in 1..=MAX_EDUCATION_SLOTS {
-            assert_eq!(
-                String::from_utf16_lossy(&slot_caption(slot).unwrap()),
-                format!("Minecraft - {slot}\0")
-            );
-        }
-        assert!(slot_caption(0).is_err());
-        assert!(slot_caption(6).is_err());
-        let class = wide(OsStr::new("STATIC")).unwrap();
-        let title = wide(OsStr::new("Owned caption control")).unwrap();
-        let hwnd = unsafe {
-            CreateWindowExW(
-                0,
-                class.as_ptr(),
-                title.as_ptr(),
-                WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-                0,
-                0,
-                240,
-                80,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null(),
-            )
-        };
-        assert!(!hwnd.is_null());
-        let outcome = std::panic::catch_unwind(|| {
-            assert!(
-                label_slot_window(hwnd, unsafe { GetCurrentProcessId() }.wrapping_add(1), 1)
-                    .is_err()
-            );
-            label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 2).unwrap();
-            let mut current = [0u16; 32];
-            let reset = wide(OsStr::new("Minecraft Education")).unwrap();
-            assert_ne!(unsafe { SetWindowTextW(hwnd, reset.as_ptr()) }, 0);
-            label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 2).unwrap();
-            let length = unsafe { GetWindowTextW(hwnd, current.as_mut_ptr(), 32) };
-            assert_eq!(
-                String::from_utf16_lossy(&current[..length as usize]),
-                "Minecraft - 2"
-            );
-            label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 2).unwrap();
-        });
-        assert_ne!(unsafe { DestroyWindow(hwnd) }, 0);
-        assert!(label_slot_window(hwnd, unsafe { GetCurrentProcessId() }, 1).is_err());
-        if let Err(error) = outcome {
-            std::panic::resume_unwind(error);
-        }
     }
 
     #[test]
