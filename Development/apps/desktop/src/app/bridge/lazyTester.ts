@@ -325,30 +325,8 @@ export function canRequestLaunch(profile:ProfileSession|undefined):boolean {
       (profile.state==='STOPPED' && profile.issue===null));
 }
 
-// A "Separate window" preference belongs to the exact process/window that
-// the user detached from Play, not to a reusable MC01–MC05 slot number.
-// This is a read-only UI projection; Rust still verifies every HWND action.
-// Keep a temporarily unobserved process binding without falsely attaching
-// it to an unrelated replacement that later occupies the same slot.
-export function separateSlotsForCurrentProfiles(
-  detached:ReadonlyMap<ProfileSlot,NonNullable<ProfileSession['process']>>,
-  profiles:readonly ProfileSession[],
-):Set<ProfileSlot> {
-  const result=new Set<ProfileSlot>();
-  for(const profile of profiles) {
-    const original=detached.get(profile.slot);
-    const current=profile.process;
-    if(!original||!current||!['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state))continue;
-    if(original.pid===current.pid &&
-       original.createdFileTime===current.createdFileTime &&
-       original.sessionId===current.sessionId &&
-       original.windowHandle===current.windowHandle)result.add(profile.slot);
-  }
-  return result;
-}
-
-export function firstEmbeddedProfile(profiles:ProfileSession[],separate:ReadonlySet<ProfileSlot>):ProfileSlot|null {
-  return profiles.find(profile=>profile.state==='RUNNING'&&!separate.has(profile.slot))?.slot??null;
+export function firstEmbeddedProfile(profiles:ProfileSession[],excluded:ReadonlySet<ProfileSlot>):ProfileSlot|null {
+  return profiles.find(profile=>profile.state==='RUNNING'&&!excluded.has(profile.slot))?.slot??null;
 }
 export function parsePreviewReport(value:unknown,slots:readonly ProfileSlot[]):PreviewReport {
   if(!record(value)||!exact(value,['schema','tiles'])||value.schema!==1||!Array.isArray(value.tiles)||value.tiles.length!==slots.length||slots.length>4)throw new TypeError('Invalid preview response');

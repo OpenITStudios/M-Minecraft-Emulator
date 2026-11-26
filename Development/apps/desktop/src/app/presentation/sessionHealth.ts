@@ -17,7 +17,6 @@ export interface SessionHealthObservation {
   readonly profiles: readonly ProfileSession[];
   readonly previewStatuses: readonly PreviewStatus[];
   readonly unresolvedRecovery: ReadonlySet<ProfileSlot>;
-  readonly separateWindows: ReadonlySet<ProfileSlot>;
   readonly primarySlot: ProfileSlot;
   readonly observed: boolean;
   readonly previewsVisible: boolean;
@@ -59,7 +58,7 @@ export function projectSessionHealth(observation: SessionHealthObservation): Ses
       });
     } else if (profile.state === 'RUNNING' &&
       observation.previewsVisible && slot !== observation.primarySlot &&
-      !observation.separateWindows.has(slot) && failedPreviews.has(slot)) {
+      failedPreviews.has(slot)) {
       // A RUNNING label alone does not prove the window is responsive.
       // Only offer Select game when native observation confirms response.
       const responding = profile.process?.responding === true;

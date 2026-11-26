@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, separateSlotsForCurrentProfiles, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, canRequestLaunch, validFpsLimits, type AgentActivityReport, type GraphicsPreset, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazy-tester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -90,11 +90,6 @@
   let manualRefreshRequested=false, manualRefreshing=false;
   let queuedLaunch:ProfileSlot|null=null;
   let mounted = false, disposed = false, dirty = false, detached = false;
-  // Presentation-only detach bindings are pinned to the observed native
-  // process/window. A new child in the same slot cannot inherit "Separate".
-  let separateWindowBindings = new Map<ProfileSlot,NonNullable<ProfileSession['process']>>();
-  let separateSlots = new Set<ProfileSlot>();
-  $: separateSlots = separateSlotsForCurrentProfiles(separateWindowBindings, profiles);
   // Alert context is authored, not a retained raw backend exception.
   let issueKey: UserMessageKey | null = null, connectionIssueKey: UserMessageKey | null = null;
   let previewIssue = '', selectedIdentity = '';
@@ -152,7 +147,7 @@
   // No new monitoring timer, native request or admission state.
   $: healthIssues = projectSessionHealth({
     profiles, previewStatuses, unresolvedRecovery: uncertainWindowSlots,
-    separateWindows: separateSlots, primarySlot: primary,
+    primarySlot: primary,
     observed: nativeBackend === 'WindowsNative' && !initializing && available && !!binding?.configured,
     previewsVisible: page === 'workspace' && !detached,
   });
@@ -234,7 +229,7 @@
   function requestGuidedRecovery(slot: ProfileSlot, action: SessionHealthAction) {
     const recommended = projectSessionHealth({
       profiles, previewStatuses, unresolvedRecovery: uncertainWindowSlots,
-      separateWindows: separateSlots, primarySlot: primary,
+      primarySlot: primary,
       observed: nativeBackend === 'WindowsNative' && !initializing &&
         available && !!binding?.configured,
       previewsVisible: page === 'workspace' && !detached,
@@ -242,7 +237,7 @@
     if (!guidedRecoveryAllowed(recommended, profiles.find(item => item.slot === slot),
       slot, action, {
         blocked: guidedRecoveryBlocked || closeReviewActive(reviewState()),
-        unresolvedRecovery: uncertainWindowSlots, separateWindows: separateSlots,
+        unresolvedRecovery: uncertainWindowSlots, 
         primarySlot: primary,
       })) return;
     if (action === 'open') {
@@ -267,7 +262,6 @@
       await lazyTester.present(slot, viewport.getBoundingClientRect());
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
-      separateWindowBindings = new Map([...separateWindowBindings].filter(([value])=>value!==slot));
     } catch (error) { issueKey='selection'; dirty = true; }
     finally { busy = false; }
   }
@@ -317,7 +311,7 @@
           issueKey='launch'; requested = null;
         }
       } else if (active === null && !detached && page === 'workspace' && queued === null) {
-        queued = firstEmbeddedProfile(profiles,separateSlots);
+        queued = firstEmbeddedProfile(profiles,uncertainWindowSlots);
       }
       if(layoutChanged) {
         previewStatuses=[];pendingPreviewInvalidations.clear();dirty=true;
@@ -613,7 +607,6 @@
       const wasActive=active===slot;
       if (wasActive) {
         active=null;selectedIdentity='';requested=null;queued=null;
-        separateWindowBindings=new Map([...separateWindowBindings].filter(([value])=>value!==slot));
       }
       if (report.snapshot) {
         profiles=report.snapshot.profiles;available=true;connectionIssueKey=null;storage=null;
@@ -621,7 +614,7 @@
           // Existing background games may still be parked offscreen with
           // WS_EX_TOOLWINDOW. Promote another verified responsive peer into
           // Play instead of leaving it inaccessible without a preview.
-          queued=firstEmbeddedProfile(profiles,separateSlots);
+          queued=firstEmbeddedProfile(profiles,uncertainWindowSlots);
           detached=queued===null;
         }
       } else {
@@ -630,7 +623,7 @@
         if (wasActive) {
           // Never automatically reselect the game whose exit outcome is
           // uncertain; a different responding peer can still be presented.
-          const excluded=new Set<ProfileSlot>([...separateSlots,slot]);
+          const excluded=new Set<ProfileSlot>([...uncertainWindowSlots,slot]);
           queued=available?firstEmbeddedProfile(profiles,excluded):null;
           detached=queued===null;
         }
@@ -648,21 +641,6 @@
     }
   }
 
-  async function release() {
-    if (navigationReviewOpen || busy || refreshing || resizing) return;
-    const slot=active;
-    const target=profiles.find(profile=>profile.slot===slot)?.process;
-    if(slot===null||!target)return;
-    busy = true;
-    try {
-      await lazyTester.clearPreviews();
-      await workspaceSurface.releaseTarget(target); active = null; selectedIdentity = ''; requested = null; queued = null;
-      separateWindowBindings=new Map(separateWindowBindings).set(slot,{...target});
-      queued=firstEmbeddedProfile(profiles,separateSlots);
-      detached = queued===null; previewStatuses = []; dirty = true;
-    } catch (error) { issueKey='workspace'; }
-    finally { busy = false; }
-  }
   async function syncLayout() {
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || !mounted) return;
     // This UI snapshot grants no native process/window authority. The
@@ -700,7 +678,7 @@
       if (!layoutCurrent()) {discardOutdated();return;}
       // DWM monitoring tiles require an observed RUNNING process, not
       // merely an existing launcher profile or stale session state.
-      const tiles = others.filter(profile=>profile.state==='RUNNING'&&!!profile.process&&!separateSlots.has(profile.slot)).flatMap(profile => {
+      const tiles = others.filter(profile=>profile.state==='RUNNING'&&!!profile.process).flatMap(profile => {
         const element = images.get(profile.slot); if (!element) return [];
         const rect = element.getBoundingClientRect();
         return rect.x >= 0 && rect.y >= 0 && rect.width >= 32 && rect.height >= 24 &&
@@ -942,7 +920,6 @@
       nativeExitReview = false;
       closeFailure = userMessage('closeAll');
       active = null; selectedIdentity = ''; requested = null; queued = null; queuedLaunch = null;
-      separateWindowBindings = new Map<ProfileSlot,NonNullable<ProfileSession['process']>>();
       previewStatuses = []; detached = true; page = 'workspace'; dirty = true;
       void refresh(); // Observation only; does not start or capture Minecraft.
     }).then(retain).catch(error => { issueKey='event'; });
@@ -987,17 +964,11 @@
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main class={page==='workspace'?'lt-play-main':undefined}>
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
-        <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Separate windows'):active?'Minecraft - '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Choose a Minecraft below'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Your games keep running on the desktop.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Choose a Minecraft below'):active?'Minecraft - '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Choose a Minecraft below'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Select a Minecraft below.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions">
           <button class="lt-secondary" bind:this={headerRefreshButton}
             disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
             on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>
-          {#if page==='workspace'&&active!==null}
-            <button class="lt-secondary" disabled={busy||navigationReviewOpen||refreshing||resizing}
-              title={'Open only Minecraft - '+active+' in its own window'}
-              aria-label={'Open Minecraft - '+active+' in a window'}
-              on:click={release}>Separate window</button>
-          {/if}
         </div>
       </header>
       {#if loadingPage===page && page!=='workspace'}
@@ -1060,13 +1031,13 @@
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Games are in separate windows'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some games may still be running. Check their windows before returning to Play.':'Use the Windows taskbar, or choose a game below to open it in Play.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lt-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Checking existing profiles. No setup needed.':nativeBackend==='Unsupported'?'Minecraft session management is not supported on this OS.':!binding?.configured?'Retry connection. Accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+          {#if detached}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Choose a Minecraft to play'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some games may still be running. Check their windows before returning to Play.':'Choose a running game below, or launch a stopped game.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lt-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Checking existing profiles. No setup needed.':nativeBackend==='Unsupported'?'Minecraft session management is not supported on this OS.':!binding?.configured?'Retry connection. Accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
         <div class="lt-games-heading"><span>Your games</span><span class="lt-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span></div>
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
-          {separateSlots} unresolvedRecovery={uncertainWindowSlots}
+          unresolvedRecovery={uncertainWindowSlots}
           {available} bindingConfigured={!!binding?.configured} {busy}
           {closeInProgress} {nativeExitReview} {guidedRecoveryBlocked}
           reviewPending={closeReviewPending}

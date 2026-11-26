@@ -59,11 +59,11 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     const app=source('LazyTesterApp.svelte'),rail=source('LauncherRail.svelte'),css=source('lazy-tester.css');
     expect(app).toContain("<main class={page==='workspace'?'lt-play-main':undefined}>");
     expect(app).toContain('hidden={active!==null&&!detached}');
-    expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
+    expect(app).not.toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
     expect(app).not.toContain('class="lt-play-utilities"');
     expect(app).not.toContain('F3InspectorPanel');
     expect(app).not.toContain('CoordinatePastePanel');
-    expect(app).toContain('on:click={release}>Separate window</button>');
+    expect(app).not.toContain('on:click={release}>Separate window</button>');
     expect(rail).toContain('aria-hidden="true">×</span></button>');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('use:observePreview={profile.slot}');
@@ -92,15 +92,15 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).not.toContain('clamp(96px,15vh,136px)');
     expect(css).not.toContain('clamp(80px,16vh,180px)');
   });
-  it('keeps only Refresh and selected Separate window in the Play header',()=>{
+  it('keeps manual recovery Refresh but no detach action in the Play header',()=>{
     const app=source('LazyTesterApp.svelte');
     const css=source('lazy-tester.css');
     const refresh=app.indexOf('bind:this={headerRefreshButton}');
     const separate=app.indexOf('on:click={release}>Separate window</button>');
     expect(refresh).toBeGreaterThan(-1);
-    expect(separate).toBeGreaterThan(refresh);
-    expect(app).toContain("{#if page==='workspace'&&active!==null}");
-    expect(app).toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
+    expect(separate).toBe(-1);
+    expect(app).not.toContain('async function release()');
+    expect(app).not.toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
     expect(app).not.toContain('F3InspectorPanel');
     expect(app).not.toContain('CoordinatePastePanel');
     expect(app).not.toContain('playToolsElement');

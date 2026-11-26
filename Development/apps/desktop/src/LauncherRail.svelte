@@ -12,7 +12,6 @@
   export let active: ProfileSlot | null;
   export let primary: ProfileSlot;
   export let detached: boolean;
-  export let separateSlots: ReadonlySet<ProfileSlot>;
   export let unresolvedRecovery: ReadonlySet<ProfileSlot>;
   export let available: boolean;
   export let bindingConfigured: boolean;
@@ -60,8 +59,6 @@
       ? 'Status unavailable'
       : active === profile.slot && !detached && profile.state === 'RUNNING'
         ? 'Selected in Play'
-        : profile.state === 'RUNNING' && separateSlots.has(profile.slot)
-          ? 'Separate window'
           : profile.state === 'RUNNING'
             ? 'Running in background'
             : labels[profile.state]}
@@ -94,7 +91,6 @@
             healthItem.action, {
               blocked: guidedRecoveryBlocked,
               unresolvedRecovery,
-              separateWindows: separateSlots,
               primarySlot: primary,
             })}/>
       {/if}

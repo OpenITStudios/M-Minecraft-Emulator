@@ -7,7 +7,6 @@ import type {SessionHealthAction, SessionHealthIssue} from './sessionHealth.js';
 export interface GuidedRecoveryGate {
   readonly blocked: boolean;
   readonly unresolvedRecovery: ReadonlySet<ProfileSlot>;
-  readonly separateWindows: ReadonlySet<ProfileSlot>;
   readonly primarySlot: ProfileSlot;
 }
 
@@ -26,5 +25,5 @@ export function guidedRecoveryAllowed(
   // The native Play command independently rechecks the original HWND.
   return issue.kind === 'preview' && action === 'open' &&
     profile.state === 'RUNNING' && profile.process?.responding === true &&
-    !gate.separateWindows.has(slot) && gate.primarySlot !== slot;
+    gate.primarySlot !== slot;
 }

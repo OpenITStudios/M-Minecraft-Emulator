@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseSelectedClose, firstEmbeddedProfile, separateSlotsForCurrentProfiles, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -241,42 +241,7 @@ describe('Lazy Tester profile contract', () => {
       {...resourcePacks,activeInWorld:true},null,
     ]) expect(()=>parseSession({...stopped(),storage:row(bad)})).toThrow();
   });
-  it('binds separate-window UI status to the original PID, birth, session and HWND',()=>{
-    const base=stopped();
-    const profiles=parseSession({...base,
-      profiles:[running(1),running(2),...base.profiles.slice(2)],
-    }).profiles;
-    const bindings=new Map<ProfileSlot,NonNullable<ProfileSession['process']>>([
-      [1,profiles[0]!.process!],[2,profiles[1]!.process!],
-    ]);
-    const separated=(next:ProfileSession[]) =>
-      [...separateSlotsForCurrentProfiles(bindings,next)];
-    expect(separated(profiles)).toEqual([1,2]);
-    // A replacement may reuse the original PID or HWND; process birth
-    // and the other original native identity fields still fence it off.
-    const changed=(process:NonNullable<ProfileSession['process']>|null,
-      state:ProfileSession['state']='RUNNING') =>
-        profiles.map(profile=>profile.slot===2?{...profile,state,process}:profile);
-    const original=profiles[1]!.process!;
-    for(const replacement of [
-      {...original,createdFileTime:'999999'},
-      {...original,pid:original.pid+300},
-      {...original,sessionId:original.sessionId+1},
-      {...original,windowHandle:'0xabcd'},
-    ])expect(separated(changed(replacement))).toEqual([1]);
-    // A missing HWND/process is not proof that the old game exited.
-    // The stored binding survives, but its display-only slot membership
-    // is withheld until the same verified original identity reappears.
-    expect(separated(changed(null,'NOT_RESPONDING'))).toEqual([1]);
-    expect(separated(profiles)).toEqual([1,2]);
-    expect(separated([])).toEqual([]);
-    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
-    expect(source).toContain('$: separateSlots = separateSlotsForCurrentProfiles(separateWindowBindings, profiles);');
-    expect(source).toContain('separateWindowBindings=new Map(separateWindowBindings).set(slot,{...target});');
-    expect(source).not.toContain('separateSlots=new Set([...separateSlots,slot]);');
-    expect(source).not.toContain('separateSlots = new Set([...separateSlots].filter');
-  });
-  it('leaves separately opened games alone while another game remains playable here',()=>{
+  it('excludes unresolved or closing profiles from automatic selection',()=>{
     const snapshot=stopped();
     for(const slot of [1,2])Object.assign(snapshot.profiles[slot-1]!,running(slot));
     const profiles=parseSession(snapshot).profiles;
@@ -578,7 +543,7 @@ describe('Lazy Tester minimal session health projection',()=>{
     profiles:normal,
     previewStatuses:[],
     unresolvedRecovery:new Set<1|2|3|4|5>(),
-    separateWindows:new Set<1|2|3|4|5>(),
+    
     primarySlot:1 as const,
     observed:true,previewsVisible:true,...overrides,
   });
@@ -602,7 +567,6 @@ describe('Lazy Tester minimal session health projection',()=>{
     expect(JSON.stringify(items)).not.toContain('SYSTEM INSTRUCTION');
     expect(JSON.stringify(items)).not.toContain('C:\\');
     expect(projectSessionHealth(sample({profiles,previewStatuses,primarySlot:2}))).toEqual([]);
-    expect(projectSessionHealth(sample({profiles,previewStatuses,separateWindows:new Set([2])}))).toEqual([]);
     expect(projectSessionHealth(sample({profiles,previewStatuses,previewsVisible:false}))).toEqual([]);
   });
   it('keeps one highest-priority problem per slot and preserves independent slots',()=>{
@@ -668,7 +632,7 @@ describe('Lazy Tester guided recovery recommendation contract',()=>{
   const observe=(overrides:Partial<Parameters<typeof projectSessionHealth>[0]>={})=>({
     profiles:base,previewStatuses:[],
     unresolvedRecovery:new Set<1|2|3|4|5>(),
-    separateWindows:new Set<1|2|3|4|5>(),
+    
     primarySlot:1 as const,observed:true,previewsVisible:true,
     ...overrides,
   });
@@ -696,7 +660,6 @@ describe('Lazy Tester guided recovery recommendation contract',()=>{
     ]);
     expect(projectSessionHealth(observe({profiles,previewStatuses,primarySlot:2}))).toEqual([]);
     expect(projectSessionHealth(observe({profiles,previewStatuses,previewsVisible:false}))).toEqual([]);
-    expect(projectSessionHealth(observe({profiles,previewStatuses,separateWindows:new Set([2])}))).toEqual([]);
     const unresponsive=profiles.map(p=>p.slot===2?
       {...p,state:'NOT_RESPONDING' as const,process:{...p.process!,responding:false}}:p);
     expect(projectSessionHealth(observe({profiles:unresponsive,previewStatuses}))[0]?.action).toBe('refresh');
@@ -716,7 +679,7 @@ describe('Guided Recovery pending-work and stale-action hardening',()=>{
   };
   const gate={
     blocked:false,unresolvedRecovery:new Set<1|2|3|4|5>(),
-    separateWindows:new Set<1|2|3|4|5>(),primarySlot:1 as const,
+    primarySlot:1 as const,
   };
   it('admits only a current matching slot and action, never an obsolete suggestion',()=>{
     expect(guidedRecoveryAllowed(issue,profile,2,'open',gate)).toBe(true);
@@ -726,8 +689,6 @@ describe('Guided Recovery pending-work and stale-action hardening',()=>{
     expect(guidedRecoveryAllowed(issue,profile,2,'open',{...gate,blocked:true})).toBe(false);
     expect(guidedRecoveryAllowed(issue,profile,2,'open',
       {...gate,unresolvedRecovery:new Set([2])})).toBe(false);
-    expect(guidedRecoveryAllowed(issue,profile,2,'open',
-      {...gate,separateWindows:new Set([2])})).toBe(false);
     expect(guidedRecoveryAllowed(issue,profile,2,'open',
       {...gate,primarySlot:2})).toBe(false);
     expect(guidedRecoveryAllowed(issue,{...profile,state:'NOT_RESPONDING'},2,'open',gate)).toBe(false);

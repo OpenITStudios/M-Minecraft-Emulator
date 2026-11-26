@@ -2,7 +2,9 @@
 
 This is the current Tauri 2 / Svelte 5 / TypeScript / Rust application.
 The mounted UI is `src/LazyTesterApp.svelte`, not the historical
-`UnifiedManagerApp.svelte`. Native Windows Minecraft Education has five
+`UnifiedManagerApp.svelte`. Play keeps the selected game in the workspace; manual window separation is not offered.
+Native recovery remains available through the original controller.
+Native Windows Minecraft Education has five
 fixed profile identities and an explicit manual launch path; the old
 Sandboxie/VMware provider route is retired.
 

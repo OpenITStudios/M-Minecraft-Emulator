@@ -745,24 +745,18 @@ try {
     'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 2 · /}).getAttribute('aria-pressed'),'false',
     'Other running profiles must remain explicitly unselected');
-  assert.equal(await page.locator('.lt-header-actions button').count(),2,
-    'Selected game shows Refresh and one contextual Separate window action');
-  await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).click();
+  assert.equal(await page.locator('.lt-header-actions button').count(),1);
+  await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
   await heading('Minecraft - 2').waitFor();
-  assert.equal(await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).isEnabled(),true,
-    'Releasing one game must keep the other Minecraft usable');
-  await page.getByRole('button',{name:'Open Minecraft - 2 in a window',exact:true}).click();
-  await heading('Games are in separate windows').waitFor();
-  assert.equal(await page.locator('.lt-card').count(),5);
-  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
-    call.command==='desktop_release_workspace' && call.args?.target!==null).length),2,
-    'Only the two explicitly selected Minecraft windows may be released');
-  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
-    ['CloseOne','CloseAll'].includes(call.args?.request?.operation))),false,
-    'Opening separate windows must not close Minecraft sessions');
-  // Return to the existing Play viewport through the running launcher card.
   await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
   await heading('Minecraft - 1').waitFor();
+  assert.equal(await page.locator('.lt-card').count(),5);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
+    call.command==='desktop_release_workspace' && call.args?.target!==null).length),0,
+    'Switching games must not release a native window');
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>
+    ['CloseOne','CloseAll'].includes(call.args?.request?.operation))),false,
+    'Switching games must not close Minecraft sessions');
   // Real content not used: the synthetic RUNNING card must reserve header
   // space so its separate normal-Close control never covers DWM pixels.
   const closeBounds=await page.locator('.lt-launcher-entry[data-slot="1"]').evaluate(entry=>{
@@ -775,7 +769,6 @@ try {
   assert.ok(closeBounds.close&&closeBounds.close.width>=32&&closeBounds.close.height>=32&&
     closeBounds.close.right<=closeBounds.cardRight+1&&closeBounds.close.bottom<=closeBounds.pictureTop,
     'Close game must stay outside and above the preserved native DWM thumbnail');
-  await page.getByRole('button',{name:'Open Minecraft - 1 in a window',exact:true}).waitFor();
   await page.waitForTimeout(200);
   const placement=await page.evaluate(()=>{
     const rect=document.querySelector('.lt-viewport').getBoundingClientRect();

@@ -154,12 +154,12 @@ describe("Emulator source verification routing", () => {
     const play=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
     const storage=readFileSync(new URL("../src/DataStorage.svelte",import.meta.url),"utf8");
     const browser=readFileSync(new URL("../../../tooling/acceptance/lazy-tester-ui-regression.mjs",import.meta.url),"utf8");
-    expect(play).toContain("Open Minecraft - {active} in a window");
-    expect(play).toContain("on:click={release}");
+    expect(play).not.toContain("Separate window</button>");
+    expect(play).not.toContain("on:click={release}");
     expect(play).toContain("onSelect={select} onLaunch={launch}");
     expect(storage).toContain(">Restore settings…</button>");
-    expect(browser).toContain("Open Minecraft - 1 in a window");
-    expect(browser).toContain("Open Minecraft - 2 in a window");
+    expect(browser).toContain("Switching games must not release a native window");
+    expect(browser).toContain("Switching games must not close Minecraft sessions");
     expect(browser).toContain("Restore settings…");
     expect(browser).toContain("desktop_release_workspace");
     expect(browser).not.toMatch(/Open in separate windows|Back to Play|name:'Restore…'/);
