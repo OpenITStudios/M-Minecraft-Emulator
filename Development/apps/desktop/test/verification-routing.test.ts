@@ -41,7 +41,7 @@ describe("Emulator source verification routing", () => {
     expect(rail).toContain("profileSlots.map((slot): ProfileSession =>");
     expect(rail).toContain("issue: 'UNOBSERVED_UI_PLACEHOLDER'");
     expect(rail).toContain("disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured");
-    expect(rail).toContain("canRequestLaunch(profile)&&onLaunch(profile.slot)");
+    expect(rail).toContain("launchAllowed&&onLaunch(profile.slot)");
     expect(rail).toContain("guidedRecoveryAllowed(healthItem, profile, profile.slot,");
     expect(rail).toContain("onRequestClose(profile.slot,event.currentTarget)");
     expect(rail).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.|\bworkspaceSurface\s*\.|\bsetInterval\s*\(/);
@@ -70,7 +70,7 @@ describe("Emulator source verification routing", () => {
     expect(ui).toContain("selectedReview: closeOneSlot !== null");
     expect(ui).toContain("selectedCloseRunning: closingOneSlot !== null");
     expect(scheduling).toContain("state.selectedReview || state.selectedCloseRunning");
-    expect((ui.match(/setInterval\\(/g)??[])).toHaveLength(1);
+    expect((ui.match(/setInterval\(/g)??[])).toHaveLength(1);
   });
 
   it("fails closed on Storage Refresh when profile binding remains unverified", () => {

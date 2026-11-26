@@ -30,7 +30,7 @@ describe('Lazy Tester transient control focus and original native admission — 
     const app=ui('LazyTesterApp.svelte');
     const rail=ui('LauncherRail.svelte');
     const block=app.split('async function confirmCloseOne()')[1]
-      ?.split('async function release()')[0] ?? '';
+      ?.split('function captureWorkspaceGeometry()')[0] ?? '';
     expect(block).toContain("closeOneTrigger?.closest<HTMLElement>('.lt-launcher-entry')");
     expect(block).toContain('closeOneReviewElement?.contains(document.activeElement)');
     expect(block).toContain('document.hasFocus()');

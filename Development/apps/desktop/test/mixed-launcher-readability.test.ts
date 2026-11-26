@@ -10,7 +10,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(rail).toContain("<strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}");
     expect(rail).toContain("const name = 'Minecraft - ' + profile.slot;");
     expect(rail).toContain("aria-label={'Minecraft - '+profile.slot+' launcher controls'}");
-    expect(rail).toContain('aria-label={cardActionName(profile, statusLabel)}');
+    expect(rail).toContain('aria-label={cardActionName(profile, statusLabel, launchAllowed, observed)}');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(css).toContain('min-height:32px;line-height:32px;padding-right:36px;');
@@ -24,7 +24,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(css).toContain('max-height:min(88px,16dvh);');
     expect(css).toContain('overflow:auto;\n  overflow-wrap:anywhere;');
     expect(css).toContain('overscroll-behavior:contain;');
-    expect(app).toContain('<div class="lt-alert" role="alert" tabindex="0" aria-label="Action needs attention">');
+    expect(app).toContain('<div class="lt-alert" class:lt-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">');
     expect(app).toContain('tabindex="0" aria-label="Window recovery unconfirmed"');
     expect(app).toContain('tabindex="0" aria-label="Launcher recovery"');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
@@ -34,12 +34,12 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
   it('uses one observed status in the card text, accessible name and tooltip',()=>{
     const rail=source('LauncherRail.svelte');
     expect(rail).toContain('{@const statusLabel = !observedSlot || !available || !bindingConfigured');
-    expect(rail).toContain('function cardActionName(profile: ProfileSession, statusLabel: string)');
-    expect(rail).toContain('aria-label={cardActionName(profile, statusLabel)}');
+    expect(rail).toContain('function cardActionName(profile: ProfileSession, statusLabel: string, launchAllowed: boolean, observed: boolean)');
+    expect(rail).toContain('aria-label={cardActionName(profile, statusLabel, launchAllowed, observed)}');
     expect(rail).toContain('title={statusLabel}>{statusLabel}</small>');
     expect(rail).toContain('use:observePreview={profile.slot}');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
-    expect(rail).toContain('canRequestLaunch(profile)&&onLaunch(profile.slot)');
+    expect(rail).toContain('launchAllowed&&onLaunch(profile.slot)');
     expect(rail).toContain('disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
   });
@@ -64,7 +64,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(health).toContain("title={item.title+' — '+item.guidance}");
     expect(health).toContain("id={'lt-health-guidance-'+item.slot}");
     expect(health).toContain('tabindex="0"');
-    expect(app).toContain('<div class="lt-alert" role="alert" tabindex="0" aria-label="Action needs attention">');
+    expect(app).toContain('<div class="lt-alert" class:lt-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">');
     expect(app).toContain('tabindex="0" aria-label="Window recovery unconfirmed"');
     expect(app).toContain('tabindex="0" aria-label="Launcher recovery"');
     expect(css).toContain('max-height:38px;');

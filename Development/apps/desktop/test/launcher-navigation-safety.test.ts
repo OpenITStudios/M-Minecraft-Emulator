@@ -7,7 +7,7 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
   it('projects five stable keyed cards from fixed slots even before native observation',()=>{
     const rail=source('LauncherRail.svelte');
     const app=source('LazyTesterApp.svelte');
-    expect(rail).toContain("import {canRequestLaunch, profileSlots,");
+    expect(rail).toContain("import {profileSlots,");
     expect(rail).toContain('profileSlots.map((slot): ProfileSession =>');
     expect(rail).toContain("issue: 'UNOBSERVED_UI_PLACEHOLDER'");
     expect(rail).toContain('state: \'STOPPED\', process: null');
@@ -37,7 +37,7 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     expect(app).toContain('aria-disabled={navigationReviewOpen}');
     expect(app).toContain('disabled={navigationReviewOpen||nativeBackend!==\'WindowsNative\'}');
     expect(app).toContain('disabled={navigationReviewOpen} class:chosen={page===\'storage\'}');
-    expect(app).toContain('Cancel before changing pages.');
+    expect(app).toContain('Save your work first. Only this game closes; other games keep running.');
     expect(storage).toContain('Finish or cancel this review before switching profiles.');
     expect(app).toContain('function cancelCloseOne()');
     expect(storage).toContain('cancelReview(onCancelFullReview)');
@@ -52,9 +52,10 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
       ?.split('  async function consumeNavigation() {')[0] ?? '';
     for (const body of [navigation, refresh]) {
       expect(body).toContain('const issued = observationEpoch;');
-      expect(body).toContain('observationStillCurrent(issued, observationEpoch, reviewState())');
+      expect(body).toContain('const current = () => isCurrentObservation(issued);');
       expect(body).toContain('if (!current()) return;');
     }
+    expect(app).toContain('return !disposed && observationStillCurrent(issued, observationEpoch, reviewState());');
     expect(navigation).toContain("const snapshot=await lazyTester.settings();\n        if (!current()) return;");
     expect(navigation).toContain("const snapshot=await lazyTester.storage();\n        if (!current()) return;");
     expect(navigation).toContain("if (current()) {issueKey='workspace';dirty=true;}");
@@ -79,7 +80,7 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     expect(app).toContain('await lazyTester.closeOne(slot)');
     expect(app).toContain('await workspaceSurface.suspend()');
     expect(app).toContain('await lazyTester.present(active, viewport.getBoundingClientRect())');
-    expect(rail).toContain('canRequestLaunch(profile)&&onLaunch(profile.slot)');
+    expect(rail).toContain('launchAllowed&&onLaunch(profile.slot)');
     expect(storage).toContain('confirmationToken!==fullReview.token');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
