@@ -168,6 +168,12 @@
     previewsVisible: page === 'workspace' && !detached,
   });
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
+  // Local display failures must not resize a retained game surface.
+  // Connection and restoration uncertainty retain their prominent global warnings.
+  $: workspaceActionFeedback = page==='workspace' && nativeBackend==='WindowsNative' &&
+    active!==null && !detached && available && !!binding?.configured &&
+    connectionIssueKey===null && uncertainWindowSlots.size===0 && !closeFailure &&
+    (issueKey==='selection' || issueKey==='preview');
   // Keep complete last-native-observation text in DOM while only the visual
   // line ellipsizes on narrow windows. This is not gameplay readiness.
   $: gamesStatusSummary = available && binding?.configured
@@ -1037,8 +1043,8 @@
       {#if loadingPage===page && page!=='workspace'}
         <p class="lt-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>
       {/if}
-      {#if issueKey!==null||connectionIssueKey!==null}
-        <div class="lt-alert" role="alert" tabindex="0" aria-label="Action needs attention">
+      {#snippet actionFeedback(compact: boolean)}
+        <div class="lt-alert" class:lt-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">
           {#if issueKey!==null}
             <div class="lt-alert-item">
               <strong>{feedbackHeading(issueKey)}</strong>
@@ -1065,6 +1071,9 @@
             </details>
           </div>
         </div>
+      {/snippet}
+      {#if (issueKey!==null||connectionIssueKey!==null) && !workspaceActionFeedback}
+        {@render actionFeedback(false)}
       {/if}
       {#if uncertainWindowSlots.size > 0}
         <section class="lt-exit-recovery" role="status" tabindex="0" aria-label="Window recovery unconfirmed">
@@ -1109,6 +1118,8 @@
             </div>
           </section>
         {:else if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>
+        {:else if workspaceActionFeedback}
+          {@render actionFeedback(true)}
         {:else if previewIssue}
           <div class="lt-workspace-preview-feedback" role="status" tabindex="0">
             <strong>Preview unavailable</strong><span>{previewIssue}</span>

@@ -112,3 +112,7 @@ ancestor scroll events reuse the existing dirty scheduler.
 Play-wide preview feedback uses the existing fixed launcher action strip;
 redundant below-rail guidance is removed. The existing Refresh action remains
 available for explicit preview recovery.
+
+Selection/preview action errors with a retained, available workspace reuse the
+fixed launcher action strip. Connection and restoration uncertainty stay global;
+selected close confirmation takes precedence over noncritical display feedback.

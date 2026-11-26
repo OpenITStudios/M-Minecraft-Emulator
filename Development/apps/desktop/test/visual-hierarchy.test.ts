@@ -90,6 +90,9 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).toContain('.lt-launcher-action-strip{height:56px;flex:0 0 56px;');
     expect(app).not.toContain('lt-single-close-confirm');
     expect(app).toContain('class="lt-workspace-preview-feedback"');
+    expect(app).toContain('{@render actionFeedback(true)}');
+    expect(app).toContain('{@render actionFeedback(false)}');
+    expect(css).toContain('.lt-app .lt-launcher-action-strip > .lt-workspace-action-feedback');
     expect(app).not.toContain('lt-preview-details');
     expect(css).not.toContain('.lt-preview-details{');
   });

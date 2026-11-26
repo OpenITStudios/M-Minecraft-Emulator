@@ -934,6 +934,16 @@ try {
     return {x,y,width,height};
   }));
   const beforePreviewWarning=await readPreviewGeometry();
+  // A noncritical workspace error reuses the existing strip; it must not
+  // insert a global banner above the currently retained game viewport.
+  await page.evaluate(()=>window.__emitNative('workspace-surface-error','Synthetic preview error'));
+  const workspaceFeedback=page.locator('.lt-launcher-action-strip > .lt-workspace-action-feedback');
+  await workspaceFeedback.waitFor();
+  assert.deepEqual(await readPreviewGeometry(),beforePreviewWarning,
+    'Workspace action feedback must not move retained native geometry');
+  // Clear the authored error without retrying any failed native mutation.
+  await workspaceFeedback.getByRole('button',{name:'Refresh status'}).click();
+  await workspaceFeedback.waitFor({state:'detached'});
   await page.evaluate(()=>{
     const process={pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:true};
     window.__emitNative('workspace-surface-error','dwm-preview-invalidated:'+
