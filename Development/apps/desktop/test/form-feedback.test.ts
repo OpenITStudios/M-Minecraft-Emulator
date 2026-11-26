@@ -91,7 +91,7 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(app).toContain('<summary>Error codes</summary>');
     expect(app).toContain('title="Checks current status only; does not repeat the failed action."');
     expect(app).toContain('on:click={requestHeaderRefresh}>Refresh status</button>');
-    expect(css).toContain('.lazytester-app .lazytester-settings-layout main > .lazytester-alert{');
+    expect(css).toContain('.lazytester-app .lazytester-settings-layout main > .lazytester-global-feedback > .lazytester-alert{');
     expect(css).toContain('position:sticky;top:0;z-index:9;');
     expect(feedback).toContain('export function feedbackHeading(key: UserMessageKey): string');
     expect(feedback).toContain('Data cleanup not confirmed');

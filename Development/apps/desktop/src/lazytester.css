@@ -108,7 +108,7 @@ body{
 .lazytester-topbar .lazytester-brand + nav{margin-left:auto;order:2}
 .lazytester-topbar nav button{min-height:32px;padding:6px 12px;border-radius:6px}
 .lazytester-settings-title{font-size:15px;font-weight:600}
-.lazytester-play-header .lazytester-games-count{font-size:12px;color:var(--lazytester-muted);white-space:nowrap}
+.lazytester-play-header .lazytester-games-count{font-size:12px;color:var(--lazytester-muted);white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .lazytester-connection{
   margin-left:auto;
   font-size:12px;
@@ -881,9 +881,10 @@ body{
 .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card small{font-size:12px}
 .lazytester-launcher-header{display:flex;align-items:center;justify-content:space-between;gap:5px;width:100%;min-height:26px;padding-right:29px;position:relative}
 .lazytester-launcher-header::after{content:"";position:absolute;right:25px;top:5px;bottom:5px;border-left:1px solid var(--lazytester-line)}
-.lazytester-filmstrip .lazytester-launcher-header small{white-space:nowrap;overflow:visible;text-overflow:clip;flex:none}
+.lazytester-filmstrip .lazytester-launcher-header small{white-space:nowrap;overflow:visible;text-overflow:clip;flex:none;max-width:none}
 .lazytester-launcher-header small::before{content:"";display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:50%;background:currentColor;vertical-align:2px}
 .lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-routine{color:var(--lazytester-success)}
+.lazytester-filmstrip .lazytester-launcher-card.selected small.lazytester-status-routine{color:var(--lazytester-accent)}
 .lazytester-app .lazytester-close-launcher{top:8px;right:7px;width:24px;height:24px;min-height:24px;border:0;background:transparent;font-size:17px}
 @media(max-width:1199px){
   /* At narrow widths retain full readable status rather than clipping it under Close. */
@@ -986,6 +987,8 @@ body{
 .lazytester-workspace-grid{display:flex;flex:1;min-height:0;min-width:0;flex-direction:column;gap:10px}
 .lazytester-workspace > .lazytester-launcher-action-strip{order:1}
 .lazytester-workspace > .lazytester-launcher-action-strip:empty{visibility:hidden}
+/* Preserve review geometry; put the reserved strip between the stage and rail in Bottom. */
+.lazytester-workspace-grid > .lazytester-launcher-action-strip{order:0}
 @container (min-width:960px) and (min-height:840px){
   .lazytester-workspace-right .lazytester-workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 230px;grid-template-rows:minmax(0,1fr)}
   .lazytester-workspace-right .lazytester-filmstrip{width:100%;height:100%;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(5,minmax(0,1fr));gap:6px}
