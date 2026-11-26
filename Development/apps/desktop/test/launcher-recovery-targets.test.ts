@@ -8,9 +8,9 @@ const browser=()=>readFileSync(
 describe('Launcher recovery action target and accessibility source contracts',()=>{
   it('exposes authored issue guidance on both the scrollable notice and its action',()=>{
     const health=load('SessionHealthNotice.svelte');
-    expect((health.match(/aria-describedby=\{'lt-health-guidance-'\+item.slot\}/g)??[]))
+    expect((health.match(/aria-describedby=\{'lazytester-health-guidance-'\+item.slot\}/g)??[]))
       .toHaveLength(2);
-    expect(health).toContain("id={'lt-health-guidance-'+item.slot}");
+    expect(health).toContain("id={'lazytester-health-guidance-'+item.slot}");
     expect(health).toContain("aria-label={actionName + ' for Minecraft - ' + item.slot}");
     expect(health).toContain('tabindex="0"');
     expect(health).toContain("item.action === 'open' ? 'Select game' : 'Refresh'");
@@ -19,10 +19,10 @@ describe('Launcher recovery action target and accessibility source contracts',()
   it('guarantees a 28px recovery target without expanding the default rail footprint',()=>{
     const health=load('SessionHealthNotice.svelte');
     const rail=load('LauncherRail.svelte');
-    const css=load('lazy-tester.css');
+    const css=load('lazytester.css');
     expect(health).toContain('box-sizing: border-box; min-height: 28px;');
     expect(health).toContain('margin-top: 0; padding: 3px 6px;');
-    expect(health).toContain('.lt-health-notice { min-width: 0; font-size: 13px;');
+    expect(health).toContain('.lazytester-health-notice { min-width: 0; font-size: 13px;');
     expect(css).toContain('max-height:38px;');
     expect(css).toContain('font-size:13px;\n  line-height:1.35;');
     expect(health).toContain('disabled={disabled}');
@@ -30,7 +30,7 @@ describe('Launcher recovery action target and accessibility source contracts',()
     expect(health).toContain('onAction(item.slot,item.action);');
     expect(health).toContain("item.action === 'refresh' && document.activeElement === actionButton");
     expect(rail).toContain('disabled={!guidedRecoveryAllowed(healthItem, profile, profile.slot,');
-    expect(css).toContain('.lt-app .lt-close-launcher{');
+    expect(css).toContain('.lazytester-app .lazytester-close-launcher{');
     expect(css).toContain('width:32px;height:32px;min-height:32px;');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
     expect(health).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\s*\(/);
@@ -38,18 +38,18 @@ describe('Launcher recovery action target and accessibility source contracts',()
 
   it('uses system feedback colors for high-contrast and retains keyboard focus',()=>{
     const health=load('SessionHealthNotice.svelte');
-    expect(health).toContain('.lt-health-action:hover:not(:disabled) {');
-    expect(health).toContain('background: var(--lt-selected-bg)');
-    expect(health).toContain('.lt-health-action:focus-visible { outline: 2px solid var(--lt-accent);');
+    expect(health).toContain('.lazytester-health-action:hover:not(:disabled) {');
+    expect(health).toContain('background: var(--lazytester-selected-bg)');
+    expect(health).toContain('.lazytester-health-action:focus-visible { outline: 2px solid var(--lazytester-accent);');
     expect(health).toContain('@media (forced-colors: active) {');
     expect(health).toContain('color: LinkText; border: 1px solid ButtonText;');
-    expect(health).toContain('.lt-health-action:disabled { color: GrayText; }');
-    expect(health).toContain('.lt-health-action:focus-visible { outline-color: Highlight; }');
+    expect(health).toContain('.lazytester-health-action:disabled { color: GrayText; }');
+    expect(health).toContain('.lazytester-health-action:focus-visible { outline-color: Highlight; }');
   });
 
   it('authors CSS target-size checks without claiming native Windows acceptance',()=>{
     const journey=browser();
-    const css=load('lazy-tester.css');
+    const css=load('lazytester.css');
     expect(journey).toContain("await checkHealth.getAttribute('aria-describedby')");
     expect(journey).toContain('recoveryTargets.refresh.width>=28');
     expect(journey).toContain('recoveryTargets.refresh.height>=28');

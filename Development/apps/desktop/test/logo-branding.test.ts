@@ -7,7 +7,7 @@ const config=(path:string)=>JSON.parse(source(path));
 describe('LazyTester approved icon and installed-identity separation',()=>{
   it('uses one real vector source in every existing WebView logo surface',()=>{
     const logo=source('src-tauri/app-icon.svg');
-    const css=source('src/lazy-tester.css');
+    const css=source('src/lazytester.css');
     const play=source('src/LazyTesterApp.svelte');
     const titlebar=source('src/WindowTitlebar.svelte');
     expect(logo).toContain('viewBox="0 0 256 256"');
@@ -18,7 +18,7 @@ describe('LazyTester approved icon and installed-identity separation',()=>{
     expect((logo.match(/<path /g)??[])).toHaveLength(8);
     expect(logo).not.toMatch(/<image|data:image\/|<foreignObject|<script|<text\b/i);
     expect(css).toContain('url("../src-tauri/app-icon.svg")');
-    expect(play).toContain('<span class="lt-brand-name">LazyTester</span>');
+    expect(play).toContain('<span class="lazytester-brand-name">LazyTester</span>');
     expect(titlebar).toContain('<span data-tauri-drag-region>LazyTester</span>');
   });
 

@@ -1,7 +1,7 @@
 import {readFileSync} from 'node:fs';
 import {describe,expect,it} from 'vitest';
 
-const css=readFileSync(new URL('../src/lazy-tester.css',import.meta.url),'utf8');
+const css=readFileSync(new URL('../src/lazytester.css',import.meta.url),'utf8');
 
 function token(name:string):string {
   const found=css.match(new RegExp(String.raw`--`+name+String.raw`:\s*(#[0-9a-fA-F]{3,8})\s*;`));
@@ -24,57 +24,57 @@ function contrast(fg:string,bg:string):number {
 describe('Minimal Professional color and control state source contracts',()=>{
   it('maintains readable authored text against known opaque source surfaces',()=>{
     for(const [foreground,background] of [
-      ['lt-text','lt-bg'],
-      ['lt-muted','lt-panel'],
-      ['lt-accent','lt-panel'],
-      ['lt-warning','lt-panel'],
-      ['lt-danger','lt-alert-surface'],
-      ['lt-on-danger','lt-danger-surface'],
-      ['lt-on-danger','lt-danger-hover'],
+      ['lazytester-text','lazytester-bg'],
+      ['lazytester-muted','lazytester-panel'],
+      ['lazytester-accent','lazytester-panel'],
+      ['lazytester-warning','lazytester-panel'],
+      ['lazytester-danger','lazytester-alert-surface'],
+      ['lazytester-on-danger','lazytester-danger-surface'],
+      ['lazytester-on-danger','lazytester-danger-hover'],
     ]) {
       expect(contrast(token(foreground),token(background))).toBeGreaterThanOrEqual(4.5);
     }
   });
   it('keeps functional input outlines distinct at 3:1 against their surfaces',()=>{
-    expect(contrast(token('lt-control-outline'),token('lt-bg')))
+    expect(contrast(token('lazytester-control-outline'),token('lazytester-bg')))
       .toBeGreaterThanOrEqual(3);
-    expect(contrast(token('lt-control-outline'),token('lt-panel')))
+    expect(contrast(token('lazytester-control-outline'),token('lazytester-panel')))
       .toBeGreaterThanOrEqual(3);
-    expect(contrast(token('lt-accent'),token('lt-panel')))
+    expect(contrast(token('lazytester-accent'),token('lazytester-panel')))
       .toBeGreaterThanOrEqual(3);
-    expect(contrast(token('lt-advanced-outline'),token('lt-panel')))
+    expect(contrast(token('lazytester-advanced-outline'),token('lazytester-panel')))
       .toBeGreaterThanOrEqual(3);
-    expect(contrast(token('lt-advanced-outline'),token('lt-expanded-surface')))
+    expect(contrast(token('lazytester-advanced-outline'),token('lazytester-expanded-surface')))
       .toBeGreaterThanOrEqual(3);
-    expect(contrast(token('lt-danger-outline'),token('lt-panel')))
+    expect(contrast(token('lazytester-danger-outline'),token('lazytester-panel')))
       .toBeGreaterThanOrEqual(3);
-    expect(contrast(token('lt-alert-outline'),token('lt-alert-surface')))
+    expect(contrast(token('lazytester-alert-outline'),token('lazytester-alert-surface')))
       .toBeGreaterThanOrEqual(3);
   });
   it('routes special use colors through semantic tokens instead of CSS literals',()=>{
-    for(const name of ['lt-advanced-outline','lt-expanded-surface','lt-preview-empty',
-      'lt-alert-outline','lt-alert-surface','lt-danger-surface',
-      'lt-danger-outline','lt-on-danger','lt-control-hover','lt-accent-hover']) {
+    for(const name of ['lazytester-advanced-outline','lazytester-expanded-surface','lazytester-preview-empty',
+      'lazytester-alert-outline','lazytester-alert-surface','lazytester-danger-surface',
+      'lazytester-danger-outline','lazytester-on-danger','lazytester-control-hover','lazytester-accent-hover']) {
       expect(token(name)).toMatch(/^#[0-9a-fA-F]{3,6}$/);
     }
-    expect(css).toContain('background:var(--lt-alert-surface)');
-    expect(css).toContain('border-color:var(--lt-alert-outline)');
-    expect(css).toContain('background:var(--lt-preview-empty)');
-    expect(css).toContain('background:var(--lt-danger-surface)');
-    expect(css).toContain('color:var(--lt-on-danger)');
-    expect(css).toContain('accent-color:var(--lt-accent)');
-    expect(css).toContain('box-shadow:0 6px 24px var(--lt-overlay-shadow)');
-    expect(css).toContain('box-shadow:0 6px 16px var(--lt-overlay-shadow)');
+    expect(css).toContain('background:var(--lazytester-alert-surface)');
+    expect(css).toContain('border-color:var(--lazytester-alert-outline)');
+    expect(css).toContain('background:var(--lazytester-preview-empty)');
+    expect(css).toContain('background:var(--lazytester-danger-surface)');
+    expect(css).toContain('color:var(--lazytester-on-danger)');
+    expect(css).toContain('accent-color:var(--lazytester-accent)');
+    expect(css).toContain('box-shadow:0 6px 24px var(--lazytester-overlay-shadow)');
+    expect(css).toContain('box-shadow:0 6px 16px var(--lazytester-overlay-shadow)');
   });
   it('retains visible focus and explicit disabled/hover controls without resizing Play DWM',()=>{
     expect(css).toContain('opacity:.68}');
-    expect(css).toContain('.lt-app button.lt-secondary:hover:not(:disabled)');
-    expect(css).toContain('.lt-settings-layout .lt-delete-confirm button.lt-danger:hover:not(:disabled)');
-    expect(css).toContain('.lt-settings-layout :is(.lt-audio-toggle,.lt-delete-ack){');
+    expect(css).toContain('.lazytester-app button.lazytester-secondary:hover:not(:disabled)');
+    expect(css).toContain('.lazytester-settings-layout .lazytester-delete-confirm button.lazytester-danger:hover:not(:disabled)');
+    expect(css).toContain('.lazytester-settings-layout :is(.lazytester-audio-toggle,.lazytester-delete-ack){');
     expect(css).toContain('min-height:32px;');
-    expect(css).toContain('.lt-settings-layout :is(.lt-launcher-heading select,.lt-fps input){');
-    expect(css).toContain('min-height:var(--lt-control-min-height);');
-    expect(css).toContain('.lt-app :is(button,a,input,textarea,select,summary):focus-visible{');
+    expect(css).toContain('.lazytester-settings-layout :is(.lazytester-launcher-heading select,.lazytester-fps input){');
+    expect(css).toContain('min-height:var(--lazytester-control-min-height);');
+    expect(css).toContain('.lazytester-app :is(button,a,input,textarea,select,summary):focus-visible{');
     expect(css).not.toContain('outline-offset:-3px}');
     expect(css).toContain('@media (forced-colors:active)');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');

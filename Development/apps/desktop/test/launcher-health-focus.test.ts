@@ -23,11 +23,11 @@ describe('Per-slot health notice keyboard focus lifecycle — source contract',(
     const health=read('SessionHealthNotice.svelte');
     expect(health).toContain("if (item.action !== 'refresh') return;");
     expect(health).toContain("!noticeElement?.contains(previousFocus)");
-    expect(health).toContain("const entry = noticeElement.closest('.lt-launcher-entry');");
+    expect(health).toContain("const entry = noticeElement.closest('.lazytester-launcher-entry');");
     expect(health).toContain('void tick().then(() => {');
     expect(health).toContain('!entry.isConnected || !document.hasFocus()');
     expect(health).toContain('current !== document.body && current !== previousFocus');
-    expect(health).toContain("entry.querySelector<HTMLButtonElement>(':scope > .lt-card')");
+    expect(health).toContain("entry.querySelector<HTMLButtonElement>(':scope > .lazytester-launcher-card')");
     expect(health).toContain('card?.isConnected && !card.disabled');
     expect(health).toContain('card.focus({preventScroll:true})');
     expect(health).toContain('entry.focus({preventScroll:true})');
@@ -35,14 +35,14 @@ describe('Per-slot health notice keyboard focus lifecycle — source contract',(
 
   it('keeps a non-Tabbable same-slot fallback visibly focusable without moving native previews',()=>{
     const rail=read('LauncherRail.svelte');
-    const css=read('lazy-tester.css');
+    const css=read('lazytester.css');
     expect(rail).toContain('role="group" tabindex="-1"');
     expect(rail).toContain("aria-label={'Minecraft - '+profile.slot+' launcher controls'}");
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('use:observePreview={profile.slot}');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
-    expect(css).toContain('.lt-filmstrip .lt-launcher-entry:focus{');
-    expect(css).toContain('.lt-filmstrip .lt-launcher-entry:focus{outline-color:Highlight}');
+    expect(css).toContain('.lazytester-filmstrip .lazytester-launcher-entry:focus{');
+    expect(css).toContain('.lazytester-filmstrip .lazytester-launcher-entry:focus{outline-color:Highlight}');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });

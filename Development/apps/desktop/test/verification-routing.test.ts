@@ -35,8 +35,8 @@ describe("Emulator source verification routing", () => {
     expect(ui).toContain("<LauncherRail {profiles} {labels} {healthIssues}");
     expect(ui).toContain("observePreview={image} onSelect={select} onLaunch={launch}");
     expect(ui).toContain("onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}");
-    expect(ui).not.toContain('<div class="lt-filmstrip"');
-    expect(rail).toContain('<div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">');
+    expect(ui).not.toContain('<div class="lazytester-filmstrip"');
+    expect(rail).toContain('<div class="lazytester-filmstrip" role="group" aria-label="Minecraft profiles">');
     expect(rail).toContain("use:observePreview={profile.slot}");
     expect(rail).toContain("profileSlots.map((slot): ProfileSession =>");
     expect(rail).toContain("issue: 'UNOBSERVED_UI_PLACEHOLDER'");
@@ -125,7 +125,7 @@ describe("Emulator source verification routing", () => {
     expect(ui).toContain("onReviewFullClear={reviewFullClear} onClearAllData={clearAllData}");
     for(const owner of ["async function clearCache(","async function recoverSettings()",
       "async function clearAllData()","function reviewFullClear()"])expect(ui).toContain(owner);
-    expect(ui).not.toContain('class="lt-danger-zone"');
+    expect(ui).not.toContain('class="lazytester-danger-zone"');
     expect(ui).not.toContain('id="full-clear-name"');
     for(const name of ["Confirm cache cleanup","Confirm game settings change",
       "Confirm full launcher data deletion"])expect(view).toContain('aria-label="'+name+'"');
@@ -190,8 +190,8 @@ describe("Emulator source verification routing", () => {
     expect(cards).toContain("profile, observedSlot && available && bindingConfigured && !unresolvedRecovery.has(profile.slot)");
     expect(cards).toContain("unresolvedRecovery: ReadonlySet<ProfileSlot>");
     expect(cards).toContain("title={guidance??undefined}");
-    expect(cards).toContain("aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}");
-    expect(cards).toContain("id={'lt-launcher-guidance-'+profile.slot} hidden");
+    expect(cards).toContain("aria-describedby={guidance ? 'lazytester-launcher-guidance-'+profile.slot : undefined}");
+    expect(cards).toContain("id={'lazytester-launcher-guidance-'+profile.slot} hidden");
     expect(cards).not.toContain("aria-description={guidance??undefined}");
     expect(hints).not.toContain("invokeRuntime(");
     expect(hints).not.toContain("setInterval(");

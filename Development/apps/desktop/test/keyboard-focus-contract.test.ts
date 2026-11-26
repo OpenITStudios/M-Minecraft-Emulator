@@ -27,7 +27,7 @@ describe('Lazy Tester scoped keyboard and transient report focus — source cont
     expect(notice).toContain("!document.hasFocus() || !(focused instanceof Node)");
     expect(notice).toContain('on:blur={closeOnWindowBlur}');
     expect(notice).toContain('detailsElement?.contains(focused)');
-    expect(notice).toContain("'.lt-topbar nav button[aria-current=\"page\"]'");
+    expect(notice).toContain("'.lazytester-topbar nav button[aria-current=\"page\"]'");
     expect(notice).toContain('playNav?.isConnected && !playNav.disabled');
     expect(notice).toContain('playNav.focus({preventScroll: true})');
     expect(app).toContain('{#if page===\'workspace\'&&available&&activityView}');
@@ -41,7 +41,7 @@ describe('Lazy Tester scoped keyboard and transient report focus — source cont
     expect(test).toContain("name:/^Launch Minecraft - 1 · /");
     expect(test).toContain("name:/^Select Minecraft - 2 · /");
     expect(test).not.toContain("name:'Launch Minecraft - 1',exact:true");
-    expect(test).toContain(".lt-launcher-entry[data-slot=\"2\"] > .lt-card");
+    expect(test).toContain(".lazytester-launcher-entry[data-slot=\"2\"] > .lazytester-launcher-card");
     expect(test).toContain('A blocked native state must not be announced as Launch');
     expect(test).toContain('Escape outside the focused CloseOne review must not intercept other UI');
     expect(test).toContain('lazy_tester_close_one');
@@ -51,7 +51,7 @@ describe('Lazy Tester scoped keyboard and transient report focus — source cont
     const app=ui('LazyTesterApp.svelte');
     const rail=ui('LauncherRail.svelte');
     const storage=ui('DataStorage.svelte');
-    const css=ui('lazy-tester.css');
+    const css=ui('lazytester.css');
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('use:observePreview={profile.slot}');
     expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');

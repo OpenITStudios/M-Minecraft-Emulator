@@ -40,7 +40,7 @@
     if (!document.hasFocus() || !(focused instanceof Node) ||
         !detailsElement?.contains(focused)) return;
     const playNav = document.querySelector<HTMLButtonElement>(
-      '.lt-topbar nav button[aria-current="page"]');
+      '.lazytester-topbar nav button[aria-current="page"]');
     if (playNav?.isConnected && !playNav.disabled)
       playNav.focus({preventScroll: true});
   });
@@ -48,15 +48,15 @@
 <svelte:window on:keydown={closeOnEscape} on:blur={closeOnWindowBlur} />
 
 <!-- Summary takes a bounded slot in the fixed-height topbar. Expanded details alone overlay the view; native viewport/rail size is unchanged. -->
-<details class="lt-agent-activity" name="lt-play-disclosures" bind:this={detailsElement} on:focusout={closeWhenFocusLeaves} aria-label="Local AI and Testing activity">
+<details class="lazytester-agent-activity" name="lazytester-play-disclosures" bind:this={detailsElement} on:focusout={closeWhenFocusLeaves} aria-label="Local AI and Testing activity">
   <summary bind:this={summaryElement} aria-label={view.summary} title={view.summary}>{view.summary}</summary>
-  <div class="lt-agent-activity-details">
+  <div class="lazytester-agent-activity-details">
     <strong>{view.urgent?'Attention required':'Activity overview'}</strong>
     {#each view.lines as item}
       <p>{item}</p>
     {/each}
     {#each view.testingSummaries as result (result.slot)}
-      <section class="lt-agent-testing-summary" aria-label={'Testing summary for '+result.slot}>
+      <section class="lazytester-agent-testing-summary" aria-label={'Testing summary for '+result.slot}>
         <strong>Testing Summary</strong>
         <dl>
           <dt>Target</dt><dd>{result.slot}</dd>

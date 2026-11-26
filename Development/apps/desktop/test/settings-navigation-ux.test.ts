@@ -37,23 +37,23 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     const app=load('LazyTesterApp.svelte');
     const storage=load('DataStorage.svelte');
     expect(storage).toContain('disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null}');
-    expect(storage).toContain("aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lt-storage-review-guidance':undefined}");
+    expect(storage).toContain("aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lazytester-storage-review-guidance':undefined}");
     expect(storage).toContain('Finish or cancel this review before switching profiles.');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
     expect(app).toContain('status.confirmationToken!==pending.token');
     expect(storage).not.toContain('invokeRuntime(');
   });
   it('retains readable support and settings copy without retired game HUD selectors',()=>{
-    const css=load('lazy-tester.css');
-    expect(css).toContain('.lt-agent-activity-details p{margin:8px 0;font-size:13px;');
-    expect(css).toContain('.lt-settings-layout .lt-setting{flex-wrap:wrap;');
-    expect(css).not.toContain('.lt-coordinate-popup');
-    expect(css).not.toContain('.lt-f3-popup');
+    const css=load('lazytester.css');
+    expect(css).toContain('.lazytester-agent-activity-details p{margin:8px 0;font-size:13px;');
+    expect(css).toContain('.lazytester-settings-layout .lazytester-setting{flex-wrap:wrap;');
+    expect(css).not.toContain('.lazytester-coordinate-popup');
+    expect(css).not.toContain('.lazytester-f3-popup');
   });
   it('keeps Data Storage navigation only in the Settings sidebar',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
-    expect(settings).not.toContain('lt-install-data-section');
+    expect(settings).not.toContain('lazytester-install-data-section');
     expect(settings).not.toContain('onOpenDataFolder');
     expect(settings).not.toContain('onShowDataStorage');
     expect(settings).not.toContain('dataLocation?.path');
@@ -64,7 +64,7 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
   it('does not distract General Settings with a redundant workspace mode selector',()=>{
     const settings=load('GeneralSettings.svelte');
     const app=load('LazyTesterApp.svelte');
-    expect(settings).toContain('<div class="lt-settings-content">\n          <section class="lt-group" aria-labelledby="lt-frame-limits-section">');
+    expect(settings).toContain('<div class="lazytester-settings-content">\n          <section class="lazytester-group" aria-labelledby="lazytester-frame-limits-section">');
     expect(settings).not.toContain('Legacy graphics preferences');
     expect(settings).not.toContain('When LazyTester closes');
     expect(settings).not.toContain('workspace-layout');
@@ -83,9 +83,9 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(general).not.toContain('Use 120 / 5');
   });
   it('wraps only settings and storage rows without changing the game viewport',()=>{
-    const css=load('lazy-tester.css');
+    const css=load('lazytester.css');
     expect(css).toContain('@media (max-width:1050px)');
-    expect(css).toContain('.lt-settings-layout .lt-setting{flex-wrap:wrap;');
+    expect(css).toContain('.lazytester-settings-layout .lazytester-setting{flex-wrap:wrap;');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });

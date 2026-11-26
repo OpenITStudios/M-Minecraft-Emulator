@@ -6,7 +6,7 @@ const source=(name:string)=>readFileSync(new URL('../src/'+name,import.meta.url)
 describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
   it('uses stable MC01–MC05 visual labels while retaining full slot names for actions',()=>{
     const rail=source('LauncherRail.svelte');
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     expect(rail).toContain("<strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}");
     expect(rail).toContain("const name = 'Minecraft - ' + profile.slot;");
     expect(rail).toContain("aria-label={'Minecraft - '+profile.slot+' launcher controls'}");
@@ -17,15 +17,15 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
   });
 
   it('limits global Play warnings without obscuring their text or shrinking the native game owner',()=>{
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     const app=source('LazyTesterApp.svelte');
-    expect(css).toContain('.lt-play-feedback:has(> :is(.lt-alert,.lt-binding,.lt-exit-recovery))');
+    expect(css).toContain('.lazytester-play-feedback:has(> :is(.lazytester-alert,.lazytester-binding,.lazytester-exit-recovery))');
     expect(css).toContain('max-height:min(104px,18dvh);');
     expect(css).toContain('max-height:min(88px,16dvh);');
     expect(css).toContain('overflow:auto;overscroll-behavior:contain;');
-    expect(css).toContain('.lt-app .lt-alert.lt-workspace-action-feedback .lt-alert-footer{');
+    expect(css).toContain('.lazytester-app .lazytester-alert.lazytester-workspace-action-feedback .lazytester-alert-footer{');
     expect(css).toContain('overscroll-behavior:contain;');
-    expect(app).toContain('<div class="lt-alert" class:lt-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">');
+    expect(app).toContain('<div class="lazytester-alert" class:lazytester-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">');
     expect(app).toContain('tabindex="0" aria-label="Window recovery unconfirmed"');
     expect(app).toContain('tabindex="0" aria-label="Launcher recovery"');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
@@ -47,29 +47,29 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
 
   it('keeps the complete five-session summary in DOM even when it ellipsizes',()=>{
     const app=source('LazyTesterApp.svelte');
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     expect(app).toContain('gamesStatusSummary = available && binding?.configured');
     expect(app).toContain("observedRunningCount + ' of 5 reported running'");
     expect(app).toContain("startingCount > 0 ? ' · ' + startingCount + ' starting'");
     expect(app).toContain("attentionCount > 0 ? ' · ' + attentionCount + ' need attention'");
-    expect(app).toContain('class="lt-games-count" title={gamesStatusSummary}');
-    expect(css).toContain('.lt-games-heading .lt-games-count{');
+    expect(app).toContain('class="lazytester-games-count" title={gamesStatusSummary}');
+    expect(css).toContain('.lazytester-games-heading .lazytester-games-count{');
     expect(css).toContain('text-overflow:ellipsis;');
   });
 
   it('makes bounded recovery copy keyboard-scrollable without native IPC',()=>{
     const health=source('SessionHealthNotice.svelte');
     const app=source('LazyTesterApp.svelte');
-    const css=source('lazy-tester.css');
-    expect(health).toContain("aria-describedby={'lt-health-guidance-'+item.slot}");
+    const css=source('lazytester.css');
+    expect(health).toContain("aria-describedby={'lazytester-health-guidance-'+item.slot}");
     expect(health).toContain("title={item.title+' — '+item.guidance}");
-    expect(health).toContain("id={'lt-health-guidance-'+item.slot}");
+    expect(health).toContain("id={'lazytester-health-guidance-'+item.slot}");
     expect(health).toContain('tabindex="0"');
-    expect(app).toContain('<div class="lt-alert" class:lt-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">');
+    expect(app).toContain('<div class="lazytester-alert" class:lazytester-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">');
     expect(app).toContain('tabindex="0" aria-label="Window recovery unconfirmed"');
     expect(app).toContain('tabindex="0" aria-label="Launcher recovery"');
     expect(css).toContain('max-height:38px;');
-    expect(css).toContain('.lt-app .lt-health-notice [tabindex="0"]:focus-visible');
+    expect(css).toContain('.lazytester-app .lazytester-health-notice [tabindex="0"]:focus-visible');
     expect(css).toContain('max-height:min(160px,28dvh);');
     expect(health).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\.\w+\(/);
   });
@@ -77,7 +77,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
   it('preserves five fixed native preview identities and original close admission',()=>{
     const rail=source('LauncherRail.svelte');
     const app=source('LazyTesterApp.svelte');
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');

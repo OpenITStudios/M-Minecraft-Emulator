@@ -8,7 +8,7 @@ const browser=()=>readFileSync(
 describe('Lazy Tester transient control focus and original native admission — source only',()=>{
   it('anchors a keyboard-activated header Refresh without taking later Tab focus',()=>{
     const app=ui('LazyTesterApp.svelte');
-    const css=ui('lazy-tester.css');
+    const css=ui('lazytester.css');
     expect(app).toContain('let headerRefreshButton: HTMLButtonElement | undefined;');
     expect(app).toContain('let headerRefreshFocusPage: Page | null = null;');
     expect(app).toContain('function requestHeaderRefresh(event: MouseEvent): void {');
@@ -23,7 +23,7 @@ describe('Lazy Tester transient control focus and original native admission — 
     expect(app).toContain('headerRefreshButton.focus({preventScroll:true})');
     expect(app).toContain('on:click={requestHeaderRefresh}');
     expect(app).toContain('<h1 bind:this={pageHeading} tabindex="-1">');
-    expect(css).toContain('.lt-play-header h1:focus,');
+    expect(css).toContain('.lazytester-play-header h1:focus,');
   });
 
   it('reanchors a disappearing CloseOne confirmation to its original MC slot group',()=>{
@@ -31,7 +31,7 @@ describe('Lazy Tester transient control focus and original native admission — 
     const rail=ui('LauncherRail.svelte');
     const block=app.split('async function confirmCloseOne()')[1]
       ?.split('function captureWorkspaceGeometry()')[0] ?? '';
-    expect(block).toContain("closeOneTrigger?.closest<HTMLElement>('.lt-launcher-entry')");
+    expect(block).toContain("closeOneTrigger?.closest<HTMLElement>('.lazytester-launcher-entry')");
     expect(block).toContain('closeOneReviewElement?.contains(document.activeElement)');
     expect(block).toContain('document.hasFocus()');
     expect(block).toContain('entry.focus({preventScroll:true})');
@@ -49,26 +49,26 @@ describe('Lazy Tester transient control focus and original native admission — 
       ?.split('onMount(() => {')[0] ?? '';
     expect(block).toContain('fullName!==`Minecraft - ${pending.slot}`');
     expect(block).toContain('status.confirmationToken!==pending.token');
-    expect(block).toContain("document.querySelector('.lt-delete-confirm')");
+    expect(block).toContain("document.querySelector('.lazytester-delete-confirm')");
     expect(block).toContain('deletionReview?.contains(document.activeElement)');
-    expect(block).toContain("document.getElementById('lt-clear-data-heading')?.focus({preventScroll:true})");
+    expect(block).toContain("document.getElementById('lazytester-clear-data-heading')?.focus({preventScroll:true})");
     expect(block).toContain('await lazyTester.clearData(pending.slot,pending.token,fullName)');
-    expect(block.indexOf("document.getElementById('lt-clear-data-heading')?.focus")).toBeLessThan(
+    expect(block.indexOf("document.getElementById('lazytester-clear-data-heading')?.focus")).toBeLessThan(
       block.indexOf('busy=true;clearingData=true;'));
-    expect(storage).toContain('id="lt-clear-data-heading" tabindex="-1"');
+    expect(storage).toContain('id="lazytester-clear-data-heading" tabindex="-1"');
     expect(storage).toContain('confirmationToken!==fullReview.token');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
   });
 
   it('authors Tab/Shift+Tab and CloseOne focus journeys without native execution',()=>{
     const journey=browser();
-    const css=ui('lazy-tester.css');
+    const css=ui('lazytester.css');
     expect(journey).toContain("await page.keyboard.press('Shift+Tab')");
     expect(journey).toContain("Tab progresses through existing controls while Refresh is disabled");
     expect(journey).toContain('The user-selected Shift+Tab destination must not be stolen on completion');
     expect(journey).toContain('Only the existing Refresh button regains keyboard focus');
     expect(journey).toContain('Confirmed CloseOne review keeps its original stable launcher focus group');
-    expect(css).toContain('.lt-settings-layout #lt-clear-data-heading:focus{');
+    expect(css).toContain('.lazytester-settings-layout #lazytester-clear-data-heading:focus{');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });

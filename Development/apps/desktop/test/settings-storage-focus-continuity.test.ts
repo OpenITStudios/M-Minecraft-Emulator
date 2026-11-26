@@ -57,11 +57,11 @@ describe('Lazy Tester Settings/Storage transient focus source contract',()=>{
   });
 
   it('keeps focus rings and separate native DWM geometry unchanged',()=>{
-    const css=load('lazy-tester.css');
+    const css=load('lazytester.css');
     const script=browser();
-    expect(css).toContain('#lt-frame-limits-section,');
-    expect(css).toContain('#lt-storage-overview-section,');
-    expect(css).toContain('.lt-group h3[tabindex="-1"]');
+    expect(css).toContain('#lazytester-frame-limits-section,');
+    expect(css).toContain('#lazytester-storage-overview-section,');
+    expect(css).toContain('.lazytester-group h3[tabindex="-1"]');
     expect(css).toContain('outline-color:Highlight;');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');

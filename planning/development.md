@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+UI naming: use the complete joined LazyTester brand for CSS classes, IDs, design tokens and stylesheet filename; launcher card/preview names identify their owner. Svelte markup and selector fixtures migrate together; no native or installed-identity migration. Tests NOT_EXECUTED.
+
 Work: `desktop-ui-refinement`. Surface: `CHATGPT_GITHUB`. Existing Svelte owners and native contracts remain fixed. Neutral shared palette, compact settings spacing, visible launcher status and navigation/card hover are authored. Selected routine status uses the existing accent. Source and browser assertions updated for visible status; stale titlebar fixture reconciled with existing close-only owner. No new dependencies, UI state or native geometry rules. Tests NOT_EXECUTED; visual acceptance held. Next: settings/storage readability and bounded CSS consolidation; preserve stable selector consumers and native review geometry.
 
 ## Desktop runtime simplification — 26 November 2026
@@ -107,7 +109,7 @@ bridge and scheduling contracts retained pending consumer audit. Next: audit
 remaining frontend bridge and CSS consumers. Retired nextProfile and the
 launchers scheduling alias after reviewing all 18 TS/Svelte sources and 25
 frontend test files; active stopped-state and cadence coverage retained.
-CSS audit found every lt-prefixed class textually referenced in mounted
+CSS audit found every lazytester-prefixed class textually referenced in mounted
 components. Consolidated the unconditionally overridden filmstrip width and
 gap into its original rule, preserving media queries. A retired popup-shadow
 assertion was confirmed stale and replaced by the two active overlay-shadow

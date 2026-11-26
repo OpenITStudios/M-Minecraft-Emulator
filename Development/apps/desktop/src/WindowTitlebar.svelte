@@ -25,13 +25,13 @@
     return ()=>{disposed=true;stopError?.();stopRejected?.();stopClosing?.();};
   });
 </script>
-<div class="lt-window-bar">
+<div class="lazytester-window-bar">
   <!-- Tauri owns native dragging; the exit button requests normal native shutdown. -->
-  <div class="lt-window-drag" data-tauri-drag-region>
-    <span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span>
+  <div class="lazytester-window-drag" data-tauri-drag-region>
+    <span class="lazytester-window-mark" aria-hidden="true" data-tauri-drag-region></span>
     <span data-tauri-drag-region>LazyTester</span>
   </div> 
-  <button class="lt-window-control lt-window-close" disabled={closing} aria-label={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} title={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} on:click={requestAppExit}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+  <button class="lazytester-window-control lazytester-window-close" disabled={closing} aria-label={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} title={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} on:click={requestAppExit}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
 </div>
-{#if closing}<div class="lt-alert" role="status">{backendSupport === 'WindowsNative' ? 'Closing LazyTester… Waiting for managed games and pending work to finish.' : 'Closing LazyTester…'}</div>{/if}
-{#if error}<div class="lt-alert" role="alert"><p>{userMessage(error)}</p><details class="lt-feedback-reference"><summary>Support reference</summary><p>{userFeedback(error).area} · {userFeedback(error).code}</p></details></div>{/if}
+{#if closing}<div class="lazytester-alert" role="status">{backendSupport === 'WindowsNative' ? 'Closing LazyTester… Waiting for managed games and pending work to finish.' : 'Closing LazyTester…'}</div>{/if}
+{#if error}<div class="lazytester-alert" role="alert"><p>{userMessage(error)}</p><details class="lazytester-feedback-reference"><summary>Support reference</summary><p>{userFeedback(error).area} · {userFeedback(error).code}</p></details></div>{/if}

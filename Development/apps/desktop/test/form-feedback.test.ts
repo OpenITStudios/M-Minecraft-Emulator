@@ -11,8 +11,8 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(settings).toContain('backgroundFpsFieldInvalid');
     expect(settings).toContain('aria-invalid={activeFpsFieldInvalid}');
     expect(settings).toContain('aria-invalid={backgroundFpsFieldInvalid}');
-    expect(settings).toContain('lt-active-fps-error');
-    expect(settings).toContain('lt-background-fps-error');
+    expect(settings).toContain('lazytester-active-fps-error');
+    expect(settings).toContain('lazytester-background-fps-error');
     expect(settings).toContain('role="status" aria-live="polite"');
     expect(settings).toContain('!performanceDirty||!performanceValid');
     expect(app).toContain('performanceValid=validFpsLimits(activeFps,backgroundFps)');
@@ -24,9 +24,9 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     const app=source('LazyTesterApp.svelte');
     expect(storage).toContain('typedFullClearNameIncorrect');
     expect(storage).toContain('aria-invalid={typedFullClearNameIncorrect}');
-    expect(storage).toContain('lt-full-clear-hint lt-full-clear-error');
+    expect(storage).toContain('lazytester-full-clear-hint lazytester-full-clear-error');
     expect(storage).toContain('No deletion has been requested.');
-    expect(storage).toContain('lt-full-clear-ack-hint');
+    expect(storage).toContain('lazytester-full-clear-ack-hint');
     expect(storage).toContain('!fullAck||fullName!==`Minecraft - ${fullReview.slot}`');
     expect(storage).toContain('confirmationToken!==fullReview.token');
     expect(app).toContain('fullName!==`Minecraft - ${pending.slot}`');
@@ -69,10 +69,10 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
   });
   it('keeps full data deletion after connect/locate and recovery without bypassing its confirmation',()=>{
     const storage=source('DataStorage.svelte');
-    const location=storage.indexOf('<details class="lt-location-options">');
-    const packs=storage.indexOf('<details class="lt-storage-packs">');
-    const advanced=storage.indexOf('<details class="lt-advanced"');
-    const danger=storage.indexOf('class="lt-danger-zone"');
+    const location=storage.indexOf('<details class="lazytester-location-options">');
+    const packs=storage.indexOf('<details class="lazytester-storage-packs">');
+    const advanced=storage.indexOf('<details class="lazytester-advanced"');
+    const danger=storage.indexOf('class="lazytester-danger-zone"');
     expect(location).toBeGreaterThan(-1);
     expect(packs).toBeGreaterThan(location);
     expect(advanced).toBeGreaterThan(packs);
@@ -83,7 +83,7 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
   });
   it('keeps one actionable, non-raw error banner without unsafe automatic retries',()=>{
     const app=source('LazyTesterApp.svelte');
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     const feedback=readFileSync(new URL('../src/app/presentation/sessionFeedback.ts',import.meta.url),'utf8');
     expect(app).toContain('role="alert" tabindex="0" aria-label="Action needs attention"');
     expect(app).toContain('{feedbackHeading(issueKey)}');
@@ -91,7 +91,7 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(app).toContain('<summary>Error codes</summary>');
     expect(app).toContain('title="Checks current status only; does not repeat the failed action."');
     expect(app).toContain('on:click={requestHeaderRefresh}>Refresh status</button>');
-    expect(css).toContain('.lt-app .lt-settings-layout main > .lt-alert{');
+    expect(css).toContain('.lazytester-app .lazytester-settings-layout main > .lazytester-alert{');
     expect(css).toContain('position:sticky;top:0;z-index:9;');
     expect(feedback).toContain('export function feedbackHeading(key: UserMessageKey): string');
     expect(feedback).toContain('Data cleanup not confirmed');
@@ -114,11 +114,11 @@ describe('Lazy Tester Settings / Storage field feedback contracts',()=>{
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
   });
   it('keeps responsive rules scoped away from the five native game surfaces',()=>{
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     const app=source('LazyTesterApp.svelte');
-    expect(css).toContain('.lt-settings-layout .lt-danger-zone{flex-wrap:wrap;');
-    expect(css).toContain('.lt-settings-layout .lt-field-error');
-    expect(css).toContain('.lt-settings-layout input[aria-invalid="true"]');
+    expect(css).toContain('.lazytester-settings-layout .lazytester-danger-zone{flex-wrap:wrap;');
+    expect(css).toContain('.lazytester-settings-layout .lazytester-field-error');
+    expect(css).toContain('.lazytester-settings-layout input[aria-invalid="true"]');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(app).toContain('onSelect={select} onLaunch={launch}');

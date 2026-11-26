@@ -3,7 +3,7 @@
   import {listen} from '@tauri-apps/api/event';
   import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
-  import './lazy-tester.css';
+  import './lazytester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
   import LauncherRail from './LauncherRail.svelte';
   import AgentActivityNotice from './AgentActivityNotice.svelte';
@@ -579,7 +579,7 @@
     // A committed CloseOne review disappears immediately. Before its focused
     // button is removed, anchor keyboard context to the SAME stable MC slot
     // group, not to body, another Minecraft process or a new Tab stop.
-    const entry = closeOneTrigger?.closest<HTMLElement>('.lt-launcher-entry');
+    const entry = closeOneTrigger?.closest<HTMLElement>('.lazytester-launcher-entry');
     if (document.hasFocus() && closeOneReviewElement?.contains(document.activeElement) &&
         entry?.isConnected)
       entry.focus({preventScroll:true});
@@ -789,9 +789,9 @@
         initializing=false;await tick();
         void lazyTester.reportStartup({
           connection:sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available),
-          issue:document.querySelector('.lt-binding p')?.textContent??'',
-          cards:document.querySelectorAll('.lt-card').length,
-          enabled:document.querySelectorAll('.lt-card:not(:disabled)').length,
+          issue:document.querySelector('.lazytester-binding p')?.textContent??'',
+          cards:document.querySelectorAll('.lazytester-launcher-card').length,
+          enabled:document.querySelectorAll('.lazytester-launcher-card:not(:disabled)').length,
         }).catch(error=>console.warn('Startup observation unavailable'));
       }
     }
@@ -866,10 +866,10 @@
     // The exact typed-name/ack/token admission above remains authoritative.
     // This is only a focus handoff from the disappearing confirmation form
     // to its persistent warning heading; no extra deletion is requested.
-    const deletionReview = document.querySelector('.lt-delete-confirm');
+    const deletionReview = document.querySelector('.lazytester-delete-confirm');
     if (document.hasFocus() && document.activeElement instanceof Node &&
         deletionReview?.contains(document.activeElement))
-      document.getElementById('lt-clear-data-heading')?.focus({preventScroll:true});
+      document.getElementById('lazytester-clear-data-heading')?.focus({preventScroll:true});
     busy=true;clearingData=true;issueKey=null;storageNotice='';fullReview=null;
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
@@ -980,56 +980,56 @@
 </script>
 <svelte:head><title>LazyTester</title></svelte:head>
 <svelte:window on:keydown={closeReviewKeydown}/>
-<div class="lt-app">
+<div class="lazytester-app">
   <WindowTitlebar backendSupport={nativeBackend} />
-  <header class="lt-topbar">
-    <a class="lt-brand" href="#play" aria-label="LazyTester — Play" aria-disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} on:click|preventDefault={() => navigate('workspace')}><span class="lt-brand-mark" aria-hidden="true"></span><span class="lt-brand-name">LazyTester</span></a>
+  <header class="lazytester-topbar">
+    <a class="lazytester-brand" href="#play" aria-label="LazyTester — Play" aria-disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} on:click|preventDefault={() => navigate('workspace')}><span class="lazytester-brand-mark" aria-hidden="true"></span><span class="lazytester-brand-name">LazyTester</span></a>
     <nav aria-label="Main navigation"><button disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={navigationReviewOpen||nativeBackend!=='WindowsNative'} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
     {#if page==='workspace'&&available&&activityView}
       <AgentActivityNotice view={activityView}/>
     {/if}
     {#if initializing || nativeBackend !== 'WindowsNative' || !binding?.configured || !available}
-    <span class="lt-connection" role="status" title={sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
+    <span class="lazytester-connection" role="status" title={sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}><span class="lazytester-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
     {/if}
   </header>
-  <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
-    {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
-    <main class={page==='workspace'?'lt-play-main':undefined}>
-      <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
+  <div class="lazytester-layout" class:lazytester-settings-layout={page!=='workspace'} inert={closeInProgress}>
+    {#if page!=='workspace'}<aside class="lazytester-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
+    <main class={page==='workspace'?'lazytester-play-main':undefined}>
+      <header class="lazytester-page-header" class:lazytester-play-header={page==='workspace'}>
         <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Choose a Minecraft below'):active?'Minecraft - '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Choose a Minecraft below'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Select a Minecraft below.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
-        <div class="lt-header-actions">
+        <div class="lazytester-header-actions">
           {#if showHeaderRefresh}
-          <button class="lt-secondary" bind:this={headerRefreshButton}
+          <button class="lazytester-secondary" bind:this={headerRefreshButton}
             disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
             on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>
           {/if}
         </div>
       </header>
       {#if loadingPage===page && page!=='workspace'}
-        <p class="lt-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>
+        <p class="lazytester-page-loading" role="status" aria-live="polite">{page==='storage'?'Checking saved profile storage…':'Checking current settings…'}</p>
       {/if}
       {#snippet actionFeedback(compact: boolean)}
-        <div class="lt-alert" class:lt-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">
+        <div class="lazytester-alert" class:lazytester-workspace-action-feedback={compact} role="alert" tabindex="0" aria-label="Action needs attention">
           {#if issueKey!==null}
-            <div class="lt-alert-item">
+            <div class="lazytester-alert-item">
               <strong>{feedbackHeading(issueKey)}</strong>
               <p>{userMessage(issueKey)}</p>
             </div>
           {/if}
           {#if connectionIssueKey!==null}
-            <div class="lt-alert-item">
+            <div class="lazytester-alert-item">
               <strong>{feedbackHeading(connectionIssueKey)}</strong>
               <p>{userMessage(connectionIssueKey)}</p>
             </div>
           {/if}
-          <div class="lt-alert-footer">
+          <div class="lazytester-alert-footer">
             {#if nativeBackend==='WindowsNative'}
-              <button class="lt-secondary lt-alert-refresh" type="button"
+              <button class="lazytester-secondary lazytester-alert-refresh" type="button"
                 disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
                 title="Checks current status only; does not repeat the failed action."
                 on:click={requestHeaderRefresh}>Refresh status</button>
             {/if}
-            <details class="lt-feedback-reference">
+            <details class="lazytester-feedback-reference">
               <summary>Error codes</summary>
               {#if issueKey!==null}<p>{userFeedback(issueKey).area} · {userFeedback(issueKey).code}</p>{/if}
               {#if connectionIssueKey!==null}<p>{userFeedback(connectionIssueKey).area} · {userFeedback(connectionIssueKey).code}</p>{/if}
@@ -1037,62 +1037,62 @@
           </div>
         </div>
       {/snippet}
-      <div class="lt-global-feedback" class:lt-play-feedback={page==='workspace'}>
+      <div class="lazytester-global-feedback" class:lazytester-play-feedback={page==='workspace'}>
       {#if (issueKey!==null||connectionIssueKey!==null) && !workspaceActionFeedback}
         {@render actionFeedback(false)}
       {/if}
       {#if uncertainWindowSlots.size > 0}
-        <section class="lt-exit-recovery" role="status" tabindex="0" aria-label="Window recovery unconfirmed">
+        <section class="lazytester-exit-recovery" role="status" tabindex="0" aria-label="Window recovery unconfirmed">
           <h2>Window recovery needs attention</h2>
           <p>{recoveryLabels(uncertainWindowSlots)}: Window restoration unconfirmed. Check game windows before closing again. Refresh checks status only.</p>
         </section>
       {/if}
       {#if closeFailure}
-        <section class="lt-exit-recovery" role="status" tabindex="0" aria-label="Exit recovery">
+        <section class="lazytester-exit-recovery" role="status" tabindex="0" aria-label="Exit recovery">
           <h2>Exit was not completed</h2>
           <p>Some games may still be running. Other sessions were preserved. Check open dialogs or select a responsive game below.</p>
-          <div class="lt-actions"><button class="lt-secondary" on:click={()=>{closeFailure='';void refresh();}}>Dismiss and refresh</button></div>
+          <div class="lazytester-actions"><button class="lazytester-secondary" on:click={()=>{closeFailure='';void refresh();}}>Dismiss and refresh</button></div>
           
         </section>
       {/if}
 
       {#if nativeBackend===null&&!initializing}
-        <section class="lt-binding" tabindex="0" aria-label="Backend capability unavailable">
+        <section class="lazytester-binding" tabindex="0" aria-label="Backend capability unavailable">
           <div><strong>Backend capability could not be verified</strong><p>{bindingIssue||'Native support check failed. No Minecraft operation was attempted.'}</p></div>
-          <div class="lt-actions"><button disabled={busy} on:click={()=>void initializeLaunchers()}>Retry backend check</button></div>
+          <div class="lazytester-actions"><button disabled={busy} on:click={()=>void initializeLaunchers()}>Retry backend check</button></div>
         </section>
       {:else if nativeBackend==='Unsupported'&&!initializing}
-        <section class="lt-binding" tabindex="0" aria-label="Unsupported platform">
+        <section class="lazytester-binding" tabindex="0" aria-label="Unsupported platform">
           <div><strong>Minecraft backend unavailable</strong><p>{bindingIssue}</p></div>
         </section>
-      {:else if !binding?.configured&&!initializing}<section class="lt-binding" tabindex="0" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
+      {:else if !binding?.configured&&!initializing}<section class="lazytester-binding" tabindex="0" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lazytester-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lazytester-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
       </div>
-      <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
-        <div class="lt-stage-space" bind:this={stageSpace}>
-        <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>
-          {#if detached}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Choose a Minecraft to play'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some games may still be running. Check their windows before returning to Play.':'Choose a running game below, or launch a stopped game.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lt-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lt-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Checking existing profiles. No setup needed.':nativeBackend==='Unsupported'?'Minecraft session management is not supported on this OS.':!binding?.configured?'Retry connection. Accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
+      <section class="lazytester-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
+        <div class="lazytester-stage-space" bind:this={stageSpace}>
+        <div class="lazytester-viewport" class:lazytester-desktop={detached} bind:this={viewport}>
+          {#if detached}<div class="lazytester-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><h2>{uncertainWindowSlots.size > 0?'Window restoration not verified':closeFailure?'Exit incomplete — sessions preserved':'Choose a Minecraft to play'}</h2><p>{uncertainWindowSlots.size > 0?'Affected launchers: '+recoveryLabels(uncertainWindowSlots)+'. Refresh checks game status, not window restoration.':closeFailure?'Some games may still be running. Check their windows before returning to Play.':'Choose a running game below, or launch a stopped game.'}</p><p>{available&&binding?.configured?observedRunningCount+' of 5 reported running':'Session status unavailable'}</p></div>{:else if !active}<div class="lazytester-empty" role="region" aria-label="Minecraft workspace status" tabindex="0"><span class="lazytester-empty-mark" aria-hidden="true"></span><h2>{initializing?'Preparing launchers…':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Connection needs attention':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Ready when you are'}</h2><p>{initializing?'Checking existing profiles. No setup needed.':nativeBackend==='Unsupported'?'Minecraft session management is not supported on this OS.':!binding?.configured?'Retry connection. Accounts and worlds are preserved.':!available?'Use Refresh to reconnect.':requested?'Waiting for the game window…':'Select Launch below to start Minecraft.'}</p></div>{/if}
         </div>
         </div>
         {#if nativeBackend === 'WindowsNative'}
-        <div class="lt-games-heading lt-launcher-action-strip">
+        <div class="lazytester-games-heading lazytester-launcher-action-strip">
         {#if closeOneSlot!==null}
-          <section class="lt-launcher-close-review" aria-label="Confirm one Minecraft close" bind:this={closeOneReviewElement}>
-            <div class="lt-launcher-close-copy"><h3>Close Minecraft - {closeOneSlot}?</h3>
+          <section class="lazytester-launcher-close-review" aria-label="Confirm one Minecraft close" bind:this={closeOneReviewElement}>
+            <div class="lazytester-launcher-close-copy"><h3>Close Minecraft - {closeOneSlot}?</h3>
             <p>Save your work first. Only this game closes; other games keep running.</p></div>
-            <div class="lt-actions">
+            <div class="lazytester-actions">
               <button disabled={busy||refreshing||resizing||closeInProgress||nativeExitReview} on:click={()=>void confirmCloseOne()}>Close Minecraft - {closeOneSlot}</button>
-              <button class="lt-secondary" bind:this={closeCancelButton} disabled={busy||closeInProgress||nativeExitReview} on:click={cancelCloseOne}>Cancel</button>
+              <button class="lazytester-secondary" bind:this={closeCancelButton} disabled={busy||closeInProgress||nativeExitReview} on:click={cancelCloseOne}>Cancel</button>
             </div>
           </section>
         {:else if closingOneSlot!==null}<p role="status">Waiting for Minecraft - {closingOneSlot} to close normally…</p>
         {:else if workspaceActionFeedback}
           {@render actionFeedback(true)}
         {:else if previewIssue}
-          <div class="lt-workspace-preview-feedback" role="status" tabindex="0">
+          <div class="lazytester-workspace-preview-feedback" role="status" tabindex="0">
             <strong>Preview unavailable</strong><span>{previewIssue}</span>
           </div>
         {:else}
-          <span>Your games</span><span class="lt-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>
+          <span>Your games</span><span class="lazytester-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>
         {/if}
         </div>
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}

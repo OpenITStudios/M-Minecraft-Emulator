@@ -75,7 +75,7 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     const app=source('LazyTesterApp.svelte');
     const rail=source('LauncherRail.svelte');
     const storage=source('DataStorage.svelte');
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     expect(app).toContain('const nextAction = nextPendingUiAction({');
     expect(app).toContain('await lazyTester.closeOne(slot)');
     expect(app).toContain('await workspaceSurface.suspend()');

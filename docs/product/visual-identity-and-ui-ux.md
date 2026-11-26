@@ -176,21 +176,21 @@ reflow result.
 ## Palette and component rules
 
 The current dark presentation remains primary, with reusable semantic tokens
-under `.lt-app` in `src/lazy-tester.css`:
+under `.lazytester-app` in `src/lazytester.css`:
 
 | Token | Value | Intent |
 | --- | --- | --- |
-| `--lt-bg` | `#14171e` | Application canvas |
-| `--lt-panel` | `#1c2029` | Standard surface |
-| `--lt-surface-raised` | `#242a36` | Secondary action / popup |
-| `--lt-text` | `#edf0f7` | Main copy |
-| `--lt-muted` | `#b5bfd0` | Secondary copy |
-| `--lt-accent` | `#bac2ff` | Focus, selected outline, primary action |
-| `--lt-control-outline` | `#667387` | Functional control boundaries |
-| `--lt-line` | `#343b48` | Decorative separator only |
-| `--lt-success` | `#95dfbd` | Positive state with text |
-| `--lt-warning` | `#d3b480` | Uncertain state with text |
-| `--lt-danger` | `#efacb6` | Error text and risk with text |
+| `--lazytester-bg` | `#14171e` | Application canvas |
+| `--lazytester-panel` | `#1c2029` | Standard surface |
+| `--lazytester-surface-raised` | `#242a36` | Secondary action / popup |
+| `--lazytester-text` | `#edf0f7` | Main copy |
+| `--lazytester-muted` | `#b5bfd0` | Secondary copy |
+| `--lazytester-accent` | `#bac2ff` | Focus, selected outline, primary action |
+| `--lazytester-control-outline` | `#667387` | Functional control boundaries |
+| `--lazytester-line` | `#343b48` | Decorative separator only |
+| `--lazytester-success` | `#95dfbd` | Positive state with text |
+| `--lazytester-warning` | `#d3b480` | Uncertain state with text |
+| `--lazytester-danger` | `#efacb6` | Error text and risk with text |
 
 Never use color as the only indication of state. Functional control outlines
 must have sufficient non-text contrast; decorative separators need not use the
@@ -638,7 +638,7 @@ and actual Minecraft runtime are all `NOT_EXECUTED`.
 ## Semantic control tokens, pointer states and source contrast audit — 7 November 2026
 
 The active Minimal Professional stylesheet continues to own **one** dark
-semantic palette within `.lt-app`. Previous literal colors for the
+semantic palette within `.lazytester-app`. Previous literal colors for the
 advanced outline and expanded surface, preview placeholder, alert
 surface/outline, destructive button/border/foreground, hover and the two
 overlay shadows are now named custom properties within that owner.
@@ -818,7 +818,7 @@ destructive-data controllers remain the only action owners.
   keyboard-only focus handoff.
 - **Confirm Close Minecraft:** the reviewed confirm action reanchors
   focus, before removing its panel, to the existing same-slot
-  `lt-launcher-entry` (`tabindex=-1`). This is safe even when native
+  `lazytester-launcher-entry` (`tabindex=-1`). This is safe even when native
   CloseOne remains unconfirmed and its launcher card is disabled.
   The original Rust CloseOne admission, required review, and Cancel
   behavior are unchanged; the reanchor neither selects nor launches
@@ -974,10 +974,10 @@ overflowing content aligns to the scroll start, plus `overflow-y:auto`,
 exclusive empty-state render paths receive the same focusable named
 status region; ordinary keyboard scroll does not need another button.
 
-**Safety boundary:** the native `.lt-viewport` remains the same
+**Safety boundary:** the native `.lazytester-viewport` remains the same
 container-sized 16:9 element, and the five fixed keyed DWM cards
 and launcher controls are untouched. This scroll behavior belongs
-only to the conditional `.lt-empty` child, which does **not**
+only to the conditional `.lazytester-empty` child, which does **not**
 exist when a game is actively presented. It does not add an
 observer, input handler, synthetic game surface or session state.
 

@@ -30,6 +30,15 @@ Git retains the older source.
 | `planning/development.md` | One current development-status and next-action handoff |
 | `workspace/` | Ignored generated tools, developer caches and packages, never game account source authority |
 
+## Desktop UI naming
+
+Use `lazytester-` for product-owned CSS classes, IDs and disclosure names,
+`--lazytester-` for design tokens, and `lazytester.css` for the shared stylesheet.
+Name each selector by its responsibility (for example `lazytester-launcher-card`
+and `lazytester-launcher-preview`). Update markup, styles and selector fixtures
+together; do not keep abbreviated aliases. The visible brand is LazyTester.
+Installed identifiers and native wire contracts remain unchanged.
+
 ## Internal native source naming
 
 Name modules by their semantic owner and purpose, not by legacy project names.

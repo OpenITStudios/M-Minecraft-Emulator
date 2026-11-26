@@ -1,0 +1,967 @@
+:root{
+  font-family:"Segoe UI",sans-serif;
+  font-size:15px;
+  color:#eff1f5;
+  background:#14161a;
+  font-synthesis:none}
+  *{
+    box-sizing:border-box}
+    html,body,#app{
+      margin:0;
+      height:100%}
+      body{
+        overflow:hidden}
+        .lazytester-app{
+          --lazytester-bg:#14161a;
+          --lazytester-panel:#1c1f24;
+          --lazytester-line:#383e48;
+          --lazytester-muted:#b5bdca;
+          --lazytester-accent:#bac2ff;
+          /* Minimal Professional semantic palette: one canonical source. */
+          --lazytester-text:#eff1f5;
+          --lazytester-on-accent:#18203a;
+          --lazytester-surface-raised:#252930;
+          --lazytester-selected-bg:#2c344c;
+          --lazytester-control-outline:#667387;
+          --lazytester-success:#95dfbd;
+          --lazytester-warning:#d3b480;
+          --lazytester-danger:#efacb6;
+          --lazytester-viewport-bg:#101216;
+          --lazytester-danger-hover:#c42b1c;
+          --lazytester-control-min-height:36px;
+          --lazytester-radius-control:6px;
+          /* Semantic interactive surfaces and non-text distinctions. */
+          --lazytester-advanced-outline:#6e7b9a;
+          --lazytester-expanded-surface:#252d43;
+          --lazytester-preview-empty:#232830;
+          --lazytester-alert-outline:#aa785a;
+          --lazytester-alert-surface:#342721;
+          --lazytester-danger-surface:#943641;
+          --lazytester-danger-outline:#b34a56;
+          --lazytester-on-danger:#fff;
+          --lazytester-control-hover:#303640;
+          --lazytester-accent-hover:#d0d7ff;
+          --lazytester-overlay-shadow:#0006;
+          display:flex;
+          flex-direction:column;
+          height:100vh;
+          background:var(--lazytester-bg);
+          color:var(--lazytester-text)}
+          .lazytester-app button,.lazytester-app input,.lazytester-app select{
+            font:inherit}
+            .lazytester-app button{
+              cursor:pointer;
+              border:1px solid transparent;
+              border-radius:6px;
+              background:var(--lazytester-accent);
+              color:var(--lazytester-on-accent);
+              padding:9px 13px;
+              font-weight:600;
+              flex-shrink:0}
+              .lazytester-app button:disabled{
+                cursor:default;
+                opacity:.68}
+                .lazytester-app button.lazytester-secondary{
+                  background:var(--lazytester-surface-raised);
+                  color:inherit;
+                  border-color:var(--lazytester-control-outline)}
+                  .lazytester-app :is(button,a,input,select,summary):focus-visible{
+                    outline:2px solid var(--lazytester-accent);
+                    outline-offset:3px}
+                    .lazytester-app input,.lazytester-app select{
+                      border:1px solid var(--lazytester-control-outline);
+                      border-radius:6px;
+                      padding:8px 10px;
+                      background:var(--lazytester-bg);
+                      color:inherit}
+                      .lazytester-app [hidden]{
+                        display:none!important}
+                        .lazytester-topbar{
+                          display:flex;
+                          align-items:center;
+                          gap:24px;
+                          padding:0 24px;
+                          height:56px;
+                          flex-shrink:0;
+                          background:var(--lazytester-panel);
+                          border-bottom:1px solid var(--lazytester-line)}
+                          .lazytester-brand{
+                            display:flex;
+                            align-items:center;
+                            gap:10px;
+                            color:inherit;
+                            font-size:15px;
+                            font-weight:600;
+                            text-decoration:none}
+                            .lazytester-brand>.lazytester-brand-mark{
+                              display:grid;
+                              place-items:center;
+                              width:29px;
+                              height:29px;
+                              border-radius:7px;
+                              background:var(--lazytester-selected-bg);
+                              color:var(--lazytester-accent);
+                              font-size:12px}
+                              .lazytester-topbar nav{
+                                display:flex;
+                                align-self:stretch;
+                                gap:20px}
+                                .lazytester-topbar nav button{
+                                  background:transparent;
+                                  color:var(--lazytester-muted);
+                                  padding:0;
+                                  border:0;
+                                  border-bottom:3px solid transparent;
+                                  border-radius:0}
+                                  .lazytester-topbar nav button.chosen{
+                                    color:inherit;
+                                    border-bottom-color:var(--lazytester-accent)}
+                                    .lazytester-connection{
+                                      margin-left:auto;
+                                      font-size:12px;
+                                      color:var(--lazytester-muted)}
+                                      .lazytester-dot{
+                                        display:inline-block;
+                                        width:7px;
+                                        height:7px;
+                                        margin-right:6px;
+                                        background:var(--lazytester-success);
+                                        border-radius:50%}
+                                        .lazytester-dot.waiting{
+                                          background:var(--lazytester-warning)}
+                                          .lazytester-layout{
+                                            flex:1;
+                                            min-height:0;
+                                            display:flex}
+                                            .lazytester-settings-layout{
+                                              display:grid;
+                                              grid-template-columns:180px minmax(0,1fr)}
+                                              .lazytester-sidebar{
+                                                background:var(--lazytester-panel);
+                                                border-right:1px solid var(--lazytester-line);
+                                                padding:25px 12px}
+                                                .lazytester-sidebar h2{
+                                                  font-size:14px;
+                                                  margin:0 12px 18px}
+                                                  .lazytester-sidebar nav{
+                                                    display:grid;
+                                                    gap:5px}
+                                                    .lazytester-sidebar button{
+                                                      text-align:left;
+                                                      background:transparent;
+                                                      color:var(--lazytester-muted);
+                                                      font-weight:400}
+                                                      .lazytester-sidebar button.chosen{
+                                                        background:var(--lazytester-selected-bg);
+                                                        color:inherit}
+                                                        .lazytester-app main{
+                                                          flex:1;
+                                                          min-width:0;
+                                                          min-height:0;
+                                                          padding:24px;
+                                                          display:flex;
+                                                          flex-direction:column;
+                                                          overflow:auto}
+                                                          .lazytester-settings-layout main{
+                                                            padding:24px 28px}
+                                                            .lazytester-page-header{
+                                                              display:flex;
+                                                              justify-content:space-between;
+                                                              align-items:center;
+                                                              gap:16px;
+                                                              margin-bottom:12px;
+                                                              flex-shrink:0}
+                                                              .lazytester-page-header h1{
+                                                                margin:0;
+                                                                font-size:20px;
+                                                                font-weight:600;
+                                                                letter-spacing:-.2px}
+                                                                .lazytester-header-actions{
+                                                                  display:flex;
+                                                                  align-items:center;
+                                                                  gap:8px}
+                                                                .lazytester-play-header h1{
+                                                                  font-size:20px}
+                                                                .lazytester-page-header button{
+                                                                  font-size:12px;
+                                                                  padding:7px 11px}
+                                                                  .lazytester-app h2{
+                                                                    font-size:16px;
+                                                                    font-weight:600;
+                                                                    margin:0 0 10px}
+                                                                    .lazytester-app h3{
+                                                                      font-size:14px;
+                                                                      font-weight:600;
+                                                                      margin:0}
+                                                                      .lazytester-app p{
+                                                                        font-size:14px;
+                                                                        line-height:1.55;
+                                                                        color:var(--lazytester-muted);
+                                                                        margin:6px 0}
+                                                                        .lazytester-app small{
+                                                                          font-size:13px;
+                                                                          color:var(--lazytester-muted);
+                                                                          font-weight:400}
+                                                                          .lazytester-group>h2 small{
+                                                                            margin-left:10px}
+                                                                            .lazytester-actions{
+                                                                              display:flex;
+                                                                              gap:8px;
+                                                                              flex-wrap:wrap;
+                                                                              margin-top:14px}
+                                                                              .lazytester-help{
+                                                                                font-size:13px!important}
+                                                                                .lazytester-settings-content{
+                                                                                  max-width:880px;
+                                                                                  width:100%}
+                                                                                  .lazytester-group{
+                                                                                    margin:12px 0 20px}
+                                                                                    .lazytester-group+.lazytester-group{
+                                                                                      padding-top:22px;
+                                                                                      border-top:1px solid var(--lazytester-line)}
+                                                                                      .lazytester-setting{
+                                                                                        display:flex;
+                                                                                        align-items:center;
+                                                                                        justify-content:space-between;
+                                                                                        gap:16px;
+                                                                                        padding:12px 0;
+                                                                                        border-bottom:1px solid var(--lazytester-line)}
+                                                                                        .lazytester-setting>div:first-child{
+                                                                                          min-width:0;
+                                                                                          flex:1}
+                                                                                          .lazytester-setting p{
+                                                                                            max-width:570px}
+
+                                                                                              .lazytester-fps{
+                                                                                                display:flex;
+                                                                                                align-items:center;
+                                                                                                gap:8px;
+                                                                                                color:var(--lazytester-muted);
+                                                                                                font-size:13px}
+                                                                                                .lazytester-fps input{
+                                                                                                  width:85px}
+                                                                                                  .lazytester-data-path{
+                                                                                                    overflow-wrap:anywhere;
+                                                                                                    user-select:text;
+                                                                                                    font-family:Consolas,monospace;
+                                                                                                    font-size:13px!important}
+                                                                                                    .lazytester-launcher-heading{
+                                                                                                      display:flex;
+                                                                                                      gap:12px;
+                                                                                                      align-items:center;
+                                                                                                      margin:16px 0}
+                                                                                                      .lazytester-launcher-heading select{
+                                                                                                        font-size:18px;
+                                                                                                        font-weight:600}
+                                                                                                        .lazytester-launcher-heading>span{
+                                                                                                          font-size:13px;
+                                                                                                          color:var(--lazytester-muted)}
+                                                                                                          .lazytester-advanced{
+                                                                                                            border:1px solid var(--lazytester-advanced-outline);
+                                                                                                            border-radius:9px;
+                                                                                                            background:var(--lazytester-panel);
+                                                                                                            margin:25px 0 0}
+                                                                                                            .lazytester-advanced summary{
+                                                                                                              display:flex;
+                                                                                                              justify-content:space-between;
+                                                                                                              align-items:center;
+                                                                                                              padding:16px 18px;
+                                                                                                              cursor:pointer;
+                                                                                                              color:var(--lazytester-accent);
+                                                                                                              list-style:none}
+                                                                                                              .lazytester-advanced summary::-webkit-details-marker{
+                                                                                                                display:none}
+                                                                                                                .lazytester-advanced summary small{
+                                                                                                                  display:block;
+                                                                                                                  margin-top:4px}
+                                                                                                                  .lazytester-advanced summary>span:last-child{
+                                                                                                                    font-size:23px}
+                                                                                                                    .lazytester-advanced[open] summary{
+                                                                                                                      border-bottom:1px solid var(--lazytester-line);
+                                                                                                                      background:var(--lazytester-expanded-surface);
+                                                                                                                      border-radius:9px 9px 0 0}
+                                                                                                                      .lazytester-advanced-body{
+                                                                                                                        padding:0 18px}
+                                                                                                                        .lazytester-danger-zone{
+                                                                                                                          margin-top:26px;
+                                                                                                                          padding-top:22px;
+                                                                                                                          border-top:1px solid var(--lazytester-line);
+                                                                                                                          display:flex;
+                                                                                                                          align-items:center;
+                                                                                                                          gap:20px}
+                                                                                                                          .lazytester-danger-zone>div{
+                                                                                                                            flex:1;
+                                                                                                                            min-width:0}
+                                                                                                                            .lazytester-danger-zone h3,.lazytester-app button.lazytester-danger{
+                                                                                                                              color:var(--lazytester-danger)}
+                                                                                                                              .lazytester-location-options{
+                                                                                                                                margin:26px 0 14px;
+                                                                                                                                padding-top:20px;
+                                                                                                                                border-top:1px solid var(--lazytester-line)}
+                                                                                                                                .lazytester-location-options summary{
+                                                                                                                                  cursor:pointer;
+                                                                                                                                  color:var(--lazytester-accent)}
+                                                                                                                                  .lazytester-workspace{
+                                                                                                                                    flex:1;
+                                                                                                                                    min-height:0;
+                                                                                                                                    display:flex;
+                                                                                                                                    flex-direction:column}
+                                                                                                                                          .lazytester-stage-space{
+                                                                                                                                            flex:1;
+                                                                                                                                            min-height:140px;
+                                                                                                                                            container-type:size;
+                                                                                                                                            display:grid;
+                                                                                                                                            place-items:center;
+                                                                                                                                            background:var(--lazytester-viewport-bg);
+                                                                                                                                            border-radius:9px}
+                                                                                                                                          .lazytester-viewport{
+                                                                                                                                            /* This exact element also supplies native placement and input bounds. */
+                                                                                                                                            width:min(100cqw,calc(100cqh * 16 / 9));
+                                                                                                                                            aspect-ratio:16/9;
+                                                                                                                                            flex:none;
+                                                                                                                                            border:1px solid var(--lazytester-line);
+                                                                                                                                            border-radius:9px;
+                                                                                                                                            background:var(--lazytester-viewport-bg);
+                                                                                                                                            overflow:hidden}
+                                                                                                                                            .lazytester-viewport.lazytester-desktop{
+                                                                                                                                              background:var(--lazytester-panel)}
+                                                                                                                                              .lazytester-empty{
+  height:100%;
+  min-width:0;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:safe center;
+  padding:20px;
+  text-align:center;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+}
+.lazytester-app .lazytester-viewport .lazytester-empty:focus-visible{
+  outline:2px solid var(--lazytester-accent);
+  outline-offset:-2px;
+}
+@media (forced-colors:active){
+  .lazytester-app .lazytester-viewport .lazytester-empty:focus-visible{
+    outline-color:Highlight;
+  }
+}
+                                                                                                                                                .lazytester-empty>span{
+                                                                                                                                                  font-size:32px;
+                                                                                                                                                  color:var(--lazytester-accent);
+                                                                                                                                                  margin-bottom:12px}
+                                                                                                                                                  .lazytester-empty h2{
+                                                                                                                                                    font-size:20px}
+                                                                                                                                                    .lazytester-games-heading{
+                                                                                                                                                      display:flex;
+                                                                                                                                                      justify-content:space-between;
+                                                                                                                                                        margin:12px auto 8px;
+                                                                                                                                                        width:min(100%,1600px);
+                                                                                                                                                        flex-shrink:0;
+                                                                                                                                                        font-size:13px;
+                                                                                                                                                      color:var(--lazytester-muted)}
+                                                                                                                                                      .lazytester-filmstrip{
+                                                                                                                                                          width:min(100%,1600px);
+                                                                                                                                                          margin-inline:auto;
+                                                                                                                                                        display:grid;
+                                                                                                                                                        grid-template-columns:repeat(5,minmax(0,1fr));
+                                                                                                                                                        gap:12px;
+                                                                                                                                                        flex-shrink:0}
+                                                                                                                                                        .lazytester-filmstrip .lazytester-launcher-card{
+                                                                                                                                                          display:flex;
+                                                                                                                                                          flex-direction:column;
+                                                                                                                                                          gap:7px;
+                                                                                                                                                          background:var(--lazytester-panel);
+                                                                                                                                                          border:1px solid var(--lazytester-line);
+                                                                                                                                                          color:inherit;
+                                                                                                                                                          padding:10px;
+                                                                                                                                                          text-align:left;
+                                                                                                                                                          min-width:0;
+                                                                                                                                                          font-size:14px}
+                                                                                                                                                          .lazytester-filmstrip .lazytester-launcher-card.selected{
+                                                                                                                                                            border-color:var(--lazytester-accent);
+                                                                                                                                                            background:var(--lazytester-selected-bg)}
+                                                                                                                                                            .lazytester-launcher-preview{
+                                                                                                                                                              display:grid;
+                                                                                                                                                              place-items:center;
+                                                                                                                                                              aspect-ratio:16/9;
+                                                                                                                                                              height:auto;
+                                                                                                                                                              width:min(100%,calc(clamp(48px,9vh,100px) * 16 / 9));
+                                                                                                                                                              margin-inline:auto;
+                                                                                                                                                              border-radius:5px;
+                                                                                                                                                              background:var(--lazytester-preview-empty);
+                                                                                                                                                              color:var(--lazytester-muted);
+                                                                                                                                                              font-size:16px;
+                                                                                                                                                              font-weight:400}
+                                                                                                                                                              .lazytester-launcher-card small{
+                                                                                                                                                                font-size:13px;
+                                                                                                                                                                overflow-wrap:anywhere}
+
+                                                                                                                                                                  .lazytester-alert,.lazytester-binding,.lazytester-cache-confirm{
+                                                                                                                                                                    padding:14px 16px;
+                                                                                                                                                                    border:1px solid var(--lazytester-line);
+                                                                                                                                                                    border-radius:8px;
+                                                                                                                                                                    margin-bottom:15px;
+                                                                                                                                                                    flex-shrink:0}
+                                                                                                                                                                    .lazytester-alert{
+                                                                                                                                                                      border-color:var(--lazytester-alert-outline);
+                                                                                                                                                                      background:var(--lazytester-alert-surface);
+                                                                                                                                                                      max-height:100px;
+                                                                                                                                                                      overflow:auto;
+                                                                                                                                                                      overflow-wrap:anywhere}
+                                                                                                                                                                      .lazytester-alert p{
+                                                                                                                                                                        color:var(--lazytester-danger)}
+                                                                                                                                                                        .lazytester-binding{
+                                                                                                                                                                          display:flex;
+                                                                                                                                                                          align-items:center;
+                                                                                                                                                                          gap:18px;
+                                                                                                                                                                          flex-wrap:wrap;
+                                                                                                                                                                          max-height:160px;
+                                                                                                                                                                          overflow:auto}
+                                                                                                                                                                          .lazytester-binding>div:first-child{
+                                                                                                                                                                            flex:1;
+                                                                                                                                                                            min-width:180px}
+                                                                                                                                                                            .lazytester-error{
+                                                                                                                                                                              color:var(--lazytester-danger)!important}
+                                                                                                                                                                              .lazytester-cache-confirm{
+                                                                                                                                                                                margin-top:14px;
+                                                                                                                                                                                background:var(--lazytester-panel)}
+                                                                                                                                                                                @media(max-width:1000px){
+                                                                                                                                                                                  .lazytester-settings-layout{
+                                                                                                                                                                                    grid-template-columns:155px minmax(0,1fr)}
+                                                                                                                                                                                    .lazytester-settings-layout main{
+                                                                                                                                                                                      padding:23px 22px}
+                                                                                                                                                                                      .lazytester-topbar{
+                                                                                                                                                                                        gap:25px}
+                                                                                                                                                                                        .lazytester-launcher-preview{
+                                                                                                                                                                                          width:min(100%,98px)}
+                                                                                                                                                                                          }
+                                                                                                                                                                                          @media(max-height:700px){
+                                                                                                                                                                                            .lazytester-topbar{
+                                                                                                                                                                                              height:54px}
+                                                                                                                                                                                              .lazytester-app main{
+                                                                                                                                                                                                padding-top:17px;
+                                                                                                                                                                                                padding-bottom:14px}
+                                                                                                                                                                                                .lazytester-page-header{
+                                                                                                                                                                                                  margin-bottom:12px}
+                                                                                                                                                                                                    .lazytester-launcher-preview{
+                                                                                                                                                                                                      width:min(100%,75px)}
+                                                                                                                                                                                                      .lazytester-empty>span{
+                                                                                                                                                                                                        display:none}
+                                                                                                                                                                                                      }
+
+/* One application frame in Play and Settings, including native aperture mode. */
+.lazytester-app .lazytester-window-bar{display:flex;align-items:stretch;height:32px;flex:none;background:var(--lazytester-panel);border-bottom:1px solid var(--lazytester-line);user-select:none}
+.lazytester-app .lazytester-window-drag{display:flex;align-items:center;gap:8px;flex:1;min-width:0;text-align:left;border:0;border-radius:0;background:transparent;color:var(--lazytester-text);padding:0 12px;font-size:12px;font-weight:400}
+.lazytester-window-drag>span:first-child{display:grid;place-items:center;background:var(--lazytester-accent);color:var(--lazytester-on-accent);border-radius:4px;width:18px;height:18px;font-size:10px;font-weight:700}
+.lazytester-app .lazytester-window-control{display:grid;place-items:center;width:46px;padding:0;border:0;border-radius:0;background:transparent;color:var(--lazytester-text)}
+.lazytester-app .lazytester-window-control:hover{background:var(--lazytester-line)}
+.lazytester-app .lazytester-window-close:hover{background:var(--lazytester-danger-hover);color:var(--lazytester-on-danger)}
+.lazytester-window-control svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1}
+.lazytester-app{color-scheme:dark;border:1px solid var(--lazytester-line)}
+
+
+.lazytester-delete-confirm {display:grid;gap:12px;justify-items:start}
+.lazytester-delete-confirm h3,.lazytester-delete-confirm p {margin:0}
+.lazytester-delete-confirm input[type="text"] {width:100%;max-width:320px}
+.lazytester-delete-ack {display:flex;gap:10px;align-items:flex-start;line-height:1.5}
+.lazytester-delete-ack input[type="checkbox"] {flex:0 0 auto;width:18px;height:18px;padding:0;margin:2px 0 0;accent-color:var(--lazytester-accent)}
+.lazytester-delete-confirm button.lazytester-danger {background:var(--lazytester-danger-surface);color:var(--lazytester-on-danger);border-color:var(--lazytester-danger-outline)}
+.lazytester-audio-toggle { display:flex; align-items:center; gap:8px; white-space:nowrap; cursor:pointer; }
+.lazytester-audio-toggle input { width:18px; height:18px; accent-color:var(--lazytester-accent); }
+
+/* Normal-exit failure is a session-recovery state, not a second launcher manager. */
+.lazytester-exit-recovery{flex:none;border:1px solid var(--lazytester-line);border-radius:8px;background:var(--lazytester-surface-raised);padding:11px 14px;margin-bottom:12px;font-size:13px}
+.lazytester-exit-recovery h2{font-size:14px;margin:0 0 5px}
+.lazytester-exit-recovery p{margin:4px 0 8px;line-height:1.45}
+.lazytester-exit-recovery details{margin-top:6px;color:var(--lazytester-muted);max-height:140px;overflow:auto;overflow-wrap:anywhere}
+.lazytester-exit-recovery summary{cursor:pointer;color:var(--lazytester-accent)}
+
+/* One launcher card with its own secondary normal-close action. */
+.lazytester-launcher-entry{display:flex;flex-direction:column;min-width:0;gap:4px;position:relative}
+.lazytester-filmstrip .lazytester-launcher-entry>.lazytester-launcher-card{flex:1;width:100%}
+.lazytester-app .lazytester-close-launcher{
+  position:absolute;top:5px;right:5px;z-index:1;
+  width:32px;height:32px;min-height:32px;padding:0;
+  display:grid;place-items:center;
+  font-size:19px;line-height:1;font-weight:500;
+  color:var(--lazytester-muted);background:var(--lazytester-surface-raised);
+  border:1px solid var(--lazytester-control-outline);border-radius:6px;
+}
+.lazytester-app .lazytester-preview-slot-issue{display:block;min-width:0;max-height:38px;overflow:auto;overflow-wrap:anywhere;line-height:1.35}
+/* The rail header owns confirmation space. Opening a review never inserts
+   another flex row or overlays a native game/thumbnail HWND. */
+.lazytester-launcher-action-strip{height:56px;flex:0 0 56px;align-items:center;min-width:0}
+.lazytester-workspace-preview-feedback{display:flex;align-items:center;gap:8px;width:100%;max-height:100%;min-width:0;overflow:auto;overflow-wrap:anywhere;color:var(--lazytester-warning)}
+.lazytester-workspace-preview-feedback strong{flex:none}
+.lazytester-workspace-preview-feedback span{min-width:0}
+/* Noncritical workspace actions reuse the fixed rail strip. Global
+   connection/restoration warnings retain their separate recovery surface. */
+.lazytester-app .lazytester-launcher-action-strip > .lazytester-workspace-action-feedback{
+  display:flex;align-items:center;gap:8px;width:100%;height:100%;min-width:0;
+  padding:4px 8px;margin:0;overflow:auto;overscroll-behavior:contain;
+}
+.lazytester-app .lazytester-workspace-action-feedback .lazytester-alert-item{flex:1;min-width:0;align-self:center}
+.lazytester-app .lazytester-alert.lazytester-workspace-action-feedback .lazytester-alert-item > p{margin:1px 0;font-size:12px;line-height:1.25}
+.lazytester-app .lazytester-alert.lazytester-workspace-action-feedback .lazytester-alert-footer{flex:none;flex-wrap:nowrap;margin:0;gap:6px}
+.lazytester-app .lazytester-workspace-action-feedback:focus-visible{outline:2px solid var(--lazytester-accent);outline-offset:-2px}
+.lazytester-launcher-close-review{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:100%;min-width:0;overflow:auto}
+.lazytester-launcher-close-copy{min-width:0;flex:1}
+.lazytester-launcher-close-copy h3,.lazytester-launcher-close-copy p{margin:0;line-height:1.3}
+.lazytester-launcher-close-copy p{font-size:12px;color:var(--lazytester-muted)}
+.lazytester-launcher-close-review .lazytester-actions{display:flex;flex:none;gap:6px;align-items:center;white-space:nowrap}
+.lazytester-launcher-close-review .lazytester-actions button{min-height:32px;font-size:12px;padding:5px 9px}
+
+/* Collapsed support references contain only authored categories/codes. */
+.lazytester-alert .lazytester-feedback-reference{margin-top:5px;font-size:12px;line-height:1.4}
+.lazytester-alert .lazytester-feedback-reference summary{cursor:pointer;color:var(--lazytester-accent);width:max-content;max-width:100%}
+.lazytester-alert .lazytester-feedback-reference p{margin:4px 0 0;font-size:12px;overflow-wrap:anywhere}
+
+/* Progressive disclosure only: use the current theme and existing setting rows. */
+.lazytester-storage-packs{margin-top:16px;border-top:1px solid var(--lazytester-line);border-bottom:1px solid var(--lazytester-line)}
+.lazytester-storage-packs summary{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap;padding:14px 0;color:var(--lazytester-accent);cursor:pointer}
+.lazytester-storage-packs-body{padding-bottom:14px}
+
+/* The optional controller-reported summary participates in the fixed-height
+   topbar: unlike an absolute badge, it cannot overlap tabs or connection text.
+   Only its expanded read-only details are overlaid; native Play/DWM bounds
+   and topbar height never depend on this report. */
+.lazytester-topbar{position:relative}
+/* Navigation and launcher hover are presentation-only; no native bounds change. */
+.lazytester-topbar nav button:hover:not(:disabled),
+.lazytester-sidebar button:hover:not(:disabled){color:var(--lazytester-text)}
+.lazytester-sidebar button:hover:not(:disabled):not(.chosen){background:var(--lazytester-control-hover)}
+.lazytester-filmstrip .lazytester-launcher-card:hover:not(:disabled):not(.selected){border-color:var(--lazytester-control-outline);background:var(--lazytester-surface-raised)}
+.lazytester-agent-activity{position:relative;right:auto;top:auto;z-index:12;flex:0 1 192px;width:192px;min-width:0;max-width:192px;font-size:12px}
+.lazytester-agent-activity summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer;padding:8px 10px;border:1px solid var(--lazytester-line);border-radius:6px;background:var(--lazytester-surface-raised);color:var(--lazytester-accent)}
+.lazytester-agent-activity summary:focus-visible{outline:2px solid var(--lazytester-accent);outline-offset:2px}
+.lazytester-agent-activity-details{position:absolute;right:0;top:38px;width:min(310px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:min(260px,calc(100dvh - 102px));overflow:auto;padding:14px;border:1px solid var(--lazytester-line);border-radius:8px;background:var(--lazytester-panel);color:var(--lazytester-text);box-shadow:0 6px 24px var(--lazytester-overlay-shadow)}
+.lazytester-agent-activity-details strong{display:block;font-size:13px}
+.lazytester-agent-activity-details p{margin:8px 0;font-size:13px;line-height:1.45}
+.lazytester-agent-activity-details small{display:block;margin-top:10px;color:var(--lazytester-muted);line-height:1.4}
+
+/* Compact, optional original Probe result within the existing one-click
+   header disclosure. No second page or change to the five DWM rail cards. */
+.lazytester-agent-testing-summary{border-top:1px solid var(--lazytester-line);margin-top:10px;padding-top:10px}
+.lazytester-agent-testing-summary strong{display:block}
+.lazytester-agent-testing-summary dl{display:grid;grid-template-columns:minmax(80px,36%) minmax(0,1fr);gap:8px 10px;margin:10px 0 4px;font-size:13px;line-height:1.45}
+.lazytester-agent-testing-summary dt{color:var(--lazytester-muted)}
+.lazytester-agent-testing-summary dd{min-width:0;margin:0;overflow-wrap:anywhere}
+
+/* Native Play-header reflow only; no desktop F3 or coordinate popups. */
+@media(max-width:1080px){.lazytester-play-header{flex-wrap:wrap}.lazytester-play-header .lazytester-header-actions{margin-left:auto}}
+@media(max-width:650px){.lazytester-play-header .lazytester-header-actions{flex-wrap:wrap;justify-content:flex-end}}
+
+/* Standalone Lazy Tester identity: reuse the bundle icon rather than duplicating
+   logo geometry in Tauri, the titlebar, and the empty Play surface. */
+.lazytester-brand > .lazytester-brand-mark,
+.lazytester-window-drag > span.lazytester-window-mark:first-child,
+.lazytester-empty > .lazytester-empty-mark{
+  display:block;
+  flex:none;
+  background:transparent url("../src-tauri/app-icon.svg") center / contain no-repeat;
+}
+.lazytester-brand > .lazytester-brand-mark{width:29px;height:29px;border-radius:7px}
+.lazytester-window-drag > span.lazytester-window-mark:first-child{width:18px;height:18px;border-radius:4px}
+.lazytester-empty > .lazytester-empty-mark{width:56px;height:56px;margin-bottom:12px}
+.lazytester-app .lazytester-play-header .lazytester-header-actions{flex-wrap:wrap;justify-content:flex-end}
+.lazytester-app .lazytester-agent-activity summary{
+  border-color:var(--lazytester-control-outline);
+}
+.lazytester-app :is(button,a,input,textarea,select,summary):focus-visible{
+  outline:2px solid var(--lazytester-accent);
+  outline-offset:2px;
+}
+@media (forced-colors:active){
+  .lazytester-app button,.lazytester-app input,.lazytester-app textarea,.lazytester-app select,
+  .lazytester-app summary{border:1px solid ButtonText}
+  .lazytester-filmstrip .lazytester-launcher-card.selected{outline:2px solid Highlight;outline-offset:-2px}
+  .lazytester-app :is(button,a,input,textarea,select,summary):focus-visible{
+    outline:2px solid Highlight;outline-offset:2px;
+  }
+}
+@media (prefers-reduced-motion:reduce){
+  .lazytester-app *, .lazytester-app *::before, .lazytester-app *::after{
+    transition-duration:0.01ms!important;
+    animation-duration:0.01ms!important;
+    scroll-behavior:auto!important;
+  }
+}
+
+/* Settings and Storage only: retain readable controls at the application's
+   supported 920px minimum without changing native Play/DWM geometry. */
+.lazytester-page-loading{
+  flex:none;
+  margin:0 0 12px;
+  padding:8px 12px;
+  border-left:3px solid var(--lazytester-accent);
+  background:var(--lazytester-surface-raised);
+  color:var(--lazytester-text);
+  font-size:13px;
+}
+.lazytester-settings-layout h1:focus{
+  outline:2px solid var(--lazytester-accent);outline-offset:4px;border-radius:4px;
+}
+@media (max-width:1050px){
+  .lazytester-settings-layout .lazytester-settings-content{min-width:0}
+  .lazytester-settings-layout .lazytester-setting{flex-wrap:wrap;align-items:flex-start;gap:10px}
+  .lazytester-settings-layout .lazytester-setting > div:first-child{flex:1 1 290px}
+  .lazytester-settings-layout .lazytester-setting > button{max-width:100%;white-space:normal;text-align:center}
+  .lazytester-settings-layout .lazytester-launcher-heading{flex-wrap:wrap}
+  .lazytester-settings-layout .lazytester-launcher-heading select{max-width:100%}
+}
+
+/* Field feedback and bounded Storage content. The native Play aperture,
+   five keyed DWM previews and launcher geometry remain untouched. */
+.lazytester-settings-layout .lazytester-field-error{
+  color:var(--lazytester-danger);
+  font-size:12px;
+  line-height:1.45;
+  overflow-wrap:anywhere;
+}
+.lazytester-settings-layout input[aria-invalid="true"]{border-color:var(--lazytester-danger)}
+.lazytester-settings-layout .lazytester-form-errors{min-width:0}
+.lazytester-settings-layout .lazytester-storage-feedback{
+  border-left:3px solid var(--lazytester-warning);
+  background:var(--lazytester-surface-raised);
+  padding:9px 12px;
+  font-size:13px;
+  overflow-wrap:anywhere;
+}
+.lazytester-settings-layout :is(.lazytester-cache-confirm,.lazytester-delete-confirm,.lazytester-advanced-body,.lazytester-storage-packs-body){
+  min-width:0;
+  max-width:100%;
+}
+.lazytester-settings-layout .lazytester-delete-confirm > *{max-width:100%;overflow-wrap:anywhere}
+.lazytester-settings-layout .lazytester-storage-packs-body .lazytester-setting > span{overflow-wrap:anywhere}
+@media (max-width:1050px){
+  .lazytester-settings-layout .lazytester-danger-zone{flex-wrap:wrap;align-items:flex-start;gap:12px}
+  .lazytester-settings-layout .lazytester-danger-zone > div{flex:1 1 100%}
+  .lazytester-settings-layout .lazytester-danger-zone > button{max-width:100%;white-space:normal;text-align:center}
+  .lazytester-settings-layout .lazytester-fps{flex-wrap:wrap}
+}
+@media (forced-colors:active){
+  .lazytester-settings-layout input[aria-invalid="true"]{border-color:ButtonText}
+}
+
+/* Minimal Professional — consistent actions in Settings and Storage only.
+   The existing native Play viewport and all five DWM thumbnail targets
+   intentionally receive no new width, height, padding or layout rules. */
+.lazytester-settings-layout :is(.lazytester-actions > button,.lazytester-setting > button,.lazytester-danger-zone > button){
+  min-height:var(--lazytester-control-min-height);
+  border-radius:var(--lazytester-radius-control);
+  font-size:13px;
+  line-height:1.3;
+}
+.lazytester-settings-layout :is(.lazytester-group > h2,.lazytester-storage-packs summary,.lazytester-advanced summary){
+  line-height:1.4;
+}
+.lazytester-settings-layout .lazytester-group > h2{margin-bottom:12px}
+.lazytester-settings-layout .lazytester-actions > button.lazytester-secondary:hover:not(:disabled),
+.lazytester-settings-layout .lazytester-setting > button.lazytester-secondary:hover:not(:disabled){
+  background:var(--lazytester-selected-bg);
+}
+.lazytester-settings-layout .lazytester-cache-confirm{border-left:3px solid var(--lazytester-accent)}
+.lazytester-settings-layout .lazytester-delete-confirm{border-left-color:var(--lazytester-danger)}
+/* Status emphasis only: do not alter card geometry, thumbnail width or row height.
+   Color is supplementary to the original exact native-observation text. */
+.lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-attention{color:var(--lazytester-warning)}
+.lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-pending{color:var(--lazytester-muted)}
+/* Keep the existing status row visible without changing preview geometry.
+   The button also exposes status in its accessible name. */
+.lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-routine{color:var(--lazytester-muted)}
+.lazytester-filmstrip .lazytester-launcher-card.selected small.lazytester-status-routine{color:var(--lazytester-accent)}
+/* Preview failure is an observation issue, not proof the game has stopped. */
+.lazytester-app .lazytester-preview-slot-issue{color:var(--lazytester-warning)!important}
+@media (forced-colors:active){
+  .lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-attention{color:CanvasText}
+  .lazytester-app .lazytester-preview-slot-issue{color:CanvasText!important}
+}
+
+/* Text-only overflow treatment: leave the five native DWM preview targets,
+   16:9 aperture and keyed launcher grid geometry unchanged. */
+.lazytester-filmstrip .lazytester-launcher-card strong,
+.lazytester-filmstrip .lazytester-launcher-card small{
+  display:block;
+  min-width:0;
+  max-width:100%;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+.lazytester-games-heading{min-width:0;gap:10px}
+.lazytester-games-heading > span:first-child{flex:none}
+.lazytester-games-heading .lazytester-games-count{
+  min-width:0;
+  flex:1 1 auto;
+  text-align:right;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+/* Each bounded recovery message retains its full authored text and a
+   keyboard focus target so users can scroll without a pointing device. */
+.lazytester-app .lazytester-health-notice :is(.lazytester-preview-slot-issue,.lazytester-session-slot-issue){
+  display:block;
+  min-width:0;
+  max-height:38px;
+  overflow:auto;
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+  font-size:13px;
+  line-height:1.35;
+}
+.lazytester-app .lazytester-health-notice [tabindex="0"]:focus-visible,
+.lazytester-app .lazytester-layout main > .lazytester-global-feedback > :is(.lazytester-alert,.lazytester-binding,.lazytester-exit-recovery):focus-visible{
+  outline:2px solid var(--lazytester-accent);
+  outline-offset:-2px;
+  border-radius:5px;
+}
+.lazytester-app .lazytester-layout main > .lazytester-global-feedback > .lazytester-alert{
+  max-height:min(160px,28dvh);
+  overflow-y:auto;
+  overscroll-behavior:contain;
+}
+.lazytester-app .lazytester-layout main > .lazytester-global-feedback > .lazytester-exit-recovery{
+  max-height:min(180px,30dvh);
+  overflow-y:auto;
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+}
+.lazytester-app .lazytester-layout main > .lazytester-global-feedback > .lazytester-binding{
+  overflow-wrap:anywhere;
+  overscroll-behavior:contain;
+}
+@media (forced-colors:active){
+  .lazytester-app .lazytester-health-notice [tabindex="0"]:focus-visible,
+  .lazytester-app .lazytester-layout main > .lazytester-global-feedback > :is(.lazytester-alert,.lazytester-binding,.lazytester-exit-recovery):focus-visible{
+    outline:2px solid Highlight;
+  }
+}
+
+/* Narrow/high-scale topbar: allocate horizontal space to the optional
+   activity summary rather than placing it over Play, Settings or connection. */
+.lazytester-topbar .lazytester-brand{flex:none;min-width:0}
+.lazytester-topbar .lazytester-brand-name{white-space:nowrap}
+.lazytester-topbar nav{flex:none}
+.lazytester-topbar .lazytester-agent-activity{align-self:center}
+.lazytester-topbar .lazytester-connection{
+  flex:0 1 auto;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+@media (max-width:860px){
+  .lazytester-topbar{gap:12px;padding-inline:12px}
+  .lazytester-topbar nav{gap:12px}
+  .lazytester-agent-activity{flex-basis:150px}
+  .lazytester-topbar .lazytester-connection{max-width:185px}
+}
+@media (max-width:650px){
+  .lazytester-topbar .lazytester-brand-name{display:none}
+  .lazytester-topbar .lazytester-agent-activity{flex:1 1 110px;width:auto}
+  .lazytester-topbar .lazytester-connection{flex:0 1 154px;min-width:64px}
+  /* At very narrow effective CSS widths, detail text uses the viewport,
+     not a negative right-anchored position outside the client window. */
+  .lazytester-agent-activity-details{
+    position:fixed;
+    top:90px;left:12px;right:12px;
+    width:auto;max-width:none;
+    max-height:min(260px,calc(100dvh - 108px));
+  }
+}
+@media (max-width:490px){
+  .lazytester-topbar{gap:8px;padding-inline:8px}
+  .lazytester-topbar nav{gap:8px}
+  .lazytester-topbar .lazytester-connection{flex-basis:100px;min-width:58px}
+}
+
+/* Consistent pointer and keyboard affordances for existing Settings/Storage.
+   Only settings controls gain target height; Play/DWM geometry is untouched. */
+.lazytester-app button.lazytester-secondary:hover:not(:disabled){background:var(--lazytester-control-hover)}
+.lazytester-settings-layout .lazytester-actions > button:not(.lazytester-secondary):not(.lazytester-danger):hover:not(:disabled){
+  background:var(--lazytester-accent-hover);
+}
+.lazytester-settings-layout .lazytester-delete-confirm button.lazytester-danger:hover:not(:disabled){
+  background:var(--lazytester-danger-hover);
+  color:var(--lazytester-on-danger);
+}
+.lazytester-settings-layout :is(.lazytester-audio-toggle,.lazytester-delete-ack){
+  min-height:32px;
+}
+.lazytester-settings-layout .lazytester-location-options > summary{
+  /* Keep the native disclosure marker while enlarging the pointer target. */
+  display:list-item;
+  min-height:32px;
+  padding-block:6px;
+}
+.lazytester-settings-layout .lazytester-location-options > summary:hover{
+  text-decoration:underline;
+}
+.lazytester-settings-layout :is(.lazytester-launcher-heading select,.lazytester-fps input){
+  min-height:var(--lazytester-control-min-height);
+}
+.lazytester-settings-layout .lazytester-sidebar nav button{min-height:var(--lazytester-control-min-height)}
+@media (forced-colors:active){
+  .lazytester-settings-layout .lazytester-delete-confirm button.lazytester-danger{
+    border-color:ButtonText;
+    color:ButtonText;
+    background:Canvas;
+  }
+  .lazytester-settings-layout .lazytester-delete-confirm button.lazytester-danger:hover:not(:disabled){
+    background:Highlight;
+    color:HighlightText;
+  }
+}
+
+/* A removed per-slot health notice may return keyboard focus to this
+   non-actionable group when native admission keeps its main card disabled.
+   tabindex="-1" does not add a Tab stop or change any DWM node geometry. */
+.lazytester-filmstrip .lazytester-launcher-entry:focus{
+  outline:2px solid var(--lazytester-accent);
+  outline-offset:-2px;
+  border-radius:6px;
+}
+@media (forced-colors:active){
+  .lazytester-filmstrip .lazytester-launcher-entry:focus{outline-color:Highlight}
+}
+
+/* Keyboard-initiated actions can disable or remove their own controls.
+   These two existing, non-Tabbable headings are temporary focus anchors
+   only; no new controls, native viewport dimensions or DWM layout. */
+.lazytester-play-header h1:focus,
+.lazytester-settings-layout #lazytester-clear-data-heading:focus{
+  outline:2px solid var(--lazytester-accent);
+  outline-offset:4px;
+  border-radius:4px;
+}
+@media (forced-colors:active){
+  .lazytester-play-header h1:focus,
+  .lazytester-settings-layout #lazytester-clear-data-heading:focus{
+    outline-color:Highlight;
+  }
+}
+
+/* A focused Settings save, audio toggle or Storage review can disable or
+   remove its own button. These existing headings are programmatic anchors,
+   not Tab stops, dialogs or new native controller status owners. */
+.lazytester-settings-layout :is(
+
+  #lazytester-frame-limits-section,
+  #lazytester-storage-overview-section,
+  .lazytester-group h3[tabindex="-1"]
+):focus{
+  outline:2px solid var(--lazytester-accent);
+  outline-offset:4px;
+  border-radius:4px;
+}
+@media (forced-colors:active){
+  .lazytester-settings-layout :is(
+
+    #lazytester-frame-limits-section,
+    #lazytester-storage-overview-section,
+    .lazytester-group h3[tabindex="-1"]
+  ):focus{
+    outline-color:Highlight;
+  }
+}
+
+/* One adaptive Play layout, not selectable modes. The game occupies the
+   remaining 16:9 stage; five keyed DWM previews use a bounded 16:9 size. */
+.lazytester-app main.lazytester-play-main{padding:10px 16px 12px;overflow-x:hidden}
+.lazytester-play-main .lazytester-play-header{gap:10px;margin-bottom:7px;align-items:center}
+.lazytester-play-main .lazytester-play-header > div:first-child{min-width:0}
+.lazytester-play-main .lazytester-play-header h1{font-size:18px;line-height:1.3}
+.lazytester-play-main .lazytester-play-header p{font-size:12px;line-height:1.3;margin:3px 0}
+.lazytester-play-main .lazytester-play-header .lazytester-header-actions{gap:6px}
+.lazytester-play-main .lazytester-play-header .lazytester-header-actions > button{white-space:nowrap}
+.lazytester-play-main .lazytester-games-heading{margin:6px auto 5px}
+.lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card{padding:7px;gap:5px}
+.lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card strong{
+  min-height:32px;line-height:32px;padding-right:36px;font-size:13px;
+}
+.lazytester-play-main .lazytester-launcher-preview{
+  width:min(100%,calc(clamp(72px,11vh,108px) * 16 / 9));
+  max-height:none;
+}
+.lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card small{font-size:13px}
+.lazytester-play-main .lazytester-close-launcher:hover:not(:disabled){
+  color:var(--lazytester-text);background:var(--lazytester-control-hover);
+}
+/* Reserve the same bounded health row for every launcher. Native preview
+   rectangles must not move when a single profile gains or loses a warning. */
+.lazytester-launcher-health-slot{flex:0 0 42px;height:42px;min-width:0}
+.lazytester-play-main .lazytester-health-notice{display:flex;align-items:center;gap:5px;height:100%;max-height:42px}
+.lazytester-play-main .lazytester-health-notice :is(.lazytester-preview-slot-issue,.lazytester-session-slot-issue){
+  flex:1 1 auto;min-width:0;max-height:38px;
+}
+.lazytester-play-main .lazytester-health-action{flex:none}
+@media(max-width:950px){
+  .lazytester-play-main .lazytester-play-header{gap:6px}
+  .lazytester-play-main .lazytester-play-header .lazytester-header-actions{gap:5px}
+}
+@media(max-height:700px){
+  .lazytester-app main.lazytester-play-main{padding-top:8px;padding-bottom:8px}
+  .lazytester-play-main .lazytester-play-header{margin-bottom:5px}
+  .lazytester-play-main .lazytester-games-heading{margin-top:4px;margin-bottom:4px}
+}
+
+
+/* All critical Play warnings share one bounded flow region; no overlay on HWNDs. */
+.lazytester-global-feedback{display:contents}
+.lazytester-play-feedback:has(> :is(.lazytester-alert,.lazytester-binding,.lazytester-exit-recovery)){
+  display:flex;flex:0 0 auto;flex-direction:column;gap:6px;min-width:0;
+  max-height:min(104px,18dvh);overflow:auto;overscroll-behavior:contain;margin-bottom:8px;
+}
+.lazytester-app .lazytester-layout main > .lazytester-play-feedback > :is(.lazytester-alert,.lazytester-binding,.lazytester-exit-recovery){flex:none;margin:0;max-height:none;overflow:visible;overflow-wrap:anywhere}
+@media(max-height:700px){
+  .lazytester-play-feedback:has(> :is(.lazytester-alert,.lazytester-binding,.lazytester-exit-recovery)){max-height:min(88px,16dvh);margin-bottom:6px}
+  .lazytester-app .lazytester-layout main > .lazytester-play-feedback > :is(.lazytester-alert,.lazytester-binding,.lazytester-exit-recovery){padding:8px 12px}
+}
+/* Settings/Storage measurement values use predictable number spacing.
+   This scope must never affect native Minecraft viewports or DWM previews. */
+.lazytester-settings-layout [aria-labelledby="lazytester-storage-overview-section"] .lazytester-setting > :is(strong,span){
+  font-variant-numeric:tabular-nums;
+  text-align:right;
+}
+.lazytester-settings-layout .lazytester-launcher-heading select{
+  font-variant-numeric:tabular-nums;
+}
+
+/* Structured, actionable status instead of a raw code-first error banner.
+   Play retains its existing strict vertical bound; Settings/Storage scroll
+   keeps the critical message visible without adding native DWM chrome. */
+.lazytester-app .lazytester-alert .lazytester-alert-item > strong{
+  display:block;font-size:13px;font-weight:650;color:var(--lazytester-text);
+}
+.lazytester-app .lazytester-alert .lazytester-alert-item > p{
+  margin:4px 0 6px;line-height:1.45;
+}
+.lazytester-app .lazytester-alert .lazytester-alert-item + .lazytester-alert-item{
+  border-top:1px solid var(--lazytester-alert-outline);
+  padding-top:8px;margin-top:8px;
+}
+.lazytester-app .lazytester-alert .lazytester-alert-footer{
+  display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-top:7px;
+}
+.lazytester-app .lazytester-alert .lazytester-alert-refresh{
+  min-height:32px;padding:5px 10px;font-size:12px;
+}
+.lazytester-app .lazytester-settings-layout main > .lazytester-global-feedback > .lazytester-alert{
+  position:sticky;top:0;z-index:9;
+  max-height:min(164px,32dvh);
+  margin-bottom:12px;
+  box-shadow:0 6px 16px var(--lazytester-overlay-shadow);
+}
+@media(max-height:700px){
+  .lazytester-app .lazytester-settings-layout main > .lazytester-global-feedback > .lazytester-alert{
+    max-height:min(136px,30dvh);
+  }
+}
+@media(forced-colors:active){
+  .lazytester-app .lazytester-settings-layout main > .lazytester-global-feedback > .lazytester-alert{border-color:Highlight}
+}

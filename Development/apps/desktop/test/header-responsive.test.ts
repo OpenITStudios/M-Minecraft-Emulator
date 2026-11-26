@@ -6,7 +6,7 @@ const browser=()=>readFileSync(new URL('../../../tooling/acceptance/lazy-tester-
 
 describe('Lazy Tester optional activity status stays inside fixed-height topbar',()=>{
   it('preserves the five keyed native previews and original aperture geometry',()=>{
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     const app=source('LazyTesterApp.svelte');
     expect(css).toContain('height:56px;');
     expect(css).toContain('@media(max-height:700px)');
@@ -17,28 +17,28 @@ describe('Lazy Tester optional activity status stays inside fixed-height topbar'
     expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');
   });
   it('gives the short-lived AI summary flow space rather than an overlapping badge',()=>{
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     const app=source('LazyTesterApp.svelte');
     const notice=source('AgentActivityNotice.svelte');
-    expect(css).toContain('.lt-agent-activity{position:relative;right:auto;top:auto;z-index:12;flex:0 1 192px;');
+    expect(css).toContain('.lazytester-agent-activity{position:relative;right:auto;top:auto;z-index:12;flex:0 1 192px;');
     expect(css).not.toContain('right:230px;top:9px');
-    expect(css).toContain('.lt-topbar .lt-brand-name{white-space:nowrap}');
-    expect(css).toContain('.lt-topbar .lt-connection{');
+    expect(css).toContain('.lazytester-topbar .lazytester-brand-name{white-space:nowrap}');
+    expect(css).toContain('.lazytester-topbar .lazytester-connection{');
     expect(app).toContain('aria-label="LazyTester — Play"');
-    expect(app).toContain('<span class="lt-brand-name">LazyTester</span>');
+    expect(app).toContain('<span class="lazytester-brand-name">LazyTester</span>');
     expect(app).toContain('role="status" title={sessionConnectionLabel(');
     expect(app).toContain("{#if initializing || nativeBackend !== 'WindowsNative' || !binding?.configured || !available}");
     expect(notice).toContain('Summary takes a bounded slot in the fixed-height topbar');
-    expect(notice).toContain('name="lt-play-disclosures"');
+    expect(notice).toContain('name="lazytester-play-disclosures"');
   });
   it('keeps details viewport-bounded and the original activity information intact',()=>{
-    const css=source('lazy-tester.css');
+    const css=source('lazytester.css');
     const notice=source('AgentActivityNotice.svelte');
     expect(css).toContain('max-height:min(260px,calc(100dvh - 102px))');
     expect(css).toContain('@media (max-width:860px)');
     expect(css).toContain('@media (max-width:650px)');
     expect(css).toContain('@media (max-width:490px)');
-    expect(css).toContain('.lt-topbar .lt-brand-name{display:none}');
+    expect(css).toContain('.lazytester-topbar .lazytester-brand-name{display:none}');
     expect(css).toContain('top:90px;left:12px;right:12px;');
     expect(notice).toContain('aria-label={view.summary} title={view.summary}');
     expect(notice).toContain('Reported by the local agent.');

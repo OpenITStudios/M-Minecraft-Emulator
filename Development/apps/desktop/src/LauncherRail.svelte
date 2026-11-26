@@ -49,7 +49,7 @@
   }
 </script>
 
-<div class="lt-filmstrip" role="group" aria-label="Minecraft profiles">
+<div class="lazytester-filmstrip" role="group" aria-label="Minecraft profiles">
   {#each orderedProfiles as profile (profile.slot)}
     {@const observedSlot = profiles.some(item => item.slot === profile.slot)}
     {@const observed = observedSlot && available && bindingConfigured}
@@ -66,30 +66,30 @@
           : profile.state === 'RUNNING'
             ? 'Running in background'
             : labels[profile.state]}
-    <div class="lt-launcher-entry" data-slot={profile.slot}
+    <div class="lazytester-launcher-entry" data-slot={profile.slot}
       role="group" tabindex="-1" aria-label={'Minecraft - '+profile.slot+' launcher controls'}
       title={guidance??undefined}>
-      <button class="lt-card" class:selected={observedSlot&&active===profile.slot&&!detached}
+      <button class="lazytester-launcher-card" class:selected={observedSlot&&active===profile.slot&&!detached}
         aria-pressed={observedSlot&&profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
         aria-label={cardActionName(profile, statusLabel, launchAllowed, observed)}
-        aria-describedby={guidance ? 'lt-launcher-guidance-'+profile.slot : undefined}
+        aria-describedby={guidance ? 'lazytester-launcher-guidance-'+profile.slot : undefined}
         disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!launchAllowed)}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):launchAllowed&&onLaunch(profile.slot)}>
         <!-- Compact visual identity, full Minecraft slot stays in accessible names and dialogs. -->
         <strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}</strong>
-        <span class="lt-card-picture" use:observePreview={profile.slot} aria-hidden="true">{!observedSlot||!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'||!launchAllowed?'Needs attention':'▷ Launch'}</span>
+        <span class="lazytester-launcher-preview" use:observePreview={profile.slot} aria-hidden="true">{!observedSlot||!available||!bindingConfigured?'Unavailable':profile.state==='RUNNING'?profile.slot:profile.state==='STARTING'?'Starting…':profile.state==='NOT_RESPONDING'?'Unavailable':profile.state==='ATTENTION'||!launchAllowed?'Needs attention':'▷ Launch'}</span>
         <small class={observedSlot&&available&&bindingConfigured
           ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'||launchFailures.has(profile.slot)
-            ? 'lt-status-attention'
+            ? 'lazytester-status-attention'
             : profile.state==='STARTING'
-              ? 'lt-status-pending'
+              ? 'lazytester-status-pending'
               : profile.state==='RUNNING' && profile.issue===null && !unresolvedRecovery.has(profile.slot)
-                ? 'lt-status-routine' : '')
+                ? 'lazytester-status-routine' : '')
           : ''} title={statusLabel}>{statusLabel}</small>
       </button>
-      {#if guidance}<span id={'lt-launcher-guidance-'+profile.slot} hidden>{guidance}</span>{/if}
-      <div class="lt-launcher-health-slot">
+      {#if guidance}<span id={'lazytester-launcher-guidance-'+profile.slot} hidden>{guidance}</span>{/if}
+      <div class="lazytester-launcher-health-slot">
       {#if healthItem}
         <SessionHealthNotice item={healthItem} onAction={onGuidedRecovery}
           disabled={!guidedRecoveryAllowed(healthItem, profile, profile.slot,
@@ -101,7 +101,7 @@
       {/if}
       </div>
       {#if observedSlot && ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
-        <button class="lt-secondary lt-close-launcher"
+        <button class="lazytester-secondary lazytester-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}
           title={'Close Minecraft - '+profile.slot+' normally'}
           disabled={busy||reviewPending||closeInProgress||nativeExitReview||!available||!bindingConfigured}

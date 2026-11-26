@@ -202,10 +202,10 @@ try {
   const section = name => page.getByRole('navigation',{name:'Settings navigation'}).getByRole('button',{name,exact:true});
   // A refused window operation must not reveal untrusted OS diagnostics.
   await page.goto('http://lazy-tester.test/?window-error=1');
-  const windowAlert=page.locator('.lt-window-bar + .lt-alert[role="alert"]');
+  const windowAlert=page.locator('.lazytester-window-bar + .lazytester-alert[role="alert"]');
   assert.equal(await page.getByRole('button',{name:'Minimize',exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Maximize',exact:true}).count(),0);
-  await page.locator('.lt-window-close').click();
+  await page.locator('.lazytester-window-close').click();
   await windowAlert.getByText('Check running games before trying to exit again.').waitFor();
   await windowAlert.locator('summary').click();
   assert.match(await windowAlert.textContent(),/Application.*LT-APP-04/s);
@@ -232,10 +232,10 @@ try {
     ['lazy_tester_profile_binding','lazy_tester_data_location','lazy_tester_session','lazy_tester_present'].includes(call.command)).length),0);
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='lazy_tester_backend_support').length),1);
-  assert.equal(await page.locator('.lt-card:not(:disabled)').count(),0);
+  assert.equal(await page.locator('.lazytester-launcher-card:not(:disabled)').count(),0);
   assert.equal(await nav('Settings').isDisabled(),true,'unsupported host must not expose native settings');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),0);
-  assert.equal(await page.locator('.lt-filmstrip').count(),0,'unsupported host has no game inventory');
+  assert.equal(await page.locator('.lazytester-filmstrip').count(),0,'unsupported host has no game inventory');
   assert.equal(await page.getByRole('button',{name:'Close LazyTester'}).getAttribute('title'),'Close LazyTester');
   await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
   // Cross the 2-second background observer interval as well as resize.
@@ -256,10 +256,10 @@ try {
 
   // The operator rejected F3 and Coordinates as desktop features.
   // Play must expose neither the retired popup menu nor those controls.
-  assert.equal(await page.locator('details.lt-play-utilities').count(),0);
-  assert.equal(await page.locator('details.lt-f3-inspector').count(),0);
-  assert.equal(await page.locator('details.lt-coordinate-paste').count(),0);
-  assert.equal(await page.locator('.lt-header-actions button').count(),0,
+  assert.equal(await page.locator('details.lazytester-play-utilities').count(),0);
+  assert.equal(await page.locator('details.lazytester-f3-inspector').count(),0);
+  assert.equal(await page.locator('details.lazytester-coordinate-paste').count(),0);
+  assert.equal(await page.locator('.lazytester-header-actions button').count(),0,
     'Healthy idle Play needs no manual Refresh');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
@@ -270,7 +270,7 @@ try {
   await page.goto('http://lazy-tester.test/?agent-status=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
-  const statusDisclosure=page.locator('.lt-agent-activity');
+  const statusDisclosure=page.locator('.lazytester-agent-activity');
   await heading('Ready when you are').waitFor();
   assert.equal(await statusDisclosure.count(),0,'Routine AI activity must not occupy the topbar');
   await page.evaluate(()=>{window.__agentReport={...window.__agentReport,displayHint:'ATTENTION',items:[{kind:'AI_INPUT',slot:2,status:'NATIVE_RELEASE_UNCONFIRMED',importance:'ATTENTION',evidence:'LOCAL_MCP_RECOVERY_HOLD'}]};});
@@ -293,7 +293,7 @@ try {
   assert.match(await statusDisclosure.textContent(),/AI & Testing · Needs attention/);
   assert.doesNotMatch(await statusDisclosure.textContent(),/\bQA\b/,
     'All visible AI and Testing labels use the agreed English terminology');
-  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5);
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count(),5);
   // Synthetic CSS viewport cases, including a narrow/high-effective-scale
   // view. These are NOT evidence of actual Windows device DPI or DWM behavior.
   for(const width of [920,720,620,480]){
@@ -305,9 +305,9 @@ try {
         const r=element.getBoundingClientRect();
         return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width};
       };
-      return {bar:rect('.lt-topbar'),items:[
-        rect('.lt-topbar .lt-brand'),rect('.lt-topbar nav'),
-        rect('.lt-topbar .lt-agent-activity')
+      return {bar:rect('.lazytester-topbar'),items:[
+        rect('.lazytester-topbar .lazytester-brand'),rect('.lazytester-topbar nav'),
+        rect('.lazytester-topbar .lazytester-agent-activity')
       ]};
     });
     assert.equal(Math.round(geometry.bar.bottom-geometry.bar.top),54,
@@ -320,7 +320,7 @@ try {
   }
   await page.setViewportSize({width:480,height:620});
   await statusDisclosure.locator('summary').click();
-  const popupRect=await statusDisclosure.locator('.lt-agent-activity-details').evaluate(element=>{
+  const popupRect=await statusDisclosure.locator('.lazytester-agent-activity-details').evaluate(element=>{
     const r=element.getBoundingClientRect();
     return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};
   });
@@ -363,7 +363,7 @@ try {
   assert.match(await testingSummary.textContent(),/Map Testing\s*Not tested/);
   assert.match(await testingSummary.textContent(),/Verification\s*Not verified/);
   assert.doesNotMatch(await testingSummary.textContent(),/Map passed|Gameplay passed|QA passed/);
-  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count(),5,
     'Opening a Probe summary must preserve all five fixed Minecraft cards');
   const resultCalls=await page.evaluate(()=>window.__calls.filter(c=>
     c.command==='lazy_tester_session'&&c.args?.request?.operation!=='Inspect').length);
@@ -405,12 +405,12 @@ try {
     };
   });
   // Wait for the existing automatic session inspection below.
-  await page.locator('.lt-agent-activity summary')
+  await page.locator('.lazytester-agent-activity summary')
     .getByText('AI & Testing · Status unavailable').waitFor();
   await page.evaluate(()=>{window.__agentReport=null;});
   // Wait for the existing automatic session inspection below.
   await statusDisclosure.waitFor({state:'detached'});
-  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count(),5,
     'Activity disappearing must not move/remove the five game cards');
 
   // The backend may enumerate MC05 first. Never move bottom rail cards, even
@@ -419,20 +419,20 @@ try {
   await page.waitForFunction(()=>!!window.__finishBinding);
   // Before native binding completes, unknown profiles keep five safe,
   // non-actionable cards. Their DWM target elements survive later selection.
-  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count(),5,
     'First native binding must not show an empty launcher rail');
-  assert.equal(await page.locator('.lt-filmstrip .lt-card:not(:disabled)').count(),0,
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card:not(:disabled)').count(),0,
     'Unobserved startup placeholders must not allow Launch');
-  assert.equal(await page.locator('.lt-filmstrip .lt-card small')
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card small')
     .filter({hasText:'Status unavailable'}).count(),5,
     'An unobserved placeholder is not a reported STOPPED session');
   await page.evaluate(()=>window.__finishBinding());
   await heading('Ready when you are').waitFor();
-  const fixedRailSlots = () => page.locator('.lt-filmstrip .lt-launcher-entry')
+  const fixedRailSlots = () => page.locator('.lazytester-filmstrip .lazytester-launcher-entry')
     .evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('data-slot'))));
   assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
     'Valid native profile results retain fixed MC01-MC05 visual order');
-  assert.deepEqual((await page.locator('.lt-filmstrip .lt-card strong').allTextContents())
+  assert.deepEqual((await page.locator('.lazytester-filmstrip .lazytester-launcher-card strong').allTextContents())
     .map(value=>value.trim()),['MC01','MC02','MC03','MC04','MC05'],
     'Visual launcher identities must use stable compact MC01–MC05 names');
   assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).count(),1,
@@ -443,8 +443,8 @@ try {
   await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
   await heading('Minecraft - 2').waitFor();
   await page.evaluate(()=>{
-    window.__railPreviewNodes=[...document.querySelectorAll('.lt-filmstrip .lt-card-picture')];
-    window.__railLocations=[...document.querySelectorAll('.lt-filmstrip .lt-launcher-entry')].map(node=>{
+    window.__railPreviewNodes=[...document.querySelectorAll('.lazytester-filmstrip .lazytester-launcher-preview')];
+    window.__railLocations=[...document.querySelectorAll('.lazytester-filmstrip .lazytester-launcher-entry')].map(node=>{
       const {x,y,width}=node.getBoundingClientRect();return {x,y,width};
     });
   });
@@ -453,8 +453,8 @@ try {
   assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
     'Selecting a game must not move or remove its lower launcher card');
   const stableRail=await page.evaluate(()=>{
-    const nodes=[...document.querySelectorAll('.lt-filmstrip .lt-card-picture')];
-    const positions=[...document.querySelectorAll('.lt-filmstrip .lt-launcher-entry')].map(node=>{
+    const nodes=[...document.querySelectorAll('.lazytester-filmstrip .lazytester-launcher-preview')];
+    const positions=[...document.querySelectorAll('.lazytester-filmstrip .lazytester-launcher-entry')].map(node=>{
       const {x,y,width}=node.getBoundingClientRect();return {x,y,width};
     });
     return nodes.length===5 && nodes.every((node,index)=>node===window.__railPreviewNodes[index]) &&
@@ -465,21 +465,21 @@ try {
   await page.waitForFunction(()=>window.__calls.some(call=>call.command==='lazy_tester_previews' &&
     call.args.tiles.length===4 && [1,2,3,5].every(slot=>call.args.tiles.some(tile=>tile.slot===slot))),
     null,{timeout:7000});
-  assert.equal(await page.locator('.lt-card.selected').count(),1,
+  assert.equal(await page.locator('.lazytester-launcher-card.selected').count(),1,
     'Only the chosen launcher gets a selection highlight');
-  assert.equal((await page.locator('[data-slot="4"] .lt-card small').textContent())?.trim(),
+  assert.equal((await page.locator('[data-slot="4"] .lazytester-launcher-card small').textContent())?.trim(),
     'Selected in Play','The selected state must not claim verified gameplay');
-  assert.equal(await page.locator('[data-slot="4"] .lt-card small').isVisible(),true,
+  assert.equal(await page.locator('[data-slot="4"] .lazytester-launcher-card small').isVisible(),true,
     'Selected launcher status remains visible alongside the selection highlight');
-  assert.equal(await page.locator('.lt-topbar .lt-connection').count(),0,
+  assert.equal(await page.locator('.lazytester-topbar .lazytester-connection').count(),0,
     'Healthy connection must not occupy the topbar');
   // A lost session inspection cannot continue advertising a stale running count.
   await page.evaluate(()=>{window.__offline=true;});
   // Wait for the existing automatic session inspection below.
-  await page.waitForFunction(()=>document.querySelector('.lt-games-heading')?.textContent?.includes('Session status unavailable'));
-  assert.equal(await page.locator('.lt-filmstrip .lt-card small').filter({hasText:'Status unavailable'}).count(),5,
+  await page.waitForFunction(()=>document.querySelector('.lazytester-games-heading')?.textContent?.includes('Session status unavailable'));
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card small').filter({hasText:'Status unavailable'}).count(),5,
     'Stale native observations must be labeled unavailable, not verified running');
-  assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count(),5,
     'Connection loss must never remove stable launcher cards');
   await page.setViewportSize({width:920,height:620});
 
@@ -491,16 +491,16 @@ try {
   await page.evaluate(()=>{window.__offline=true;});
   // Wait for the existing automatic session inspection below.
   await page.waitForFunction(()=>
-    document.querySelector('.lt-page-header h1')?.textContent==='Session status unavailable');
-  assert.equal(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').isDisabled(),true,
+    document.querySelector('.lazytester-page-header h1')?.textContent==='Session status unavailable');
+  assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="1"] > .lazytester-launcher-card').isDisabled(),true,
     'Offline Inspect must not present a launchable profile even with saved binding');
-  assert.doesNotMatch(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').getAttribute('aria-label')??'',/^Launch /,
+  assert.doesNotMatch(await page.locator('.lazytester-launcher-entry[data-slot="1"] > .lazytester-launcher-card').getAttribute('aria-label')??'',/^Launch /,
     'Unavailable profile must not announce a Launch action');
   await page.evaluate(()=>{window.__offline=false;});
   // Automatic inspection may resolve the fault before the manual control is clicked.
   await heading('Ready when you are').waitFor();
   await page.getByRole('button',{name:'Refresh',exact:true}).waitFor({state:'detached'});
-  assert.equal(await page.locator('.lt-page-header h1').textContent(),'Choose a Minecraft below',
+  assert.equal(await page.locator('.lazytester-page-header h1').textContent(),'Choose a Minecraft below',
     'A successful fresh Inspect restores normal Play guidance');
   // Keyboard Refresh must not lose focus when the original controller
   // request makes its own button disabled. These are synthetic DOM checks,
@@ -512,41 +512,41 @@ try {
   await page.evaluate(()=>{window.__holdInspect=true;});
   await page.keyboard.press('Enter');
   await page.waitForFunction(()=>typeof window.__finishInspect==='function');
-  assert.equal(await page.locator('.lt-page-header h1').evaluate(node=>document.activeElement===node),true,
+  assert.equal(await page.locator('.lazytester-page-header h1').evaluate(node=>document.activeElement===node),true,
     'Focused keyboard Refresh temporarily anchors to the unchanged page heading');
   await page.keyboard.press('Shift+Tab');
   assert.equal(await page.evaluate(()=>document.activeElement!==document.body&&
-    document.activeElement!==document.querySelector('.lt-page-header h1')),true,
+    document.activeElement!==document.querySelector('.lazytester-page-header h1')),true,
     'Shift+Tab while Refresh is disabled must reach the existing navigation');
   await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(()=>document.activeElement!==document.body&&
-    document.activeElement!==document.querySelector('.lt-page-header h1')),true,
+    document.activeElement!==document.querySelector('.lazytester-page-header h1')),true,
     'Tab progresses through existing controls while Refresh is disabled');
   await page.evaluate(()=>{window.__manualOtherFocus=document.activeElement;});
   await page.evaluate(()=>{
     const release=window.__finishInspect;window.__holdInspect=false;
     window.__finishInspect=null;release();
   });
-  await page.waitForFunction(()=>!document.querySelector('.lt-header-actions > button')?.disabled);
+  await page.waitForFunction(()=>!document.querySelector('.lazytester-header-actions > button')?.disabled);
   assert.equal(await page.evaluate(()=>document.activeElement===window.__manualOtherFocus),true,
     'The user-selected Shift+Tab destination must not be stolen on completion');
   await keyboardRefresh.focus();
   await page.evaluate(()=>{window.__holdInspect=true;});
   await page.keyboard.press('Enter');
   await page.waitForFunction(()=>typeof window.__finishInspect==='function');
-  assert.equal(await page.locator('.lt-page-header h1').evaluate(node=>document.activeElement===node),true);
+  assert.equal(await page.locator('.lazytester-page-header h1').evaluate(node=>document.activeElement===node),true);
   await page.evaluate(()=>{
     const release=window.__finishInspect;window.__holdInspect=false;
     window.__finishInspect=null;release();
   });
   await page.waitForFunction(()=>document.activeElement===
-    document.querySelector('.lt-header-actions > button'),
+    document.querySelector('.lazytester-header-actions > button'),
     null,{timeout:7000});
   assert.equal(await keyboardRefresh.isEnabled(),true,
     'Only the existing Refresh button regains keyboard focus; no new action is sent');
   await page.evaluate(()=>{window.__healthFixture=false;});
   await keyboardRefresh.waitFor({state:'detached'});
-  assert.equal(await page.locator('.lt-card').count(),5);
+  assert.equal(await page.locator('.lazytester-launcher-card').count(),5);
   const profileGroup = page.getByRole('group',{name:'Minecraft profiles'});
   assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 1 · /}).count(),1,
     'AI navigation must find the stable profile controls by role and action');
@@ -561,15 +561,15 @@ try {
   await page.evaluate(()=>{
     window.__inspectDelay=150;window.__visualChanges=[];
     window.__previewBaseline=window.__calls.filter(c=>c.command==='lazy_tester_previews').length;
-    const refresh=document.querySelector('.lt-page-header button'),actionStrip=document.querySelector('.lt-launcher-action-strip');
-    const cards=[...document.querySelectorAll('.lt-card')];
+    const refresh=document.querySelector('.lazytester-page-header button'),actionStrip=document.querySelector('.lazytester-launcher-action-strip');
+    const cards=[...document.querySelectorAll('.lazytester-launcher-card')];
     window.__stableObserver=new MutationObserver(records=>{
       for(const record of records){const node=record.target.nodeType===3?record.target.parentElement:record.target;
         if(refresh&&(refresh.contains(node)||refresh===node))window.__visualChanges.push('refresh');
         if(actionStrip.contains(node)||actionStrip===node)window.__visualChanges.push('action-strip');
         if(cards.includes(node))window.__visualChanges.push('card');
       }
-    });window.__stableObserver.observe(document.querySelector('.lt-app'),{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['disabled']});
+    });window.__stableObserver.observe(document.querySelector('.lazytester-app'),{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['disabled']});
   });
   await page.waitForTimeout(30500);
   assert.deepEqual(await page.evaluate(()=>window.__visualChanges),[],'unchanged polling must leave controls stable');
@@ -580,7 +580,7 @@ try {
   // reader, high contrast or game-window behavior until actually executed.
   const settingsTargets=await page.evaluate(()=>{
     const selectors=['#active-fps','#background-fps',
-      '.lt-audio-toggle','.lt-sidebar nav button'];
+      '.lazytester-audio-toggle','.lazytester-sidebar nav button'];
     return selectors.map(selector=>{
       const element=document.querySelector(selector);
       return {selector,height:element?.getBoundingClientRect().height??0};
@@ -596,26 +596,26 @@ try {
       const node=document.querySelector(selector);
       return node?Number.parseFloat(getComputedStyle(node).fontSize):0;
     };
-    return {help:size('.lt-settings-layout .lt-help')};
+    return {help:size('.lazytester-settings-layout .lazytester-help')};
   });
   assert.ok(settingsCopy.help>=13,
     'Settings instructions remain readable; data paths belong only to Data Storage');
   assert.equal(await page.getByRole('button',{name:'Open Data Storage',exact:true}).count(),0,
     'General does not duplicate the Data Storage sidebar link');
   assert.equal(await page.locator('#graphics-preset').count(),0);
-  assert.match(await page.locator('#lt-graphics-policy').textContent(),/All launchers/);
+  assert.match(await page.locator('#lazytester-graphics-policy').textContent(),/All launchers/);
   await page.getByLabel('While playing',{exact:true}).fill('60');await page.getByLabel('In the background',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
   await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
-  assert.match(await page.locator('[aria-labelledby="lt-storage-overview-section"] .lt-help').textContent()??'',
+  assert.match(await page.locator('[aria-labelledby="lazytester-storage-overview-section"] .lazytester-help').textContent()??'',
     /Last storage report received:/,
     'UI report receipt time is not presented as a native measurement timestamp');
-  assert.ok(await page.locator('.lt-data-path').first().evaluate(node=>
+  assert.ok(await page.locator('.lazytester-data-path').first().evaluate(node=>
     Number.parseFloat(getComputedStyle(node).fontSize)>=13),
     'Long data paths remain readable within the one Data Storage owner');
   const storageOrder=await page.evaluate(()=>{
-    const loc=document.querySelector('.lt-location-options');
-    const danger=document.querySelector('.lt-danger-zone');
+    const loc=document.querySelector('.lazytester-location-options');
+    const danger=document.querySelector('.lazytester-danger-zone');
     return loc&&danger&&Boolean(loc.compareDocumentPosition(danger)&Node.DOCUMENT_POSITION_FOLLOWING);
   });
   assert.equal(storageOrder,true,
@@ -623,7 +623,7 @@ try {
   await section('General').click();assert.equal(await page.getByLabel('While playing',{exact:true}).inputValue(),'60');
   await page.getByRole('button',{name:'Save FPS limits',exact:true}).click();
   await page.getByText('FPS limits saved. Applies when each game next starts.').waitFor();
-  assert.equal(await page.locator('#lt-frame-limits-section').evaluate(
+  assert.equal(await page.locator('#lazytester-frame-limits-section').evaluate(
     node=>document.activeElement===node),true,
     'A completed FPS limits save must retain focus on its persistent Frame Limits heading');
   assert.equal(await page.getByRole('button',{name:'Save FPS limits',exact:true}).isDisabled(),true,
@@ -642,18 +642,18 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='ApplyGraphicsPreset').length),0);
   await section('Data Storage').click();
   assert.equal(await page.getByLabel('Graphics preset',{exact:true}).count(),0);
-  const advanced=page.locator('.lt-advanced');await advanced.locator('summary').click();
+  const advanced=page.locator('.lazytester-advanced');await advanced.locator('summary').click();
   assert.equal(await page.getByRole('button',{name:'Clear all data…',exact:true}).isDisabled(),true);
   assert.equal(await page.getByRole('button',{name:'Restore settings…',exact:true}).isDisabled(),true);
   assert.match(await advanced.getAttribute('open')??'',/^$/);
   for(const size of [{width:920,height:620},{width:1280,height:900},{width:1366,height:728},{width:1920,height:1080},{width:2560,height:1378},{width:3440,height:1440},{width:1000,height:1200}]){
     await page.setViewportSize(size);
     await nav('Play').click();await heading('Ready when you are').waitFor();
-    assert.equal(await page.locator('.lt-card').count(),5);
-    assert.equal(await page.evaluate(()=>document.querySelector('.lt-filmstrip').getBoundingClientRect().bottom>innerHeight),false);
+    assert.equal(await page.locator('.lazytester-launcher-card').count(),5);
+    assert.equal(await page.evaluate(()=>document.querySelector('.lazytester-filmstrip').getBoundingClientRect().bottom>innerHeight),false);
     const geometry=await page.evaluate(()=>{
       const rect=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,bottom:r.bottom,right:r.right};};
-      return {stage:rect('.lt-stage-space'),game:rect('.lt-viewport'),dock:rect('.lt-filmstrip'),previews:[...document.querySelectorAll('.lt-card-picture')].map(e=>({width:e.clientWidth,height:e.clientHeight}))};
+      return {stage:rect('.lazytester-stage-space'),game:rect('.lazytester-viewport'),dock:rect('.lazytester-filmstrip'),previews:[...document.querySelectorAll('.lazytester-launcher-preview')].map(e=>({width:e.clientWidth,height:e.clientHeight}))};
     });
     const {stage,game,dock,previews}=geometry;
     assert.ok(Math.abs(game.width-game.height*16/9)<1,'game area must stay 16:9');
@@ -662,11 +662,11 @@ try {
     assert.ok(Math.abs(game.y+game.height/2-stage.y-stage.height/2)<1,'game must be centered vertically');
     assert.ok(game.x>=stage.x&&game.y>=stage.y&&game.right<=stage.right+1&&game.bottom<=stage.bottom+1,'game must fit without cropping');
     assert.ok(dock.width<=1600,'The existing live-preview rail remains bounded on ultrawide screens');
-    const headingWidth=await page.locator('.lt-games-heading').evaluate(node=>node.getBoundingClientRect().width);
+    const headingWidth=await page.locator('.lazytester-games-heading').evaluate(node=>node.getBoundingClientRect().width);
     assert.ok(Math.abs(headingWidth-dock.width)<1,'Five-card rail heading and cards must align');
     assert.ok(previews.every(p=>Math.abs(p.width-p.height*16/9)<2),'previews must stay 16:9');
     if((size.width===920&&size.height===620)||(size.width===1280&&size.height===900)){
-      const slots=await page.locator('.lt-filmstrip .lt-launcher-entry').count();
+      const slots=await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count();
       assert.equal(slots,5,'The original five DWM preview slots are retained');
     }
     if(size.width===920&&size.height===620){
@@ -679,7 +679,7 @@ try {
       assert.equal(await emptyStatus.evaluate(node=>document.activeElement===node),true,
         'Empty status information can receive keyboard focus without activating Minecraft');
       const emptyStatusScrollable=await emptyStatus.evaluate(node=>{
-        const viewport=node.closest('.lt-viewport');
+        const viewport=node.closest('.lazytester-viewport');
         const before=viewport.getBoundingClientRect();
         const originalHeight=node.style.height;
         node.style.height='56px';
@@ -716,8 +716,8 @@ try {
   assert.equal(await page.locator('#graphics-preset').count(),0,
     'Individual graphics preferences are retired');
   await nav('Play').click();
-  assert.equal(await page.locator('.lt-filmstrip .lt-card-picture').count(),5);
-  const adaptivePreviews=await page.locator('.lt-card-picture').evaluateAll(nodes=>
+  assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-preview').count(),5);
+  const adaptivePreviews=await page.locator('.lazytester-launcher-preview').evaluateAll(nodes=>
     nodes.map(node=>({width:node.getBoundingClientRect().width,
       height:node.getBoundingClientRect().height})));
   assert.ok(adaptivePreviews.every(({width,height})=>
@@ -747,12 +747,12 @@ try {
     'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 2 · /}).getAttribute('aria-pressed'),'false',
     'Other running profiles must remain explicitly unselected');
-  assert.equal(await page.locator('.lt-header-actions button').count(),0);
+  assert.equal(await page.locator('.lazytester-header-actions button').count(),0);
   await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
   await heading('Minecraft - 2').waitFor();
   await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
   await heading('Minecraft - 1').waitFor();
-  assert.equal(await page.locator('.lt-card').count(),5);
+  assert.equal(await page.locator('.lazytester-launcher-card').count(),5);
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='desktop_release_workspace' && call.args?.target!==null).length),0,
     'Switching games must not release a native window');
@@ -761,10 +761,10 @@ try {
     'Switching games must not close Minecraft sessions');
   // Real content not used: the synthetic RUNNING card must reserve header
   // space so its separate normal-Close control never covers DWM pixels.
-  const closeBounds=await page.locator('.lt-launcher-entry[data-slot="1"]').evaluate(entry=>{
-    const close=entry.querySelector('.lt-close-launcher')?.getBoundingClientRect();
-    const picture=entry.querySelector('.lt-card-picture').getBoundingClientRect();
-    const card=entry.querySelector('.lt-card').getBoundingClientRect();
+  const closeBounds=await page.locator('.lazytester-launcher-entry[data-slot="1"]').evaluate(entry=>{
+    const close=entry.querySelector('.lazytester-close-launcher')?.getBoundingClientRect();
+    const picture=entry.querySelector('.lazytester-launcher-preview').getBoundingClientRect();
+    const card=entry.querySelector('.lazytester-launcher-card').getBoundingClientRect();
     return {close:close?{right:close.right,bottom:close.bottom,width:close.width,height:close.height}:null,
       pictureTop:picture.top,cardRight:card.right};
   });
@@ -773,7 +773,7 @@ try {
     'Close game must stay outside and above the preserved native DWM thumbnail');
   await page.waitForTimeout(200);
   const placement=await page.evaluate(()=>{
-    const rect=document.querySelector('.lt-viewport').getBoundingClientRect();
+    const rect=document.querySelector('.lazytester-viewport').getBoundingClientRect();
     const call=window.__calls.filter(c=>c.command==='lazy_tester_present').at(-1);
     return {rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},viewport:call.args.viewport};
   });
@@ -785,7 +785,7 @@ try {
     await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
     await page.waitForFunction(scale=>window.__calls.filter(c=>c.command==='desktop_update_workspace').at(-1)?.args.viewport.pixelRatio===scale,scale);
     const scaled=await page.evaluate(()=>{
-      const r=document.querySelector('.lt-viewport').getBoundingClientRect();
+      const r=document.querySelector('.lazytester-viewport').getBoundingClientRect();
       return {rect:{x:r.x,y:r.y,width:r.width,height:r.height},viewport:window.__calls.filter(c=>c.command==='desktop_update_workspace').at(-1).args.viewport};
     });
     for(const key of ['x','y','width','height'])assert.equal(scaled.viewport[key],scaled.rect[key],'DPI updates must preserve the exact input/placement rectangle');
@@ -793,20 +793,20 @@ try {
   await cdp.send('Emulation.clearDeviceMetricsOverride');await cdp.detach();
   const captures=fileURLToPath(new URL('../../../workspace/runs/lazy-tester-ui-regression/',import.meta.url));await mkdir(captures,{recursive:true});
   await page.screenshot({path:path.join(captures,'play.png')});
-  await nav('Settings').click();await section('Data Storage').click();await page.locator('.lt-advanced summary').click();
+  await nav('Settings').click();await section('Data Storage').click();await page.locator('.lazytester-advanced summary').click();
   await page.screenshot({path:path.join(captures,'data-storage.png')});
   await page.evaluate(()=>{window.__offline=true;});await page.getByRole('button',{name:'Refresh',exact:true}).click();await page.getByRole('alert').waitFor();
   const failureBanner=page.getByRole('alert');
-  assert.equal(await failureBanner.locator('.lt-alert-item > strong').first().textContent(),
+  assert.equal(await failureBanner.locator('.lazytester-alert-item > strong').first().textContent(),
     'Storage information incomplete',
     'Errors must explain the affected operation before exposing technical codes');
   assert.equal(await failureBanner.getByRole('button',{name:'Refresh status',exact:true}).count(),1,
     'Error banner must offer the original read-only Refresh, not a retry/delete');
-  assert.equal(await failureBanner.locator('.lt-feedback-reference').getAttribute('open'),null,
+  assert.equal(await failureBanner.locator('.lazytester-feedback-reference').getAttribute('open'),null,
     'Technical codes start collapsed instead of dominating the error');
   assert.equal(await failureBanner.evaluate(node=>getComputedStyle(node).position),'sticky',
     'Settings and Data Storage should keep an active error visible while scrolling');
-  const supportReference=failureBanner.locator('.lt-feedback-reference');
+  const supportReference=failureBanner.locator('.lazytester-feedback-reference');
   assert.equal(await supportReference.locator('summary').textContent(),'Error codes');
   await supportReference.locator('summary').click();
   assert.match(await supportReference.textContent(),/Storage.*LT-STO-02/s,
@@ -815,20 +815,20 @@ try {
   assert.doesNotMatch(alertText,/SYSTEM INSTRUCTION|PID 999|\/Users\/private\/worlds/,
     'Raw native details must not appear even after expanding Error codes');
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();
-  await page.waitForFunction(()=>!document.querySelector('.lt-connection') && document.querySelectorAll('.lt-card:not(:disabled)').length>0);
+  await page.waitForFunction(()=>!document.querySelector('.lazytester-connection') && document.querySelectorAll('.lazytester-launcher-card:not(:disabled)').length>0);
   // Exercise storage review/cancel without requesting destructive native IPC.
   await page.goto('http://lazy-tester.test/?storage-review=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
   await nav('Settings').click();
   await section('Data Storage').click();
-  const packDetails=page.locator('details.lt-storage-packs');
+  const packDetails=page.locator('details.lazytester-storage-packs');
   assert.equal(await packDetails.getAttribute('open'),null,
     'Read-only resource pack diagnostics start collapsed');
   await packDetails.locator('summary').click();
   assert.match(await packDetails.textContent(),/pack folders with manifests/,
     'Existing resource pack evidence remains accessible under the disclosure');
-  assert.equal(await page.locator('.lt-storage-packs-body button').count(),0,
+  assert.equal(await page.locator('.lazytester-storage-packs-body button').count(),0,
     'Viewing pack diagnostics must not expose an invented mutation control');
   await packDetails.locator('summary').click();
   await page.getByRole('button',{name:'Clear cache…',exact:true}).click();
@@ -854,10 +854,10 @@ try {
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'Switching to MC02 must display its own cache admission, not MC01 status');
   await storageProfilePicker.selectOption('1');
-  await page.locator('.lt-advanced summary').click();
+  await page.locator('.lazytester-advanced summary').click();
   await section('General').click();
   await section('Data Storage').click();
-  assert.equal(await page.locator('.lt-advanced').getAttribute('open'),'',
+  assert.equal(await page.locator('.lazytester-advanced').getAttribute('open'),'',
     'Advanced details still bind to the parent on page navigation');
   await page.getByRole('button',{name:'Clear all data…',exact:true}).click();
   const fullReview=page.getByRole('form',{name:'Confirm full launcher data deletion'});
@@ -917,7 +917,7 @@ try {
   await page.waitForFunction(()=>window.__nativeListeners.has('workspace-surface-error') &&
     window.__calls.some(call=>call.command==='lazy_tester_previews'));
   await heading('Minecraft - 1').waitFor();
-  const readPreviewGeometry=()=>page.evaluate(()=>['.lt-viewport',...Array.from({length:5},(_,i)=>'.lt-launcher-entry[data-slot="'+(i+1)+'"] .lt-card-picture')].map(selector=>{
+  const readPreviewGeometry=()=>page.evaluate(()=>['.lazytester-viewport',...Array.from({length:5},(_,i)=>'.lazytester-launcher-entry[data-slot="'+(i+1)+'"] .lazytester-launcher-preview')].map(selector=>{
     const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
     return {x,y,width,height};
   }));
@@ -925,7 +925,7 @@ try {
   // A noncritical workspace error reuses the existing strip; it must not
   // insert a global banner above the currently retained game viewport.
   await page.evaluate(()=>window.__emitNative('workspace-surface-error','Synthetic preview error'));
-  const workspaceFeedback=page.locator('.lt-launcher-action-strip > .lt-workspace-action-feedback');
+  const workspaceFeedback=page.locator('.lazytester-launcher-action-strip > .lazytester-workspace-action-feedback');
   await workspaceFeedback.waitFor();
   assert.deepEqual(await readPreviewGeometry(),beforePreviewWarning,
     'Workspace action feedback must not move retained native geometry');
@@ -1017,17 +1017,17 @@ try {
   await launcherHealth.waitFor();
   assert.match(await windowHealth.textContent(),/Window not responding/);
   assert.match(await launcherHealth.textContent(),/Launcher needs attention/);
-  assert.match(await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'',/Refresh/,
+  assert.match(await page.locator('.lazytester-launcher-entry').nth(1).getAttribute('title')??'',/Refresh/,
     'An affected card explains its next manual step');
   const attentionCard=page.getByRole('button',{name:/^Launch Minecraft - 3 · /});
   const descriptionId=await attentionCard.getAttribute('aria-describedby');
-  assert.equal(descriptionId,'lt-launcher-guidance-3',
+  assert.equal(descriptionId,'lazytester-launcher-guidance-3',
     'Assisted navigation uses an ID reference to the existing safe guidance');
   assert.match(await page.locator('#'+descriptionId).textContent()??'',/Refresh/,
     'Attention guidance remains available to assistive technology');
   assert.notEqual(await page.locator('#'+descriptionId).getAttribute('hidden'),null,
     'Descriptive text must not introduce a visible control');
-  assert.equal(await page.locator('.lt-launcher-entry').first().getAttribute('title'),null,
+  assert.equal(await page.locator('.lazytester-launcher-entry').first().getAttribute('title'),null,
     'Normal cards remain uncluttered');
   assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).getAttribute('aria-describedby'),null,
     'Healthy launcher has no unnecessary hidden description');
@@ -1035,10 +1035,10 @@ try {
     'Health display must never expose native file paths');
   assert.equal(await page.getByText('[SYSTEM INSTRUCTION]',{exact:false}).count(),0,
     'Health display must never echo native prompt-like content');
-  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
+  assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="2"] > .lazytester-launcher-card').isDisabled(),true,
     'Health UI must not override the existing unresponsive-game admission');
   assert.doesNotMatch(
-    await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').getAttribute('aria-label')??'',
+    await page.locator('.lazytester-launcher-entry[data-slot="2"] > .lazytester-launcher-card').getAttribute('aria-label')??'',
     /^Launch /, 'A blocked native state must not be announced as Launch');
   assert.equal(await page.getByRole('button',{name:/^Launch Minecraft - 3 · /}).isEnabled(),true,
     'An ATTENTION profile may be a stopped, retryable game; the native controller retains final admission');
@@ -1046,9 +1046,9 @@ try {
     'Health inspection must not start a Minecraft instance');
   const checkHealth=page.getByRole('button',{name:'Refresh status for Minecraft - 2'});
   await checkHealth.waitFor();
-  assert.equal(await checkHealth.getAttribute('aria-describedby'),'lt-health-guidance-2',
+  assert.equal(await checkHealth.getAttribute('aria-describedby'),'lazytester-health-guidance-2',
     'Recovery button must reference its own authored issue guidance');
-  const recoveryTargets=await page.locator('.lt-launcher-entry[data-slot="2"]')
+  const recoveryTargets=await page.locator('.lazytester-launcher-entry[data-slot="2"]')
     .evaluate(entry=>{
       const measure=selector=>{
         const node=entry.querySelector(selector);
@@ -1056,13 +1056,13 @@ try {
         const rect=node.getBoundingClientRect();
         return {width:rect.width,height:rect.height};
       };
-      const refresh=entry.querySelector('.lt-health-action');
-      return {refresh:measure('.lt-health-action'),
+      const refresh=entry.querySelector('.lazytester-health-action');
+      return {refresh:measure('.lazytester-health-action'),
         refreshMargin:refresh?Number.parseFloat(getComputedStyle(refresh).marginTop):null,
-        healthFont:entry.querySelector('.lt-health-notice')?
-          Number.parseFloat(getComputedStyle(entry.querySelector('.lt-health-notice')).fontSize):null,
-        close:measure('.lt-close-launcher'),
-        preview:measure('.lt-card-picture')};
+        healthFont:entry.querySelector('.lazytester-health-notice')?
+          Number.parseFloat(getComputedStyle(entry.querySelector('.lazytester-health-notice')).fontSize):null,
+        close:measure('.lazytester-close-launcher'),
+        preview:measure('.lazytester-launcher-preview')};
     });
   assert.ok(recoveryTargets.refresh&&recoveryTargets.refresh.width>=28&&
     recoveryTargets.refresh.height>=28,
@@ -1129,8 +1129,8 @@ try {
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await focusedHealth.waitFor({state:'detached'});
   await page.waitForFunction(()=>document.activeElement?.matches(
-    '.lt-launcher-entry[data-slot="2"] > .lt-card')===true);
-  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isEnabled(),true,
+    '.lazytester-launcher-entry[data-slot="2"] > .lazytester-launcher-card')===true);
+  assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="2"] > .lazytester-launcher-card').isEnabled(),true,
     'A verified STOPPED observation returns focus to the same newly enabled launcher card');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     ['Launch','CloseOne','CloseAll'].includes(call.args?.request?.operation))),false,
@@ -1150,8 +1150,8 @@ try {
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await unobservedHealth.waitFor({state:'detached'});
   await page.waitForFunction(()=>document.activeElement?.matches(
-    '.lt-launcher-entry[data-slot="2"][role="group"]')===true);
-  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
+    '.lazytester-launcher-entry[data-slot="2"][role="group"]')===true);
+  assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="2"] > .lazytester-launcher-card').isDisabled(),true,
     'Connection uncertainty must not create a new Launch admission');
 
   // A later explicit focus change takes precedence over any stale notice.
@@ -1178,10 +1178,10 @@ try {
   const missingWindowNotice=page.getByRole('status',{name:'Minecraft - 2 needs attention'});
   await missingWindowNotice.waitFor();
   assert.match(await missingWindowNotice.textContent(),/Game window unavailable/);
-  const missingWindowHint=await page.locator('.lt-launcher-entry').nth(1).getAttribute('title')??'';
+  const missingWindowHint=await page.locator('.lazytester-launcher-entry').nth(1).getAttribute('title')??'';
   assert.match(missingWindowHint,/window is unavailable/);
   assert.doesNotMatch(missingWindowHint,/Check its window/);
-  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
+  assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="2"] > .lazytester-launcher-card').isDisabled(),true,
     'A missing native process/window observation must not enable Launch');
 
   // An unconfirmed native window restoration owns its Play warning. The
@@ -1190,9 +1190,9 @@ try {
   await page.goto('http://lazy-tester.test/?health-state=1&close-recovery=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
-  const affectedCard=page.locator('.lt-launcher-entry').nth(1);
+  const affectedCard=page.locator('.lazytester-launcher-entry').nth(1);
   assert.match(await affectedCard.getAttribute('title')??'',/Refresh/);
-  const closeReviewGeometry=()=>page.evaluate(()=>['.lt-viewport','.lt-filmstrip',...Array.from({length:5},(_,i)=>'.lt-launcher-entry[data-slot="'+(i+1)+'"] .lt-card-picture')].map(selector=>{
+  const closeReviewGeometry=()=>page.evaluate(()=>['.lazytester-viewport','.lazytester-filmstrip',...Array.from({length:5},(_,i)=>'.lazytester-launcher-entry[data-slot="'+(i+1)+'"] .lazytester-launcher-preview')].map(selector=>{
     const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
     return {x,y,width,height};
   }));
@@ -1215,11 +1215,11 @@ try {
   assert.equal(await nav('Settings').isDisabled(),true);
   // Tauri drag region is pointer-only, not a bogus keyboard button.
   // Normal app exit remains an independently focusable window action.
-  assert.equal(await page.locator('.lt-window-drag[data-tauri-drag-region]').count(),1,
+  assert.equal(await page.locator('.lazytester-window-drag[data-tauri-drag-region]').count(),1,
     'The branded titlebar keeps its original Tauri-native drag region');
   assert.equal(await page.getByRole('button',{name:'Move LazyTester window'}).count(),0,
     'Pointer-only titlebar drag cannot pollute the keyboard button list');
-  await page.locator('.lt-window-close').focus();
+  await page.locator('.lazytester-window-close').focus();
   await page.keyboard.press('Escape');
   assert.equal(await closeReview.count(),1,
     'Escape outside the focused CloseOne review must not intercept other UI');
@@ -1249,29 +1249,29 @@ try {
   await page.getByRole('region',{name:'Confirm one Minecraft close'})
     .getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
   await page.waitForFunction(()=>document.activeElement?.matches(
-    '.lt-launcher-entry[data-slot="2"][role="group"]')===true);
-  assert.equal(await affectedCard.locator('.lt-card').count(),1,
+    '.lazytester-launcher-entry[data-slot="2"][role="group"]')===true);
+  assert.equal(await affectedCard.locator('.lazytester-launcher-card').count(),1,
     'Confirmed CloseOne review keeps its original stable launcher focus group');
   await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
   // Short-window/system-warning stress: all warning content stays reachable
   // without consuming the entire game stage. Synthetic DOM only, not native DWM.
   await page.setViewportSize({width:920,height:620});
   const compactRecovery=await page.evaluate(()=>{
-    const warning=document.querySelector('.lt-exit-recovery[aria-label="Window recovery unconfirmed"]');
+    const warning=document.querySelector('.lazytester-exit-recovery[aria-label="Window recovery unconfirmed"]');
     const message=warning.querySelector('p');
     const oldText=message.textContent;
     message.textContent=(oldText+' ').repeat(12);
-    const feedback=warning.closest('.lt-play-feedback');
+    const feedback=warning.closest('.lazytester-play-feedback');
     feedback.scrollTop=feedback.scrollHeight;
     const warningHeight=feedback.getBoundingClientRect().height;
     const scrollOffset=feedback.scrollTop;
-    const stage=document.querySelector('.lt-stage-space').getBoundingClientRect();
-    const game=document.querySelector('.lt-viewport').getBoundingClientRect();
-    const filmstrip=document.querySelector('.lt-filmstrip').getBoundingClientRect();
+    const stage=document.querySelector('.lazytester-stage-space').getBoundingClientRect();
+    const game=document.querySelector('.lazytester-viewport').getBoundingClientRect();
+    const filmstrip=document.querySelector('.lazytester-filmstrip').getBoundingClientRect();
     message.textContent=oldText;
     return {warningHeight,scrollOffset,gameHeight:game.height,
       withinStage:game.top>=stage.top-1&&game.bottom<=stage.bottom+1,
-      previewCount:document.querySelectorAll('.lt-filmstrip .lt-card-picture').length,
+      previewCount:document.querySelectorAll('.lazytester-filmstrip .lazytester-launcher-preview').length,
       railVisible:filmstrip.bottom<=innerHeight+1};
   });
   assert.ok(compactRecovery.warningHeight<=89&&compactRecovery.scrollOffset>0,
@@ -1287,11 +1287,11 @@ try {
     document.querySelectorAll('[aria-label="Refresh status for Minecraft - 2"]').length===0);
   assert.equal(await affectedCard.getAttribute('title'),null,
     'Unconfirmed restoration must suppress advice for a missing action');
-  assert.equal(await affectedCard.locator('.lt-card').getAttribute('aria-describedby'),null,
+  assert.equal(await affectedCard.locator('.lazytester-launcher-card').getAttribute('aria-describedby'),null,
     'An unresolved recovery must not retain a stale accessibility description');
-  assert.equal(await affectedCard.locator('#lt-launcher-guidance-2').count(),0,
+  assert.equal(await affectedCard.locator('#lazytester-launcher-guidance-2').count(),0,
     'Guidance is absent when the action is intentionally unavailable');
-  assert.equal(await page.locator('.lt-launcher-entry[data-slot="2"] > .lt-card').isDisabled(),true,
+  assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="2"] > .lazytester-launcher-card').isDisabled(),true,
     'Recovery guidance must not enable another game launch');
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.args?.request?.operation==='Launch').length),0,
@@ -1395,10 +1395,10 @@ try {
   assert.equal(await page.getByText('Saved profiles could not be verified.',{exact:true}).count(),0,'Raw backend binding errors must not appear in UI');
   assert.equal(await heading('Ready when you are').count(),0);
   await heading('Connection needs attention').waitFor();
-  assert.equal(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').isDisabled(),true);
-  assert.equal((await page.locator('[data-slot="1"] .lt-card-picture').textContent())?.trim(),'Unavailable',
+  assert.equal(await page.locator('.lazytester-launcher-entry[data-slot="1"] > .lazytester-launcher-card').isDisabled(),true);
+  assert.equal((await page.locator('[data-slot="1"] .lazytester-launcher-preview').textContent())?.trim(),'Unavailable',
     'Disconnected profiles cannot advertise a misleading Launch action');
-  assert.equal((await page.locator('[data-slot="1"] .lt-card small').textContent())?.trim(),'Status unavailable',
+  assert.equal((await page.locator('[data-slot="1"] .lazytester-launcher-card small').textContent())?.trim(),'Status unavailable',
     'Disconnected cards must not claim the last known native state');
   // A transient first check must recover through a deliberate Refresh, without import/reset.
   await page.evaluate(()=>{window.__bindingFailure='';window.__locationFailure='';window.__finishBinding=()=>{};});
@@ -1420,7 +1420,7 @@ try {
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'No storage mutation may be enabled from an unverified profile binding');
   await page.getByText('Find existing profile data',{exact:true}).click();
-  const locate=page.locator('.lt-location-options').getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
+  const locate=page.locator('.lazytester-location-options').getByRole('button',{name:'Locate existing data',exact:true});await locate.click();
   await page.evaluate(()=>{window.__locateOutcome='invalid';});await locate.click();await page.getByText('Check the folder in Data Storage before retrying.',{exact:true}).waitFor();
   assert.equal(await page.getByText('The selected folder does not match the saved profile identities.',{exact:true}).count(),0,
     'Untrusted native folder errors must never appear in Storage');
