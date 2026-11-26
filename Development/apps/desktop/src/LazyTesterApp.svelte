@@ -752,7 +752,7 @@
       if(!disposed){
         initializing=false;await tick();
         void lazyTester.reportStartup({
-          connection:document.querySelector('.lt-connection')?.textContent?.trim()??'',
+          connection:sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available),
           issue:document.querySelector('.lt-binding p')?.textContent??'',
           cards:document.querySelectorAll('.lt-card').length,
           enabled:document.querySelectorAll('.lt-card:not(:disabled)').length,
@@ -958,7 +958,9 @@
     {#if page==='workspace'&&available&&activityView}
       <AgentActivityNotice view={activityView}/>
     {/if}
+    {#if initializing || nativeBackend !== 'WindowsNative' || !binding?.configured || !available}
     <span class="lt-connection" role="status" title={sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}><span class="lt-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
+    {/if}
   </header>
   <div class="lt-layout" class:lt-settings-layout={page!=='workspace'} inert={closeInProgress}>
     {#if page!=='workspace'}<aside class="lt-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}

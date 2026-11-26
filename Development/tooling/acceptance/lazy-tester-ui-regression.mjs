@@ -301,7 +301,7 @@ try {
       };
       return {bar:rect('.lt-topbar'),items:[
         rect('.lt-topbar .lt-brand'),rect('.lt-topbar nav'),
-        rect('.lt-topbar .lt-agent-activity'),rect('.lt-topbar .lt-connection')
+        rect('.lt-topbar .lt-agent-activity')
       ]};
     });
     assert.equal(Math.round(geometry.bar.bottom-geometry.bar.top),54,
@@ -310,7 +310,7 @@ try {
       'All topbar controls must fit the CSS viewport');
     for(let i=1;i<geometry.items.length;i++)
       assert.ok(geometry.items[i].left>=geometry.items[i-1].right-1,
-        'Optional AI summary must not overlap navigation or the connection label');
+        'Optional AI summary must not overlap navigation');
   }
   await page.setViewportSize({width:480,height:620});
   await statusDisclosure.locator('summary').click();
@@ -463,6 +463,10 @@ try {
     'Only the chosen launcher gets a selection highlight');
   assert.equal((await page.locator('[data-slot="4"] .lt-card small').textContent())?.trim(),
     'Selected in Play','The selected state must not claim verified gameplay');
+  assert.equal(await page.locator('[data-slot="4"] .lt-card small').isVisible(),false,
+    'Healthy running status is redundant with the selection highlight');
+  assert.equal(await page.locator('.lt-topbar .lt-connection').count(),0,
+    'Healthy connection must not occupy the topbar');
   // A lost session inspection cannot continue advertising a stale running count.
   await page.evaluate(()=>{window.__offline=true;});
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
@@ -813,7 +817,7 @@ try {
   assert.doesNotMatch(alertText,/SYSTEM INSTRUCTION|PID 999|\/Users\/private\/worlds/,
     'Raw native details must not appear even after expanding Error codes');
   await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelector('.lt-connection').textContent==='Profile data verified');
+  await page.waitForFunction(()=>!document.querySelector('.lt-connection') && document.querySelectorAll('.lt-card:not(:disabled)').length>0);
   // Exercise storage review/cancel without requesting destructive native IPC.
   await page.goto('http://lazy-tester.test/?storage-review=1');
   await page.waitForFunction(()=>!!window.__finishBinding);

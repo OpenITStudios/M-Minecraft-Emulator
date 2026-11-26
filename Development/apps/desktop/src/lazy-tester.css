@@ -659,12 +659,13 @@
    Color is supplementary to the original exact native-observation text. */
 .lt-filmstrip .lt-card small.lt-status-attention{color:var(--lt-warning)}
 .lt-filmstrip .lt-card small.lt-status-pending{color:var(--lt-muted)}
-.lt-filmstrip .lt-card small.lt-status-selected{color:var(--lt-accent)}
+/* Keep preview geometry stable when a healthy running label is redundant.
+   The button still exposes status in its accessible name. */
+.lt-filmstrip .lt-card small.lt-status-routine{visibility:hidden}
 /* Preview failure is an observation issue, not proof the game has stopped. */
 .lt-app .lt-preview-slot-issue{color:var(--lt-warning)!important}
 @media (forced-colors:active){
-  .lt-filmstrip .lt-card small.lt-status-attention,
-  .lt-filmstrip .lt-card small.lt-status-selected{color:CanvasText}
+  .lt-filmstrip .lt-card small.lt-status-attention{color:CanvasText}
   .lt-app .lt-preview-slot-issue{color:CanvasText!important}
 }
 

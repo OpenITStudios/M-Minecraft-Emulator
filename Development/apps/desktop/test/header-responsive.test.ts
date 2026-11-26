@@ -27,6 +27,7 @@ describe('Lazy Tester optional activity status stays inside fixed-height topbar'
     expect(app).toContain('aria-label="LazyTester — Play"');
     expect(app).toContain('<span class="lt-brand-name">LazyTester</span>');
     expect(app).toContain('role="status" title={sessionConnectionLabel(');
+    expect(app).toContain("{#if initializing || nativeBackend !== 'WindowsNative' || !binding?.configured || !available}");
     expect(notice).toContain('Summary takes a bounded slot in the fixed-height topbar');
     expect(notice).toContain('name="lt-play-disclosures"');
   });
@@ -46,7 +47,7 @@ describe('Lazy Tester optional activity status stays inside fixed-height topbar'
   it('authors CSS viewport checks separately from real Windows DPI verification',()=>{
     const journey=browser();
     expect(journey).toContain('for(const width of [920,720,620,480])');
-    expect(journey).toContain('Optional AI summary must not overlap navigation or the connection label');
+    expect(journey).toContain('Optional AI summary must not overlap navigation');
     expect(journey).toContain('Optional AI summary must not change the fixed-height topbar');
     expect(journey).toContain('Narrow agent details must stay in the WebView bounds');
     expect(journey).toContain('NOT evidence of actual Windows device DPI');
