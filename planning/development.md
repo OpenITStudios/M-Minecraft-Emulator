@@ -2,10 +2,12 @@
 
 ## Source simplification — 26 November 2026
 
-Phase 1: retire superseded world-scoped F3 prototypes and dedicated review
-routing; preserve native F3 source, controller, profile data and packaging.
-Proof: source review only; tests and CI remain held. Next: audit dormant
-coordinate contracts and remaining test-only/experimental source before removal.
+Phase 1: retired superseded world-scoped F3 prototypes and dedicated review
+routing; also retired six unmounted desktop coordinate research/fixture files.
+Historical research remains in Git; native bookmark command/store, shared
+process identity parser, native F3, controller, profile data and packaging
+are preserved. Proof: source review only; tests and CI remain held.
+Next: audit remaining test-only/experimental source and its consumers.
 
 ## Continue development outside Codex
 

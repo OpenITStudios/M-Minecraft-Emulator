@@ -9,6 +9,17 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired unmounted desktop coordinate research — 26 November 2026
+
+Removed three TypeScript modules (coordinate formatting, unverified candidate
+screening, and the unused bookmark bridge) and their three dedicated fixtures.
+All mounted desktop source consumers and desktop tests were reviewed; no
+remaining imports were identified. Original research and fixtures remain at
+[the pre-retirement revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/67ef2b636f4e2579a6c5c03cfb7d8f5777630bb7/Development/apps/desktop).
+The shared observed-process parser, native bookmark command and Rust storage
+owner, `Data/Coordinates/bookmarks.json`, and native F3 candidate are unchanged.
+No user data migration or deletion; build/tests NOT_EXECUTED.
+
 ## Retired world-scoped F3 prototypes — 26 November 2026
 
 Removed the superseded JavaScript Player/ScriptEvent formatter and JSON UI

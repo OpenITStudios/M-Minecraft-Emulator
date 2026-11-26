@@ -13,9 +13,12 @@ lifecycle: SOURCE_ONLY
 > Coordinates & Saves were removed from Lazy Tester by explicit user
 > instruction. This document records earlier research, **not** an
 > authorized desktop feature or current UI requirement. Former Svelte
-> components, popup helpers and browser tests were retired. Pure
-> coordinate computations and existing native Saved Locations records
-> are preserved; no in-game HUD, waypoint, or command was installed.
+> components, popup helpers and browser tests were retired. The unmounted
+> TypeScript coordinate research and its fixtures were subsequently retired
+> from active source on 26 November 2026 and remain recoverable at the
+> [pre-retirement revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/67ef2b636f4e2579a6c5c03cfb7d8f5777630bb7/Development/apps/desktop). Existing native Saved Locations
+> storage and records remain unchanged; no in-game HUD, waypoint, or command
+> was installed.
 > Education native-HUD experiments are retired from active source; historical compatibility remains unverified. See [retirement register](legacy-retirement.md).
 
 ## Purpose and scope
@@ -31,7 +34,7 @@ an unbound coordinate parser and copy-text formatting. No on-screen F3 panel,
 clipboard integration, global shortcut, native IPC, game command, content-log
 reader or new Script API event emitter is introduced in this step.
 
-## Current source owner
+## Historical source owners (before frontend retirement)
 
 - Desktop pure data and text: Development/apps/desktop/src/app/coordinates.ts
 - Source-only regression fixtures: Development/apps/desktop/test/coordinates.test.ts
