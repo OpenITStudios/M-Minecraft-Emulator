@@ -13,12 +13,12 @@ lifecycle: SOURCE_ONLY
 The operator's 8 November requirement is a **client-native** Java-style F3
 toggle working in Minecraft Education without modifying a world. This
 resource-pack approach is permanently excluded from the F3 deliverable;
-preserve its previous research/fixtures without installing or developing it
-further for F3. Canonical direction:
+its previous research and fixtures are preserved in Git history, not in the active source tree. Do not install or develop it further for F3. Canonical direction:
 [minecraft-education-native-f3-client.md](minecraft-education-native-f3-client.md).
 
 **Project:** Lazy Tester / M-Minecraft-Emulator, `Local` branch.
-**Status:** SOURCE_ONLY, compatibility NOT_VERIFIED, not installed.
+**Status:** RETIRED_SOURCE; historical compatibility NOT_VERIFIED, not installed.
+The sections below record historical work at the [pre-retirement source revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/a76580e45526a9bbd64767a8e39b7ff0904e31a9/Development/tooling/agent/education-native-hud-prototype).
 **Intent:** extend the vanilla `hud.player_position` component *without*
 recreating Minecraft's location logic or installing a second gameplay runtime.
 

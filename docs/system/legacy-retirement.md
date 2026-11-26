@@ -9,6 +9,16 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired world-scoped F3 prototypes — 26 November 2026
+
+Removed the superseded JavaScript Player/ScriptEvent formatter and JSON UI
+resource-pack experiment, their dedicated checker and fixtures, and obsolete
+developer-review routing. Historical source remains available at the
+[pre-retirement revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/a76580e45526a9bbd64767a8e39b7ff0904e31a9/Development/tooling/agent/education-debug-prototype) and
+[resource-pack prototype](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/a76580e45526a9bbd64767a8e39b7ff0904e31a9/Development/tooling/agent/education-native-hud-prototype).
+The client-native F3 source remains default OFF and ABI acceptance remains
+NOT_VERIFIED. No installed pack, game, account, world or profile data changed.
+
 ## Source retirement completion — 27 October 2026
 
 Retired Sandboxie/VMware source is no longer part of the active `Local`

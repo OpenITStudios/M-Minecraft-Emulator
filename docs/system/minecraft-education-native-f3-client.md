@@ -57,8 +57,7 @@ Bedrock vtable values as Education proof, or silently enable hooks.
 | Reviewed native presentation candidate | `Development/tooling/acceptance/windows/bootstrap-ordering/presentation-enrollment.cpp` | Existing OGLES-owned DXGI interception path; not a native debug screen |
 | Wrapped Present/Present1, FPS pacing | `.../dxgi-pacing.cpp` | Native frame acceptance measurements; no world coordinates, biome or player info |
 | Measured FPS panel | `.../fps-hud.cpp` | Uses `WS_EX_LAYERED`/`UpdateLayeredWindow` in a separate native window. **Explicitly NOT the requested in-game F3 renderer** |
-| Legacy F3/coordinate research | `Development/tooling/agent/education-debug-prototype/` | Pure ScriptEvent/Player data plans only. World/Script API path superseded for this feature |
-| Old JSON UI RP | `Development/tooling/agent/education-native-hud-prototype/` | Source-only world-scoped additive hint; do not install, package or extend as F3 |
+| Retired world/Script API and JSON UI approaches | [Retirement register](legacy-retirement.md) | Historical only; no active source or fallback for client F3 |
 
 No Python/OCR, game Content Log, screen pixel parser, desktop Saved
 Locations file, player nickname, Windows PID, controller ACK or DWM

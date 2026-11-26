@@ -16,7 +16,7 @@ lifecycle: SOURCE_ONLY
 > components, popup helpers and browser tests were retired. Pure
 > coordinate computations and existing native Saved Locations records
 > are preserved; no in-game HUD, waypoint, or command was installed.
-> Education native-HUD experiments remain source-only and unverified.
+> Education native-HUD experiments are retired from active source; historical compatibility remains unverified. See [retirement register](legacy-retirement.md).
 
 ## Purpose and scope
 
@@ -1184,7 +1184,7 @@ Official references:
 - https://learn.microsoft.com/en-us/minecraft/creator/documents/copycoordinates?view=minecraft-bedrock-stable
 - https://education.minecraft.net/en-us/resources/minecraft_education_add_ons_collection
 
-## P20 — Native HUD JSON UI extension prototype (5 November 2026; source-only)
+## P20 — Native HUD JSON UI extension prototype (historical, retired)
 
 The operator approved a **separate, opt-in resource-only** experiment to
 modify vanilla `hud.player_position` rather than duplicate XYZ in an app

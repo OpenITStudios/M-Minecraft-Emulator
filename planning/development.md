@@ -1,5 +1,12 @@
 # Current Development Handoff — Lazy Tester
 
+## Source simplification — 26 November 2026
+
+Phase 1: retire superseded world-scoped F3 prototypes and dedicated review
+routing; preserve native F3 source, controller, profile data and packaging.
+Proof: source review only; tests and CI remain held. Next: audit dormant
+coordinate contracts and remaining test-only/experimental source before removal.
+
 ## Continue development outside Codex
 
 In any editor, open this checkout or clone:
@@ -194,9 +201,8 @@ Minecraft Education Windows debug HUD, with live game-local XYZ,
 chunk/facing/dimension and an explicit in-game Copy Coordinates
 action. No world pack, global Resource Pack, Script API player
 event, modal form, Windows layered overlay or LazyTester
-application UI. Previous source-only `education-debug-prototype`
-and `education-native-hud-prototype` are reference-only, not
-product-completion paths.
+application UI. The superseded world/Script API and JSON UI prototypes
+are retired from active source; see the [retirement register](../docs/system/legacy-retirement.md).
 
 **Owner/evidence:** the exact installed Education 26.33 game-native
 input, Player/HUD and render ABI must be verified before any

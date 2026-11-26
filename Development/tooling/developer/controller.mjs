@@ -165,16 +165,6 @@ export function planForPaths(paths,revision) {
 // Source-only quality review: a deterministic checklist, NOT an LLM runner,
 // binary investigator, gameplay agent, or grading/acceptance authority.
 const QUALITY_AREAS=Object.freeze({
-  'education-hud':Object.freeze({
-    owner:'Development/tooling/agent/check-education-native-hud-source.mjs and education-native-hud-prototype/; review the existing HUD fixture and docs/system/education-native-coordinate-hud.md as direct companions',
-    checks:[
-      'Verify JSONC structural parent/child path and after-player_position sibling; never insert into auto-sized native image.',
-      'Review the pinned Bedrock coordinate label type/text, binding conditions, duplicate JSON keys, and source file-handle admission with the existing negative fixtures.',
-      'Keep world-only manifest scope, original XYZ/Agent Pos/visibility bindings and no Script API or button action.',
-      'Inspect the existing HUD source fixture and HUD contract guide even when only one is in the selected diff; changed-path selection is not proof of test coverage.',
-      'Keep Education 26.33 rendering, layout, team forms and pack interaction explicitly UNVERIFIED.'
-    ]
-  }),
   'agent-mcp':Object.freeze({
     owner:'Development/tooling/agent/mcp.mjs and the existing specialized agent modules',
     checks:[
@@ -234,10 +224,6 @@ const QUALITY_AREAS=Object.freeze({
   })
 });
 function qualityArea(path) {
-  if(path.startsWith('Development/tooling/agent/education-native-hud-prototype/') ||
-      path==='Development/tooling/agent/check-education-native-hud-source.mjs' ||
-      path==='Development/tooling/agent/education-native-hud-prototype.source.test.mjs' ||
-      path==='docs/system/education-native-coordinate-hud.md') return 'education-hud';
   if(path.startsWith('Development/tooling/agent/')) return 'agent-mcp';
   // The C++ game-side input reader is a source ABI consumer, not just
   // developer tooling. Its edits require review of the retained Rust
