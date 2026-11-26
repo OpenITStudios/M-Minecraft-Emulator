@@ -65,7 +65,10 @@ instead of parsing its text three times. Malformed prefixes fail closed;
 close callers retain the same native checks. Periodic frontend refresh now
 avoids replacing unchanged profile observations, comparing every current wire
 field including issue text; independent settings/activity updates and native
-reads remain unchanged. Next: review other high-frequency resource paths.
+reads remain unchanged. Identical settings and Agent Activity reports now
+avoid redundant reactive assignment; timestamp, stale status, receipts and
+optional fields remain significant. DWM invalidation and layout IPC are
+unchanged pending native acceptance. Next: review remaining resource paths.
 
 ## Continue development outside Codex
 

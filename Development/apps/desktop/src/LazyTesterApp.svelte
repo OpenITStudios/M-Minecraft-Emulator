@@ -13,7 +13,7 @@
   import {projectSessionHealth, type SessionHealthAction} from './app/presentation/sessionHealth.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -285,13 +285,14 @@
       const layoutChanged=!available||layoutIdentity(profiles)!==layoutIdentity(snapshot.profiles);
       if (!sameProfileObservation(profiles, snapshot.profiles)) profiles = snapshot.profiles;
       available = true; connectionIssueKey=null;
-      agentActivity=snapshot.agentActivity??null;
+      const incomingActivity = snapshot.agentActivity ?? null;
+      if (!sameAgentObservation(agentActivity, incomingActivity)) agentActivity = incomingActivity;
       // STOPPED only confirms a session observation, not restoration of
       // the original HWND/helper checkpoint. Only a positive selected-close
       // presentation receipt below may clear the uncertainty warning.
       if(snapshot.settings){
         if(!performanceDirty){activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;}
-        settings=snapshot.settings;
+        if (!sameSettingsObservation(settings, snapshot.settings)) settings=snapshot.settings;
       }
       if (active !== null && selectedIdentity !== identity(profiles.find(profile => profile.slot === active))) {
         const released = {slot: active, identity: selectedIdentity};

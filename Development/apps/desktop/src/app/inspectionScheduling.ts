@@ -1,6 +1,6 @@
 // UI-only scheduling policy. It never owns a native process or authorizes
 // Launch/Close; those remain under the Rust controller and Tauri admission.
-import type {ProfileSession} from './bridge/lazyTester.js';
+import type {ProfileSession, SettingsReport, AgentActivityReport} from './bridge/lazyTester.js';
 
 // Compare every field of the validated profile contract, including issue
 // text. This only suppresses redundant UI assignments, never native reads.
@@ -17,6 +17,27 @@ export function sameProfileObservation(
       a.sessionId === b.sessionId && a.windowHandle === b.windowHandle &&
       a.responding === b.responding;
   });
+}
+
+// Only validated wire reports reach these comparisons. Optional fields and
+// ordered preset/item arrays remain significant; freshness is never inferred.
+export function sameSettingsObservation(a: SettingsReport | null, b: SettingsReport): boolean {
+  return a !== null && a.backgroundAudio === b.backgroundAudio &&
+    a.audioIssue === b.audioIssue && a.activeFps === b.activeFps &&
+    a.backgroundFps === b.backgroundFps && a.renderDistanceChunks === b.renderDistanceChunks &&
+    a.canApplyPreset === b.canApplyPreset && a.changedProfiles === b.changedProfiles &&
+    (a.graphicsPresets === b.graphicsPresets ||
+      (a.graphicsPresets !== undefined && b.graphicsPresets !== undefined &&
+        a.graphicsPresets.length === b.graphicsPresets.length &&
+        a.graphicsPresets.every((preset, index) => preset === b.graphicsPresets![index])));
+}
+
+export function sameAgentObservation(a: AgentActivityReport | null, b: AgentActivityReport | null): boolean {
+  if (a === null || b === null) return a === b;
+  // Validated, bounded JSON records; compare the entire report, including
+  // snapshotAt and stale. Different serialization order may cause an extra
+  // update but can never suppress a changed field.
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 export interface CloseReview {

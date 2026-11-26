@@ -5,7 +5,7 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -36,6 +36,36 @@ describe('Lazy Tester profile contract', () => {
     const next = copy();
     next[1]!.process = {...base[0]!.process!};
     expect(sameProfileObservation(base, next)).toBe(false);
+  });
+  it('preserves changed settings receipts, optional fields and ordered presets', () => {
+    const base = parseSession({...stopped(), settings: {
+      activeFps:144, backgroundFps:10, renderDistanceChunks:12, canApplyPreset:true,
+      changedProfiles:null, backgroundAudio:'Keep', graphicsPresets:['Low','High','Low','Low','Low'],
+    }}).settings!;
+    expect(sameSettingsObservation(null, base)).toBe(false);
+    expect(sameSettingsObservation(base, {...base, graphicsPresets:[...base.graphicsPresets!]})).toBe(true);
+    for (const change of [
+      {activeFps:120}, {backgroundFps:5}, {renderDistanceChunks:8},
+      {canApplyPreset:false}, {changedProfiles:0}, {backgroundAudio:'Mute' as const},
+      {audioIssue:'Native audio unavailable'}, {graphicsPresets:undefined},
+      {graphicsPresets:[...base.graphicsPresets!].reverse()},
+    ]) expect(sameSettingsObservation(base, {...base, ...change})).toBe(false);
+  });
+  it('never suppresses changed agent timestamps, staleness or missing reports', () => {
+    const base = {
+      schema:1 as const, source:'CURRENT_MCP_PROCESS_MEMORY_ONLY' as const,
+      snapshotAt:'2026-01-01T00:00:00.000Z', displayHint:'ATTENTION' as const,
+      desktopControl:'NOT_OBSERVED_NO_AUTHENTICATED_DESKTOP_PROVIDER' as const,
+      minecraftInputEffect:'NOT_VERIFIED' as const, mapGameplayAcceptance:'NOT_TESTED' as const,
+      items:[{kind:'AI_INPUT' as const, slot:1 as const, status:'NATIVE_RELEASE_UNCONFIRMED',
+        importance:'ATTENTION' as const, evidence:'LOCAL_MCP_RECOVERY_HOLD'}], stale:false,
+    };
+    expect(sameAgentObservation(null, null)).toBe(true);
+    expect(sameAgentObservation(base, structuredClone(base))).toBe(true);
+    expect(sameAgentObservation(base, null)).toBe(false);
+    expect(sameAgentObservation(base, {...base, stale:true})).toBe(false);
+    expect(sameAgentObservation(base, {...base, snapshotAt:'2026-01-01T00:00:01.000Z'})).toBe(false);
+    expect(sameAgentObservation(base, {...base, items:[]})).toBe(false);
   });
   it('rejects reversed native inventory rather than trusting unverified order',()=>{
     const snapshot=stopped();
