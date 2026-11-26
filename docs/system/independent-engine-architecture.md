@@ -223,7 +223,7 @@ and [Security Descriptor Control](https://learn.microsoft.com/en-us/windows/win3
 
 ### Root-owner SID and effective peer ACL checks (23 October 2026)
 
-The existing Windows-only `independent_root_access.rs` now inspects the
+The existing Windows-only `native_isolation_fixtures/root_acl.rs` now inspects the
 directory's ACTUAL owner SID from its `GetSecurityInfo` HANDLE-bound,
 READ_CONTROL-guarded, non-NULL DACL descriptor, and the original two
 processes' `TokenUser` SIDs from bounded `GetTokenInformation` buffers.
@@ -267,7 +267,7 @@ CI remains disabled.
 
 ### Windows HANDLE-relative file I/O consumes canonical Rust storage plans (23 October 2026)
 
-The original Windows-only `Development/apps/desktop/src-tauri/src/engine/independent_private_files.rs`
+The original Windows-only `Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/private_files.rs`
 fixture now calls the canonical
 `Development/engine/runtime-core/src/independent_engine/storage.rs::plan_private_file_access`
 instead of relying only on its native single-component parser. An actual
@@ -679,7 +679,7 @@ on a Windows target without activating real game privileges.
 The previously string-only logon DACL candidate is now an actual,
 **read-only Windows AccessCheck review** inside the existing
 service_identity.rs source owner (reusing the Win32 ABI pattern from
-independent_root_access.rs without coupling the SCM process to Tauri).
+root_acl.rs without coupling the SCM process to Tauri).
 The candidate SDDL now includes an explicit SYSTEM Owner and Group,
 `O:SYG:SY`, because AccessCheck rejects descriptors without them.
 The source converts its internally validated SDDL to a self-relative
@@ -1019,7 +1019,7 @@ fixture DACL or elevate the existing untrusted PID wire protocol.
 ### Bounded overlapped named-pipe fixture lifecycle — 22 October 2026
 
 The original one-client named-pipe fixture in
-[independent_pipe_server.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
+[pipe_server.rs](../../Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/pipe_server.rs)
 now uses FILE_FLAG_OVERLAPPED for both ConnectNamedPipe and ReadFile,
 with separate manual-reset events and native OVERLAPPED structures.
 Connect and exact-message read deadlines are 1500 ms each. A timeout
@@ -1047,7 +1047,7 @@ or isolation acceptance.
 ### Explicit-DACL native named-pipe server fixture (22 October 2026)
 
 The original, unmounted Windows backend
-[apps/desktop/src-tauri/src/engine/independent_pipe_server.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_pipe_server.rs)
+[apps/desktop/src-tauri/src/engine/native_isolation_fixtures/pipe_server.rs](../../Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/pipe_server.rs)
 implements a disposable, **one-client inbound-only** named-pipe server.
 Unlike the unsafe Windows pipe default, it builds a protected SDDL DACL
 using the actual current-user token SID plus SYSTEM/Administrators,
@@ -1099,7 +1099,7 @@ file/registry mutation, credential, token, or readiness opcodes.
 A correlation ID is not an authentication nonce or an anti-replay proof.
 
 The Windows-only, unmounted diagnostic adapter at
-`Development/apps/desktop/src-tauri/src/engine/independent_pipe_peer.rs`
+`Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/pipe_peer.rs`
 accepts an **already connected server-side named-pipe HANDLE**, checks
 the real client PID using GetNamedPipeClientProcessId, opens that
 process with query/synchronize-only rights, checks complete creation
@@ -1128,7 +1128,7 @@ storage admission.
 ### Native Windows effective root-access evidence (22 October 2026)
 
 The original Win32 read-only inspector in
-[apps/desktop/src-tauri/src/engine/independent_root_access.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_root_access.rs)
+[apps/desktop/src-tauri/src/engine/native_isolation_fixtures/root_acl.rs](../../Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/root_acl.rs)
 uses GetSecurityInfo (OWNER, GROUP, DACL), OpenProcessToken,
 DuplicateTokenEx (SecurityImpersonation) and AccessCheck to evaluate
 FILE_LIST_DIRECTORY and FILE_ADD_FILE against the same opened directory
@@ -1192,7 +1192,7 @@ unmodified Minecraft until these can actually be enforced.
 ### Native Windows handle-relative private file storage (22 October 2026)
 
 The original Win32/NT adapter at
-[apps/desktop/src-tauri/src/engine/independent_private_files.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_private_files.rs)
+[apps/desktop/src-tauri/src/engine/native_isolation_fixtures/private_files.rs](../../Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/private_files.rs)
 performs actual filesystem I/O via NtCreateFile with a held parent
 directory HANDLE and a single validated relative component. It uses
 FILE_CREATE or FILE_OPEN instead of overwrite, FILE_OPEN_REPARSE_POINT
@@ -1227,7 +1227,7 @@ must still be proven before any production launch.
 ### Native Windows private registry application hive (22 October 2026)
 
 The unmounted, independently authored Rust module
-[apps/desktop/src-tauri/src/engine/independent_private_hive.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_private_hive.rs)
+[apps/desktop/src-tauri/src/engine/native_isolation_fixtures/registry_hive.rs](../../Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/registry_hive.rs)
 implements real Windows application-hive I/O using RegLoadAppKeyW,
 RegSetValueExW, RegQueryValueExW, RegFlushKey and RegCloseKey.
 The registry namespace is reached ONLY through an owned HKEY, never
@@ -1261,7 +1261,7 @@ without real interception/enforcement proof.
 ### Independent Win32 process lifecycle (22 October 2026)
 
 The original Windows-only code in
-[apps/desktop/src-tauri/src/engine/independent_job.rs](../../Development/apps/desktop/src-tauri/src/engine/independent_job.rs)
+[apps/desktop/src-tauri/src/engine/native_isolation_fixtures/process_job.rs](../../Development/apps/desktop/src-tauri/src/engine/native_isolation_fixtures/process_job.rs)
 creates an unnamed Job Object, sets fixture-only KILL_ON_JOB_CLOSE,
 launches our own Rust test executable SUSPENDED, assigns the exact retained
 child HANDLE to the job, verifies PID/creation FILETIME, then resumes it.

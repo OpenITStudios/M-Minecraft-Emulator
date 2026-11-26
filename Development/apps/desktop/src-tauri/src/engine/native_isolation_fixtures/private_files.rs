@@ -29,9 +29,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 #[cfg(test)]
-use super::independent_job::{FixtureJob, SuspendedFixture};
+use super::process_job::{FixtureJob, SuspendedFixture};
 #[cfg(test)]
-use super::independent_root_access::{self, PairAccessFacts, PairAccessReview};
+use super::root_acl::{self, PairAccessFacts, PairAccessReview};
 #[cfg(test)]
 use virtual_clients_core::independent_engine::{
     plan_private_file_access, PendingPrivateFilePlan, ProcessIdentity,
@@ -361,7 +361,7 @@ impl<'owner> FixtureFileRoot<'owner> {
     /// fixtures. A positive peer-denial candidate is NOT a launch grant.
     fn assess_peer_acl(&self, peer: &SuspendedFixture) -> io::Result<PairAccessFacts> {
         self.verify()?;
-        let facts = independent_root_access::review_fixture_pair(
+        let facts = root_acl::review_fixture_pair(
             &self.directory, self.owner, peer,
         )?;
         self.verify()?;
@@ -439,7 +439,7 @@ impl SlotFiles<'_, '_> {
     // its parent root. Nothing is granted by this diagnostic result.
     fn assess_peer_acl(&self, peer: &SuspendedFixture) -> io::Result<PairAccessFacts> {
         self.verify()?;
-        let facts = independent_root_access::review_fixture_pair(
+        let facts = root_acl::review_fixture_pair(
             &self.directory, self.root.owner, peer,
         )?;
         self.verify()?;

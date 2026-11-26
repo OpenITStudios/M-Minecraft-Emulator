@@ -7,7 +7,10 @@ routing; also retired six unmounted desktop coordinate research/fixture files.
 Historical research remains in Git; native bookmark command/store, shared
 process identity parser, native F3, controller, profile data and packaging
 are preserved. Proof: source review only; tests and CI remain held.
-Next: audit remaining test-only/experimental source and its consumers.
+Grouped six retained Windows test-only isolation primitives under
+`engine/native_isolation_fixtures/`, with domain names and one compile gate.
+No fixture behavior or native runtime changed. Next: audit remaining
+experimental source and consolidate duplicated active runtime helpers.
 
 ## Continue development outside Codex
 

@@ -30,6 +30,15 @@ Git retains the older source.
 | `planning/development.md` | One current development-status and next-action handoff |
 | `workspace/` | Ignored generated tools, developer caches and packages, never game account source authority |
 
+## Internal native source naming
+
+Name modules by their semantic owner and purpose, not by legacy project names.
+Use `native_isolation_fixtures/` for Windows test-only process, registry,
+filesystem, ACL and pipe primitives; these are not product runtime owners.
+Keep fixtures behind one Windows/test gate and retain domain-specific names
+inside that namespace. Do not rename stable IPC, package or data contracts
+for cosmetic consistency.
+
 ## Persistent product data
 
 - Current profile folders: `Data/Launchers/Minecraft-1..5`.

@@ -23,6 +23,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 
 | Problem | Existing canonical source | Follow only when needed |
 | --- | --- | --- |
+| Windows isolation research fixtures (test-only) | `src-tauri/src/engine/native_isolation_fixtures/` | Disposable process job, registry hive, private files, root ACL and named-pipe primitives. One Windows/test compilation gate; no product launcher or IPC owner. |
 | Main Play, Settings, Storage and action sequencing | `src/LazyTesterApp.svelte` | `src/app/inspectionScheduling.ts`, `src/app/presentation/` |
 | Optional MCP-reported AI/QA disclosure | `src/app/presentation/agentActivity.ts`, `src/AgentActivityNotice.svelte` | Existing `agent_capabilities` explicit status mirror in `Development/tooling/agent/mcp.mjs`; original controller `SessionSnapshot.agentActivity` only, no new watcher/QA owner |
 | Launcher rail and status guidance | `src/LauncherRail.svelte`, `src/SessionHealthNotice.svelte` | `src/app/presentation/sessionFeedback.ts` |

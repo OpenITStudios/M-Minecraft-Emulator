@@ -13,7 +13,7 @@
 
 use std::{ffi::c_void, fs::File, io, mem, os::windows::io::AsRawHandle, ptr};
 #[cfg(test)]
-use super::independent_job::SuspendedFixture;
+use super::process_job::SuspendedFixture;
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 
 const READ_CONTROL: u32 = 0x0002_0000;

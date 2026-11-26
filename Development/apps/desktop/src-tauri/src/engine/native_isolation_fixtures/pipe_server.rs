@@ -30,7 +30,7 @@ use windows_sys::Win32::{
     Foundation::{CloseHandle, GetLastError, HANDLE, INVALID_HANDLE_VALUE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     System::Threading::{GetCurrentProcess, GetCurrentThread, WaitForSingleObject},
 };
-use super::independent_pipe_peer::inspect_connected_server_pipe;
+use super::pipe_peer::inspect_connected_server_pipe;
 
 const TOKEN_QUERY: u32 = 0x0008;
 const TOKEN_USER: u32 = 1;
