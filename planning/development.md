@@ -58,7 +58,9 @@ components. Consolidated the unconditionally overridden filmstrip width and
 gap into its original rule, preserving media queries. A retired popup-shadow
 assertion was confirmed stale and replaced by the two active overlay-shadow
 contracts; the unused token is removed. Visual runtime acceptance remains held.
-Next: review remaining CSS overrides and resource-efficiency opportunities.
+Audio session ownership checks now narrow candidates by retained PID/birth
+before fresh native identity/liveness verification; no cache or cadence change.
+Next: review native observation and frontend resource scheduling.
 
 ## Continue development outside Codex
 

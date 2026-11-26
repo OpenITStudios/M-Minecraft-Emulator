@@ -1424,7 +1424,15 @@ fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
         return Ok(());
     }
     if audio.is_none(){*audio=Some(super::session_audio::Audio::new()?);}
-    audio.as_mut().unwrap().sync(&targets,foreground,|pid,born|sessions.running.iter().flatten().any(|s|s.children[0].identity().ok()==Some((pid,born))))
+    audio.as_mut().unwrap().sync(&targets, foreground, |pid, born| {
+        // Cheap retained metadata only narrows the candidate set; the
+        // matching child still needs fresh native identity/liveness proof.
+        sessions.running.iter().flatten().any(|started| {
+            let child = &started.children[0];
+            child.pid == pid && child.created == born
+                && child.identity().ok() == Some((pid, born))
+        })
+    })
 }
 
 // Admit an authenticated, queued request before optional idle maintenance on
