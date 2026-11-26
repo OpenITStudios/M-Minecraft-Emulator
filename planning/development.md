@@ -62,7 +62,10 @@ Audio session ownership checks now narrow candidates by retained PID/birth
 before fresh native identity/liveness verification; no cache or cadence change.
 Routine session snapshots reuse the HWND returned by fresh native validation
 instead of parsing its text three times. Malformed prefixes fail closed;
-close callers retain the same native checks. Next: review frontend scheduling.
+close callers retain the same native checks. Periodic frontend refresh now
+avoids replacing unchanged profile observations, comparing every current wire
+field including issue text; independent settings/activity updates and native
+reads remain unchanged. Next: review other high-frequency resource paths.
 
 ## Continue development outside Codex
 

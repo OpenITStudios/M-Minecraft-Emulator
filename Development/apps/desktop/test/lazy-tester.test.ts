@@ -5,13 +5,38 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
 describe('Lazy Tester profile contract', () => {
+  it('compares all profile observation fields before suppressing redundant UI updates', () => {
+    const base = parseSession({...stopped(), profiles: [running(1), ...stopped().profiles.slice(1)]}).profiles;
+    const copy = () => base.map(profile => ({...profile, process: profile.process && {...profile.process}}));
+    expect(sameProfileObservation(base, copy())).toBe(true);
+    expect(sameProfileObservation(base, [])).toBe(false);
+    expect(sameProfileObservation(base, [...base].reverse())).toBe(false);
+    for (const change of [
+      {state: 'NOT_RESPONDING' as const}, {issue: 'Native issue'}, {process: null},
+    ]) {
+      const next = copy();
+      Object.assign(next[0]!, change);
+      expect(sameProfileObservation(base, next)).toBe(false);
+    }
+    for (const change of [
+      {pid: 999}, {createdFileTime: '999'}, {sessionId: 2},
+      {windowHandle: '0x99'}, {responding: false},
+    ]) {
+      const next = copy();
+      Object.assign(next[0]!.process!, change);
+      expect(sameProfileObservation(base, next)).toBe(false);
+    }
+    const next = copy();
+    next[1]!.process = {...base[0]!.process!};
+    expect(sameProfileObservation(base, next)).toBe(false);
+  });
   it('rejects reversed native inventory rather than trusting unverified order',()=>{
     const snapshot=stopped();
     expect(()=>parseSession({...snapshot,profiles:[...snapshot.profiles].reverse()}))

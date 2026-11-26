@@ -1,5 +1,24 @@
 // UI-only scheduling policy. It never owns a native process or authorizes
 // Launch/Close; those remain under the Rust controller and Tauri admission.
+import type {ProfileSession} from './bridge/lazyTester.js';
+
+// Compare every field of the validated profile contract, including issue
+// text. This only suppresses redundant UI assignments, never native reads.
+export function sameProfileObservation(
+  current: readonly ProfileSession[], incoming: readonly ProfileSession[],
+): boolean {
+  return current.length === incoming.length && current.every((profile, index) => {
+    const next = incoming[index]!;
+    if (profile.slot !== next.slot || profile.state !== next.state ||
+        profile.issue !== next.issue) return false;
+    const a = profile.process, b = next.process;
+    if (a === null || b === null) return a === b;
+    return a.pid === b.pid && a.createdFileTime === b.createdFileTime &&
+      a.sessionId === b.sessionId && a.windowHandle === b.windowHandle &&
+      a.responding === b.responding;
+  });
+}
+
 export interface CloseReview {
   readonly nativeExitReview: boolean;
   readonly closeAllRunning: boolean;
