@@ -46,9 +46,9 @@ fn run_startup_observation(count: usize) -> io::Result<i32> {
         crate::engine::native_clients_session::CONTROLLER_GATE_NAME,
         io::Error::new(io::ErrorKind::AlreadyExists, "Startup experiment already active"),
     )?;
-    let mut launch_guard = super::acquire_native_launch()?;
+    let mut launch_guard = super::super::acquire_native_launch()?;
     // Preserve existing games; no termination, sign-out or activation fallback.
-    if !super::inspect_native_workspace()?.processes.is_empty() {
+    if !super::super::inspect_native_workspace()?.processes.is_empty() {
         return Err(io::Error::new(
             io::ErrorKind::AlreadyExists,
             "Close the existing game normally first",
@@ -83,7 +83,7 @@ fn label_started_windows<const N: usize>(started: &StartedEducationObservation<N
         let state = &mut *(data as *mut Selection);
         let mut pid = 0;
         GetWindowThreadProcessId(hwnd, &mut pid);
-        if pid == state.pid && super::verify_live_client_02_window(hwnd, pid).is_ok() {
+        if pid == state.pid && super::super::verify_live_client_02_window(hwnd, pid).is_ok() {
             if state.window.is_null() {
                 state.window = hwnd;
             } else {
