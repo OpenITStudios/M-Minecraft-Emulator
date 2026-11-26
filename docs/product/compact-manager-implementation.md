@@ -21,7 +21,7 @@ lifecycle: HISTORICAL
 **Scope:** Windows desktop, Minecraft Education. Long-term goal: four separately licensed, independent sessions. Active code: native Client 01 + one Sandboxie Plus isolated Client 02 experiment. Client 03/04, distinct game sessions and packaged native release remain UNPROVEN/UNIMPLEMENTED.
 **Authority boundary:** Rust/native platform and the typed IPC decide eligibility. The frontend explains observations and requests supported actions; this spec does not authorize new providers, account actions, implicit polling, destructive changes, packaging, or resumed Windows localtests.
 
-**Design authority:** This is the **only active Compact Manager UI specification**. The older `compact-manager-ux-spec.md` and `compact-manager-screen-design.md` are historical draft records and MUST NOT be treated as alternative instructions. System/runtime contracts override a design proposal where safety or compatibility conflicts.
+**Historical design authority (13 October only):** This document was the Compact Manager UI specification for the retired two-client pilot. It does not govern LazyTester. See [the active five-profile workspace contract](unified-workspace.md). The older `compact-manager-ux-spec.md` and `compact-manager-screen-design.md` are historical draft records and MUST NOT be treated as alternative instructions. System/runtime contracts override a design proposal where safety or compatibility conflicts.
 
 ## 1. User goal and firm non-goals
 

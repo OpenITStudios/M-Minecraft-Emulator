@@ -26,6 +26,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Windows isolation research fixtures (test-only) | `src-tauri/src/engine/native_isolation_fixtures/` | Disposable process job, registry hive, private files, root ACL and named-pipe primitives. One Windows/test compilation gate; no product launcher or IPC owner. |
 | Historical startup observation CLI | `src-tauri/src/engine/independent_bootstrap/legacy_startup_observation.rs` | Explicit opt-in pair/five observation and legacy replay preparation; not the mounted session controller. Shared process and journal contracts remain in bootstrap. |
 | Main Play, Settings, Storage and action sequencing | `src/LazyTesterApp.svelte` | `src/app/inspectionScheduling.ts`, `src/app/presentation/` |
+| UI viewport/preview geometry observation and comparison | `src/app/workspaceGeometry.ts` | `src/LazyTesterApp.svelte` captures and dispatches; native ownership remains in `workspace_surface` |
 | Optional MCP-reported AI/QA disclosure | `src/app/presentation/agentActivity.ts`, `src/AgentActivityNotice.svelte` | Existing `agent_capabilities` explicit status mirror in `Development/tooling/agent/mcp.mjs`; original controller `SessionSnapshot.agentActivity` only, no new watcher/QA owner |
 | Launcher rail and status guidance | `src/LauncherRail.svelte`, `src/SessionHealthNotice.svelte` | `src/app/presentation/sessionFeedback.ts` |
 | Settings and storage presentation | `src/GeneralSettings.svelte`, `src/DataStorage.svelte` | Typed `src/app/bridge/lazyTester.ts` |

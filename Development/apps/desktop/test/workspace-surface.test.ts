@@ -2,7 +2,8 @@ import {expect,it} from 'vitest';
 import {workspaceViewport} from '../src/app/bridge/workspaceSurface.js';
 import {readFileSync} from 'node:fs';
 it('keeps focus authority in the foreground manager and geometry in the recovery helper',()=>{
-  const source=readFileSync(new URL('../src-tauri/src/engine/workspace_surface.rs',import.meta.url),'utf8');
+  const source=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/native.rs',import.meta.url),'utf8');
+  const controller=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/controller.rs',import.meta.url),'utf8');
   const helperPlacement=source.slice(source.indexOf('pub(super) fn place('),source.indexOf('pub(super) fn confirm_foreground('));
   expect(helperPlacement).toContain('SWP_NOZORDER');
   expect(helperPlacement).not.toContain('SetForegroundWindow');
@@ -12,9 +13,11 @@ it('keeps focus authority in the foreground manager and geometry in the recovery
   expect(foreground.indexOf('return Ok(())')).toBeLessThan(foreground.indexOf('WS_DISABLED'));
   expect(foreground).toContain('SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE');
   expect(foreground).not.toContain('Workspace foreground activation refused');
-  const passive=source.slice(source.indexOf('pub fn update(manager:'),source.indexOf('#[cfg(all(test, windows))]'));
+  const passive=controller.slice(controller.indexOf('pub fn update(manager:'),controller.indexOf('#[cfg(all(test, windows))]'));
   expect(passive).toContain('lease.place(rect, false)');
-  expect(source).toContain('native::confirm_foreground(');
+  expect(controller).toContain('native::confirm_foreground(');
+  expect(passive.indexOf('native::can_park(&saved.target)')).toBeLessThan(passive.indexOf('native::minimized(manager)'));
+  expect(source).toContain('manager_foreground_exposes_game(&saved.target,window,manager,expected)');
   expect(source).not.toMatch(/AttachThreadInput|AllowSetForegroundWindow|SPI_SETFOREGROUNDLOCKTIMEOUT/);
 });
 it('keeps fractional CSS coordinates and explicit display scale for native conversion',()=>{
@@ -26,22 +29,24 @@ it('rejects impossible areas and nonfinite or unsupported display scale before I
 });
 
 it('retained workspace windows require positive OS identity even when native queries fail',()=>{
-  const source=readFileSync(new URL('../src-tauri/src/engine/workspace_surface.rs',import.meta.url),'utf8');
+  const source=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/native.rs',import.meta.url),'utf8');
   const retired=source.slice(source.indexOf('pub(super) fn retired(target: &OwnedProcess)'),source.indexOf('pub(super) fn rectangle(manager:',source.indexOf('pub(super) fn retired(target: &OwnedProcess)')));
   expect(retired).toContain('return true;');
   expect(retired).toContain('if process.is_null() {');
-  expect(retired).toContain('ok == 0');
+  expect(retired).toContain('windows_process_time::creation_filetime');
+  expect(retired).toContain('!birth.is_ok_and(|value| value == key.created_file_time)');
   expect(retired).not.toContain('return GetLastError() == ERROR_INVALID_PARAMETER;');
-  expect(retired).not.toContain('ok != 0');
 });
 
-it('observed tab switching reuses an OS-checked retained lease before full PowerShell discovery',()=>{
+it('Play switch uses original session observation before retained or verified presentation',()=>{
   const source=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
-  const start=source.indexOf('pub async fn desktop_present_observed_window(');
-  const end=source.indexOf('pub async fn desktop_update_workspace(',start);
+  const start=source.indexOf('pub async fn lazy_tester_present(');
+  const end=source.indexOf('pub async fn lazy_tester_previews(',start);
   const handler=source.slice(start,end);
   expect(handler).toContain('present_retained(');
-  expect(handler).toContain('native_clients::inspect_native_workspace()?');
-  expect(handler.indexOf('present_retained(')).toBeLessThan(handler.indexOf('native_clients::inspect_native_workspace()?'));
-  expect(handler.indexOf('native_clients::inspect_native_workspace()?')).toBeLessThan(handler.indexOf('present_verified('));
+  expect(handler).toContain('SessionRequest::Inspect');
+  expect(handler).toContain('.filter(|p| p.responding)');
+  expect(handler.indexOf('SessionRequest::Inspect')).toBeLessThan(handler.indexOf('present_retained('));
+  expect(handler.indexOf('present_retained(')).toBeLessThan(handler.indexOf('present_verified('));
+  expect(handler).not.toContain('native_clients::inspect_native_workspace');
 });

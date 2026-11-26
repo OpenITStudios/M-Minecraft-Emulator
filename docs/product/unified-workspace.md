@@ -34,7 +34,9 @@ unambiguous worlds/accounts/backup warnings despite the shorter copy. The select
 becomes unavailable, the five cards remain visible but their status is
 "Status unavailable"; no stale running count is shown. "Profile data verified"
 means validated stored profile identities only. Read-only status rechecks use
-the same visible "Refresh" wording in the toolbar and per-launcher recovery.
+the same visible "Refresh" wording. Healthy Play uses automatic inspection;
+header Refresh appears for exceptional states or pending manual inspection.
+General Settings and Data Storage retain manual inspection.
 A global operation-specific error has one authored heading, an actionable
 message, a safe **Refresh status** control when native status rechecking is
 available, and collapsed **Error codes** for support. This action only checks
@@ -45,6 +47,16 @@ A failed native preview offers "Select game" only when window response is
 positively observed; otherwise the safe offered action is "Refresh".
 
 The five-card rail retains its original fixed profile identities and native live preview nodes. The single adaptive Play layout compacts card chrome, reserves the original Close control in each card title band and automatically balances the game viewport against readable previews. Visual card labels are always MC01–MC05, with full Minecraft slot names preserved for accessibility and confirmations. Play-only system warnings have bounded keyboard-scrollable content so long recovery messages cannot indefinitely shrink the game stage. No display-density selector or additional native DWM target is needed.
+The fixed 56px launcher action strip hosts Close confirmation, pending close,
+and noncritical selection/preview feedback without inserting another workspace row.
+Each keyed launcher reserves a 42px health row. Launch receipt uncertainty is scoped
+to its slot and blocks retry until fresh native observation; it never authorizes launch.
+Critical connection and restoration warnings remain global. Layout uses one captured
+viewport/preview/DPI snapshot per pass. During selected Close review only retained
+viewport updates are admitted; inspection and full preview configuration wait for
+review completion. Native passive placement defers while the main HWND is disabled
+by a modal. These are source contracts, not Windows acceptance; DWM tile geometry
+during review resize and critical warning geometry still need resolution.
 A selected-game Close review still uses the original native CloseOne admission;
 its UI defaults keyboard focus to Cancel, supports Escape dismissal, and returns
 focus to the invoking Close game button without scrolling the rail. No implicit
