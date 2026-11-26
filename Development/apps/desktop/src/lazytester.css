@@ -103,18 +103,12 @@ body{
   font-size:12px}
 .lazytester-topbar nav{
   display:flex;
-  align-self:stretch;
-  gap:20px}
-.lazytester-topbar nav button{
-  background:transparent;
-  color:var(--lazytester-muted);
-  padding:0;
-  border:0;
-  border-bottom:3px solid transparent;
-  border-radius:0}
-.lazytester-topbar nav button.chosen{
-  color:inherit;
-  border-bottom-color:var(--lazytester-accent)}
+  align-items:center;
+  gap:12px}
+.lazytester-topbar .lazytester-brand + nav{margin-left:auto;order:2}
+.lazytester-topbar nav button{min-height:32px;padding:6px 12px;border-radius:6px}
+.lazytester-settings-title{font-size:15px;font-weight:600}
+.lazytester-play-header .lazytester-games-count{font-size:12px;color:var(--lazytester-muted);white-space:nowrap}
 .lazytester-connection{
   margin-left:auto;
   font-size:12px;

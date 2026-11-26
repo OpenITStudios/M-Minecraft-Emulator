@@ -27,7 +27,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(rail).not.toContain(' ✓');
     expect(css).toContain('.lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-routine{color:var(--lazytester-muted)}');
     expect(rail).toContain("<strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}");
-    expect(rail).toContain("'Selected in Play'");
+    expect(rail).toContain("'Selected'");
     expect(css).toContain('.lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-attention{color:var(--lazytester-warning)}');
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');

@@ -468,7 +468,7 @@ try {
   assert.equal(await page.locator('.lazytester-launcher-card.selected').count(),1,
     'Only the chosen launcher gets a selection highlight');
   assert.equal((await page.locator('[data-slot="4"] .lazytester-launcher-card small').textContent())?.trim(),
-    'Selected in Play','The selected state must not claim verified gameplay');
+    'Selected','The selected state must not claim verified gameplay');
   assert.equal(await page.locator('[data-slot="4"] .lazytester-launcher-card small').isVisible(),true,
     'Selected launcher status remains visible alongside the selection highlight');
   assert.equal(await page.locator('.lazytester-topbar .lazytester-connection').count(),0,
@@ -500,7 +500,7 @@ try {
   // Automatic inspection may resolve the fault before the manual control is clicked.
   await heading('Ready when you are').waitFor();
   await page.getByRole('button',{name:'Refresh',exact:true}).waitFor({state:'detached'});
-  assert.equal(await page.locator('.lazytester-page-header h1').textContent(),'Choose a Minecraft below',
+  assert.equal(await page.locator('.lazytester-page-header h1').textContent(),'Workspace',
     'A successful fresh Inspect restores normal Play guidance');
   // Keyboard Refresh must not lose focus when the original controller
   // request makes its own button disabled. These are synthetic DOM checks,
@@ -555,7 +555,7 @@ try {
     'Launch is an action, not a selected-state toggle');
   assert.equal(await page.getByRole('button',{name:'Exit LazyTester and all managed Minecraft sessions',exact:true}).count(),1,
     'Assistive control must state that closing the manager also closes managed games');
-  assert.equal(await nav('Play').getAttribute('aria-current'),'page');
+  assert.equal(await nav('Settings').count(),1);
   // Unchanged background checks must not flash controls, lock cards or move native surfaces.
   await page.waitForTimeout(200);
   await page.evaluate(()=>{
@@ -648,7 +648,7 @@ try {
   assert.match(await advanced.getAttribute('open')??'',/^$/);
   for(const size of [{width:920,height:620},{width:1280,height:900},{width:1366,height:728},{width:1920,height:1080},{width:2560,height:1378},{width:3440,height:1440},{width:1000,height:1200}]){
     await page.setViewportSize(size);
-    await nav('Play').click();await heading('Ready when you are').waitFor();
+    await nav('Back').click();await heading('Ready when you are').waitFor();
     assert.equal(await page.locator('.lazytester-launcher-card').count(),5);
     assert.equal(await page.evaluate(()=>document.querySelector('.lazytester-filmstrip').getBoundingClientRect().bottom>innerHeight),false);
     const geometry=await page.evaluate(()=>{
@@ -715,7 +715,7 @@ try {
     'No redundant Gameplay Focus/Monitoring selector belongs in Settings');
   assert.equal(await page.locator('#graphics-preset').count(),0,
     'Individual graphics preferences are retired');
-  await nav('Play').click();
+  await nav('Back').click();
   assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-preview').count(),5);
   const adaptivePreviews=await page.locator('.lazytester-launcher-preview').evaluateAll(nodes=>
     nodes.map(node=>({width:node.getBoundingClientRect().width,
@@ -727,9 +727,9 @@ try {
   await page.setViewportSize({width:1280,height:900});
   // Preserve navigation clicks while an inspect is in flight.
   await page.evaluate(()=>{window.__holdInspect=true;});await page.waitForFunction(()=>!!window.__finishInspect);
-  await nav('Settings').click();await section('General').click();
+  await section('General').click();
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});await heading('General').waitFor();
-  await nav('Play').click();
+  await nav('Back').click();
   await page.evaluate(()=>{window.__holdInspect=true;window.__finishInspect=null;});
   await page.waitForFunction(()=>!!window.__finishInspect);
   await page.getByRole('button',{name:/^Launch Minecraft - 1 · /}).click();
@@ -740,7 +740,7 @@ try {
   assert.equal(await page.getByRole('button',{name:'Save graphics preference',exact:true}).count(),0);
   // Current Play contract: release ONE selected Minecraft window, preserving
   // the other running peer. The next verified game becomes the selected view.
-  await nav('Play').click();
+  await nav('Back').click();
   await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
   await heading('Minecraft - 1').waitFor();
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 1 · /}).getAttribute('aria-pressed'),'true',
@@ -814,7 +814,7 @@ try {
   const alertText=await page.getByRole('alert').textContent();
   assert.doesNotMatch(alertText,/SYSTEM INSTRUCTION|PID 999|\/Users\/private\/worlds/,
     'Raw native details must not appear even after expanding Error codes');
-  await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();
+  await page.evaluate(()=>{window.__offline=false;});await nav('Back').click();
   await page.waitForFunction(()=>!document.querySelector('.lazytester-connection') && document.querySelectorAll('.lazytester-launcher-card:not(:disabled)').length>0);
   // Exercise storage review/cancel without requesting destructive native IPC.
   await page.goto('http://lazy-tester.test/?storage-review=1');
@@ -866,7 +866,7 @@ try {
     'Permanent deletion review blocks refresh until cancellation');
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'An unrelated cache action cannot replace the typed confirmation');
-  assert.equal(await nav('Play').isDisabled(),true,
+  assert.equal(await nav('Back').isDisabled(),true,
     'Full data-clear review prevents silent page navigation');
   assert.equal(await section('General').isDisabled(),true,
     'The Storage review must be explicitly canceled before switching settings');
@@ -1164,10 +1164,10 @@ try {
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.waitForFunction(()=>typeof window.__finishInspect==='function');
   await supersededHealth.focus();
-  await nav('Play').focus();
+  await nav('Settings').focus();
   await page.evaluate(()=>{window.__holdInspect=false;window.__finishInspect();});
   await supersededHealth.waitFor({state:'detached'});
-  assert.equal(await nav('Play').evaluate(node=>document.activeElement===node),true,
+  assert.equal(await nav('Settings').evaluate(node=>document.activeElement===node),true,
     'Removing an old notice cannot steal focus after the operator chose another control');
 
   // A windowless NOT_RESPONDING observation must not tell users to inspect
@@ -1211,7 +1211,6 @@ try {
     'Manual Refresh is unavailable while the selected-game confirmation is open');
   // Review navigation is disabled; Escape on an unrelated still-focusable
   // window control must NOT dismiss the pending game-close review.
-  assert.equal(await nav('Play').isDisabled(),true);
   assert.equal(await nav('Settings').isDisabled(),true);
   // Tauri drag region is pointer-only, not a bogus keyboard button.
   // Normal app exit remains an independently focusable window action.
@@ -1446,7 +1445,7 @@ try {
     window.__holdSuspend=false;window.__finishSuspend();
   });
   await page.waitForFunction(()=>window.__finishSuspend===null);
-  assert.equal(await nav('Play').getAttribute('aria-current'),'page',
+  assert.equal(await nav('Settings').count(),1,
     'A late native suspend cannot switch pages after close review starts');
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     call.args?.request?.operation==='InspectSettings')),false,

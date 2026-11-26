@@ -131,7 +131,7 @@
   $: navigationReviewOpen = closeReviewPending || clearingData ||
     clearSlot !== null || recovery !== null || fullReview !== null;
   const images = new Map<ProfileSlot, HTMLElement>();
-  const labels = {STOPPED: 'Not running', STARTING: 'Starting', RUNNING: 'Running', NOT_RESPONDING: 'Not responding', ATTENTION: 'Needs attention'};
+  const labels = {STOPPED: 'Stopped', STARTING: 'Starting…', RUNNING: 'Running', NOT_RESPONDING: 'Not Responding', ATTENTION: 'Needs Attention'};
   const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
   const layoutIdentity=(items:ProfileSession[])=>items.map(p=>p.slot+':'+p.state+':'+identity(p)+':'+(p.process?.responding??false)).join('|');
   $: primary = active ?? requested ?? profiles.find(profile => profile.state === 'RUNNING')?.slot ?? 1;
@@ -983,8 +983,16 @@
 <div class="lazytester-app">
   <WindowTitlebar backendSupport={nativeBackend} />
   <header class="lazytester-topbar">
-    <a class="lazytester-brand" href="#play" aria-label="LazyTester — Play" aria-disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} on:click|preventDefault={() => navigate('workspace')}><span class="lazytester-brand-mark" aria-hidden="true"></span><span class="lazytester-brand-name">LazyTester</span></a>
-    <nav aria-label="Main navigation"><button disabled={navigationReviewOpen} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page==='workspace'} aria-current={page==='workspace'?'page':undefined} on:click={()=>navigate('workspace')}>Play</button><button disabled={navigationReviewOpen||nativeBackend!=='WindowsNative'} title={navigationReviewOpen?'Finish or cancel the current review before navigating.':undefined} class:chosen={page!=='workspace'} aria-current={page!=='workspace'?'page':undefined} on:click={()=>navigate('settings')}>Settings</button></nav>
+    {#if page==='workspace'}
+      <div class="lazytester-brand" aria-label="LazyTester"><span class="lazytester-brand-mark" aria-hidden="true"></span><span class="lazytester-brand-name">LazyTester</span></div>
+    {/if}
+    <nav aria-label="Main navigation">
+      {#if page==='workspace'}
+        <button class="lazytester-secondary lazytester-settings-button" disabled={navigationReviewOpen||nativeBackend!=='WindowsNative'} on:click={()=>navigate('settings')}>Settings</button>
+      {:else}
+        <button class="lazytester-secondary" disabled={navigationReviewOpen} on:click={()=>navigate('workspace')}>Back</button><span class="lazytester-settings-title">Settings</span>
+      {/if}
+    </nav>
     {#if page==='workspace'&&available&&activityView}
       <AgentActivityNotice view={activityView}/>
     {/if}
@@ -993,11 +1001,12 @@
     {/if}
   </header>
   <div class="lazytester-layout" class:lazytester-settings-layout={page!=='workspace'} inert={closeInProgress}>
-    {#if page!=='workspace'}<aside class="lazytester-sidebar"><h2>Settings</h2><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
+    {#if page!=='workspace'}<aside class="lazytester-sidebar"><nav aria-label="Settings navigation"><button disabled={navigationReviewOpen} class:chosen={page==='settings'} aria-current={page==='settings'?'page':undefined} on:click={()=>navigate('settings')}>General</button><button disabled={navigationReviewOpen} class:chosen={page==='storage'} aria-current={page==='storage'?'page':undefined} on:click={()=>navigate('storage')}>Data Storage</button></nav></aside>{/if}
     <main class={page==='workspace'?'lazytester-play-main':undefined}>
       <header class="lazytester-page-header" class:lazytester-play-header={page==='workspace'}>
-        <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Choose a Minecraft below'):active?'Minecraft - '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Choose a Minecraft below'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Select a Minecraft below.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
+        <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Workspace'):active?'Minecraft '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Workspace'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Select a Minecraft below.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lazytester-header-actions">
+          {#if page==='workspace' && nativeBackend==='WindowsNative'}<span class="lazytester-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>{/if}
           {#if showHeaderRefresh}
           <button class="lazytester-secondary" bind:this={headerRefreshButton}
             disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
@@ -1091,8 +1100,6 @@
           <div class="lazytester-workspace-preview-feedback" role="status" tabindex="0">
             <strong>Preview unavailable</strong><span>{previewIssue}</span>
           </div>
-        {:else}
-          <span>Your games</span><span class="lazytester-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>
         {/if}
         </div>
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}

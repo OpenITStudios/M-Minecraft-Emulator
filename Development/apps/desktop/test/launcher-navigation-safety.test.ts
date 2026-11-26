@@ -34,7 +34,7 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     expect(app).toContain('clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;');
     expect(app).toContain('closeReviewActive(reviewState()) ||');
     expect(app).toContain('clearSlot !== null || recovery !== null || fullReview !== null) return;');
-    expect(app).toContain('aria-disabled={navigationReviewOpen}');
+    expect(app).toContain('disabled={navigationReviewOpen} on:click={()=>navigate(\'workspace\')}>Back</button>');
     expect(app).toContain('disabled={navigationReviewOpen||nativeBackend!==\'WindowsNative\'}');
     expect(app).toContain('disabled={navigationReviewOpen} class:chosen={page===\'storage\'}');
     expect(app).toContain('Save your work first. Only this game closes; other games keep running.');

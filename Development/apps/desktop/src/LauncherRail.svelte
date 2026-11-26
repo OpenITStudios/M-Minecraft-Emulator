@@ -59,12 +59,12 @@
       profile, observedSlot && available && bindingConfigured && !unresolvedRecovery.has(profile.slot)
     )}
     {@const statusLabel = !observedSlot || !available || !bindingConfigured
-      ? 'Status unavailable'
+      ? 'Unavailable'
       : launchFailures.get(profile.slot)==='unverified' && profile.state!=='RUNNING' ? 'Launch not confirmed'
       : active === profile.slot && !detached && profile.state === 'RUNNING'
-        ? 'Selected in Play'
+        ? 'Selected'
           : profile.state === 'RUNNING'
-            ? 'Running in background'
+            ? 'Running'
             : labels[profile.state]}
     <div class="lazytester-launcher-entry" data-slot={profile.slot}
       role="group" tabindex="-1" aria-label={'Minecraft - '+profile.slot+' launcher controls'}

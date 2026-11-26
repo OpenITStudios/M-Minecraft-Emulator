@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Homepage source checkpoint: brand and Settings on workspace; Back and Settings title on settings pages. Removed duplicate sidebar heading and routine Your games heading; running summary moved to workspace header. Compact launcher state labels; fixed review strip and native preview geometry retained. Activity expiry restores keyboard focus to Settings instead of retired Play tab. Capture remains held. Adaptive layout/card header geometry and remaining consumer review pending; tests NOT_EXECUTED.
+
 Approved redesign implementation: General Frame Rate and Audio now use shared compact panel/row/footer styling; Active FPS / Background FPS, Save Changes, and native-confirmed audio switch. Graphics removed from UI only. FPS timing and validation retained; no new dependencies or native IPC. Layout choice, homepage/card redesign, storage safety and selected-only measured FPS remain pending. Screenshot/video, capture keybinds and media management explicitly deferred to the operator's special task. Tests NOT_EXECUTED. No release.
 
 Settings readability: grouped cache cleanup and folder access under Maintenance using the existing section/row styles; compact disclosure spacing and clarified FPS/audio guidance. Kept original native action admission, focus anchors and review controls. Removed redundant settings-only secondary hover override in favor of the shared hover owner. Source review only; tests NOT_EXECUTED.

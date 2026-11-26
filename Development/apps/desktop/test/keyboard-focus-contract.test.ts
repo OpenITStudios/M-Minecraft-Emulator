@@ -27,9 +27,9 @@ describe('Lazy Tester scoped keyboard and transient report focus — source cont
     expect(notice).toContain("!document.hasFocus() || !(focused instanceof Node)");
     expect(notice).toContain('on:blur={closeOnWindowBlur}');
     expect(notice).toContain('detailsElement?.contains(focused)');
-    expect(notice).toContain("'.lazytester-topbar nav button[aria-current=\"page\"]'");
-    expect(notice).toContain('playNav?.isConnected && !playNav.disabled');
-    expect(notice).toContain('playNav.focus({preventScroll: true})');
+    expect(notice).toContain("'.lazytester-settings-button'");
+    expect(notice).toContain('settingsButton?.isConnected && !settingsButton.disabled');
+    expect(notice).toContain('settingsButton.focus({preventScroll: true})');
     expect(app).toContain('{#if page===\'workspace\'&&available&&activityView}');
     for(const forbidden of ['setInterval(', 'invokeRuntime(', 'navigator.clipboard']) {
       expect(notice).not.toContain(forbidden);

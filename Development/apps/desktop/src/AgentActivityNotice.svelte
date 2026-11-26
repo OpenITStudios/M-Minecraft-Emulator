@@ -39,10 +39,10 @@
     const focused = document.activeElement;
     if (!document.hasFocus() || !(focused instanceof Node) ||
         !detailsElement?.contains(focused)) return;
-    const playNav = document.querySelector<HTMLButtonElement>(
-      '.lazytester-topbar nav button[aria-current="page"]');
-    if (playNav?.isConnected && !playNav.disabled)
-      playNav.focus({preventScroll: true});
+    const settingsButton = document.querySelector<HTMLButtonElement>(
+      '.lazytester-settings-button');
+    if (settingsButton?.isConnected && !settingsButton.disabled)
+      settingsButton.focus({preventScroll: true});
   });
 </script>
 <svelte:window on:keydown={closeOnEscape} on:blur={closeOnWindowBlur} />
