@@ -458,13 +458,6 @@ pub(super) fn apply_inactive(stores: &[SlotStorage]) -> io::Result<usize> {
     Ok(changed)
 }
 
-pub(super) fn apply_selected(store: &SlotStorage, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<usize> {
-    if preset == crate::engine::manager_settings::GraphicsPreset::Preserve {
-        return Ok(0); // Only save the preference; never rewrite Minecraft graphics options.
-    }
-    Ok(usize::from(Prepared::read_preset(&store.private, preset)?.commit()?))
-}
-
 #[cfg(test)]
 fn apply_directories<'a>(directories: impl Iterator<Item = &'a File>) -> io::Result<usize> {
     let prepared: Vec<_> = directories

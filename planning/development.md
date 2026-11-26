@@ -27,6 +27,8 @@ Settings reports now resolve and validate the settings directory once per report
 
 Global settings simplification (SIM-01/02): the reviewed Low graphics preset is applied for every managed launch; the legacy graphics.json file is preserved, no longer read by launch/report policy. The compatibility report projects five identical Low values. Desktop individual graphics mutation is refused and the UI selector, per-slot drafts and preset queue lane are retired. FPS/audio, account/world and recovery remain independent of this change. Shared legacy native request variants and bridge parser retained pending complete compatibility consumer review; MCP implementation untouched, shared launch policy intentionally changes. Source fixtures updated, NOT_EXECUTED. Next: review remaining legacy command consumers and storage settings recovery UI.
 
+Global settings retirement: removed the individual graphics storage reader/writer, selected-profile preset mutation and unused desktop bridge method. Retained legacy request decoding with explicit controller refusal and five-value response compatibility; no legacy preference file is read, modified or deleted by this policy. Tests for obsolete writers retired, report fixture covers intact mixed and malformed legacy bytes. MCP implementation and schema unchanged; native legacy individual mutation is refused. Source review only; tests NOT_EXECUTED. Next: remaining Data Storage controls and unused compatibility consumers.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

@@ -363,10 +363,6 @@ export const lazyTester = {
   },
   reportStartup:(report:{connection:string;issue:string;cards:number;enabled:number})=>invokeRuntime<void>('startup_diagnostic_result',report),
   backendSupport:async()=>parseNativeBackendSupport(await invokeRuntime<unknown>('lazy_tester_backend_support')),
-  applyGraphics:async(slot:ProfileSlot,preset:GraphicsPreset)=>{
-    if(!profileSlots.includes(slot)||!['Preserve','High','Low'].includes(preset))throw new TypeError('Invalid graphics preset');
-    return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ApplyGraphicsPreset',slot,preset}}));
-  },
   settings:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'}})),
   savePerformance:async(activeFps:number,backgroundFps:number)=>{
     if(!validFpsLimits(activeFps,backgroundFps))throw new TypeError('Use whole FPS limits from 5 to 1000. Background FPS must not exceed active FPS.');

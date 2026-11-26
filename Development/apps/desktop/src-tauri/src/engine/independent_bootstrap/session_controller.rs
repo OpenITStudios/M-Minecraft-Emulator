@@ -924,17 +924,7 @@ impl Sessions {
         Ok(report)
     }
 
-    fn apply_graphics_preset(&mut self, slot: u32, preset: crate::engine::manager_settings::GraphicsPreset) -> io::Result<SettingsReport> {
-        let report = self.fresh_settings_report()?;
-        require_preset_idle(report.can_apply_preset)?;
-        let mut values = crate::engine::manager_settings::load_graphics()?;
-        let changed = game_preset::apply_selected(self.store(slot)?, preset)?;
-        values[slot as usize - 1] = preset;
-        crate::engine::manager_settings::save_graphics(values)?;
-        let mut report = self.fresh_settings_report()?;
-        report.changed_profiles = Some(changed as u32);
-        Ok(report)
-    }
+
 }
 
 fn require_data_idle(selected_idle: bool, owned: &[(u32,u64)], observed: &[OwnedProcess]) -> io::Result<()> {
@@ -1576,8 +1566,8 @@ fn run() -> io::Result<()> {
                 SessionRequest::ApplyPreset => {
                     settings = Some(sessions.apply_preset().map_err(|error| error.to_string())?);
                 }
-                SessionRequest::ApplyGraphicsPreset { slot, preset } => {
-                    settings = Some(sessions.apply_graphics_preset(slot, preset).map_err(|error| error.to_string())?);
+                SessionRequest::ApplyGraphicsPreset { .. } => {
+                    return Err("Individual graphics preferences are retired; all launchers use the optimized preset.".into());
                 }
                 SessionRequest::SavePerformance {active_fps,background_fps} => {
                     crate::engine::manager_settings::save_performance(crate::engine::manager_settings::PerformanceSettings {active_fps,background_fps})

@@ -343,7 +343,9 @@ export function verifyRepository(root,g0=false) {
     && gameSessions.includes('inspect_native_workspace_for_pinned_settings(&sessions.path)')
     && /SessionRequest::InspectSettings\s*=>\s*\{[\s\S]*?settings_observation\(\)/.test(gameSessions)
     && /SessionRequest::ApplyPreset\s*=>\s*\{[\s\S]*?sessions\.apply_preset\(\)/.test(gameSessions)
-    && /SessionRequest::ApplyGraphicsPreset\s*\{[^}]*\}\s*=>\s*\{[\s\S]*?sessions\.apply_graphics_preset\(slot, preset\)/.test(gameSessions)
+    && /SessionRequest::ApplyGraphicsPreset\s*\{\s*\.\.\s*\}\s*=>\s*\{\s*return Err\("Individual graphics preferences are retired/.test(gameSessions)
+    && !gameSessions.includes('fn apply_graphics_preset(')
+    && !gamePreset.includes('fn apply_selected(')
     && gameSessions.includes('super::super::inspect_native_workspace()?.processes.is_empty()'),
     'Read-only Settings may reuse pinned image but all mutation admission must still perform fresh registration checks');
   // Inspect the live shared 0/1 parser, not the retired one-off parser:
