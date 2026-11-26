@@ -63,7 +63,8 @@ describe('Minimal Professional color and control state source contracts',()=>{
     expect(css).toContain('background:var(--lt-danger-surface)');
     expect(css).toContain('color:var(--lt-on-danger)');
     expect(css).toContain('accent-color:var(--lt-accent)');
-    expect(css).toContain('box-shadow:0 12px 28px var(--lt-popup-shadow)');
+    expect(css).toContain('box-shadow:0 6px 24px var(--lt-overlay-shadow)');
+    expect(css).toContain('box-shadow:0 6px 16px var(--lt-overlay-shadow)');
   });
   it('retains visible focus and explicit disabled/hover controls without resizing Play DWM',()=>{
     expect(css).toContain('opacity:.68}');

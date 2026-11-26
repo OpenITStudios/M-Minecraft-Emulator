@@ -56,8 +56,9 @@ frontend test files; active stopped-state and cadence coverage retained.
 CSS audit found every lt-prefixed class textually referenced in mounted
 components. Consolidated the unconditionally overridden filmstrip width and
 gap into its original rule, preserving media queries. A retired popup-shadow
-assertion remains a separate source-contract cleanup candidate; visual runtime
-acceptance remains held. Next: review stale visual contracts and remaining CSS.
+assertion was confirmed stale and replaced by the two active overlay-shadow
+contracts; the unused token is removed. Visual runtime acceptance remains held.
+Next: review remaining CSS overrides and resource-efficiency opportunities.
 
 ## Continue development outside Codex
 

@@ -42,7 +42,6 @@
           --lt-control-hover:#303a48;
           --lt-accent-hover:#d0d7ff;
           --lt-overlay-shadow:#0006;
-          --lt-popup-shadow:#0009;
           display:flex;
           flex-direction:column;
           height:100vh;
