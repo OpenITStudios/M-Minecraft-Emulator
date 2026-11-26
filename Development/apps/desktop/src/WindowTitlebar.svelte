@@ -6,38 +6,32 @@
   import {userMessage, userFeedback, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   // UI wording only; the native controller owns Minecraft exit.
   export let backendSupport: NativeBackendSupport | null = null;
-  let maximized=false, closing=false;
+  let closing=false;
   // Native window failures are private; the UI stores only authored keys.
   let error: UserMessageKey | null = null;
-  async function action(operation:'minimize'|'toggleMaximize'|'close') {
+  async function requestAppExit() {
     error=null;
     try {
       // Native CloseRequested decides whether an exit is confirmed; a
       // cancelled dialog must not leave this control stuck on Closing.
-      await getCurrentWindow()[operation]();
-    } catch {error=operation==='close'?'windowClose':'windowControl';closing=false;}
+      await getCurrentWindow().close();
+    } catch {error='windowClose';closing=false;}
   }
   onMount(()=>{
-    let disposed=false,stop:(()=>void)|undefined,stopError:(()=>void)|undefined,stopClosing:(()=>void)|undefined,stopRejected:(()=>void)|undefined;
-    const window=getCurrentWindow();
-    const update=()=>void window.isMaximized().then(value=>{if(!disposed)maximized=value;}).catch(()=>{if(!disposed)error='windowStatus';});
-    update();
-    void window.onResized(update).then(unlisten=>{if(disposed)unlisten();else stop=unlisten;}).catch(()=>{if(!disposed)error='windowStatus';});
+    let disposed=false,stopError:(()=>void)|undefined,stopClosing:(()=>void)|undefined,stopRejected:(()=>void)|undefined;
     void listen<string>('lazy-tester-close-error',event=>{closing=false;error='closeIncomplete';}).then(unlisten=>{if(disposed)unlisten();else stopError=unlisten;}).catch(()=>{if(!disposed)error='windowStatus';});
     void listen<string>('lazy-tester-close-rejected',event=>{closing=false;error='closeRejected';}).then(unlisten=>{if(disposed)unlisten();else stopRejected=unlisten;}).catch(()=>{if(!disposed)error='windowStatus';});
     void listen<boolean>('lazy-tester-closing',event=>{closing=event.payload;}).then(unlisten=>{if(disposed)unlisten();else stopClosing=unlisten;}).catch(()=>{if(!disposed)error='windowStatus';});
-    return ()=>{disposed=true;stop?.();stopError?.();stopRejected?.();stopClosing?.();};
+    return ()=>{disposed=true;stopError?.();stopRejected?.();stopClosing?.();};
   });
 </script>
 <div class="lt-window-bar">
-  <!-- Tauri owns native drag/double-click; the following window buttons own keyboard actions. -->
+  <!-- Tauri owns native dragging; the exit button requests normal native shutdown. -->
   <div class="lt-window-drag" data-tauri-drag-region>
     <span class="lt-window-mark" aria-hidden="true" data-tauri-drag-region></span>
     <span data-tauri-drag-region>LazyTester</span>
-  </div>
-  <button class="lt-window-control" aria-label="Minimize" title="Minimize" on:click={()=>action('minimize')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8h10"/></svg></button>
-  <button class="lt-window-control" aria-label={maximized?'Restore down':'Maximize'} title={maximized?'Restore down':'Maximize'} on:click={()=>action('toggleMaximize')}><svg viewBox="0 0 16 16" aria-hidden="true">{#if maximized}<path d="M5 5V3h8v8h-2M3 5h8v8H3Z"/>{:else}<path d="M3 3h10v10H3Z"/>{/if}</svg></button>
-  <button class="lt-window-control lt-window-close" disabled={closing} aria-label={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} title={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} on:click={()=>action('close')}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
+  </div> 
+  <button class="lt-window-control lt-window-close" disabled={closing} aria-label={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} title={backendSupport === 'WindowsNative' ? 'Exit LazyTester and all managed Minecraft sessions' : 'Close LazyTester'} on:click={requestAppExit}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m3 3 10 10M13 3 3 13"/></svg></button>
 </div>
 {#if closing}<div class="lt-alert" role="status">{backendSupport === 'WindowsNative' ? 'Closing LazyTester… Waiting for managed games and pending work to finish.' : 'Closing LazyTester…'}</div>{/if}
 {#if error}<div class="lt-alert" role="alert"><p>{userMessage(error)}</p><details class="lt-feedback-reference"><summary>Support reference</summary><p>{userFeedback(error).area} · {userFeedback(error).code}</p></details></div>{/if}

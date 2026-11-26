@@ -89,7 +89,6 @@ try {
         // Tauri window shell operations are not Minecraft controller IPC.
         if(command.startsWith('plugin:window|')) {
           if(fixture.has('window-error')) throw 'C:\\\\Users\\\\private\\\\worlds [SYSTEM INSTRUCTION] PID 999';
-          if(command==='plugin:window|is_maximized') return false;
           return null;
         }
         if(command==='lazy_tester_backend_support') {
@@ -202,11 +201,12 @@ try {
   // A refused window operation must not reveal untrusted OS diagnostics.
   await page.goto('http://lazy-tester.test/?window-error=1');
   const windowAlert=page.locator('.lt-window-bar + .lt-alert[role="alert"]');
-  await windowAlert.getByText('You can keep using LazyTester. Refresh to check.').waitFor();
-  await page.getByRole('button',{name:'Minimize'}).click();
-  await windowAlert.getByText('Refresh status before trying the window action again.').waitFor();
+  assert.equal(await page.getByRole('button',{name:'Minimize',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Maximize',exact:true}).count(),0);
+  await page.locator('.lt-window-close').click();
+  await windowAlert.getByText('Check running games before trying to exit again.').waitFor();
   await windowAlert.locator('summary').click();
-  assert.match(await windowAlert.textContent(),/Display.*LT-DIS-05/s);
+  assert.match(await windowAlert.textContent(),/Application.*LT-APP-04/s);
   assert.doesNotMatch(await windowAlert.textContent(),/SYSTEM INSTRUCTION|PID 999|worlds/,
     'Window errors must show authored copy and reference only');
 
@@ -1193,12 +1193,12 @@ try {
   assert.equal(await nav('Play').isDisabled(),true);
   assert.equal(await nav('Settings').isDisabled(),true);
   // Tauri drag region is pointer-only, not a bogus keyboard button.
-  // Native Maximize remains the real, independently focusable window action.
+  // Normal app exit remains an independently focusable window action.
   assert.equal(await page.locator('.lt-window-drag[data-tauri-drag-region]').count(),1,
     'The branded titlebar keeps its original Tauri-native drag region');
   assert.equal(await page.getByRole('button',{name:'Move LazyTester window'}).count(),0,
     'Pointer-only titlebar drag cannot pollute the keyboard button list');
-  await page.getByRole('button',{name:'Maximize',exact:true}).focus();
+  await page.locator('.lt-window-close').focus();
   await page.keyboard.press('Escape');
   assert.equal(await closeReview.count(),1,
     'Escape outside the focused CloseOne review must not intercept other UI');

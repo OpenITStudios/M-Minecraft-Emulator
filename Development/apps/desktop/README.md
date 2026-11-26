@@ -14,6 +14,7 @@ Sandboxie/VMware provider route is retired.
 | General Settings forms and read-only product details | `src/GeneralSettings.svelte` |
 | Data Storage, inventory and confirmation presentation only | `src/DataStorage.svelte` |
 | Pure pending-action eligibility and inspection scheduling | `src/app/inspectionScheduling.ts` |
+| App titlebar drag and normal exit request (no custom minimize/maximize buttons) | `src/WindowTitlebar.svelte` |
 | Fixed five-launcher rail, visual actions only | `src/LauncherRail.svelte` |
 | Health and recovery guidance | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
 | Authored diagnostic categories, stable support codes and user error messages | `src/app/presentation/sessionFeedback.ts` |

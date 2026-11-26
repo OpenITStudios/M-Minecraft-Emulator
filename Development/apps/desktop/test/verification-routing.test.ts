@@ -170,7 +170,14 @@ describe("Emulator source verification routing", () => {
     const cards=readFileSync(new URL("../src/LauncherRail.svelte",import.meta.url),"utf8");
     const hints=readFileSync(new URL("../src/app/presentation/sessionHealth.ts",import.meta.url),"utf8");
     expect(bar).toContain("let error: UserMessageKey | null = null");
-    expect(bar).toContain("error=operation==='close'?'windowClose':'windowControl'");
+    expect(bar).toContain("error='windowClose'");
+    expect(bar).toContain("await getCurrentWindow().close()");
+    expect(bar).not.toMatch(/isMaximized|onResized|action\('minimize'\)|action\('toggleMaximize'\)/);
+    const config=JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json",import.meta.url),"utf8"));
+    const permissions=config.app.security.capabilities[0].permissions;
+    expect(permissions).not.toContain("core:window:allow-minimize");
+    expect(permissions).not.toContain("core:window:allow-is-maximized");
+    expect(permissions).toContain("core:window:allow-close");
     expect(bar).toContain("userMessage(error)");
     expect(bar).toContain("userFeedback(error).code");
     expect(bar).not.toContain("String(reason)");
