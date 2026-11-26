@@ -805,7 +805,7 @@ impl Sessions {
                     game_settings: Some(game_preset::inspect_settings(&store.private, replay_admission())),
                     full_clear: Some(product_profiles::clear::inspect(store, replay_admission())),
                 };
-                scan(&path, &mut result, budget, 0);
+                profile_storage::scan_profile_size(&path, &mut result, budget);
                 Ok(result)
             })
             .collect()
@@ -949,50 +949,6 @@ fn require_data_idle(selected_idle: bool, owned: &[(u32,u64)], observed: &[Owned
 fn require_preset_idle(idle: bool) -> io::Result<()> {
     if !idle { return Err(invalid("Close all Minecraft sessions normally before applying the graphics preset")); }
     Ok(())
-}
-
-// Metadata only, bounded, and no traversal through junctions/symlinks. Not a cache classifier.
-fn scan(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget, depth: usize) {
-    if depth > 48 || result.files >= 100_000 || budget.exhausted() {
-        result.partial = true;
-        return;
-    }
-    let Ok(_pin) = open_directory(path, FILE_READ_ATTRIBUTES) else {
-        result.partial = true;
-        return;
-    };
-    let Ok(entries) = std::fs::read_dir(path) else {
-        result.partial = true;
-        return;
-    };
-    for entry in entries {
-        if result.files >= 100_000 || budget.exhausted() {
-            result.partial = true;
-            break;
-        }
-        let Ok(entry) = entry else {
-            result.partial = true;
-            continue;
-        };
-        let Ok(metadata) = std::fs::symlink_metadata(entry.path()) else {
-            result.partial = true;
-            continue;
-        };
-        use std::os::windows::fs::MetadataExt;
-        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
-            result.partial = true;
-            continue;
-        }
-        if metadata.is_dir() {
-            scan(&entry.path(), result, budget, depth + 1);
-        } else if metadata.is_file() {
-            result.bytes = result.bytes.saturating_add(metadata.len());
-            result.files += 1;
-        }
-    }
-    // The last file observation may cross the budget without another loop
-    // iteration. Such a five-profile size estimate remains incomplete.
-    if budget.exhausted() { result.partial = true; }
 }
 
 fn normal_close_mask(slot:Option<u32>)->io::Result<[bool;5]> {
@@ -2306,44 +2262,5 @@ mod tests {
         assert!(sessions.snapshot().profiles.iter().all(|profile|profile.state=="ATTENTION"));
     }
 
-    #[test]
-    fn metadata_scan_counts_files_and_reports_bounds_without_opening_contents() {
-        let directory = std::env::temp_dir().join(format!(
-            "lazy-tester-storage-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        std::fs::create_dir(&directory).unwrap();
-        std::fs::create_dir(directory.join("nested")).unwrap();
-        std::fs::write(directory.join("a.bin"), [0u8; 17]).unwrap();
-        std::fs::write(directory.join("nested/b.bin"), [0u8; 23]).unwrap();
-        let mut result = ProfileStorage {
-            slot: 5,
-            bytes: 0,
-            files: 0,
-            partial: false,
-            disk: None,
-            cache: Default::default(),
-            game_settings: None,
-            full_clear: None,
-            resource_packs: None,
-        };
-        scan(&directory, &mut result, InspectionBudget::new(Duration::from_secs(2)), 0);
-        assert_eq!((result.bytes, result.files, result.partial), (40, 2, false));
-        scan(&directory, &mut result, InspectionBudget::new(Duration::from_secs(2)), 49);
-        assert_eq!((result.bytes, result.files, result.partial), (40, 2, true));
-        // Expired shared admission never pretends a zero-byte snapshot is complete.
-        let mut expired = result.clone();
-        expired.bytes = 0;
-        expired.files = 0;
-        expired.partial = false;
-        scan(&directory, &mut expired, InspectionBudget::new(Duration::ZERO), 0);
-        assert_eq!((expired.bytes, expired.files, expired.partial), (0, 0, true));
-        // Only the unique, create-new disposable fixture directory created above.
-        assert_eq!(directory.parent(), Some(std::env::temp_dir().as_path()));
-        std::fs::remove_dir_all(directory).unwrap();
-    }
+
 }

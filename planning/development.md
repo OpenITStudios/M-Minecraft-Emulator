@@ -13,6 +13,8 @@ DWM preview admission now constructs the fallback tile report only on the no-sou
 
 Desktop CloseOne now moves the owned successful SessionSnapshot directly into SelectedCloseReport instead of cloning it. Error mapping and mutual exclusion of snapshot/issue remain identical. No request count, wire schema, native lifecycle, recovery or MCP change. Existing selected-close receipt fixtures remain NOT_EXECUTED. Shared IPC admission and fresh native inspections are retained because their safety and consumer contracts are not redundant.
 
+Profile size traversal and its existing regression fixture now live in `independent_bootstrap/profile_storage.rs`, alongside disk/cache observation. The session controller retains admission, shared two-second budget and report assembly; the storage module owns recursive metadata traversal and depth. No changed traversal limits, data operations, IPC or MCP contracts. Test relocated unchanged except owner/function naming, NOT_EXECUTED.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track
