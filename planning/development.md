@@ -1,39 +1,45 @@
 # Current Development Handoff — Lazy Tester
 
+## Continue development outside Codex
+
+In any editor, open this checkout or clone:
+`git clone --branch Local --single-branch https://github.com/OpenITStudios/M-Minecraft-Emulator.git`.
+The PC and GitHub matched at `2ed588589bd5`.
+Start with the [implementation map](../docs/system/implementation-map.md)
+and [Windows setup guide](../docs/validation/local-pc-first-run.md).
+Use `DEV.cmd`. Source tests remain held and CI disabled.
+
+For approved native development, point `LAZY_TESTER_NATIVE_PAYLOAD_DIR` at
+the absolute path of the reviewed DLL pair. The PC's `App/independent-bootstrap/`
+pair matched the source-pinned hashes. On another PC, obtain the pair from
+an authorized artifact source and install official Minecraft Education.
+Keep `Data/` and `workspace/private/` backups on the PC.
+See the [data layout](../docs/system/data-layout.md).
+
 ## Launch repair incident — 17 November 2026
 
-Delivered local build: a15dd9f5811dcc6a937890b3e90cc0673e99214d. Installed
-App payload hashes and the root launcher hash all match their build receipt.
-The ordinary root launcher now opens the real compiled UI with Profile data
-verified, five cards, five enabled controls and no binding issue. After two
-managed Education 1.26.33 sessions reported responsive RUNNING windows, the
-manager's actual normal CloseRequested path closed itself, both games and
-the retained controller without force termination. A subsequent root start
-again reported five enabled controls. The delivered manager is left open.
-Read-only canonical setup verification reports configured=true, issue=null.
+Local build `a15dd9f5811dcc6a937890b3e90cc0673e99214d` matched its App/root
+receipt. Root startup showed verified data and five enabled controls.
+The manager's normal close stopped itself, both responsive managed Education
+1.26.33 sessions and the controller without force. A repeat start showed five
+enabled controls and was left open. Setup reported `configured=true, issue=null`.
 
-The final App-only promotion preserved metadata for all 29 protected objects,
-including the same five profile directories and hive files. Prior App/root
-payloads remain in workspace/private/local-app-backups. Local installer export:
-workspace/packages/lazy-tester/0.1.0-a15dd9f5811d-20261117T075038267Z/.
-No installer was published and signing/install-repair-uninstall are unverified.
-No profile reset, migration, credential copying, sign-in automation or world
-interaction occurred. Retaining these files is NOT proof that Microsoft's
-session remains valid; account sign-in, licensing, world play and networking
-were not inspected or accepted by this launcher test.
+App-only promotion preserved 29 protected metadata identities, including five
+profile directories and hives. Prior App/root backups remain under
+`workspace/private/local-app-backups`. No profile reset, migration, credential
+copying, sign-in, world interaction or Computer Use occurred.
 
-The prior cea37a26 manager became stuck behind its native resource lock and
-refused repeated normal close attempts even with no game process. Only that
-exact installed manager was terminated to permit replacement, after verifying
-no Minecraft was alive. No game was force-stopped. The final a15dd9f5 manager
-passed normal close, so the earlier failure is not promoted into a final PASS.
+The PC retains an unsigned installer under
+`workspace/packages/lazy-tester/0.1.0-a15dd9f5811d-20261117T075038267Z/`.
+Its SHA-256 matched the local `SHA256SUMS.txt` at handoff
+(`65b6cef20c83c8adad96cae379a5237c779d6a70f36e79e4e793b0837404c080`).
+Signing, installer lifecycle, licensing, sign-in, worlds, networking and
+five-client gameplay are unverified. Builds, tests, CI and native execution
+for this handoff were `NOT_EXECUTED`.
 
-Scoped repair outcome: DONE for packaged/staged launcher startup, two-session
-managed launch, normal whole-app exit and data-preserving App replacement.
-No Computer Use tool, mouse/keyboard/focus input or game account/world
-automation was used. The broad source-contract failures recorded below remain
-outside this acceptance; do not claim the whole test suite or five licensed
-playable clients passed. Next for this bounded repair: STOP.
+Earlier `cea37a26` hung on a native lock. Only that manager was terminated,
+after confirming no game was alive. Broader source-contract failures are
+recorded below. The bounded launcher delivery is complete. STOP.
 
 Earlier build/diagnosis evidence:
 The cea37a26 build was packaged/staged and successfully
