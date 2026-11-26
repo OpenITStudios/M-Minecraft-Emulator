@@ -511,8 +511,8 @@ fn default_graphics() -> [super::manager_settings::GraphicsPreset; 5] { [super::
 impl SettingsReport {
     pub fn policy(can_apply_preset: bool, changed_profiles: Option<u32>) -> io::Result<Self> {
         // Configured ceilings of the reviewed payload, never measured frame rates.
-        let limits=super::manager_settings::load_performance()?;
-        Ok(Self { background_audio:Some(super::manager_settings::load_audio()?), audio_issue:None, graphics_presets: super::manager_settings::load_graphics()?, active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
+        let (limits, audio, graphics)=super::manager_settings::load_report_preferences()?;
+        Ok(Self { background_audio:Some(audio), audio_issue:None, graphics_presets: graphics, active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
             can_apply_preset, changed_profiles })
     }
 }

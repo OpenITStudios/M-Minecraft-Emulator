@@ -23,6 +23,8 @@ Startup, explicit Refresh and automatic Refresh now use one start timestamp for 
 
 Reconciled the exact Tauri handler assertion with the prior retirement decision to retain the native bookmark command and storage. Registration, handler admission, data format and MCP remain unchanged; no new access granted. Repository assertion now matches the observed ordered allowlist, NOT_EXECUTED. Next: desktop startup and inspection cost review.
 
+Settings reports now resolve and validate the settings directory once per report rather than three times, and perform one directory-creation call rather than two. Individual file validation, default values, read order, write admission and wire schema are unchanged. No cross-request cache or MCP implementation change. Regression fixture authored NOT_EXECUTED; runtime savings unmeasured. Next: workspace request flow and remaining startup costs.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

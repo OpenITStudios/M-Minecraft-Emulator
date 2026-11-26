@@ -149,6 +149,19 @@ fn product_directory(name:&str)->io::Result<PathBuf> {
     }
     Ok(directory)
 }
+// One freshly checked directory per report, not a persistent settings cache.
+// Preserve the existing directory creation and individual file validation.
+pub(super) fn load_report_preferences() -> io::Result<(PerformanceSettings, BackgroundAudio, [GraphicsPreset; 5])> {
+    let directory = product_settings()?;
+    fs::create_dir_all(&directory)?;
+    read_report_preferences(&directory)
+}
+fn read_report_preferences(directory: &std::path::Path) -> io::Result<(PerformanceSettings, BackgroundAudio, [GraphicsPreset; 5])> {
+    let performance = read_performance(&directory.join("performance.json"))?;
+    let audio = read_audio(&directory.join("audio.json"))?;
+    let graphics = read_graphics(&directory.join("graphics.json"))?;
+    Ok((performance, audio, graphics))
+}
 fn performance_path() -> io::Result<PathBuf> {
     let directory=product_settings()?;
     fs::create_dir_all(&directory)?;
@@ -306,6 +319,29 @@ mod tests {
         assert_eq!(read_performance(&path).unwrap().active_fps,5);
         fs::write(&path,b"invalid").unwrap();
         assert!(read_performance(&path).is_err());assert!(write_performance(&path,PerformanceSettings::default()).is_err());assert_eq!(fs::read(&path).unwrap(),b"invalid");
+        fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn report_preferences_read_current_files_and_preserve_invalid_inputs() {
+        let root = std::env::temp_dir().join(format!("lazy-report-preferences-{}-{}",
+            std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();
+        assert_eq!(read_report_preferences(&root).unwrap(),
+            (PerformanceSettings::default(), BackgroundAudio::Keep, [GraphicsPreset::Preserve; 5]));
+        let limits = PerformanceSettings {active_fps: 60, background_fps: 5};
+        let graphics = [GraphicsPreset::High; 5];
+        write_performance(&root.join("performance.json"), limits).unwrap();
+        write_audio(&root.join("audio.json"), BackgroundAudio::Mute).unwrap();
+        write_graphics(&root.join("graphics.json"), graphics).unwrap();
+        assert_eq!(read_report_preferences(&root).unwrap(), (limits, BackgroundAudio::Mute, graphics));
+        for name in ["performance.json", "audio.json", "graphics.json"] {
+            let path = root.join(name);
+            let original = fs::read(&path).unwrap();
+            fs::write(&path, b"invalid").unwrap();
+            assert!(read_report_preferences(&root).is_err());
+            assert_eq!(fs::read(&path).unwrap(), b"invalid");
+            fs::write(&path, original).unwrap();
+        }
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
