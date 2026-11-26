@@ -1,5 +1,9 @@
 # Current Development Handoff — Lazy Tester
 
+## Desktop UI refinement — 27 November 2026
+
+Work: `desktop-ui-refinement`. Surface: `CHATGPT_GITHUB`. Existing Svelte owners and native contracts remain fixed. Neutral shared palette, compact settings spacing, visible launcher status and navigation/card hover are authored. Selected routine status uses the existing accent. Source and browser assertions updated for visible status; stale titlebar fixture reconciled with existing close-only owner. No new dependencies, UI state or native geometry rules. Tests NOT_EXECUTED; visual acceptance held. Next: settings/storage readability and bounded CSS consolidation; preserve stable selector consumers and native review geometry.
+
 ## Desktop runtime simplification — 26 November 2026
 
 Work: `desktop-runtime-efficiency`. MCP and AI integration are explicitly out of scope.

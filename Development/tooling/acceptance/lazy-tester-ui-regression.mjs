@@ -469,8 +469,8 @@ try {
     'Only the chosen launcher gets a selection highlight');
   assert.equal((await page.locator('[data-slot="4"] .lt-card small').textContent())?.trim(),
     'Selected in Play','The selected state must not claim verified gameplay');
-  assert.equal(await page.locator('[data-slot="4"] .lt-card small').isVisible(),false,
-    'Healthy running status is redundant with the selection highlight');
+  assert.equal(await page.locator('[data-slot="4"] .lt-card small').isVisible(),true,
+    'Selected launcher status remains visible alongside the selection highlight');
   assert.equal(await page.locator('.lt-topbar .lt-connection').count(),0,
     'Healthy connection must not occupy the topbar');
   // A lost session inspection cannot continue advertising a stale running count.

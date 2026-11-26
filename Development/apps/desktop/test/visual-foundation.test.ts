@@ -30,10 +30,9 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(bar).not.toContain('<button class="lt-window-drag"');
     expect(bar).not.toContain('Move LazyTester window');
     expect(bar).not.toContain('on:dblclick=');
-    expect(bar).toContain('aria-label="Minimize"');
-    expect(bar).toContain("aria-label={maximized?'Restore down':'Maximize'}");
-    expect(bar).toContain("on:click={()=>action('toggleMaximize')}");
-    expect(bar).toContain("on:click={()=>action('close')}");
+    expect(bar).not.toContain('aria-label="Minimize"');
+    expect(bar).not.toContain("toggleMaximize");
+    expect(bar).toContain('on:click={requestAppExit}');
   });
   it('keeps overflowing no-game status text keyboard-scrollable without changing native placement',()=>{
     const play=asset('src/LazyTesterApp.svelte');

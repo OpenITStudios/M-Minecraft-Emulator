@@ -34,6 +34,7 @@ Sandboxie/VMware provider route is retired.
 | UI workspace geometry snapshot comparison | `src/app/workspaceGeometry.ts` |
 | App titlebar drag and normal exit request (no custom minimize/maximize buttons) | `src/WindowTitlebar.svelte` |
 | Fixed five-launcher rail, visual actions only | `src/LauncherRail.svelte` |
+| Shared visual tokens, shell, launcher and settings styles | `src/lazy-tester.css` |
 | Health and recovery guidance | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
 | Authored diagnostic categories, stable support codes and user error messages | `src/app/presentation/sessionFeedback.ts` |
 | Validated desktop protocol | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
