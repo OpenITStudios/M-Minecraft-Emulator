@@ -16,7 +16,10 @@ Consolidated Windows executable attribute and file ID queries across bootstrap,
 process roles and session IPC; caller admission and file pins remain unchanged.
 Extended the same process-time reader to native observation, normal close
 and descendant handoff; independent test oracles remain unchanged.
-Next: review standard OwnedHandle adoption where resource ownership matches.
+Replaced redundant process/snapshot handle wrappers in native observation and
+workspace with Rust's standard OwnedHandle; DWM retains the original process
+pin and explicit failure checks remain. Next: review remaining identity owner
+and larger session-controller responsibilities.
 
 ## Continue development outside Codex
 

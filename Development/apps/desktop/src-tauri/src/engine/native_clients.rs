@@ -564,10 +564,10 @@ fn validate_native_auth_family(value: &NativeAuthFamilyObservation) -> io::Resul
 #[cfg(target_os = "windows")]
 mod native_workspace_windows {
     use super::*;
-    use std::{mem, ptr};
+    use std::{mem, ptr, os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle}};
     use windows_sys::Win32::{
         Foundation::{
-            CloseHandle, HANDLE, ERROR_NO_MORE_FILES,
+            ERROR_NO_MORE_FILES,
             INVALID_HANDLE_VALUE, WAIT_TIMEOUT,
         },
         Globalization::{CompareStringOrdinal, CSTR_EQUAL},
@@ -588,13 +588,6 @@ mod native_workspace_windows {
         },
     };
 
-    struct OwnedHandle(HANDLE);
-    impl Drop for OwnedHandle {
-        fn drop(&mut self) {
-            // Every handle here is obtained exactly once from the OS.
-            unsafe { CloseHandle(self.0); }
-        }
-    }
 
     struct GameWindow {
         pid: u32,
@@ -666,16 +659,16 @@ mod native_workspace_windows {
             // excluded or promoted to an official Minecraft process.
             return Err(io::Error::last_os_error());
         }
-        let process = OwnedHandle(handle);
+        let process = unsafe { OwnedHandle::from_raw_handle(handle as _) };
         // Session is checked again after pinning the process HANDLE below,
         // so a PID that changed between enumeration and open is not trusted.
 
-        let image = crate::engine::windows_process_image::query(process.0)?;
+        let image = crate::engine::windows_process_image::query(process.as_raw_handle() as _)?;
         if !exact_windows_path(&image, target_image) {
             return Ok(None);
         }
 
-        let original_created = crate::engine::windows_process_time::creation_filetime(process.0)?;
+        let original_created = crate::engine::windows_process_time::creation_filetime(process.as_raw_handle() as _)?;
         if original_created == 0 {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Missing Minecraft process creation time"));
         }
@@ -693,13 +686,13 @@ mod native_workspace_windows {
         }
         // Recheck all process/window fields after enumeration. An exited or
         // PID-reused game must not be published as a live selection.
-        let current_created = crate::engine::windows_process_time::creation_filetime(process.0)?;
+        let current_created = crate::engine::windows_process_time::creation_filetime(process.as_raw_handle() as _)?;
         let mut again_session = 0;
         if unsafe { ProcessIdToSessionId(pid, &mut again_session) } == 0 {
             return Err(io::Error::last_os_error());
         }
         if again_session != current_session || current_created != original_created
-            || unsafe { WaitForSingleObject(process.0, 0) } != WAIT_TIMEOUT
+            || unsafe { WaitForSingleObject(process.as_raw_handle() as _, 0) } != WAIT_TIMEOUT
         {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Minecraft process identity changed during native observation"));
         }
@@ -736,10 +729,10 @@ mod native_workspace_windows {
         if snapshot == INVALID_HANDLE_VALUE {
             return Err(io::Error::last_os_error());
         }
-        let snapshot = OwnedHandle(snapshot);
+        let snapshot = unsafe { OwnedHandle::from_raw_handle(snapshot as _) };
         let mut entry: PROCESSENTRY32W = unsafe { mem::zeroed() };
         entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
-        if unsafe { Process32FirstW(snapshot.0, &mut entry) } == 0 {
+        if unsafe { Process32FirstW(snapshot.as_raw_handle() as _, &mut entry) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let expected_image: Vec<u16> = "Minecraft.Windows.exe".encode_utf16().collect();
@@ -753,7 +746,7 @@ mod native_workspace_windows {
                     }
                 }
             }
-            if unsafe { Process32NextW(snapshot.0, &mut entry) } == 0 {
+            if unsafe { Process32NextW(snapshot.as_raw_handle() as _, &mut entry) } == 0 {
                 if io::Error::last_os_error().raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
                     return Err(io::Error::last_os_error());
                 }
@@ -796,10 +789,10 @@ mod native_workspace_windows {
 
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if snapshot == INVALID_HANDLE_VALUE { return Err(io::Error::last_os_error()); }
-        let snapshot = OwnedHandle(snapshot);
+        let snapshot = unsafe { OwnedHandle::from_raw_handle(snapshot as _) };
         let mut entry: PROCESSENTRY32W = unsafe { mem::zeroed() };
         entry.dwSize = mem::size_of::<PROCESSENTRY32W>() as u32;
-        if unsafe { Process32FirstW(snapshot.0, &mut entry) } == 0 {
+        if unsafe { Process32FirstW(snapshot.as_raw_handle() as _, &mut entry) } == 0 {
             return Err(io::Error::last_os_error());
         }
         let mut games: Vec<NativeAuthGameFamily> = before.processes.iter()
@@ -866,7 +859,7 @@ mod native_workspace_windows {
                     }
                 }
             }
-            if unsafe { Process32NextW(snapshot.0, &mut entry) } == 0 {
+            if unsafe { Process32NextW(snapshot.as_raw_handle() as _, &mut entry) } == 0 {
                 if io::Error::last_os_error().raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
                     return Err(io::Error::last_os_error());
                 }

@@ -1,14 +1,7 @@
 use super::*;
+use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
 use windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId;
 use windows_sys::Win32::{Foundation::*, System::Threading::*, UI::WindowsAndMessaging::*};
-pub(super) struct ProcessHandle(HANDLE);
-impl Drop for ProcessHandle {
-    fn drop(&mut self) {
-        unsafe {
-            CloseHandle(self.0);
-        }
-    }
-}
 fn permitted_image(parent: &std::path::Path, current: &std::path::Path) -> bool {
     let same = |a: &std::path::Path, b: &std::path::Path| {
         a.to_string_lossy()
@@ -35,7 +28,7 @@ pub(super) fn trusted_parent() -> io::Result<()> {
         if snapshot == INVALID_HANDLE_VALUE {
             return Err(io::Error::last_os_error());
         }
-        let _snapshot = ProcessHandle(snapshot);
+        let _snapshot = OwnedHandle::from_raw_handle(snapshot as _);
         let mut entry: PROCESSENTRY32W = std::mem::zeroed();
         entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
         let mut ok = Process32FirstW(snapshot, &mut entry);
@@ -53,7 +46,7 @@ pub(super) fn trusted_parent() -> io::Result<()> {
                 "Workspace helper requires its manager caller",
             ));
         }
-        let _parent = ProcessHandle(process);
+        let _parent = OwnedHandle::from_raw_handle(process as _);
         let name = crate::engine::windows_process_image::query(process)?;
         let image = std::path::PathBuf::from(String::from_utf16_lossy(&name))
             .canonicalize()?;
@@ -84,7 +77,7 @@ fn helper_caller_is_own_image_or_exact_developer_harness_directory() {
         current
     ));
 }
-pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(ProcessHandle, HWND)> {
+pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(OwnedHandle, HWND)> {
     let key = super::super::instance_identity::parse_window_identity(
         target.pid,
         Some(&target.created_file_time),
@@ -99,7 +92,7 @@ pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(ProcessHandle, HWND)> {
         if process.is_null() {
             return Err(io::Error::last_os_error());
         }
-        let pin = ProcessHandle(process);
+        let pin = OwnedHandle::from_raw_handle(process as _);
         let birth = crate::engine::windows_process_time::creation_filetime(process);
         let mut session = 0;
         let mut own_session = 0;
@@ -561,14 +554,14 @@ pub(super) fn original_game_process_exited(target: &OwnedProcess) -> io::Result<
             }
             return Err(error);
         }
-        let pin=ProcessHandle(raw);
-        let observed = crate::engine::windows_process_time::creation_filetime(pin.0)?;
+        let pin=OwnedHandle::from_raw_handle(raw as _);
+        let observed = crate::engine::windows_process_time::creation_filetime(pin.as_raw_handle() as _)?;
         if observed!=expected {
             // PID was reused; the original lifetime has ended, and the
             // replacement is not a window-recovery target.
             return Ok(true);
         }
-        match WaitForSingleObject(pin.0,0) {
+        match WaitForSingleObject(pin.as_raw_handle() as _,0) {
             WAIT_OBJECT_0=>Ok(true),
             WAIT_TIMEOUT=>Ok(false),
             _=>Err(io::Error::last_os_error()),
@@ -826,8 +819,8 @@ pub(super) fn retired(target: &OwnedProcess) -> bool {
             // unchanged game. Deny retention until Windows can attest it.
             return true;
         }
-        let birth = crate::engine::windows_process_time::creation_filetime(process);
-        CloseHandle(process);
+        let pin = OwnedHandle::from_raw_handle(process as _);
+        let birth = crate::engine::windows_process_time::creation_filetime(pin.as_raw_handle() as _);
         !birth.is_ok_and(|value| value == key.created_file_time)
     }
 }

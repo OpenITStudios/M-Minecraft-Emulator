@@ -213,7 +213,7 @@ struct Thumbnail {
     // Only successful native property writes are cached. Exact game HWND
     // and worker-owned DWM destination are still checked on every wake.
     last_applied: Option<(DwmAppliedState, Instant)>,
-    _process: native::ProcessHandle,
+    _process: std::os::windows::io::OwnedHandle,
 }
 impl Thumbnail {
     fn create(manager: u64, tile: &PreviewTile, target: OwnedProcess) -> io::Result<Self> {
