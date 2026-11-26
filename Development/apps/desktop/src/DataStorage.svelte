@@ -137,8 +137,11 @@
 <svelte:window on:keydown={onReviewEscape}/>
 
         <div class="lazytester-settings-content">
-          <p>Manage profile files, cache and saved settings. Export worlds in Minecraft.</p>
-          <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>MC0{p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+          <section class="lazytester-group" aria-labelledby="lazytester-storage-overview-section">
+            <div class="lazytester-profile-management-heading">
+              <h2 id="lazytester-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Profile Management</h2>
+              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+            </div>
           {#if clearSlot!==null||recovery!==null||fullReview!==null}<p id="lazytester-storage-review-guidance" class="lazytester-help" role="status">Finish or cancel this review before switching profiles.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
           {#if storage===null}
@@ -148,11 +151,8 @@
           {:else if !available}
             <p class="lazytester-storage-feedback" role="status">Session status unavailable. Showing last reported sizes, not live usage.</p>
           {/if}
-          <section class="lazytester-group" aria-labelledby="lazytester-storage-overview-section">
-            <h2 id="lazytester-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Storage overview</h2>
-            <div class="lazytester-setting"><h3>Profile data</h3>
-              <strong>{selectedStorage ? formatStorageExtent(selectedStorage.bytes,selectedStorage.partial) : 'Not measured'}</strong>
-            </div>
+          <div class="lazytester-settings-panel">
+            <div class="lazytester-setting"><div><h3>Profile Folder</h3><p>{selectedStorage ? formatStorageExtent(selectedStorage.bytes,selectedStorage.partial) : 'Not measured'}</p><p class="lazytester-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured} on:click={()=>onOpenFolder(selectedSlot)}>Open Folder</button></div>
             <div class="lazytester-setting"><h3>Web cache</h3>
               <span>{selectedStorage ? formatStorageExtent(selectedStorage.cache.bytes,selectedStorage.cache.partial) : 'Not measured'}</span>
             </div>
@@ -162,14 +162,12 @@
             <p class="lazytester-help">{storage
               ? 'Last storage report received: '+(storageReportReceivedAt||'time unavailable')+'. Includes cache and worlds. Partial values are minimums, not live usage.'
               : 'Refresh to inspect storage. Not measured does not mean empty.'}</p>
-          </section>
-          <section class="lazytester-group" aria-labelledby="lazytester-storage-maintenance-heading">
-            <h2 id="lazytester-storage-maintenance-heading">Maintenance</h2>
+
           <div class="lazytester-setting"><div><h3>Clear cache</h3><p>Remove temporary web cache. Accounts, worlds and settings stay.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lazytester-help">Cache cleanup unavailable. Refresh to check again.</p>{/if}</div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></div>
           {#if clearSlot===selectedSlot}<section class="lazytester-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts, settings and other launchers stay.</p><div class="lazytester-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>commitCacheReview(selectedSlot)}>Clear web cache</button><button class="lazytester-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview(onCancelCacheReview)}>Cancel</button></div></section>{/if}
-          <div class="lazytester-setting"><div><h3>Data folder</h3><p class="lazytester-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured} on:click={()=>onOpenFolder(selectedSlot)}>Open folder</button></div>
+          </div>
           </section>
-          <details class="lazytester-location-options"><summary>Find existing profile data</summary><p class="lazytester-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lazytester-error">{locationIssue}</p>{/if}<div class="lazytester-actions"><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing||storageReviewOpen} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
+          <details class="lazytester-location-options" open={!bindingConfigured || !dataLocation?.path}><summary>Find existing profile data</summary><p class="lazytester-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lazytester-error">{locationIssue}</p>{/if}<div class="lazytester-actions"><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing||storageReviewOpen} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
           <details class="lazytester-storage-packs">
             <summary><strong>Resource pack details</strong></summary>
             <div class="lazytester-storage-packs-body">

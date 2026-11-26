@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Data Storage presentation checkpoint: profile picker moved into Profile Management heading, full Minecraft names, profile size/path and Open Folder combined into the first shared panel row. Existing cache review, pack/recovery information, full-clear confirmation and native admission retained until selective/automatic cleanup owners are ready. No new deletion capability. Source only; tests NOT_EXECUTED. Capture held.
+
 Follow-up source consistency: bounded the relocated workspace summary text, retained accent for selected status, reconciled sticky feedback selector fixture with its actual wrapper. No native operations changed. Remaining narrow card geometry and Data Storage work still pending; capture held. Tests NOT_EXECUTED.
 
 Launcher card source checkpoint: identity and observed status share header; reserved Close space, separator and status dot; running color uses existing success token and selected retains accent. Five keyed preview targets and original action admission remain unchanged. Right size gate reduced to 960×840 CSS px based on compact card chrome; narrow Bottom uses wrap rather than clipped status as a temporary fallback, not yet the approved single-line acceptance. Geometry and browser/runtime checks NOT_EXECUTED. Capture remains held. Next: reconcile minimum supported width, action strip and remaining consumer contracts before Data Storage.

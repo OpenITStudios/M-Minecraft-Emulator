@@ -1007,3 +1007,8 @@ body{
 .lazytester-layout-diagram i{background:var(--lazytester-control-outline);border-radius:2px}
 .lazytester-layout-diagram-right{grid-template-columns:minmax(0,1fr) 23%;grid-template-rows:minmax(0,1fr)}
 .lazytester-layout-diagram-right > span:last-child{grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(5,minmax(0,1fr))}
+
+/* Profile selection shares the section heading rather than adding a page-level toolbar. */
+.lazytester-profile-management-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.lazytester-profile-management-heading h2{margin:0;font-size:15px}
+.lazytester-profile-management-heading .lazytester-launcher-heading{margin:0;gap:8px}
