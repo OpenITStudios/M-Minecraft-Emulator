@@ -702,6 +702,12 @@
       if (epoch!==observationEpoch || closeOneSlot===null || nativeExitReview ||
           closeInProgress || document.hidden || disposed) return;
       const geometry=captureWorkspaceGeometry();
+      // Old DWM destinations cannot follow new CSS coordinates during review.
+      // Clear presentation only; do not adopt sources or change game lifecycle.
+      await lazyTester.clearPreviews();
+      previewStatuses=[];pendingPreviewInvalidations.clear();
+      if (epoch!==observationEpoch || closeOneSlot===null || nativeExitReview ||
+          closeInProgress || document.hidden || disposed) return;
       await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
       if (!disposed && !sameWorkspaceGeometry(geometry,captureWorkspaceGeometry())) dirty=true;
     } catch {
@@ -1080,6 +1086,7 @@
           </div>
         </div>
       {/snippet}
+      <div class="lt-global-feedback" class:lt-play-feedback={page==='workspace'}>
       {#if (issueKey!==null||connectionIssueKey!==null) && !workspaceActionFeedback}
         {@render actionFeedback(false)}
       {/if}
@@ -1108,6 +1115,7 @@
           <div><strong>Minecraft backend unavailable</strong><p>{bindingIssue}</p></div>
         </section>
       {:else if !binding?.configured&&!initializing}<section class="lt-binding" tabindex="0" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lt-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lt-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
+      </div>
       <section class="lt-workspace" hidden={page!=='workspace'} aria-label="Minecraft play area">
         <div class="lt-stage-space" bind:this={stageSpace}>
         <div class="lt-viewport" class:lt-desktop={detached} bind:this={viewport}>

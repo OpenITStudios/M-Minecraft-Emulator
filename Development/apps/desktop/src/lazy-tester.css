@@ -717,29 +717,29 @@
   line-height:1.35;
 }
 .lt-app .lt-health-notice [tabindex="0"]:focus-visible,
-.lt-app .lt-layout main > :is(.lt-alert,.lt-binding,.lt-exit-recovery):focus-visible{
+.lt-app .lt-layout main > .lt-global-feedback > :is(.lt-alert,.lt-binding,.lt-exit-recovery):focus-visible{
   outline:2px solid var(--lt-accent);
   outline-offset:-2px;
   border-radius:5px;
 }
-.lt-app .lt-layout main > .lt-alert{
+.lt-app .lt-layout main > .lt-global-feedback > .lt-alert{
   max-height:min(160px,28dvh);
   overflow-y:auto;
   overscroll-behavior:contain;
 }
-.lt-app .lt-layout main > .lt-exit-recovery{
+.lt-app .lt-layout main > .lt-global-feedback > .lt-exit-recovery{
   max-height:min(180px,30dvh);
   overflow-y:auto;
   overflow-wrap:anywhere;
   overscroll-behavior:contain;
 }
-.lt-app .lt-layout main > .lt-binding{
+.lt-app .lt-layout main > .lt-global-feedback > .lt-binding{
   overflow-wrap:anywhere;
   overscroll-behavior:contain;
 }
 @media (forced-colors:active){
   .lt-app .lt-health-notice [tabindex="0"]:focus-visible,
-  .lt-app .lt-layout main > :is(.lt-alert,.lt-binding,.lt-exit-recovery):focus-visible{
+  .lt-app .lt-layout main > .lt-global-feedback > :is(.lt-alert,.lt-binding,.lt-exit-recovery):focus-visible{
     outline:2px solid Highlight;
   }
 }
@@ -913,26 +913,17 @@
 }
 
 
-/* A system warning must not consume most of the selected game's vertical
-   space. This applies ONLY to Play; original full authored messages and
-   actions remain available through each already-focusable scroll region. */
-.lt-app .lt-layout main.lt-play-main > :is(.lt-alert,.lt-binding,.lt-exit-recovery){
-  flex:none;
-  min-width:0;
-  max-height:min(104px,18dvh);
-  overflow:auto;
-  overflow-wrap:anywhere;
-  overscroll-behavior:contain;
-  margin-bottom:8px;
+/* All critical Play warnings share one bounded flow region; no overlay on HWNDs. */
+.lt-global-feedback{display:contents}
+.lt-play-feedback:has(> :is(.lt-alert,.lt-binding,.lt-exit-recovery)){
+  display:flex;flex:0 0 auto;flex-direction:column;gap:6px;min-width:0;
+  max-height:min(104px,18dvh);overflow:auto;overscroll-behavior:contain;margin-bottom:8px;
 }
+.lt-app .lt-layout main > .lt-play-feedback > :is(.lt-alert,.lt-binding,.lt-exit-recovery){flex:none;margin:0;max-height:none;overflow:visible}
 @media(max-height:700px){
-  .lt-app .lt-layout main.lt-play-main > :is(.lt-alert,.lt-binding,.lt-exit-recovery){
-    max-height:min(88px,16dvh);
-    padding:8px 12px;
-    margin-bottom:6px;
-  }
+  .lt-play-feedback:has(> :is(.lt-alert,.lt-binding,.lt-exit-recovery)){max-height:min(88px,16dvh);margin-bottom:6px}
+  .lt-app .lt-layout main > .lt-play-feedback > :is(.lt-alert,.lt-binding,.lt-exit-recovery){padding:8px 12px}
 }
-
 /* Settings/Storage measurement values use predictable number spacing.
    This scope must never affect native Minecraft viewports or DWM previews. */
 .lt-settings-layout [aria-labelledby="lt-storage-overview-section"] .lt-setting > :is(strong,span){
@@ -962,17 +953,17 @@
 .lt-app .lt-alert .lt-alert-refresh{
   min-height:32px;padding:5px 10px;font-size:12px;
 }
-.lt-app .lt-settings-layout main > .lt-alert{
+.lt-app .lt-settings-layout main > .lt-global-feedback > .lt-alert{
   position:sticky;top:0;z-index:9;
   max-height:min(164px,32dvh);
   margin-bottom:12px;
   box-shadow:0 6px 16px var(--lt-overlay-shadow);
 }
 @media(max-height:700px){
-  .lt-app .lt-settings-layout main > .lt-alert{
+  .lt-app .lt-settings-layout main > .lt-global-feedback > .lt-alert{
     max-height:min(136px,30dvh);
   }
 }
 @media(forced-colors:active){
-  .lt-app .lt-settings-layout main > .lt-alert{border-color:Highlight}
+  .lt-app .lt-settings-layout main > .lt-global-feedback > .lt-alert{border-color:Highlight}
 }

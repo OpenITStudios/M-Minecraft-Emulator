@@ -1,5 +1,19 @@
 # Current Development Handoff — Lazy Tester
 
+## Workspace stability — source checkpoint (26 November 2026)
+
+Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track
+prioritizes Play geometry, native modal recovery, foreground FPS and DWM.
+Review-only resize clears old preview destinations before retained placement;
+critical warnings share one bounded scroll region. Existing lifecycle, identity,
+profile data and normal close ownership are unchanged. Preview blanking during
+review is intentional; normal configuration resumes after Cancel or close.
+Proof: source review only, all tests `NOT_EXECUTED`. Windows import/cancel,
+one-click switching, FPS, DPI and DWM stacking remain `NOT_VERIFIED`.
+Do not claim runtime acceptance or resume held tests without authorized PC-local
+execution. Other historical F3/native-input holds below remain unchanged.
+
+
 ## Source simplification — 26 November 2026
 
 Phase 1: retired superseded world-scoped F3 prototypes and dedicated review

@@ -54,9 +54,12 @@ to its slot and blocks retry until fresh native observation; it never authorizes
 Critical connection and restoration warnings remain global. Layout uses one captured
 viewport/preview/DPI snapshot per pass. During selected Close review only retained
 viewport updates are admitted; inspection and full preview configuration wait for
-review completion. Native passive placement defers while the main HWND is disabled
-by a modal. These are source contracts, not Windows acceptance; DWM tile geometry
-during review resize and critical warning geometry still need resolution.
+review completion. Review-only resize clears old DWM destinations before moving the
+retained surface; normal layout recreates previews after review. Critical warnings
+share one bounded scroll region rather than independently consuming stage height.
+Native passive placement defers while the main HWND is disabled
+by a modal. These are source contracts, not Windows acceptance; temporary preview
+blanking and bounded critical warnings require local usability/geometry validation.
 A selected-game Close review still uses the original native CloseOne admission;
 its UI defaults keyboard focus to Cancel, supports Escape dismissal, and returns
 focus to the invoking Close game button without scrolling the rail. No implicit

@@ -1280,9 +1280,10 @@ try {
     const message=warning.querySelector('p');
     const oldText=message.textContent;
     message.textContent=(oldText+' ').repeat(12);
-    warning.scrollTop=warning.scrollHeight;
-    const warningHeight=warning.getBoundingClientRect().height;
-    const scrollOffset=warning.scrollTop;
+    const feedback=warning.closest('.lt-play-feedback');
+    feedback.scrollTop=feedback.scrollHeight;
+    const warningHeight=feedback.getBoundingClientRect().height;
+    const scrollOffset=feedback.scrollTop;
     const stage=document.querySelector('.lt-stage-space').getBoundingClientRect();
     const game=document.querySelector('.lt-viewport').getBoundingClientRect();
     const filmstrip=document.querySelector('.lt-filmstrip').getBoundingClientRect();

@@ -768,6 +768,14 @@ describe('Lazy Tester queue scheduling parity',()=>{
       }
     }
   });
+  it('clears stale preview destinations before review-only placement',()=>{
+    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const review=source.slice(source.indexOf('async function syncSelectedReviewGeometry()'),source.indexOf('async function syncLayout()'));
+    expect(review).toContain('await lazyTester.clearPreviews()');
+    expect(review.indexOf('await lazyTester.clearPreviews()')).toBeLessThan(review.indexOf('await workspaceSurface.update('));
+    expect(review).not.toContain('lazyTester.previews(');
+    expect(review).not.toContain('lazyTester.inspect(');
+  });
   it('allows only retained geometry during an eligible selected close review',()=>{
     const review={...idle,closeReviewPending:true,selectedReviewGeometryOnly:true,
       queuedLaunch:true,queuedSelection:true,manualRefreshRequested:true,dirty:true};
