@@ -7,6 +7,8 @@ Routine refresh now compares validated profile observations first and constructs
 
 Explicit launch, navigation, settings, close reconciliation and storage receipts now share the existing full-field profile comparison before publishing UI state. Identical observations avoid reactive assignment; action-specific receipts, storage timestamps and recovery effects remain independent. No native request or MCP change; existing comparison fixtures NOT_EXECUTED.
 
+Healthy idle Play now shares the existing 10s read-only inspection cadence; all five profiles must be STOPPED with no process/issue, no selected/pending launch, no recovery or active agent report. Live/uncertain Play and connection recovery retain 2s observation. Explicit actions and native validation remain unchanged; external changes during healthy idle can take up to the next idle inspection to appear. Cadence fixtures extended, NOT_EXECUTED; actual savings and UI acceptance remain unmeasured. MCP implementation/contract unchanged.
+
 ## Workspace stability — source checkpoint (26 November 2026)
 
 Work: `workspace-ui-lifecycle`. Surface: `CHATGPT_GITHUB`. The current track

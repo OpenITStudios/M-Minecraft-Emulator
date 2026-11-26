@@ -91,6 +91,12 @@ describe('Lazy Tester profile contract', () => {
     }
     expect(periodicInspectionDue('workspace', 0, true, 0)).toBe(true);
     expect(periodicInspectionDue('workspace', 0, false, 0)).toBe(true);
+    for (const elapsed of [0, 2000, 9999]) {
+      expect(periodicInspectionDue('workspace', 0, true, elapsed, true)).toBe(false);
+    }
+    expect(periodicInspectionDue('workspace', 0, true, 10000, true)).toBe(true);
+    expect(periodicInspectionDue('workspace', 1, true, 0, true)).toBe(true);
+    expect(periodicInspectionDue('workspace', 0, false, 0, true)).toBe(true);
   });
   it('suspends automatic inspection through every close review and drops stale results', () => {
     const idle: CloseReview = {

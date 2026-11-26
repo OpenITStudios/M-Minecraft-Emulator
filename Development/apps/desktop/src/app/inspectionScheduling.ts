@@ -100,17 +100,17 @@ export function releasedSelectionStillCurrent(
     released.identity === current.identity;
 }
 
-// The existing 2s observer remains immediate for live games, launcher and
- // workspace views, and connection recovery. Settings/storage with no active
- // game use a bounded 10s read-only cadence; user actions still refresh
- // immediately and Rust rechecks all admissions before mutations.
+// Keep the 2s observer for live sessions, recovery and unresolved workspace
+// state. Healthy idle Play uses the same bounded 10s cadence as idle
+// Settings/Storage. Explicit actions and native mutation admission are unchanged.
 export function periodicInspectionDue(
   page: 'workspace' | 'storage' | 'settings',
   runningCount: number,
   available: boolean,
   elapsedMs: number,
+  workspaceSettledIdle = false,
 ): boolean {
-  return page === 'workspace' ||
+  return (page === 'workspace' && !workspaceSettledIdle) ||
     runningCount > 0 || !available || elapsedMs >= 10_000;
 }
 

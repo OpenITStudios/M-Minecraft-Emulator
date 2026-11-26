@@ -957,7 +957,15 @@
           clearSlot===null && recovery===null && fullReview===null &&
           !busy && !refreshing && !resizing && !initializing) {
         const now = performance.now();
-        if (periodicInspectionDue(page, runningCount, available, now - lastAutomaticInspectionAt)) {
+        // Only a fully observed, healthy stopped roster may slow Play.
+        // Keep rapid observation for launch, recovery and agent activity.
+        const workspaceSettledIdle = profiles.length === 5 &&
+          profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null) &&
+          active === null && requested === null && queued === null && queuedLaunch === null &&
+          !detached && attentionCount === 0 && issueKey === null && connectionIssueKey === null &&
+          previewIssue === '' && !closeFailure && agentActivity === null;
+        if (periodicInspectionDue(page, runningCount, available,
+          now - lastAutomaticInspectionAt, workspaceSettledIdle)) {
           lastAutomaticInspectionAt = now;
           void refresh();
         }
