@@ -168,6 +168,12 @@
     previewsVisible: page === 'workspace' && !detached,
   });
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
+  // Normal Play is already inspected automatically. Keep explicit Refresh
+  // for exceptional states, settings/storage and an in-flight manual action.
+  $: showHeaderRefresh = nativeBackend==='WindowsNative' &&
+    (page!=='workspace' || manualRefreshing || manualRefreshRequested ||
+      (!initializing && (!available || !binding?.configured || issueKey!==null ||
+        connectionIssueKey!==null || previewIssue!=='' || attentionCount>0 || !!closeFailure)));
   // Local display failures must not resize a retained game surface.
   // Connection and restoration uncertainty retain their prominent global warnings.
   $: workspaceActionFeedback = page==='workspace' && nativeBackend==='WindowsNative' &&
@@ -1035,9 +1041,11 @@
       <header class="lt-page-header" class:lt-play-header={page==='workspace'}>
         <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Choose a Minecraft below'):active?'Minecraft - '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Choose a Minecraft below'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Select a Minecraft below.'):active?'Choose a Minecraft below to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lt-header-actions">
+          {#if showHeaderRefresh}
           <button class="lt-secondary" bind:this={headerRefreshButton}
             disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
             on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>
+          {/if}
         </div>
       </header>
       {#if loadingPage===page && page!=='workspace'}

@@ -232,7 +232,7 @@ try {
     call.command==='lazy_tester_backend_support').length),1);
   assert.equal(await page.locator('.lt-card:not(:disabled)').count(),0);
   assert.equal(await nav('Settings').isDisabled(),true,'unsupported host must not expose native settings');
-  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true);
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),0);
   assert.equal(await page.locator('.lt-filmstrip').count(),0,'unsupported host has no game inventory');
   assert.equal(await page.getByRole('button',{name:'Close LazyTester'}).getAttribute('title'),'Close LazyTester');
   await page.evaluate(()=>window.dispatchEvent(new Event('resize')));
@@ -257,9 +257,9 @@ try {
   assert.equal(await page.locator('details.lt-play-utilities').count(),0);
   assert.equal(await page.locator('details.lt-f3-inspector').count(),0);
   assert.equal(await page.locator('details.lt-coordinate-paste').count(),0);
-  assert.equal(await page.locator('.lt-header-actions button').count(),1,
-    'Before a game is selected only Refresh is visible in the Play header');
-  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),1);
+  assert.equal(await page.locator('.lt-header-actions button').count(),0,
+    'Healthy idle Play needs no manual Refresh');
+  assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),0);
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     ['Launch','CloseOne','ClearProfileData'].includes(call.args?.request?.operation))),false,
     'Removing the retired desktop tools cannot operate on a Minecraft session');
@@ -272,7 +272,7 @@ try {
   await heading('Ready when you are').waitFor();
   assert.equal(await statusDisclosure.count(),0,'Routine AI activity must not occupy the topbar');
   await page.evaluate(()=>{window.__agentReport={...window.__agentReport,displayHint:'ATTENTION',items:[{kind:'AI_INPUT',slot:2,status:'NATIVE_RELEASE_UNCONFIRMED',importance:'ATTENTION',evidence:'LOCAL_MCP_RECOVERY_HOLD'}]};});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await statusDisclosure.waitFor();
   await statusDisclosure.locator('summary').focus();
   await page.keyboard.press('Enter');
@@ -344,7 +344,7 @@ try {
         reportedOutcome:'PROBE_REPORTED_PASS',
         probeCounts:{expected:2,pass:2,fail:0,info:0,look:0}}],
     };});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await page.getByText('Testing · Results available · MC02',{exact:true}).waitFor();
   assert.equal(await statusDisclosure.locator('summary').getAttribute('title'),
     'Testing · Results available · MC02',
@@ -384,7 +384,7 @@ try {
         reportedOutcome:'INCOMPLETE'}],
     };
   });
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await page.getByText('Testing · Incomplete · MC02',{exact:true}).waitFor();
   assert.equal(await page.getByRole('region',{name:'Testing summary for MC02'}).count(),0,
     'Incomplete Probe status cannot expose a completed test result');
@@ -402,11 +402,11 @@ try {
         importance:'ATTENTION',evidence:'LOCAL_MCP_RECOVERY_HOLD'}],
     };
   });
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await page.locator('.lt-agent-activity summary')
     .getByText('AI & Testing · Status unavailable').waitFor();
   await page.evaluate(()=>{window.__agentReport=null;});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await statusDisclosure.waitFor({state:'detached'});
   assert.equal(await page.locator('.lt-filmstrip .lt-launcher-entry').count(),5,
     'Activity disappearing must not move/remove the five game cards');
@@ -437,7 +437,7 @@ try {
     'Compact visible names must not reduce the full accessible launcher name');
   await page.setViewportSize({width:1280,height:900});
   await page.evaluate(()=>{window.__runningSlots=[1,2,3,4,5];});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
   await heading('Minecraft - 2').waitFor();
   await page.evaluate(()=>{
@@ -473,7 +473,7 @@ try {
     'Healthy connection must not occupy the topbar');
   // A lost session inspection cannot continue advertising a stale running count.
   await page.evaluate(()=>{window.__offline=true;});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await page.waitForFunction(()=>document.querySelector('.lt-games-heading')?.textContent?.includes('Session status unavailable'));
   assert.equal(await page.locator('.lt-filmstrip .lt-card small').filter({hasText:'Status unavailable'}).count(),5,
     'Stale native observations must be labeled unavailable, not verified running');
@@ -487,7 +487,7 @@ try {
   // A verified binding alone is not a fresh native session observation.
   // When Inspect fails, Play must not claim that a game can be chosen.
   await page.evaluate(()=>{window.__offline=true;});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await page.waitForFunction(()=>
     document.querySelector('.lt-page-header h1')?.textContent==='Session status unavailable');
   assert.equal(await page.locator('.lt-launcher-entry[data-slot="1"] > .lt-card').isDisabled(),true,
@@ -502,12 +502,14 @@ try {
   // Keyboard Refresh must not lose focus when the original controller
   // request makes its own button disabled. These are synthetic DOM checks,
   // NOT Windows focus, DPI or five-client acceptance.
+  await page.evaluate(()=>{window.__healthFixture=true;});
+  await page.getByRole('status',{name:'Minecraft - 2 needs attention'}).waitFor();
   const keyboardRefresh=page.getByRole('button',{name:'Refresh',exact:true});
   await keyboardRefresh.focus();
   await page.evaluate(()=>{window.__holdInspect=true;});
   await page.keyboard.press('Enter');
   await page.waitForFunction(()=>typeof window.__finishInspect==='function');
-  assert.equal(await heading('Ready when you are').evaluate(node=>document.activeElement===node),true,
+  assert.equal(await page.locator('.lt-page-header h1').evaluate(node=>document.activeElement===node),true,
     'Focused keyboard Refresh temporarily anchors to the unchanged page heading');
   await page.keyboard.press('Shift+Tab');
   assert.equal(await page.evaluate(()=>document.activeElement!==document.body&&
@@ -529,7 +531,7 @@ try {
   await page.evaluate(()=>{window.__holdInspect=true;});
   await page.keyboard.press('Enter');
   await page.waitForFunction(()=>typeof window.__finishInspect==='function');
-  assert.equal(await heading('Ready when you are').evaluate(node=>document.activeElement===node),true);
+  assert.equal(await page.locator('.lt-page-header h1').evaluate(node=>document.activeElement===node),true);
   await page.evaluate(()=>{
     const release=window.__finishInspect;window.__holdInspect=false;
     window.__finishInspect=null;release();
@@ -539,6 +541,8 @@ try {
     null,{timeout:7000});
   assert.equal(await keyboardRefresh.isEnabled(),true,
     'Only the existing Refresh button regains keyboard focus; no new action is sent');
+  await page.evaluate(()=>{window.__healthFixture=false;});
+  await keyboardRefresh.waitFor({state:'detached'});
   assert.equal(await page.locator('.lt-card').count(),5);
   const profileGroup = page.getByRole('group',{name:'Minecraft profiles'});
   assert.equal(await profileGroup.getByRole('button',{name:/^Launch Minecraft - 1 · /}).count(),1,
@@ -558,7 +562,7 @@ try {
     const cards=[...document.querySelectorAll('.lt-card')];
     window.__stableObserver=new MutationObserver(records=>{
       for(const record of records){const node=record.target.nodeType===3?record.target.parentElement:record.target;
-        if(refresh.contains(node)||refresh===node)window.__visualChanges.push('refresh');
+        if(refresh&&(refresh.contains(node)||refresh===node))window.__visualChanges.push('refresh');
         if(actionStrip.contains(node)||actionStrip===node)window.__visualChanges.push('action-strip');
         if(cards.includes(node))window.__visualChanges.push('card');
       }
@@ -758,7 +762,7 @@ try {
     'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 2 · /}).getAttribute('aria-pressed'),'false',
     'Other running profiles must remain explicitly unselected');
-  assert.equal(await page.locator('.lt-header-actions button').count(),1);
+  assert.equal(await page.locator('.lt-header-actions button').count(),0);
   await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
   await heading('Minecraft - 2').waitFor();
   await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
@@ -825,7 +829,7 @@ try {
   const alertText=await page.getByRole('alert').textContent();
   assert.doesNotMatch(alertText,/SYSTEM INSTRUCTION|PID 999|\/Users\/private\/worlds/,
     'Raw native details must not appear even after expanding Error codes');
-  await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.evaluate(()=>{window.__offline=false;});await nav('Play').click();
   await page.waitForFunction(()=>!document.querySelector('.lt-connection') && document.querySelectorAll('.lt-card:not(:disabled)').length>0);
   // Exercise storage review/cancel without requesting destructive native IPC.
   await page.goto('http://lazy-tester.test/?storage-review=1');
@@ -927,8 +931,7 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   await page.waitForFunction(()=>window.__nativeListeners.has('workspace-surface-error') &&
     window.__calls.some(call=>call.command==='lazy_tester_previews'));
-  const baseline = await page.evaluate(()=>window.__calls.filter(
-    call=>call.command==='lazy_tester_previews').length);
+  await heading('Minecraft - 1').waitFor();
   const readPreviewGeometry=()=>page.evaluate(()=>['.lt-viewport',...Array.from({length:5},(_,i)=>'.lt-launcher-entry[data-slot="'+(i+1)+'"] .lt-card-picture')].map(selector=>{
     const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
     return {x,y,width,height};
@@ -944,6 +947,8 @@ try {
   // Clear the authored error without retrying any failed native mutation.
   await workspaceFeedback.getByRole('button',{name:'Refresh status'}).click();
   await workspaceFeedback.waitFor({state:'detached'});
+  const baseline = await page.evaluate(()=>window.__calls.filter(
+    call=>call.command==='lazy_tester_previews').length);
   await page.evaluate(()=>{
     const process={pid:102,createdFileTime:'134000000000000001',sessionId:1,windowHandle:'0x125',responding:true};
     window.__emitNative('workspace-surface-error','dwm-preview-invalidated:'+
@@ -994,7 +999,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>['Launch','CloseOne','CloseAll'].includes(
     call.args?.request?.operation))),false,'Guided Open must not invoke Launch or Close');
   await page.evaluate(()=>{window.__runningSlots=[1,3];});
-  await page.getByRole('button',{name:'Refresh',exact:true}).click();
+  // Wait for the existing automatic session inspection below.
   await page.getByRole('button',{name:/^Launch Minecraft - 2 · /}).waitFor();
   assert.equal(await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).count(),0);
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);

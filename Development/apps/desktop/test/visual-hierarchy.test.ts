@@ -117,6 +117,8 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     const app=source('LazyTesterApp.svelte');
     const css=source('lazy-tester.css');
     const refresh=app.indexOf('bind:this={headerRefreshButton}');
+    expect(app).toContain('{#if showHeaderRefresh}');
+    expect(app).toContain("page!=='workspace' || manualRefreshing || manualRefreshRequested");
     const separate=app.indexOf('on:click={release}>Separate window</button>');
     expect(refresh).toBeGreaterThan(-1);
     expect(separate).toBe(-1);
