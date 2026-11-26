@@ -789,7 +789,15 @@ describe('Lazy Tester queue scheduling parity',()=>{
   });
 });
 
- describe('Workspace geometry identity',()=>{
+describe('Workspace geometry identity',()=>{
+  it('passes the captured DPI to both native layout bridge calls',()=>{
+    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    expect(source).toContain('workspaceSurface.update(geometry.viewport,geometry.pixelRatio)');
+    expect(source).toContain('lazyTester.previews(geometry.viewport,[...geometry.tiles],geometry.pixelRatio)');
+    const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
+    expect(bridge).toContain('previewViewport(tile.rect,pixelRatio)');
+    expect(bridge).toContain('viewport:workspaceViewport(rect,pixelRatio),tiles:placements');
+  });
   const rect=(x=0,y=0,width=640,height=360)=>({x,y,width,height} as DOMRect);
   const baseline:WorkspaceGeometry={viewport:rect(),tiles:[{slot:2,rect:rect(20,400,160,90)}],pixelRatio:1};
   it('rejects position-only changes, DPI changes and changed preview targets',()=>{

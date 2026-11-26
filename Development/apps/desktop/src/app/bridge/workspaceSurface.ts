@@ -14,7 +14,7 @@ function validatedViewport(rect:WorkspaceRectangle,pixelRatio:number,minimumWidt
   return {x,y,width,height,pixelRatio};
 }
 export const workspaceSurface={
-  update:(rect:WorkspaceRectangle)=>invokeRuntime<void>('desktop_update_workspace',{viewport:workspaceViewport(rect,window.devicePixelRatio)}),
+  update:(rect:WorkspaceRectangle,pixelRatio=window.devicePixelRatio)=>invokeRuntime<void>('desktop_update_workspace',{viewport:workspaceViewport(rect,pixelRatio)}),
   release:()=>invokeRuntime<void>('desktop_release_workspace',{target:null}),
   releaseTarget:(target:OwnedProcess)=>invokeRuntime<void>('desktop_release_workspace',{target}),
   suspend:()=>invokeRuntime<boolean>('desktop_suspend_workspace'),

@@ -407,10 +407,10 @@ export const lazyTester = {
   present: (slot: ProfileSlot, rect: WorkspaceRectangle) => invokeRuntime<void>('lazy_tester_present', {
     slot, viewport: workspaceViewport(rect, window.devicePixelRatio),
   }),
-  previews: async(rect:WorkspaceRectangle,tiles:{slot:ProfileSlot;rect:WorkspaceRectangle}[])=>{
-    const placements:PreviewPlacement[]=tiles.map(tile=>({slot:tile.slot,viewport:previewViewport(tile.rect,window.devicePixelRatio)}));
+  previews: async(rect:WorkspaceRectangle,tiles:{slot:ProfileSlot;rect:WorkspaceRectangle}[],pixelRatio=window.devicePixelRatio)=>{
+    const placements:PreviewPlacement[]=tiles.map(tile=>({slot:tile.slot,viewport:previewViewport(tile.rect,pixelRatio)}));
     return parsePreviewReport(await invokeRuntime<unknown>('lazy_tester_previews',{
-      viewport:workspaceViewport(rect,window.devicePixelRatio),tiles:placements,
+      viewport:workspaceViewport(rect,pixelRatio),tiles:placements,
     }),tiles.map(tile=>tile.slot));
   },
   clearPreviews:()=>invokeRuntime<void>('lazy_tester_clear_previews'),
