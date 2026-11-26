@@ -120,3 +120,7 @@ selected close confirmation takes precedence over noncritical display feedback.
 Healthy Play relies on existing automatic inspection; the header Refresh is
 shown only for actionable exceptions or an in-flight manual refresh. Settings
 and Data Storage retain explicit inspection controls.
+
+Data Storage keeps pack counts inside the inventory disclosure and consolidates
+compatibility option status and guidance into their existing setting rows.
+No storage measurement, mutation, review token or backup contract is changed.

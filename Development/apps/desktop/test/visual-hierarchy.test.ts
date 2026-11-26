@@ -32,6 +32,15 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });
+  it('keeps storage inventory in its disclosure without repeating summary counts',()=>{
+    const storage=source('DataStorage.svelte'),css=source('lazy-tester.css');
+    expect(storage).toContain('<summary><strong>Resource pack details</strong></summary>');
+    expect(storage).toContain('Counts pack folders with manifests, not packs loaded in the game.');
+    expect(storage).toContain('Active packs and memory usage are unknown.');
+    expect(storage).toContain('Texture Streaming — off');
+    expect(storage).toContain('Improved Input Response — on');
+    expect(css).not.toContain('.lt-storage-packs summary small');
+  });
   it('provides accessible section hierarchy and retains optional legacy controls',()=>{
     const settings=source('GeneralSettings.svelte');
     const storage=source('DataStorage.svelte');
