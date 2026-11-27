@@ -872,16 +872,21 @@ describe('Workspace geometry identity',()=>{
 
 describe('Recording receipt contract',()=>{
   it('accepts independent slots without interpreting a launch as a recording',()=>{
-    const receipts=parseRecordingStatus([{slot:1,state:'Starting',frames:0},{slot:3,state:'Recording',frames:7},{slot:5,state:'Saved',frames:120}]);
+    const receipts=parseRecordingStatus([{slot:1,state:'Starting',frames:0,recoveryFile:null},{slot:3,state:'Recording',frames:7,recoveryFile:null},{slot:5,state:'Saved',frames:120,recoveryFile:null}]);
     expect(receipts.filter(recordingActive).map(r=>r.slot)).toEqual([1,3]);
     expect(recordingActive(undefined)).toBe(false);
-    expect(recordingActive({slot:2,state:'Stopping',frames:0})).toBe(true);
+    expect(recordingActive({slot:2,state:'Stopping',frames:0,recoveryFile:null})).toBe(true);
+  });
+  it('exposes only a terminal, generated recovery filename, not a path',()=>{
+    const result=parseRecordingStatus([{slot:2,state:'Failed',frames:9,recoveryFile:'.lazy-tester-video-abc123.part'}]);
+    expect(result[0]?.recoveryFile).toBe('.lazy-tester-video-abc123.part');
+    expect(recordingActive(result[0])).toBe(false);
   });
   it('refuses duplicate, invalid or unconfirmed recording receipts',()=>{
-    const good={slot:1,state:'Recording',frames:1};
+    const good={slot:1,state:'Recording',frames:1,recoveryFile:null};
     for(const value of [[good,good],[{...good,slot:6}],[{...good,frames:0}],
       [{...good,state:'Saved',frames:0}],[{...good,state:'Starting'}],
-      [{...good,frames:-1}],[{...good,state:'Success'}],[{...good,state:['Recording']}],[{...good,path:'private.mkv'}],null]){
+      [{...good,frames:-1}],[{...good,state:'Success'}],[{...good,state:['Recording']}],[{...good,path:'private.mkv'}],[{...good,recoveryFile:'.lazy-tester-video-abc.part'}],[{...good,state:'Failed',recoveryFile:'../private.mkv'}],[{...good,state:'Failed',frames:0,recoveryFile:'.lazy-tester-video-abc.part'}],null]){
       expect(()=>parseRecordingStatus(value)).toThrow();
     }
   });

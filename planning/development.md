@@ -101,9 +101,13 @@ stalls; completed progress reports only, monotonic count, strict terminal
 marker, bounded natural-exit finalization and no false failure solely
 from BrokenPipe during Stop. Screenshot/AI worker rechecks original handle
 liveness after window identity observation. Fixtures authored NOT_EXECUTED.
+Finalized output publication refusal now preserves the existing temporary
+file when possible; Failed receipt exposes only its generated filename in
+the selected folder. No automatic alternative filename/overwrite/retry;
+no preservation claim after unconfirmed keep. Conflict fixture authored.
 Remaining native risks: WGC same-process HWND reuse and mixed DPI/occlusion,
 actual GPU frame negotiation, job assignment before manager crash,
-disk full/destination races and recoverability of interrupted MKV.
+disk-full/unavailable storage and recoverability of interrupted MKV.
 No new fallback, dependency, idle worker or automatic retry.
 Reviewed binary, exact native capture/resize/cleanup and measured quality
 remain held. Source only, no CI, no test execution, no release.

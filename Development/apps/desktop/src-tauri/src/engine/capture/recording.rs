@@ -7,7 +7,7 @@ use std::{
     io::{self,Read,Seek,SeekFrom,Write},
     os::windows::{io::{AsRawHandle,FromRawHandle,OwnedHandle},process::CommandExt},
     path::PathBuf,process::{Child,Command,Stdio},
-    sync::{Arc,Mutex,atomic::{AtomicBool,AtomicU64,AtomicU8,Ordering}},
+    sync::{Arc,Mutex,OnceLock,atomic::{AtomicBool,AtomicU64,AtomicU8,Ordering}},
     thread,time::{Duration,Instant},
 };
 use windows_sys::Win32::System::JobObjects::*;
@@ -24,8 +24,8 @@ const STOP_TIMEOUT:Duration=Duration::from_secs(10);
 
 #[derive(Clone,Serialize)]
 #[serde(rename_all="camelCase")]
-pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64}
-struct Run{state:AtomicU8,stop:AtomicBool,frames:AtomicU64,pixel_rate:u64}
+pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub recovery_file:Option<String>}
+struct Run{state:AtomicU8,stop:AtomicBool,frames:AtomicU64,pixel_rate:u64,recovery_file:OnceLock<String>}
 impl Run{
     fn active(&self)->bool{self.state.load(Ordering::Acquire)<SAVED}
     fn receipt(&self,slot:u32)->RecordingReceipt{
@@ -36,7 +36,8 @@ impl Run{
         // status read can observe the old state and new count; keep that
         // Starting receipt valid rather than reporting conflicting proof.
         let frames=if observed==STARTING{0}else{self.frames.load(Ordering::Acquire)};
-        RecordingReceipt{slot,state,frames}
+        let recovery_file=if observed==FAILED{self.recovery_file.get().cloned()}else{None};
+        RecordingReceipt{slot,state,frames,recovery_file}
     }
 }
 static SLOTS:Mutex<[Option<Arc<Run>>;5]>=Mutex::new([const{None};5]);
@@ -90,7 +91,7 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     let image=worker::reviewed_image("ffmpeg.exe",video::REVIEWED_FFMPEG_SHA256)?;
     let parent=path.parent().ok_or_else(||io::Error::other("Recording save folder unavailable"))?;
     let temp=tempfile::Builder::new().prefix(".lazy-tester-video-").suffix(".part").tempfile_in(parent)?;
-    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate});
+    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()});
     let mut all=slots()?;
     admit(&all,idx,rate)?;
     let active=Arc::clone(&run);
@@ -213,8 +214,33 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     let mut header=[0u8;4];file.read_exact(&mut header)?;
     if header!=[0x1a,0x45,0xdf,0xa3]{return Err(io::Error::other("Recording container invalid"));}
     file.sync_all()?;
-    temp.persist_noclobber(path).map_err(|e|e.error)?;
-    Ok(())
+    publish_finalized(temp,&path,run)
+}
+
+// This boundary is reached only after target, exit, final progress,
+// container and sync checks. If publishing fails, do not destroy the
+// already finalized recording or overwrite someone else's destination.
+fn publish_finalized(temp:tempfile::NamedTempFile,path:&std::path::Path,run:&Run)->io::Result<()>{
+    match temp.persist_noclobber(path){
+        Ok(_)=>Ok(()),
+        Err(error)=>{
+            let failure=error.error;
+            match error.file.keep(){
+                Ok((_file,retained))=>{
+                    if let Some(name)=retained.file_name().and_then(|name|name.to_str()){
+                        let _=run.recovery_file.set(name.to_owned());
+                    }
+                }
+                Err(mut keep_error)=>{
+                    // The filesystem may be unavailable. Preserve the
+                    // existing temporary entry if possible, but do not
+                    // claim recovery without a successful keep receipt.
+                    keep_error.file.disable_cleanup(true);
+                }
+            }
+            Err(failure)
+        }
+    }
 }
 
 // One deadline for first-frame and mid-stream stalls, no additional timer.
@@ -271,7 +297,7 @@ fn read_progress(mut input:impl Read,run:&Run)->io::Result<bool>{
 #[cfg(test)]
 mod tests{
     use super::*;
-    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate})}
+    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()})}
     #[test]
     fn admission_prevents_duplicate_and_aggregate_overcommit(){
         let mut slots:[Option<Arc<Run>>;5]=[const{None};5];
@@ -317,6 +343,26 @@ mod tests{
         assert!(read_progress(&b"frame=5\nprogress=end\nframe=6\n"[..],&r).is_err());
         assert!(read_progress(&b"frame=4\nprogress=end\n"[..],&r).is_err());
     }
+    #[test]
+    fn finalized_publish_conflict_preserves_existing_file_and_recording(){
+        let folder=tempfile::tempdir().unwrap();
+        let destination=folder.path().join("recording.mkv");
+        std::fs::write(&destination,b"existing").unwrap();
+        let mut temp=tempfile::Builder::new().prefix(".lazy-tester-video-").suffix(".part")
+            .tempfile_in(folder.path()).unwrap();
+        temp.write_all(b"finalized fixture").unwrap();
+        temp.as_file().sync_all().unwrap();
+        let r=run(1);
+        r.frames.store(1,Ordering::Release);
+        assert!(publish_finalized(temp,&destination,&r).is_err());
+        r.state.store(FAILED,Ordering::Release);
+        let receipt=r.receipt(1);
+        assert_eq!(receipt.state,"Failed");
+        let retained=receipt.recovery_file.unwrap();
+        assert_eq!(std::fs::read(folder.path().join(retained)).unwrap(),b"finalized fixture");
+        assert_eq!(std::fs::read(destination).unwrap(),b"existing");
+    }
+
     #[test]
     fn progress_requires_terminal_receipt_and_real_frames(){
         let r=run(1);

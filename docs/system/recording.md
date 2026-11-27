@@ -41,7 +41,15 @@ command arguments: stdout is the manager-owned file handle, fd protocol
 allows muxer seeks. FFmpeg progress is read from a bounded pipe and only
 frame counts/state are exposed. Only success exit, final progress=end,
 positive frame count, EBML header and bounded size permit no-clobber publish.
-These are structural/producer receipts, not independent decode validation.
+If final publication fails after these checks and sync (for example, a file
+appears at the destination during recording), the completed temporary file
+is retained with its existing unique .part name, when the filesystem permits.
+The terminal Failed receipt reports only that generated filename in the chosen
+save folder; it never reports Saved, overwrites, retries, or auto-renames.
+A failed keep operation is unconfirmed; automatic cleanup is disabled for
+that entry, but recovery is not promised. Earlier capture/identity/encoder
+failures do not use this retention path. These are structural/producer
+receipts, not independent decode validation.
 
 Up to five logical slots; initial aggregate pixel throughput is capped at
 4096×2160×30 pixels/s. This is a policy candidate, not measured hardware
