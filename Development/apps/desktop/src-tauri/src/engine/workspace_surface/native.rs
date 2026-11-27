@@ -842,6 +842,28 @@ pub(super) fn retired(target: &OwnedProcess) -> bool {
         !birth.is_ok_and(|value| value == key.created_file_time)
     }
 }
+// Round both edges of each validated CSS interval at the observed native DPI.
+fn scaled_client_rectangle(viewport: Viewport, scale: f64) -> Rectangle {
+    let x = (viewport.x * scale).round() as i32;
+    let y = (viewport.y * scale).round() as i32;
+    let width = ((viewport.x + viewport.width) * scale).round() as i32 - x;
+    let height = ((viewport.y + viewport.height) * scale).round() as i32 - y;
+    Rectangle { x, y, width, height }
+}
+
+#[test]
+fn fractional_viewport_rounds_shared_edges_without_gap_or_overlap() {
+    let viewport = Viewport { x: 10.25, y: 20.25, width: 160.25, height: 120.25, pixel_ratio: 1.5 };
+    let first = scaled_client_rectangle(viewport, 1.5);
+    assert_eq!(first, Rectangle { x: 15, y: 30, width: 241, height: 181 });
+    let right = scaled_client_rectangle(Viewport { x: viewport.x + viewport.width, ..viewport }, 1.5);
+    let below = scaled_client_rectangle(Viewport { y: viewport.y + viewport.height, ..viewport }, 1.5);
+    assert_eq!(first.x + first.width, right.x);
+    assert_eq!(first.y + first.height, below.y);
+    let integral = Viewport { x: 10.0, y: 20.0, width: 160.0, height: 120.0, pixel_ratio: 1.0 };
+    assert_eq!(scaled_client_rectangle(integral, 1.0), Rectangle { x: 10, y: 20, width: 160, height: 120 });
+}
+
 pub(super) fn rectangle(manager: u64, viewport: Viewport) -> io::Result<Rectangle> {
     unsafe {
         use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
@@ -867,10 +889,7 @@ pub(super) fn rectangle(manager: u64, viewport: Viewport) -> io::Result<Rectangl
         if GetClientRect(window, &mut client) == 0 || ClientToScreen(window, &mut origin) == 0 {
             return Err(io::Error::last_os_error());
         }
-        let x = (viewport.x * scale).round() as i32;
-        let y = (viewport.y * scale).round() as i32;
-        let width = ((viewport.x + viewport.width) * scale).round() as i32 - x;
-        let height = ((viewport.y + viewport.height) * scale).round() as i32 - y;
+        let Rectangle { x, y, width, height } = scaled_client_rectangle(viewport, scale);
         if x < 0 || y < 0 || x + width > client.right + 1 || y + height > client.bottom + 1 {
             return Err(io::Error::new(
                 io::ErrorKind::WouldBlock,

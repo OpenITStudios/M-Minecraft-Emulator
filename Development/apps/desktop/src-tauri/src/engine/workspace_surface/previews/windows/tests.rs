@@ -645,3 +645,14 @@ fn preview_startup_timeout_retains_late_ready_receipt() {
     sender.send(Ok(42)).unwrap();
     assert_eq!(super::await_worker_ready(&receiver,std::time::Duration::ZERO).unwrap(),42);
 }
+
+#[test]
+fn preview_startup_refuses_invalid_identity_and_propagates_failure() {
+    let (sender, receiver) = mpsc::sync_channel(1);
+    sender.send(Ok(0)).unwrap();
+    assert!(await_worker_ready(&receiver, Duration::ZERO).unwrap_err().to_string().contains("invalid thread identity"));
+    sender.send(Err(io::Error::new(io::ErrorKind::PermissionDenied, "fixture startup failure"))).unwrap();
+    assert_eq!(await_worker_ready(&receiver, Duration::ZERO).unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+    drop(sender);
+    assert!(await_worker_ready(&receiver, Duration::ZERO).unwrap_err().to_string().contains("stopped before startup"));
+}

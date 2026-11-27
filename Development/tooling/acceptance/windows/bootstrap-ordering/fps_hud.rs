@@ -223,3 +223,37 @@ pub unsafe extern "C" fn lazytester_hud_present(h:*const Hud,result:i32,flags:u3
 pub unsafe extern "C" fn lazytester_hud_snapshot(h:*const Hud,out:*mut HudSnapshot){
     if let Some(out)=out.as_mut(){*out=h.as_ref().map_or(HudSnapshot::default(),Hud::snapshot);}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hud_constructor_preserves_legacy_hidden_and_selected_policy() {
+        unsafe {
+            let selected = Owned::event(true).unwrap();
+            let stop = Owned::event(true).unwrap();
+            let controller = Owned::event(true).unwrap();
+            let null = ptr::null_mut();
+            let unmanaged = Hud::new(null, null, null).unwrap();
+            assert!(unmanaged.shared.admitted());
+            // Legacy policy has no selection handle; it must remain hidden.
+            let legacy = Hud::new(null, stop.raw(), controller.raw()).unwrap();
+            assert!(!legacy.shared.admitted());
+            for (a, b, c) in [(selected.raw(), null, controller.raw()),
+                (selected.raw(), stop.raw(), null), (null, stop.raw(), null),
+                (null, null, controller.raw())] {
+                assert!(Hud::new(a, b, c).is_none());
+            }
+            let managed = Hud::new(selected.raw(), stop.raw(), controller.raw()).unwrap();
+            assert!(!managed.shared.admitted());
+            assert_ne!(SetEvent(selected.raw()), 0);
+            assert!(managed.shared.admitted());
+            assert!(!legacy.shared.admitted());
+            assert_ne!(SetEvent(controller.raw()), 0);
+            assert!(!managed.shared.admitted());
+            // Synthetic events only; no bind, window, thread or game launch.
+            assert_eq!(managed.snapshot().active, 0);
+        }
+    }
+}

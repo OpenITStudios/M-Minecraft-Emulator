@@ -67,12 +67,16 @@ it('rearms display-scale observation once and removes the current listener on te
   expect(queries[0].listeners.size).toBe(0);
   expect(queries[1].text).toBe('(resolution: 1.5dppx)');
   expect(calls).toBe(1);
+  const queued=[...queries[1].listeners][0]!;
   stop();expect(queries[1].listeners.size).toBe(0);
+  ratio=2;queued(); // An already queued callback cannot revive a disposed observer.
+  expect(calls).toBe(1);
+  expect(queries).toHaveLength(2);
 });
-it('rounds native viewport edges consistently instead of independent dimensions',()=>{
+it('routes native viewport placement through the shared edge conversion',()=>{
   const native=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/native.rs',import.meta.url),'utf8');
-  expect(native).toContain('((viewport.x + viewport.width) * scale).round() as i32 - x');
-  expect(native).toContain('((viewport.y + viewport.height) * scale).round() as i32 - y');
+  const placement=native.slice(native.indexOf('pub(super) fn rectangle(manager:'));
+  expect(placement).toContain('= scaled_client_rectangle(viewport, scale);');
 });
 
 
