@@ -30,6 +30,17 @@ pub(super) struct InventoryItem {
     pub(super) identity: windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
 }
 
+// Both inventory fingerprints use the same lowercase, two-digit wire encoding.
+fn fingerprint_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut result = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        result.push(char::from(HEX[(byte >> 4) as usize]));
+        result.push(char::from(HEX[(byte & 0xf) as usize]));
+    }
+    result
+}
+
 // Opaque display identity also binds the retained profile and selected slot.
 // This is not an authorization token.
 pub(super) fn inventory_identity(profile: &windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
@@ -46,7 +57,7 @@ pub(super) fn inventory_identity(profile: &windows_sys::Win32::Storage::FileSyst
         hash.update((field.len() as u64).to_le_bytes());
         hash.update(field.as_bytes());
     }
-    hash.finalize().iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join("")
+    fingerprint_hex(&hash.finalize()[..])
 }
 
 pub(super) fn individual_inventory(private: &File, category: InventoryCategory,
@@ -338,7 +349,7 @@ fn dependency_uuids(manifest: &PackManifest) -> io::Result<Vec<String>> {
     for entry in &manifest.dependencies {
         match (&entry.uuid, &entry.module_name) {
             (Some(uuid), None) if valid_uuid(uuid) => {
-                let version: [u32; 3] = serde_json::from_value(entry.version.clone())
+                let version: [u32; 3] = serde::Deserialize::deserialize(&entry.version)
                     .map_err(|_| io::Error::other("Invalid pack dependency version"))?;
                 if version.iter().any(|v| *v > 65535) {
                     return Err(io::Error::other("Invalid pack dependency version"));
@@ -459,7 +470,7 @@ impl SelectiveReview {
             identity(&mut hash, &item.identity);
             hash.update(digest);
         }
-        Ok(hash.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<Vec<_>>().join(""))
+        Ok(fingerprint_hex(&hash.finalize()[..]))
     }
 }
 
@@ -667,6 +678,26 @@ mod tests {
             let json = format!("{header}{dependency}]}}");
             assert!(serde_json::from_str::<PackManifest>(&json)
                 .map_or(true, |manifest| dependency_uuids(&manifest).is_err()));
+        }
+    }
+
+    #[test]
+    fn fingerprint_hex_preserves_every_byte_and_leading_zero() {
+        let bytes: Vec<u8> = (0..=255).collect();
+        let expected: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        assert_eq!(fingerprint_hex(&bytes), expected);
+        assert_eq!(fingerprint_hex(&[0; 32]), "0".repeat(64));
+        assert_eq!(fingerprint_hex(&[]), "");
+    }
+
+    #[test]
+    fn borrowed_dependency_version_preserves_owned_deserializer_rules() {
+        for raw in ["[0,1,65535]", "[0,1]", "[0,1,2,3]", "[0,-1,2]", "[0,1.0,2]",
+                    "[0,4294967296,2]", "[0,\"1\",2]", "null", "{}", "\"1.0.0\""] {
+            let value: serde_json::Value = serde_json::from_str(raw).unwrap();
+            let owned = serde_json::from_value::<[u32; 3]>(value.clone());
+            let borrowed = <[u32; 3] as serde::Deserialize>::deserialize(&value);
+            assert_eq!(owned.ok(), borrowed.ok(), "{raw}");
         }
     }
 
