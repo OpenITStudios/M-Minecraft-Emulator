@@ -53,6 +53,11 @@ pub async fn lazy_tester_session(
         return Err("Experimental input is restricted to the opt-in native agent CLI".into());
     }
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
+        match &request {
+            crate::engine::native_clients_session::SessionRequest::CloseOne{slot}=>crate::engine::capture::require_recording_idle(Some(*slot))?,
+            crate::engine::native_clients_session::SessionRequest::CloseAll=>crate::engine::capture::require_recording_idle(None)?,
+            _=>{},
+        }
         crate::engine::native_clients_session::request(request)
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
@@ -94,6 +99,7 @@ pub async fn lazy_tester_close_one(
     if crate::app_bootstrap::startup_diagnostic_mode() {return Err("Startup diagnostic cannot close games".into());}
     if !(1..=5).contains(&slot) {return Err("Unknown Minecraft profile".into());}
     tauri::async_runtime::spawn_blocking(move||run_manager_operation(||{
+        crate::engine::capture::require_recording_idle(Some(slot))?;
         use crate::engine::native_clients_session::{request,SessionRequest};
         // A preliminary Inspect would reap and sync journals from ALL slots
         // before the selected close. The original workspace owner only
@@ -167,6 +173,27 @@ pub async fn lazy_tester_screenshot(slot:u32,expected:crate::engine::process_ide
     tauri::async_runtime::spawn_blocking(move||run_manager_operation(||crate::engine::capture::save_screenshot(slot,expected)))
         .await.map_err(|_|"Screenshot task failed".to_string())?
         .map_err(|error|error.to_string())
+}
+
+#[tauri::command]
+pub fn lazy_tester_recording_available()->bool{
+    !crate::app_bootstrap::startup_diagnostic_mode()&&crate::engine::capture::recording_available()
+}
+#[tauri::command]
+pub fn lazy_tester_recording_status()->Result<Vec<crate::engine::capture::RecordingReceipt>,String>{
+    crate::engine::capture::recording_status().map_err(|e|e.to_string())
+}
+#[tauri::command]
+pub async fn lazy_tester_start_recording(slot:u32,expected:crate::engine::process_identity::OwnedProcess)->Result<bool,String>{
+    if crate::app_bootstrap::startup_diagnostic_mode(){return Err("Startup diagnostic cannot record games".into());}
+    tauri::async_runtime::spawn_blocking(move||run_manager_operation(||crate::engine::capture::start_recording(slot,expected)))
+        .await.map_err(|_|"Recording start task failed".to_string())?.map_err(|e|e.to_string())
+}
+#[tauri::command]
+pub async fn lazy_tester_stop_recording(slot:u32)->Result<(),String>{
+    if crate::app_bootstrap::startup_diagnostic_mode(){return Err("Startup diagnostic cannot record games".into());}
+    tauri::async_runtime::spawn_blocking(move||run_manager_operation(||crate::engine::capture::stop_recording(slot)))
+        .await.map_err(|_|"Recording stop task failed".to_string())?.map_err(|e|e.to_string())
 }
 
 #[tauri::command]
@@ -300,6 +327,7 @@ pub(crate) fn close_all_managed() -> Result<(), (bool, io::Error)> {
     // A gate refusal, by contrast, makes no game/window changes at all.
     let mut release_attempted = false;
     let outcome = run_manager_operation(|| {
+        crate::engine::capture::require_recording_idle(None)?;
         release_attempted = true;
         let release=crate::engine::workspace_surface::release_for_close();
         #[cfg(feature = "lazy-tester-package")]

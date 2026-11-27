@@ -77,17 +77,16 @@ roadmap; this new capture workstream does not release any validation holds.
 |---|---|
 | CAP-01 | Explicit WGC one-shot screenshot source in the existing optional worker; original client-area RGBA8 → WebP VP8L, bounded geometry/bytes, separate from LTG1 PNG AI observation. Fixture source authored, NOT_EXECUTED; native build and installation held. |
 | CAP-02 | Source integrated: existing controller/manager gate, exact expected-target comparison, bounded binary runner, approved pinned helper digest gate (None), strict VP8L receipt, native Save dialog, exclusive no-clobber publisher, minimal selected-instance UI. Authored fixtures NOT_EXECUTED; approved binary/dependency lock/package/native proof remain held. |
-| CAP-03 | GPU frame recording: same verified source principle, 30 FPS original client resolution, constant quality, AV1 preferred, hardware H.264 fallback only after capability and muxer support; MKV output, no PNG/CPU frame loop. Backend, GPU resource interoperability and container implementation pending. |
-| CAP-04 | Recording ownership: independent per-slot explicit start/stop, up to five logical slots subject to shared hardware/memory/disk budget, no auto-record; exact target loss/resize policy, bounded queue and finalization before successful publication. Pending. |
+| CAP-03 | Hardware-only FFmpeg 8.1 candidate source: explicit WGC HWND → D3D11 → AV1 NVENC CQ 23/P4 → Matroska, seekable inherited output file, no automatic format conversion or software fallback. VFR capped at 30, even original dimensions only. Binary digest None, no distribution; fallback/non-NVIDIA capability review and exact native validation remain open. |
+| CAP-04 | Source integrated: five slot leases with aggregate 4096×2160×30 pixel/s initial admission, one direct job-owned child per active slot, no idle polling, pinned original process/HWND/size checks, explicit save dialog, stop/trailer receipt and no-clobber publication. CloseOne/CloseAll desktop paths refuse active recording; target loss/resize or invalid receipt fails closed. 1h/4GiB candidate ceilings, native capacity and cleanup proof held. |
 | CAP-05 | Recording UI integration and lifecycle/close consumers; source fixtures and later exact Windows acceptance (one then five, text/texture quality, GPU/CPU/RAM, recovery, target isolation). Audio optional, off until instance-specific capture is verified. Pending. |
 
 Source reference: [native GPU capture worker](../Development/tooling/agent/native-gpu-capture/README.md).
-The WGC crate exposes native frame readback and conversion into
-Direct3D11CaptureFrame; recording must use GPU surfaces rather than the
-readback path. No new third-party video dependency is admitted yet:
-hardware AV1/MKV compatibility, dependency/licensing and finalization
-behavior need source review. No automatic software fallback or new game
-lifecycle owner. Source only, no CI, no test execution, no release.
+Recording uses a separate reviewed FFmpeg 8.1 executable rather than a raw
+frame pipe or custom codec/muxer. [Recording contract](../docs/system/recording.md)
+owns the source boundary and acceptance. No binary shipped, automatic
+software fallback or new game lifecycle owner. Source only, no CI, no test
+execution, no release.
 
 ## Desktop UI refinement — 27 November 2026
 

@@ -12,9 +12,12 @@ const MAX_WORKER_BYTES:u64=128*1024*1024;
 
 pub(super) fn available()->bool { REVIEWED_CAPTURE_WORKER_SHA256.is_some() }
 
-struct Image { path:PathBuf, _file:File, _directory:File }
-fn reviewed_image()->io::Result<Image>{
-    let expected=REVIEWED_CAPTURE_WORKER_SHA256.ok_or_else(||io::Error::new(io::ErrorKind::Unsupported,"Capture worker approval pending"))?;
+pub(super) struct Image { pub path:PathBuf, _file:File, _directory:File }
+pub(super) fn reviewed_image(name:&str,digest:Option<[u8;32]>)->io::Result<Image>{
+    let expected=digest.ok_or_else(||io::Error::new(io::ErrorKind::Unsupported,"Capture binary approval pending"))?;
+    if !matches!(name,"lazy-tester-gpu-capture.exe"|"ffmpeg.exe"){
+        return Err(io::Error::other("Unknown capture binary"));
+    }
     let current=std::env::current_exe()?;
     let folder=current.parent().ok_or_else(||io::Error::other("Capture helper directory unavailable"))?;
     // Pin the existing executable directory and exact worker file. No reparse
@@ -25,7 +28,7 @@ fn reviewed_image()->io::Result<Image>{
     if attrs&FILE_ATTRIBUTE_REPARSE_POINT!=0||attrs&FILE_ATTRIBUTE_DIRECTORY==0 {
         return Err(io::Error::other("Capture helper directory is not ordinary"));
     }
-    let path=folder.join("lazy-tester-gpu-capture.exe");
+    let path=folder.join(name);
     let mut file=OpenOptions::new().read(true).share_mode(FILE_SHARE_READ)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT).open(&path)?;
     if windows_file_identity::attributes(&file)?&(FILE_ATTRIBUTE_REPARSE_POINT|FILE_ATTRIBUTE_DIRECTORY)!=0 {
@@ -50,7 +53,7 @@ fn reviewed_image()->io::Result<Image>{
 }
 
 pub(super) fn screenshot(target:&OwnedProcess)->io::Result<Vec<u8>>{
-    let image=reviewed_image()?;
+    let image=reviewed_image("lazy-tester-gpu-capture.exe",REVIEWED_CAPTURE_WORKER_SHA256)?;
     let hwnd=target.window_handle.strip_prefix("0x")
         .and_then(|s|u64::from_str_radix(s,16).ok()).filter(|n|*n>0)
         .ok_or_else(||io::Error::other("Minecraft window unavailable"))?;

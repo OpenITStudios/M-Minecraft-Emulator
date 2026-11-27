@@ -7,7 +7,7 @@ fn same_target(a:&OwnedProcess,b:&OwnedProcess)->bool {
     a.responding&&b.responding&&a.pid==b.pid&&a.session_id==b.session_id&&
         a.created_file_time==b.created_file_time&&a.window_handle.eq_ignore_ascii_case(&b.window_handle)
 }
-fn verified(slot:u32,expected:&OwnedProcess)->io::Result<OwnedProcess>{
+pub(super) fn verified(slot:u32,expected:&OwnedProcess)->io::Result<OwnedProcess>{
     if !(1..=5).contains(&slot){return Err(io::Error::other("Unknown Minecraft profile"));}
     let target=request(SessionRequest::Inspect)?.profiles.into_iter()
         .find(|p|p.slot==slot&&p.state=="RUNNING").and_then(|p|p.process)
