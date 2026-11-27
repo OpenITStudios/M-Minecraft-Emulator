@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include "fps-meter-ffi.h"
+#include "hud-window-ffi.h"
 
 namespace fps_hud {
 struct Reading { unsigned long long accepted = 0; unsigned milliFps = 0; bool valid = false; };
@@ -38,11 +39,12 @@ struct Snapshot {
 // One process policy retains this object across native chain recreation.
 // Its existing installation/lifetime owner serializes bind/unbind; present/read may race.
 class Hud {
-    struct State;
-    std::unique_ptr<State> state_;
+    LazyTesterNativeHud* state_;
 public:
     explicit Hud(HANDLE hudSelected = nullptr, HANDLE policyStop = nullptr, HANDLE controller = nullptr);
     ~Hud();
+    Hud(const Hud&) = delete;
+    Hud& operator=(const Hud&) = delete;
     bool bind(HWND owner, DWORD thread) noexcept;
     void unbind() noexcept;
     void present(HRESULT result, UINT flags) noexcept;

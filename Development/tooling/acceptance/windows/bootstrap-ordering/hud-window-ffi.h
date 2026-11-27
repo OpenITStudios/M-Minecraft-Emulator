@@ -1,23 +1,18 @@
 #pragma once
 #include <windows.h>
 #include <cstdint>
-struct LazyTesterHudWindowHost;
-using LazyTesterHudNotify = void (*)(void*, HWND);
+struct LazyTesterNativeHud;
+struct LazyTesterHudSnapshot {
+    std::uint64_t accepted; std::uint32_t milli, valid; HWND window; RECT bounds;
+    std::uint32_t dpi, draws, failures, visible, active;
+};
+static_assert(sizeof(LazyTesterHudSnapshot)==64);
 extern "C" {
-LazyTesterHudWindowHost* lazytester_hud_window_host_create(void*, LazyTesterHudNotify);
-void lazytester_hud_window_host_destroy(LazyTesterHudWindowHost*);
-void lazytester_hud_window_clear(LazyTesterHudWindowHost*);
-HWND lazytester_hud_window_get(LazyTesterHudWindowHost*, HWND, LONG, LONG);
-std::uint32_t lazytester_hud_window_wait(HANDLE, HANDLE);
-}
-
-struct LazyTesterHudRenderer;
-struct LazyTesterHudComposition { HWND window; RECT bounds; std::uint32_t dpi, visible, drawn; };
-static_assert(sizeof(LazyTesterHudComposition)==40);
-extern "C" {
-LazyTesterHudRenderer* lazytester_hud_renderer_create();
-void lazytester_hud_renderer_destroy(LazyTesterHudRenderer*);
-void lazytester_hud_renderer_reset(LazyTesterHudRenderer*);
-std::uint32_t lazytester_hud_renderer_update(LazyTesterHudRenderer*, LazyTesterHudWindowHost*, HWND,
-    std::uint32_t, std::uint32_t, std::uint32_t, std::uint32_t, LazyTesterHudComposition*);
+LazyTesterNativeHud* lazytester_hud_create(HANDLE,HANDLE,HANDLE);
+void lazytester_hud_destroy(LazyTesterNativeHud*);
+std::uint32_t lazytester_hud_bind(const LazyTesterNativeHud*,HWND,DWORD);
+void lazytester_hud_unbind(const LazyTesterNativeHud*);
+void lazytester_hud_present(const LazyTesterNativeHud*,HRESULT,UINT);
+void lazytester_hud_snapshot(const LazyTesterNativeHud*,LazyTesterHudSnapshot*);
+std::uint32_t lazytester_hud_selection(std::uint32_t,HANDLE,HANDLE,HANDLE);
 }

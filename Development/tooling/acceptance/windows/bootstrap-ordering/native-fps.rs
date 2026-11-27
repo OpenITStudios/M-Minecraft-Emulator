@@ -10,3 +10,6 @@ mod hud_canvas;
 #[cfg(windows)]
 #[path = "hud_window.rs"]
 mod hud_window;
+
+#[cfg(windows)]
+mod fps_hud;

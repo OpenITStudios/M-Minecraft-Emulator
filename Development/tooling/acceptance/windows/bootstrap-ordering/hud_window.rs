@@ -34,7 +34,7 @@ extern "system" {
     fn GetCurrentProcessId()->u32;
     fn GetLastError()->u32;
 }
-const NAME:[u16;20]=[77,105,118,117,98,105,77,101,97,115,117,114,101,100,70,112,115,72,117,100,0];
+const NAME:[u16;21]=[77,105,118,117,98,105,77,101,97,115,117,114,101,100,70,112,115,72,117,100,0];
 thread_local! { static CALLBACK:Cell<Option<(*mut c_void,Notify)>>=const { Cell::new(None) }; }
 unsafe extern "system" fn procedure(window:Handle,message:u32,w:usize,l:isize)->isize {
     match message { 0x84=>-1,0x21=>3,0x14=>1,_=>DefWindowProcW(window,message,w,l) }
@@ -86,15 +86,6 @@ pub unsafe extern "C" fn lazytester_hud_window_host_destroy(host:*mut WindowHost
 pub unsafe extern "C" fn lazytester_hud_window_clear(host:*mut WindowHost) {
     if let Some(h)=host.as_mut() { h.clear(); }
 }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_window_get(host:*mut WindowHost,owner:Handle,x:i32,y:i32)->Handle {
-    let Some(h)=host.as_mut() else { return ptr::null_mut(); };
-    if h.window.is_null() {
-        h.window=CreateWindowExW(0x080800a0,NAME.as_ptr(),[0u16].as_ptr(),0x80000000,x,y,0,0,
-            owner,ptr::null_mut(),h.instance,ptr::null_mut());
-    }
-    h.window
-}
 // 0 = continue, 1 = stop/quit, 2 = failure. Keep 250ms wake and 64-message bound.
 #[no_mangle]
 pub unsafe extern "C" fn lazytester_hud_window_wait(stop:Handle,changed:Handle)->u32 {
@@ -129,7 +120,7 @@ extern "system" {
         source:Handle,origin:*const Point,key:u32,blend:*const Blend,flags:u32)->i32;
 }
 #[repr(C)]
-pub struct Composition { window:Handle,bounds:Rect,dpi:u32,visible:u32,drawn:u32 }
+pub struct Composition { pub window:Handle,pub bounds:Rect,pub dpi:u32,pub visible:u32,pub drawn:u32 }
 pub struct Renderer { canvas:*mut Canvas, previous_dpi:u32, previous_rate:u32, previous_valid:bool, previous_bounds:Rect }
 impl Drop for Renderer { fn drop(&mut self) { unsafe { lazytester_hud_canvas_destroy(self.canvas); } } }
 #[no_mangle]

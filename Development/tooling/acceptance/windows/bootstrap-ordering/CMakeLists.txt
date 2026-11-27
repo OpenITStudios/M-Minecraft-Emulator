@@ -78,7 +78,8 @@ add_custom_command(OUTPUT "${native_fps_lib}"
   DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/native-fps.rs"
     "${CMAKE_CURRENT_SOURCE_DIR}/fps-meter.rs" "${CMAKE_CURRENT_SOURCE_DIR}/frame-pacing.rs"
     "${CMAKE_CURRENT_SOURCE_DIR}/hud_canvas.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hud_window.rs" VERBATIM)
+    "${CMAKE_CURRENT_SOURCE_DIR}/hud_window.rs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fps_hud.rs" VERBATIM)
 add_custom_target(lazytester-native-fps-build DEPENDS "${native_fps_lib}")
 
 add_library(bootstrap-dependency SHARED dependency.cpp)

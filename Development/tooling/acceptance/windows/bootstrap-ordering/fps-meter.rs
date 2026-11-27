@@ -11,12 +11,12 @@ pub struct FpsMeterState {
 }
 
 impl FpsMeterState {
-    fn new(frequency: i64) -> Self {
+    pub(crate) fn new(frequency: i64) -> Self {
         Self { frequency: if (1..=1_000_000_000_000).contains(&frequency) { frequency } else { 0 },
             first: 0, last: 0, intervals: 0, accepted: 0, milli_fps: 0, valid: 0 }
     }
 
-    fn record(&mut self, now: i64) {
+    pub(crate) fn record(&mut self, now: i64) {
         if self.frequency == 0 || now <= 0 { return; }
         self.accepted = self.accepted.saturating_add(1);
         let now = now.max(self.last);
@@ -38,6 +38,8 @@ impl FpsMeterState {
         self.last = now;
     }
 
+    pub(crate) fn reset(&mut self) { *self=Self::new(self.frequency); }
+    pub(crate) fn reading(&self, now:i64)->FpsMeterReading { FpsMeterReading {accepted:self.accepted,milli_fps:self.milli_fps,valid:u32::from(self.valid_at(now))} }
     fn valid_at(&self, now: i64) -> bool {
         self.valid != 0 && now >= self.last && now - self.last <= self.frequency * 2
     }
@@ -63,16 +65,16 @@ pub unsafe extern "C" fn lazytester_fps_meter_record(state: *mut FpsMeterState, 
 
 #[repr(C)]
 pub struct FpsMeterReading {
-    accepted: u64,
-    milli_fps: u32,
-    valid: u32,
+    pub accepted: u64,
+    pub milli_fps: u32,
+    pub valid: u32,
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn lazytester_fps_meter_read(state: *const FpsMeterState, now: i64, output: *mut FpsMeterReading) {
     if output.is_null() { return; }
     let reading = match state.as_ref() {
-        Some(s) => FpsMeterReading { accepted: s.accepted, milli_fps: s.milli_fps, valid: u32::from(s.valid_at(now)) },
+        Some(s) => s.reading(now),
         None => FpsMeterReading { accepted: 0, milli_fps: 0, valid: 0 },
     };
     output.write(reading);
