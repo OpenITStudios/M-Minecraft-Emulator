@@ -1497,7 +1497,7 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
 // Audio COM reads are separate from process exit. Stable audio uses its
 // 1-second discovery deadline; a process-local focus hint can wake it early.
 // Keep the short deadline when the hint or prior observation is unavailable.
-const AUDIO_IDLE_RESYNC: Duration = Duration::from_secs(1);
+const AUDIO_IDLE_RESYNC: Duration = super::session_audio::DISCOVERY_INTERVAL;
 type AudioRoster = [Option<(u32, u64)>; 5];
 fn audio_roster(sessions: &Sessions) -> AudioRoster {
     // Retained handles are the only source of ownership. Cheap metadata
@@ -1533,12 +1533,19 @@ impl AudioIdleGate {
         // suppressed by a previously successful cadence checkpoint.
         self.last_success = None;
     }
-    fn wait_budget(&self, now: Instant, roster: AudioRoster, focus_ready: bool) -> Duration {
+    fn current_success(&self, roster: AudioRoster) -> bool {
+        self.last_success.is_some() && self.roster == Some(roster)
+    }
+    fn wait_budget(&self, now: Instant, roster: AudioRoster, focus_ready: bool,
+        discovery: Option<Duration>) -> Duration {
         let short=Duration::from_millis(250);
         let Some(last)=self.last_success.filter(|_| self.roster==Some(roster)) else {
+            // A missing/failed sync or a changed roster must not turn an
+            // overdue discovery into an immediate repeated COM retry.
             return short;
         };
         let remaining=AUDIO_IDLE_RESYNC.saturating_sub(now.saturating_duration_since(last));
+        let remaining=discovery.map_or(remaining, |budget| remaining.min(budget));
         if focus_ready {remaining} else {remaining.min(short)}
     }
 }
@@ -1678,13 +1685,18 @@ fn run() -> io::Result<()> {
                 }
             }
         }
-        let focus_ready = !native_wait_failed && !exit_retry &&
+        // Focus hints are an acceleration only for healthy audio. A burst
+        // must not bypass the bounded retry or pending storage cadence.
+        let focus_ready = !native_wait_failed && !exit_retry && !pending_storage &&
+            audio_idle.current_success(roster) &&
             audio_focus.as_ref().is_some_and(|wake|wake.observer_active()) &&
             sessions.running.iter().flatten().all(|started|started.children[0].policy.is_some());
         let cadence = maintenance_interval(pending_storage, audio_needed && !focus_ready,
             exit_retry || native_wait_failed && running);
         let cadence = if audio_needed {
-            cadence.min(audio_idle.wait_budget(Instant::now(),roster,focus_ready))
+            let now=Instant::now();
+            let discovery=audio.as_ref().map(|a|a.discovery_budget(now));
+            cadence.min(audio_idle.wait_budget(now,roster,focus_ready,discovery))
         } else {cadence};
         // Direct wait on the original actor's handles. A dead manager cannot
         // repeatedly wake a controller that still owns games; it is relevant
@@ -1742,11 +1754,13 @@ fn run() -> io::Result<()> {
                     }
                     let foreground = super::session_audio::foreground();
                     let now = Instant::now();
-                    if audio_idle.due(now, foreground, roster) {
+                    let discovery_due=audio_idle.current_success(roster) &&
+                        audio.as_ref().is_some_and(|a|a.discovery_budget(now).is_zero());
+                    if discovery_due || audio_idle.due(now, foreground, roster) {
                         match sync_audio(&sessions, &mut audio, audio_mode, foreground) {
                             Ok(()) => {
                                 audio_issue = None;
-                                audio_idle.success(now, foreground, roster);
+                                audio_idle.success(Instant::now(), foreground, roster);
                             }
                             Err(error) => {
                                 audio_issue = Some(error.to_string());
@@ -2241,18 +2255,25 @@ mod tests {
         let start=Instant::now();
         let roster:AudioRoster=[Some((102,1)),None,None,None,None];
         let mut gate=AudioIdleGate::default();
-        assert_eq!(gate.wait_budget(start,roster,true),Duration::from_millis(250));
+        assert_eq!(gate.wait_budget(start,roster,true,None),Duration::from_millis(250));
+        assert!(!gate.current_success(roster));
         gate.success(start,Some(102),roster);
-        assert_eq!(gate.wait_budget(start,roster,true),AUDIO_IDLE_RESYNC);
-        assert_eq!(gate.wait_budget(start,roster,false),Duration::from_millis(250));
+        assert!(gate.current_success(roster));
+        assert_eq!(gate.wait_budget(start,roster,true,None),AUDIO_IDLE_RESYNC);
+        // A focus-only success cannot postpone an earlier discovery deadline.
+        assert_eq!(gate.wait_budget(start,roster,true,Some(Duration::from_millis(100))),Duration::from_millis(100));
+        assert_eq!(gate.wait_budget(start,roster,true,Some(Duration::ZERO)),Duration::ZERO);
+        assert_eq!(gate.wait_budget(start,roster,false,None),Duration::from_millis(250));
         let later=start+Duration::from_millis(900);
-        assert_eq!(gate.wait_budget(later,roster,true),Duration::from_millis(100));
-        assert_eq!(gate.wait_budget(later,roster,false),Duration::from_millis(100));
-        assert_eq!(gate.wait_budget(start+AUDIO_IDLE_RESYNC,roster,true),Duration::ZERO);
+        assert_eq!(gate.wait_budget(later,roster,true,None),Duration::from_millis(100));
+        assert_eq!(gate.wait_budget(later,roster,false,None),Duration::from_millis(100));
+        assert_eq!(gate.wait_budget(start+AUDIO_IDLE_RESYNC,roster,true,None),Duration::ZERO);
         let mut changed=roster;changed[0]=Some((102,2));
-        assert_eq!(gate.wait_budget(start,changed,true),Duration::from_millis(250));
+        assert!(!gate.current_success(changed));
+        assert_eq!(gate.wait_budget(start,changed,true,Some(Duration::ZERO)),Duration::from_millis(250));
         gate.invalidate();
-        assert_eq!(gate.wait_budget(start,roster,true),Duration::from_millis(250));
+        assert!(!gate.current_success(roster));
+        assert_eq!(gate.wait_budget(start,roster,true,Some(Duration::ZERO)),Duration::from_millis(250));
     }
 
     #[test]

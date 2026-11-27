@@ -240,19 +240,27 @@ export function verifyRepository(root,g0=false) {
   const inspectionPolicy=read('Development/apps/desktop/src/app/inspectionScheduling.ts');
   assert.ok(inspectionPolicy.includes('export function periodicInspectionInterval(') &&
     inspectionPolicy.includes("(page === 'workspace' && !workspaceSettledIdle) ||") &&
-    inspectionPolicy.includes('runningCount > 0 || !available ? 2000 : 10_000;') &&
+    inspectionPolicy.includes('if (!available) return 2000;') &&
+    inspectionPolicy.includes("if (page === 'workspace' && runningCount > 0 && workspaceSettledLive) return 5000;") &&
+    inspectionPolicy.includes('runningCount > 0 ? 2000 : 10_000;') &&
+    inspectionPolicy.includes('return lastStartedAt + (hinted ? Math.min(interval, 2000) : interval);') &&
     inspectionPolicy.includes('export function nextBackgroundDeadline('),
-    'Healthy idle observer must throttle without delaying live sessions or recovery');
+    'Healthy idle/settled Play may throttle; unavailable and unsettled live sessions retain recovery cadence');
   const mountedUI=read('Development/apps/desktop/src/LazyTesterApp.svelte');
   const titlebar=read('Development/apps/desktop/src/WindowTitlebar.svelte');
   assert.ok(mountedUI.includes("nativeBackend === 'WindowsNative' && !closeReviewPending && !!binding?.configured") &&
     mountedUI.includes('sessionObservationEnabled = mounted && !disposed && managerVisible') &&
-    mountedUI.includes('lastInspectionStartedAt + periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle)') &&
+    mountedUI.includes('sessionInspectionDeadline(lastInspectionStartedAt,') &&
+    mountedUI.includes('periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle, workspaceSettledLive)') &&
+    mountedUI.includes('sessionObservationHint)') &&
+    mountedUI.includes("selectedIdentity !== '' && selectedIdentity === identity(profiles.find(profile => profile.slot === active))") &&
+    mountedUI.includes('profile.slot === active || previewStatuses.some(status => status.slot === profile.slot && status.registered)') &&
     mountedUI.includes('const due = nextBackgroundDeadline(sessionDue, recordingDue)') &&
     mountedUI.includes('disposed = true; clearBackgroundObservation();') &&
     /refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/.test(mountedUI) &&
     mountedUI.includes("profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null)") &&
-    mountedUI.includes('active === null && requested === null && queued === null && queuedLaunch === null') &&
+    mountedUI.includes('workspaceSettledIdle = workspaceObservationHealthy && active === null') &&
+    mountedUI.includes('requested === null && queued === null && queuedLaunch === null') &&
     mountedUI.includes("previewIssue === '' && !closeFailure && agentActivity === null") &&
     mountedUI.includes('activeOperation === null && !refreshing && !resizing && !initializing') &&
     mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&

@@ -761,6 +761,20 @@ mod windows {
             },
         };
         #[test]
+        fn presentation_hints_coalesce_and_failed_post_reopens_admission() {
+            let pending=std::sync::atomic::AtomicBool::new(false);
+            let mut posts=0;
+            queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
+            queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
+            assert_eq!(posts,1);
+            pending.store(false,std::sync::atomic::Ordering::Release);
+            assert!(queue_presentation_refresh(&pending,||Err(std::io::Error::other("post failed"))).is_err());
+            assert!(!pending.load(std::sync::atomic::Ordering::Acquire));
+            queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
+            assert_eq!(posts,2);
+        }
+
+        #[test]
         fn audio_focus_hint_coalesces_and_rearms_without_starting_hook() {
             let wake=AudioFocusWake {handle:event(true).unwrap(),last:Mutex::new(None)};
             let ready=||unsafe {WaitForSingleObject(wake.handle.as_raw_handle() as _,0)};
@@ -1076,19 +1090,6 @@ pub fn shutdown() {
 
 #[cfg(test)]
 mod tests {
-        #[test]
-        fn presentation_hints_coalesce_and_failed_post_reopens_admission() {
-            let pending=std::sync::atomic::AtomicBool::new(false);
-            let mut posts=0;
-            super::queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
-            super::queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
-            assert_eq!(posts,1);
-            pending.store(false,std::sync::atomic::Ordering::Release);
-            assert!(super::queue_presentation_refresh(&pending,||Err(std::io::Error::other("post failed"))).is_err());
-            assert!(!pending.load(std::sync::atomic::Ordering::Acquire));
-            super::queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
-            assert_eq!(posts,2);
-        }
 
     use super::*;
     #[test]

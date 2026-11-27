@@ -159,8 +159,10 @@ is needed and the existing policy foreground observer is available, a
 process-local coalesced event hints an owned focus change; the actor rechecks
 actual foreground and native identities before COM. The event is manual-reset
 so request priority does not lose it; reset precedes observation. Stable
-successful observations wait for the remaining discovery deadline, with 250ms
-fallback when the hint is unavailable, roster changed, or a sync failed.
+successful observations wait for the earlier remaining COM discovery or
+policy reconciliation deadline. Focus-only sync cannot postpone discovery.
+Hints are excluded during pending storage, exit retry, changed roster or
+failed sync; bounded 250ms fallback preserves the original retry cadence.
 Missed focus hints may wait until reconciliation (nominal 1s). Unrelated
 foreground changes do not trigger COM sync. Per-endpoint/per-session COM
 subscriptions remain deferred; no callback list or second audio owner. Policy application on untouched foreground

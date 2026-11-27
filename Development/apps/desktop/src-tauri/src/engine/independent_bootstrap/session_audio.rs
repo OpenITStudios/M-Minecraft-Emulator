@@ -64,6 +64,13 @@ impl Drop for Session {
 const CONTEXT: windows::core::GUID =
     windows::core::GUID::from_u128(0x978f5ab6_f1e5_489e_a3fb_f6148c53373b);
 
+pub(super) const DISCOVERY_INTERVAL: Duration = Duration::from_secs(1);
+
+fn discovery_remaining(scanned: Option<Instant>, now: Instant) -> Duration {
+    scanned.map_or(Duration::ZERO, |last|
+        DISCOVERY_INTERVAL.saturating_sub(now.saturating_duration_since(last)))
+}
+
 pub(super) struct Audio {
     // COM references must drop before this thread's apartment.
     sessions: Vec<Session>,
@@ -97,17 +104,18 @@ impl Audio {
         }
         failure.map_or(Ok(()), Err)
     }
+    // The actor schedules against the same discovery checkpoint that
+    // admits enumeration, not the timestamp of a focus-only sync.
+    pub(super) fn discovery_budget(&self, now: Instant) -> Duration {
+        discovery_remaining(self.scanned, now)
+    }
     pub(super) fn sync(
         &mut self,
         targets: &[(u32, u64)],
         foreground: Option<u32>,
         valid: impl Fn(u32, u64) -> bool,
     ) -> io::Result<()> {
-        if targets != self.targets
-            || self
-                .scanned
-                .is_none_or(|last| last.elapsed() >= Duration::from_secs(1))
-        {
+        if targets != self.targets || self.discovery_budget(Instant::now()).is_zero() {
             self.discover(targets, &valid)?;
             if targets != self.targets {
                 self.targets.clear();
@@ -228,6 +236,16 @@ pub(super) fn foreground() -> Option<u32> {
 mod tests {
     use super::*;
     use std::io::{BufRead, Write};
+
+    #[test]
+    fn discovery_deadline_is_anchored_to_last_completed_scan() {
+        let scanned=Instant::now();
+        assert_eq!(discovery_remaining(None,scanned),Duration::ZERO);
+        assert_eq!(discovery_remaining(Some(scanned),scanned),DISCOVERY_INTERVAL);
+        assert_eq!(discovery_remaining(Some(scanned),scanned+Duration::from_millis(900)),Duration::from_millis(100));
+        assert_eq!(discovery_remaining(Some(scanned),scanned+DISCOVERY_INTERVAL),Duration::ZERO);
+    }
+
     fn silent_session(enumerator: &IMMDeviceEnumerator) -> (IAudioClient, ISimpleAudioVolume) {
         let device = unsafe { enumerator.GetDefaultAudioEndpoint(eRender, eConsole) }.unwrap();
         let client: IAudioClient = unsafe { device.Activate(CLSCTX_ALL, None) }.unwrap();
