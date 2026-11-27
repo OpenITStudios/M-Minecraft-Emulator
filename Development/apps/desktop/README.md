@@ -117,9 +117,13 @@ See the [implementation map](../../../docs/system/implementation-map.md),
 and `GITHUB_RULES.md`. Retired designs remain in Git history, not active UI.
 
 Workspace placement and preview IPC share one captured geometry per layout pass.
-Position, size, target identity and pixel ratio are rechecked after native awaits;
-ancestor scroll and event-driven display-scale changes reuse the existing dirty
-scheduler. The native conversion rounds shared physical edges consistently.
+Position, size, target identity and pixel ratio are rechecked after actual native awaits;
+without a selected game there is no redundant pre-preview geometry read.
+The bridge borrows the captured tiles. Native preview admission compares all
+destinations in one fresh manager geometry sample; actual Park/Place and DWM
+updates retain their fresh native checks. Ancestor scroll and event-driven
+display-scale changes reuse the existing dirty scheduler. The native conversion
+rounds shared physical edges consistently.
 
 Play-wide preview feedback uses the existing fixed launcher action strip;
 redundant below-rail guidance is removed. The existing Refresh action remains

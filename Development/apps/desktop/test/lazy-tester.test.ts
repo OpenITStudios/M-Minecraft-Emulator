@@ -1072,10 +1072,18 @@ describe('Workspace geometry identity',()=>{
   it('passes the captured DPI to both native layout bridge calls',()=>{
     const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
     expect(source).toContain('workspaceSurface.update(geometry.viewport,geometry.pixelRatio)');
-    expect(source).toContain('lazyTester.previews(geometry.viewport,[...geometry.tiles],geometry.pixelRatio)');
+    expect(source).toContain('lazyTester.previews(geometry.viewport,geometry.tiles,geometry.pixelRatio)');
     const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
     expect(bridge).toContain('previewViewport(tile.rect,pixelRatio)');
     expect(bridge).toContain('viewport:workspaceViewport(rect,pixelRatio),tiles:placements');
+  });
+  it('rechecks layout after native awaits, not between synchronous reads',()=>{
+    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const layout=source.slice(source.indexOf('async function syncLayout()'),source.indexOf('function publishProfiles('));
+    expect(layout).toMatch(/if \(active !== null\) \{\s*await workspaceSurface\.update\(geometry\.viewport,geometry\.pixelRatio\);\s*if \(!geometryCurrent\(\)\) \{discardOutdated\(\);return;\}\s*\}/);
+    expect(layout).toMatch(/await lazyTester\.previews\(geometry\.viewport,geometry\.tiles,geometry\.pixelRatio\)\)\.tiles;\s*if \(!geometryCurrent\(\)\)/);
+    const review=source.slice(source.indexOf('async function syncSelectedReviewGeometry()'),source.indexOf('async function syncLayout()'));
+    expect(review).toMatch(/if \(active !== null\) \{\s*await workspaceSurface\.update\(geometry\.viewport,geometry\.pixelRatio\);\s*if \(!disposed && !sameWorkspaceGeometry\(geometry,captureWorkspaceGeometry\(\)\)\) dirty=true;\s*\}/);
   });
   const rect=(x=0,y=0,width=640,height=360)=>({x,y,width,height} as DOMRect);
   const baseline:WorkspaceGeometry={viewport:rect(),tiles:[{slot:2,rect:rect(20,400,160,90)}],pixelRatio:1};

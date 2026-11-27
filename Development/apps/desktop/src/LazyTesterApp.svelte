@@ -811,8 +811,10 @@
         dirty=true;
         return;
       }
-      if (active !== null) await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
-      if (!disposed && !sameWorkspaceGeometry(geometry,captureWorkspaceGeometry())) dirty=true;
+      if (active !== null) {
+        await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
+        if (!disposed && !sameWorkspaceGeometry(geometry,captureWorkspaceGeometry())) dirty=true;
+      }
     } catch {
       // Report through the existing feedback owner after review ends.
       previewIssue=userMessage('preview');
@@ -861,9 +863,11 @@
       const geometry = captureWorkspaceGeometry();
       const geometryCurrent = () => layoutCurrent() &&
         sameWorkspaceGeometry(geometry,captureWorkspaceGeometry());
-      if (active !== null) await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
-      if (!geometryCurrent()) {discardOutdated();return;}
-      const response = (await lazyTester.previews(geometry.viewport,[...geometry.tiles],geometry.pixelRatio)).tiles;
+      if (active !== null) {
+        await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
+        if (!geometryCurrent()) {discardOutdated();return;}
+      }
+      const response = (await lazyTester.previews(geometry.viewport,geometry.tiles,geometry.pixelRatio)).tiles;
       if (!geometryCurrent()) {discardOutdated();return;}
       // An invalidation received AFTER this layout began is newer evidence
       // than its eventual PreviewReport. Never let that older response

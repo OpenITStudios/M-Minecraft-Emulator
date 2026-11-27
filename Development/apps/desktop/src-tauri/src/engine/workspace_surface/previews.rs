@@ -82,10 +82,13 @@ pub(super) fn configure(
         let manager = window.hwnd().map_err(io::Error::other)?.0 as usize as u64;
         let active = controller::active_preview_slot(manager)?;
         validate_tiles(&tiles, active)?;
-        let main = native::rectangle(manager, viewport.validate()?)?;
+        // Compare every destination in one native coordinate space.
+        // Park/Place and DWM updates still observe fresh native geometry.
+        let geometry = native::capture_manager_geometry(manager)?;
+        let main = geometry.rectangle(manager, viewport.validate()?)?;
         let rectangles = tiles
             .iter()
-            .map(|tile| native::rectangle(manager, tile.viewport))
+            .map(|tile| geometry.rectangle(manager, tile.viewport))
             .collect::<io::Result<Vec<_>>>()?;
         for (index, rect) in rectangles.iter().enumerate() {
             if overlaps(main, *rect)

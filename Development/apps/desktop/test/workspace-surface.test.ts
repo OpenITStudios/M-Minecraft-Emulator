@@ -62,6 +62,23 @@ it('empty unowned layout performs no session inspection but retained or requeste
   expect(handler.indexOf('configure_previews(')).toBeGreaterThan(handler.indexOf('SessionRequest::Inspect'));
 });
 
+it('validates preview overlap in one manager coordinate sample and keeps fresh native placement',()=>{
+  const previews=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/previews.rs',import.meta.url),'utf8');
+  const admission=previews.slice(previews.indexOf('let active = controller::active_preview_slot'),previews.indexOf('let monitored ='));
+  expect(admission.match(/native::capture_manager_geometry\(manager\)/g)).toHaveLength(1);
+  expect(admission).toContain('geometry.rectangle(manager, viewport.validate()?)');
+  expect(admission).toContain('geometry.rectangle(manager, tile.viewport)');
+  expect(admission).not.toContain('native::rectangle(');
+  expect(admission).toContain('overlaps(main, *rect)');
+  expect(admission).toContain('require_current_admission(&issued_epochs)');
+  const controller=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/controller.rs',import.meta.url),'utf8');
+  const adoption=controller.slice(controller.indexOf('pub(super) fn adopt_preview_sources'),controller.indexOf('#[cfg(test)]\nfn present('));
+  expect(adoption).toContain('native::rectangle(manager, viewport.validate()?)');
+  const worker=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/previews/windows.rs',import.meta.url),'utf8');
+  expect(worker).toContain('let rect = native::rectangle(manager, tile.viewport)?;');
+  expect(worker).toContain('let rect=native::rectangle(self.manager,self.viewport)?;');
+});
+
 it('borrows requested preview sources without a second cloned process roster',()=>{
   const previews=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/previews.rs',import.meta.url),'utf8');
   const adoption=previews.slice(previews.indexOf('let monitored ='),previews.indexOf('let primary =',previews.indexOf('let monitored =')));
