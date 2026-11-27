@@ -685,11 +685,11 @@ pub enum SessionRequest {
     SaveStoragePreferences { preferences: super::manager_settings::StoragePreferences },
     InspectStorage,
     InspectProfileStorage { slot: u32 },
-    InspectSelectiveInventory { slot: u32, category: SelectiveCategory },
-    ReviewSelectiveInventory { slot: u32, selections: Vec<SelectiveSelection> },
+    InspectSelectiveInventory { slot: u32, category: SelectiveCategory, #[serde(default, rename="selectedProfile", skip_serializing_if="Option::is_none")] selected_profile: Option<bool> },
+    ReviewSelectiveInventory { slot: u32, selections: Vec<SelectiveSelection>, #[serde(default, rename="selectedProfile", skip_serializing_if="Option::is_none")] selected_profile: Option<bool> },
     ConfirmSelectedWorlds { slot: u32, selections: Vec<SelectiveSelection>, #[serde(rename="confirmationToken")] confirmation_token: String },
     ConfirmSelectedPacks { slot: u32, selections: Vec<SelectiveSelection>, #[serde(rename="confirmationToken")] confirmation_token: String },
-    OpenProfileFolder { slot: u32 },
+    OpenProfileFolder { slot: u32, #[serde(default, rename="selectedProfile", skip_serializing_if="Option::is_none")] selected_profile: Option<bool> },
     ClearProfileCache { slot: u32, #[serde(default, rename="selectedStorage", skip_serializing_if="Option::is_none")] selected_storage: Option<bool> },
     ClearProfileDownloadCache { slot: u32 },
     ResetGameSettings { slot: u32, #[serde(default, rename="selectedStorage", skip_serializing_if="Option::is_none")] selected_storage: Option<bool> },
@@ -1295,7 +1295,7 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot, .. } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot, .. } | SessionRequest::RestoreGameSettings { slot, .. } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot, .. } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot, .. } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot, .. } | SessionRequest::RestoreGameSettings { slot, .. } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -2016,6 +2016,36 @@ mod tests {
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectProfileStorage","slot":1,"path":"outside"}"#).is_err());
         assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectStorage"}"#),Ok(SessionRequest::InspectStorage)));
     }
+    #[cfg(windows)]
+    #[test]
+    fn selected_profile_receipt_scope_is_optional_and_strict() {
+        for operation in ["OpenProfileFolder", "InspectSelectiveInventory", "ReviewSelectiveInventory"] {
+            let mut legacy = serde_json::json!({"operation":operation,"slot":3});
+            if operation == "InspectSelectiveInventory" { legacy["category"] = serde_json::json!("Worlds"); }
+            if operation == "ReviewSelectiveInventory" {
+                legacy["selections"] = serde_json::json!([{"category":"Worlds","root":"minecraftWorlds","name":"one","identity":"a".repeat(64)}]);
+            }
+            let request: SessionRequest = serde_json::from_value(legacy.clone()).unwrap();
+            assert!(validate_request(&request).is_ok());
+            assert_eq!(serde_json::to_value(request).unwrap(), legacy);
+            for selected in [false, true] {
+                let mut wire = legacy.clone();
+                wire["selectedProfile"] = serde_json::json!(selected);
+                let request: SessionRequest = serde_json::from_value(wire.clone()).unwrap();
+                assert!(validate_request(&request).is_ok());
+                assert_eq!(serde_json::to_value(request).unwrap(), wire);
+            }
+            let mut invalid = legacy.clone();
+            invalid["selectedProfile"] = serde_json::json!("true");
+            assert!(serde_json::from_value::<SessionRequest>(invalid).is_err());
+            legacy["selectedProfile"] = serde_json::json!(true);
+            legacy["slot"] = serde_json::json!(6);
+            assert!(validate_request(&serde_json::from_value(legacy).unwrap()).is_err());
+        }
+        assert!(serde_json::from_value::<SessionRequest>(serde_json::json!({"operation":"Inspect","selectedProfile":true})).is_err());
+        assert!(serde_json::from_value::<SessionRequest>(serde_json::json!({"operation":"Launch","slot":3,"selectedProfile":true})).is_err());
+    }
+
     #[cfg(windows)]
     #[test]
     fn selected_mutation_storage_scope_is_optional_and_strict() {

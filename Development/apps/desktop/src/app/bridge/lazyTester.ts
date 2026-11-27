@@ -222,21 +222,26 @@ export function parseProfileBinding(value: unknown): ProfileBinding {
   return value as unknown as ProfileBinding;
 }
 
-export function parseSession(value: unknown, selectedStorageSlot?: ProfileSlot): SessionSnapshot {
+export function parseSession(value: unknown, selectedStorageSlot?: ProfileSlot, selectedProfileSlot?: ProfileSlot): SessionSnapshot {
   if (selectedStorageSlot !== undefined && !profileSlots.includes(selectedStorageSlot)) throw new TypeError('Invalid storage slot');
+  if (selectedProfileSlot !== undefined && (!profileSlots.includes(selectedProfileSlot) || selectedStorageSlot !== undefined))
+    throw new TypeError('Invalid selected profile scope');
   if (!record(value) || !exact(value, ['schema','profiles','storage',
      ...(Object.hasOwn(value,'settings')?['settings']:[]),
      ...(Object.hasOwn(value,'selectiveInventory')?['selectiveInventory']:[]),
      ...(Object.hasOwn(value,'selectiveReview')?['selectiveReview']:[]),
      ...(Object.hasOwn(value,'agentActivity')?['agentActivity']:[])]) || value.schema !== 1 ||
-      !Array.isArray(value.profiles) || value.profiles.length !== 5) throw new TypeError('Invalid session response');
+      !Array.isArray(value.profiles) || value.profiles.length !== (selectedProfileSlot === undefined ? 5 : 1)) throw new TypeError('Invalid session response');
+  if (selectedProfileSlot !== undefined && (value.storage !== null || Object.hasOwn(value,'settings') ||
+      (Object.hasOwn(value,'selectiveInventory') && Object.hasOwn(value,'selectiveReview'))))
+    throw new TypeError('Invalid selected profile receipt');
   const pids = new Set<number>();
   // Validate every ordered slot, including sparse/non-JSON inputs, before
   // using index-based storage admission below.
   for (let index = 0; index < value.profiles.length; index++) {
     const profile: unknown = value.profiles[index];
     if (!record(profile) || !exact(profile, ['slot', 'state', 'process', 'issue']) ||
-        profile.slot !== index + 1 || typeof profile.state !== 'string' || !['STOPPED', 'STARTING', 'RUNNING', 'NOT_RESPONDING', 'ATTENTION'].includes(profile.state) ||
+        profile.slot !== (selectedProfileSlot ?? index + 1) || typeof profile.state !== 'string' || !['STOPPED', 'STARTING', 'RUNNING', 'NOT_RESPONDING', 'ATTENTION'].includes(profile.state) ||
         !(profile.issue === null || typeof profile.issue === 'string' && profile.issue.length <= 8192)) throw new TypeError('Invalid profile response');
     if (profile.process !== null) {
       const process = parseObservedProcess(profile.process);
@@ -348,7 +353,7 @@ export function parseSession(value: unknown, selectedStorageSlot?: ProfileSlot):
   if(Object.hasOwn(value,'selectiveInventory')) {
     const inventory=value.selectiveInventory;
     if(!record(inventory)||!exact(inventory,['slot','category','items'])||
-      !profileSlots.includes(inventory.slot as ProfileSlot)||!Array.isArray(inventory.items)||inventory.items.length>128||
+      !profileSlots.includes(inventory.slot as ProfileSlot)||(selectedProfileSlot !== undefined && inventory.slot !== selectedProfileSlot)||!Array.isArray(inventory.items)||inventory.items.length>128||
       (value.profiles as ProfileSession[]).some(p=>p.slot===inventory.slot&&p.state!=='STOPPED'))
       throw new TypeError('Invalid selective inventory');
     const roots=inventory.category==='Worlds'?['minecraftWorlds']:
@@ -371,7 +376,7 @@ export function parseSession(value: unknown, selectedStorageSlot?: ProfileSlot):
     if(!record(review)||!exact(review,['slot','items','warnings','confirmationToken','bytes','files'])||
       !Number.isSafeInteger(review.bytes)||Number(review.bytes)<0||
       !Number.isInteger(review.files)||Number(review.files)<0||Number(review.files)>2048||
-      !profileSlots.includes(review.slot as ProfileSlot)||
+      !profileSlots.includes(review.slot as ProfileSlot)||(selectedProfileSlot !== undefined && review.slot !== selectedProfileSlot)||
       (value.profiles as ProfileSession[]).some(p=>p.slot===review.slot&&p.state!=='STOPPED')||
       !Array.isArray(review.items)||!review.items.length||review.items.length>128||
       !Array.isArray(review.warnings)||review.warnings.length>385||
@@ -527,13 +532,13 @@ export const lazyTester = {
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectProfileStorage', slot}}),slot);
   },
   selectiveInventory: async (slot: ProfileSlot, category: SelectiveCategory): Promise<SelectiveInventory> => {
-    const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSelectiveInventory',slot,category}}));
+    const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSelectiveInventory',slot,category,selectedProfile:true}}),undefined,slot);
     const inventory=snapshot.selectiveInventory;
     if(!inventory||inventory.slot!==slot||inventory.category!==category)throw new TypeError('Inventory receipt does not match request');
     return inventory;
   },
   reviewSelectiveInventory: async (slot: ProfileSlot, selections: SelectiveSelection[]): Promise<SelectiveReviewReceipt> => {
-    const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ReviewSelectiveInventory',slot,selections}}));
+    const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ReviewSelectiveInventory',slot,selections,selectedProfile:true}}),undefined,slot);
     const review=snapshot.selectiveReview;
     if(!review||review.slot!==slot||review.items.length!==selections.length||
       !review.items.every((item,i)=>item.identity===selections[i].identity&&item.category===selections[i].category&&item.root===selections[i].root&&item.name===selections[i].name))
@@ -548,7 +553,10 @@ export const lazyTester = {
     if (!profileSlots.includes(slot)||receipt.slot!==slot||receipt.warnings.length||!receipt.confirmationToken||!/^[0-9a-f]{64}$/.test(receipt.confirmationToken)||!receipt.items.length||receipt.items.some(item=>item.category!=='Worlds')) throw new TypeError('Invalid world cleanup confirmation');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ConfirmSelectedWorlds',slot,selections:receipt.items,confirmationToken:receipt.confirmationToken}}));
   },
-  openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
+  openFolder: async (slot: ProfileSlot): Promise<void> => {
+    const receipt = parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot, selectedProfile:true}}),undefined,slot);
+    if (receipt.selectiveInventory || receipt.selectiveReview) throw new TypeError('Invalid folder receipt');
+  },
   clearDownloadCache: async (slot: ProfileSlot) => {
     if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
     const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileDownloadCache',slot}}));

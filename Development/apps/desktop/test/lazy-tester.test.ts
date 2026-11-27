@@ -76,6 +76,30 @@ describe('Selective inventory wire contract',()=>{
     expect(parseSession({...stopped(),selectiveInventory:inventory}).selectiveInventory).toEqual(inventory);
     expect(parseSession({...stopped(),selectiveReview:review}).selectiveReview).toEqual(review);
   });
+  it('validates selected profile receipts without allowing a partial ordinary snapshot',()=>{
+    const profile=stopped().profiles[0]!;
+    const selected={schema:1,profiles:[profile],storage:null};
+    expect(parseSession(selected,undefined,1).profiles).toEqual([profile]);
+    expect(parseSession({...selected,selectiveInventory:inventory},undefined,1).selectiveInventory).toEqual(inventory);
+    expect(parseSession({...selected,selectiveReview:review},undefined,1).selectiveReview).toEqual(review);
+    expect(()=>parseSession(selected)).toThrow('Invalid session response');
+    expect(()=>parseSession(stopped(),undefined,1)).toThrow();
+    expect(()=>parseSession(selected,undefined,2)).toThrow();
+    expect(()=>parseSession({...selected,profiles:[running(1)],selectiveInventory:inventory},undefined,1)).toThrow();
+    expect(()=>parseSession({...selected,selectiveInventory:{...inventory,slot:2}},undefined,1)).toThrow();
+    expect(()=>parseSession({...selected,selectiveReview:{...review,slot:2}},undefined,1)).toThrow();
+    expect(()=>parseSession({...selected,storage:[]},undefined,1)).toThrow();
+    expect(()=>parseSession({...selected,settings:{}},undefined,1)).toThrow();
+    expect(()=>parseSession({...selected,selectiveInventory:inventory,selectiveReview:review},undefined,1)).toThrow();
+    expect(()=>parseSession(selected,1,1)).toThrow();
+  });
+  it('opts into selected profile receipts only for consumers that discard the full roster',()=>{
+    const source=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
+    expect(source).toContain("operation:'InspectSelectiveInventory',slot,category,selectedProfile:true");
+    expect(source).toContain("operation:'ReviewSelectiveInventory',slot,selections,selectedProfile:true");
+    expect(source).toContain("operation: 'OpenProfileFolder', slot, selectedProfile:true");
+    expect(source.match(/selectedProfile:true/g)).toHaveLength(3);
+  });
   it('rejects duplicate identity, unsafe names and unverified pack confirmation',()=>{
     expect(()=>parseSession({...stopped(),selectiveInventory:{...inventory,items:[item,{...item,name:'two'}]}})).toThrow();
     expect(()=>parseSession({...stopped(),selectiveReview:{...review,items:[{...review.items[0],name:'../outside'}]}})).toThrow();

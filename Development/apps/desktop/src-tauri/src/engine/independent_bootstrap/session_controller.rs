@@ -570,7 +570,13 @@ impl Sessions {
     // all five profiles. Keep the SAME original process/HWND verification
     // and five-profile response shape; normal Inspect still repairs labels.
     fn snapshot_without_reaping(&mut self, relabel: bool) -> SessionSnapshot {
-        let profiles = (0..5)
+        self.snapshot_slots(relabel, 0..5)
+    }
+
+    // Only explicit desktop receipt scope may select a single verified slot.
+    // Use the same profile observation logic as the full roster.
+    fn snapshot_slots(&mut self, relabel: bool, slots: std::ops::Range<usize>) -> SessionSnapshot {
+        let profiles = slots
             .map(|index| {
                 let process = self.running[index].as_ref().and_then(|started| {
                     let child = &started.children[0];
@@ -1611,14 +1617,19 @@ enum ReplySnapshot {
     Full,
     Close,
     Receipt,
+    Selected(u32),
 }
 impl ReplySnapshot {
     fn for_request(request: &SessionRequest) -> Self {
         match request {
             SessionRequest::CloseOne { .. } | SessionRequest::CloseAll => Self::Close,
-            SessionRequest::OpenProfileFolder { .. } |
-            SessionRequest::InspectSelectiveInventory { .. } |
-            SessionRequest::ReviewSelectiveInventory { .. } => Self::Receipt,
+            SessionRequest::OpenProfileFolder { slot, selected_profile } |
+            SessionRequest::InspectSelectiveInventory { slot, selected_profile, .. } |
+            SessionRequest::ReviewSelectiveInventory { slot, selected_profile, .. } => {
+                if *selected_profile == Some(true) && (1..=5).contains(slot) {
+                    Self::Selected(*slot)
+                } else { Self::Receipt }
+            }
             SessionRequest::PublishAgentActivity { .. } |
             SessionRequest::TestingReserve { .. } |
             SessionRequest::TestingFinalize { .. } |
@@ -1638,6 +1649,7 @@ impl ReplySnapshot {
             Self::Full => sessions.snapshot(),
             Self::Close => sessions.snapshot_without_reaping(true),
             Self::Receipt => sessions.snapshot_without_reaping(false),
+            Self::Selected(slot) => sessions.snapshot_slots(false, (slot as usize - 1)..slot as usize),
         }
     }
 }
@@ -1940,10 +1952,10 @@ fn run() -> io::Result<()> {
                 SessionRequest::InspectProfileStorage { slot } => {
                     storage = Some(sessions.inspect_storage(slot..=slot).map_err(|error| error.to_string())?)
                 }
-                SessionRequest::InspectSelectiveInventory { slot, category } => {
+                SessionRequest::InspectSelectiveInventory { slot, category, .. } => {
                     selective_inventory = Some(sessions.selective_inventory(slot, category).map_err(|error| error.to_string())?);
                 }
-                SessionRequest::ReviewSelectiveInventory { slot, selections } => {
+                SessionRequest::ReviewSelectiveInventory { slot, selections, .. } => {
                     selective_review = Some(sessions.review_selective_inventory(slot, selections).map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ConfirmSelectedPacks { slot, selections, confirmation_token } => {
@@ -1997,7 +2009,7 @@ fn run() -> io::Result<()> {
                     sessions.clear_data(slot,&confirmation_token).map_err(|error|error.to_string())?;
                     storage=Some(sessions.inspect_storage(mutation_storage_slots(slot, selected_storage)).map_err(|error|error.to_string())?);
                 }
-                SessionRequest::OpenProfileFolder { slot } => sessions
+                SessionRequest::OpenProfileFolder { slot, .. } => sessions
                     .open_folder(slot)
                     .map_err(|error| error.to_string())?,
             }
@@ -2184,11 +2196,18 @@ mod tests {
     #[test]
     fn desktop_folder_and_selective_reads_use_receipts_without_changing_mutation_snapshots() {
         for request in [
-            SessionRequest::OpenProfileFolder { slot: 1 },
-            SessionRequest::InspectSelectiveInventory { slot: 2, category: SelectiveCategory::Worlds },
-            SessionRequest::ReviewSelectiveInventory { slot: 3, selections: vec![] },
+            SessionRequest::OpenProfileFolder { slot: 1, selected_profile: None },
+            SessionRequest::InspectSelectiveInventory { slot: 2, category: SelectiveCategory::Worlds, selected_profile: Some(false) },
+            SessionRequest::ReviewSelectiveInventory { slot: 3, selections: vec![], selected_profile: None },
         ] {
             assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Receipt);
+        }
+        for (slot, request) in [
+            (1, SessionRequest::OpenProfileFolder { slot: 1, selected_profile: Some(true) }),
+            (2, SessionRequest::InspectSelectiveInventory { slot: 2, category: SelectiveCategory::Worlds, selected_profile: Some(true) }),
+            (3, SessionRequest::ReviewSelectiveInventory { slot: 3, selections: vec![], selected_profile: Some(true) }),
+        ] {
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Selected(slot));
         }
         for request in [
             SessionRequest::ClearProfileCache { slot: 1, selected_storage: None },

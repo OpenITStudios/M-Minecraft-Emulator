@@ -149,6 +149,8 @@ preview cleanup; navigation, visibility transitions, failed preview recovery
 and native safety admission retain their original paths.
 
 Desktop Storage entry, explicit Refresh and launcher selection request only the selected profile's storage report. Active desktop cache clear, settings reset/restore and full profile clear also opt into an exact-slot post-mutation report with `selectedStorage: true`. The five-slot lifecycle roster is unchanged; legacy full reports and default mutation receipts still return all five storage rows. Held and experimental operations retain their existing receipt shape. Category inventory is on demand.
+
+Desktop Open Folder, selective inventory and review explicitly request `selectedProfile: true`: the existing receipt carries only the exact selected lifecycle row, not four unused peer rows. The same per-profile observer, selected STOPPED validation for inventory/review, operation-specific payload checks and independent mutation admission remain. Without this opt-in the original five-row receipt is unchanged; full Inspect, settings/storage, close, mutation and AI/MCP routes retain their roster. Partial receipts are not published as full session observations.
 Within a read-only report or review, reuse verified handle metadata
 and pinned directory chains; never carry mutation permission across
 requests. The approximate profile-size traversal reuses the current
