@@ -93,6 +93,16 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');
     expect(app).toContain('await lazyTester.present(slot, viewport.getBoundingClientRect())');
-    expect(rail).toContain('aria-pressed={observedSlot&&profile.state===\'RUNNING\'');
+    expect(rail).toContain('aria-pressed={observed&&profile.state===\'RUNNING\'');
   });
+});
+
+
+it('reserves close-control space only for an observed close target',()=>{
+  const rail=source('LauncherRail.svelte');
+  const css=source('lazytester.css');
+  expect(rail).toContain('class:has-close={hasClose}');
+  expect(rail).toContain('{#if hasClose}');
+  expect(css).toContain('.lazytester-launcher-header:not(.has-close){padding-right:0}');
+  expect(css).toContain('.lazytester-launcher-header.has-close::after');
 });
