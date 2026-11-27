@@ -205,6 +205,8 @@ Host World/focus/resource acceptance next action stay in planning/development.md
 
 ## Rust native FPS core
 
+`presentation_image.rs` shares DXGI image identity, bounded PE header parsing, versioned capability sizes and executable RVA admission between enrollment producer and receiver. C++ retains the native mapping copy protected by SEH and the COM/Detours bridge. Image header reads use bounded ReadProcessMemory on the current process; no allocation or device creation. Windows controls NOT_EXECUTED.
+
 Presentation capability admission now lives in `presentation_policy.rs`: exact granted access, distinct handles, event reset modes, unsignaled stop, controller PID/birth/session/liveness, non-inheritance and FPS limits. The C++ enrollment bridge passes scalar values from the unchanged mapping and uses the validated limits directly. No new worker, allocation or DLL loading during admission. The existing undocumented NtQueryEvent compatibility limitation remains; native controls NOT_EXECUTED.
 
 `fps_hud.rs` owns HUD session, binding, worker, synchronization and retirement. `fps-hud.cpp` is now a compatibility and diagnostic adapter; native controls remain NOT_EXECUTED.

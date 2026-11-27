@@ -73,3 +73,11 @@ extern "C" std::uint32_t lazytester_presentation_validate(std::uint32_t version,
     HANDLE level, HANDLE changed, HANDLE stop, HANDLE controller, HANDLE selected,
     std::uint32_t controllerPid, std::uint32_t birthLow, std::uint32_t birthHigh,
     std::uint32_t childPid, std::uint32_t childSession, std::uint32_t* active, std::uint32_t* background);
+
+struct LazyTesterPresentationImage { std::uint32_t timestamp,bytes; FILE_ID_INFO id; };
+static_assert(sizeof(LazyTesterPresentationImage)==32 && offsetof(LazyTesterPresentationImage,id)==8);
+extern "C" {
+std::uint32_t lazytester_presentation_image(LazyTesterPresentationImage*,HMODULE*);
+std::uint32_t lazytester_presentation_bytes(std::uint32_t pacing,std::uint32_t version);
+void* lazytester_presentation_entry(HMODULE,std::uint32_t imageBytes,std::uint32_t rva);
+}

@@ -122,6 +122,11 @@ HRESULT WINAPI createFactory2(UINT flags, REFIID id, void** result) {
     SetLastError(error); return status;
 }
 }
+// Mapping may be malformed or concurrently invalidated. Keep SEH at the native boundary.
+static bool copyCapability(void* destination, const void* source, SIZE_T bytes) noexcept {
+    __try { memcpy(destination,source,bytes); return true; }
+    __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
+}
 bool prepare(const education_bootstrap::Config& process) noexcept {
     wchar_t setting[32]{};
     SetLastError(ERROR_SUCCESS);
@@ -142,41 +147,34 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
         if (raw > (~static_cast<ULONG_PTR>(0) - digit) / 10) return false;
         raw = raw * 10 + digit;
     }
-    if (!raw) return false;
+    if (!raw || raw > static_cast<ULONG_PTR>(INTPTR_MAX)) return false;
     const HANDLE section = reinterpret_cast<HANDLE>(raw);
     if (!SetHandleInformation(section, HANDLE_FLAG_INHERIT, 0)) return false;
     if (pacing) {
         const void* prefix = MapViewOfFile(section, FILE_MAP_READ, 0, 0, sizeof(CreationConfig));
         if (!prefix) { CloseHandle(section); return false; }
-        CreationConfig header{}; memcpy(&header, prefix, sizeof(header)); UnmapViewOfFile(prefix);
-        bytes = header.version == 4 ? sizeof(PolicyConfig) : LegacyPolicyBytes;
+        CreationConfig header{}; const bool copied=copyCapability(&header,prefix,sizeof(header)); UnmapViewOfFile(prefix);
+        bytes = copied ? lazytester_presentation_bytes(1,header.version) : 0;
+        if (!bytes) { CloseHandle(section); return false; }
     }
     void* writable = MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, bytes);
     if (writable) { UnmapViewOfFile(writable); CloseHandle(section); return false; }
     const void* view = MapViewOfFile(section, FILE_MAP_READ, 0, 0, bytes);
     if (!view) { CloseHandle(section); return false; }
     PolicyConfig capability{};
-    memcpy(&capability, view, bytes);
-    const auto& config = capability.creation;
+    const bool copied=copyCapability(&capability,view,bytes);
     UnmapViewOfFile(view); CloseHandle(section);
+    if (!copied) return false;
+    const auto& config = capability.creation;
     CreationConfig actual{}; HMODULE module = nullptr;
-    if (config.magic != CreationMagic || (pacing ? config.version != 2 && config.version != 3 && config.version != 4 : config.version != 1) || config.bytes != bytes || (pacing && bytes != (config.version == 4 ? sizeof(PolicyConfig) : LegacyPolicyBytes))
+    if (config.magic != CreationMagic || config.bytes != bytes || lazytester_presentation_bytes(pacing ? 1U : 0U,config.version) != bytes
         || config.pid != process.pid || config.session != process.session
         || memcmp(&config.created, &process.created, sizeof(FILETIME))
         || !imageMetadata(actual, module) || config.imageBytes != actual.imageBytes
         || config.imageTimestamp != actual.imageTimestamp || memcmp(&config.imageId, &actual.imageId, sizeof(FILE_ID_INFO))) return false;
-    const auto entry = [&](DWORD rva) -> void* {
-        if (rva < 4096 || rva >= actual.imageBytes) return nullptr;
-        auto* address = reinterpret_cast<BYTE*>(module) + rva;
-        MEMORY_BASIC_INFORMATION memory{};
-        if (!VirtualQuery(address, &memory, sizeof(memory)) || memory.AllocationBase != module
-            || memory.State != MEM_COMMIT || memory.Type != MEM_IMAGE || (memory.Protect & PAGE_GUARD)
-            || !(memory.Protect & (PAGE_EXECUTE | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY))) return nullptr;
-        return address;
-    };
-    originalOld = reinterpret_cast<CreateOld>(entry(config.oldRva));
-    originalHwnd = reinterpret_cast<CreateHwnd>(entry(config.hwndRva));
-    if (!originalOld || !originalHwnd || config.oldRva == config.hwndRva) return false;
+    const auto oldEntry = lazytester_presentation_entry(module,actual.imageBytes,config.oldRva);
+    const auto hwndEntry = lazytester_presentation_entry(module,actual.imageBytes,config.hwndRva);
+    if (!oldEntry || !hwndEntry || oldEntry == hwndEntry) return false;
     if (pacing) {
         unsigned active=0, background=0;
         if (!lazytester_presentation_validate(config.version, capability.reserved,
@@ -186,6 +184,8 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
         input = {capability.level, capability.changed, capability.stop, capability.controller, active, background};
         if (config.version == 4) input.hudSelected = capability.hudSelected;
     }
+    originalOld = reinterpret_cast<CreateOld>(oldEntry);
+    originalHwnd = reinterpret_cast<CreateHwnd>(hwndEntry);
     armed = true;
     return true;
 }

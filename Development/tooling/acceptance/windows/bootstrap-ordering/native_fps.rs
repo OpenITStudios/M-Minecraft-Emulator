@@ -7,3 +7,6 @@ mod hud_window;
 #[cfg(windows)]
 mod fps_hud;
 mod presentation_policy;
+
+#[cfg(windows)]
+mod presentation_image;
