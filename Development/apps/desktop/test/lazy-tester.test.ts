@@ -28,6 +28,20 @@ describe('Selective inventory wire contract',()=>{
     expect(()=>parseSession({...stopped(),profiles:[running(1),...stopped().profiles.slice(1)],selectiveInventory:inventory})).toThrow();
   });
 });
+describe('Storage on-demand boundary', () => {
+  it('keeps complete storage scans out of startup, periodic observation and slot selection', () => {
+    const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const refresh=app.split('async function refresh()')[1]!.split('async function launch(')[0]!;
+    const selection=app.split('function chooseSlot(')[1]!.split('let queuedPerformance:')[0]!;
+    expect(refresh).toContain("page === 'settings' || page === 'storage' ? await lazyTester.settings() : await lazyTester.inspect()");
+    expect(refresh).not.toContain('lazyTester.storage(');
+    expect(selection).not.toContain('lazyTester.');
+    expect(app.match(/lazyTester\.storage\(/g)).toHaveLength(2);
+    expect(app).toContain("if(next==='storage'&&binding?.configured)");
+    const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
+    expect(bridge).toContain('value.storage.length !== 5');
+  });
+});
 describe('Desktop operation ownership', () => {
   it('uses a synchronous operation tag and derives display-only activity flags', () => {
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');

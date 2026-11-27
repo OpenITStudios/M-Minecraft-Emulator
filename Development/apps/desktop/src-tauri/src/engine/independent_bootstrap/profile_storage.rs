@@ -294,11 +294,10 @@ impl CachePlan {
         };
         self.visit_pinned_tree(path, root, depth, directory)
     }
-    // A verified read-only root may be supplied directly. Recursive and
-    // exclusive mutation traversal still opens its original handles above.
+    // Callers check bounds before entering with a verified directory pin.
+    // Recursive and exclusive mutation traversal still opens its handles above.
     fn visit_pinned_tree(&mut self, path: &Path, root: &Path, depth: usize,
         directory: File) -> io::Result<()> {
-        self.bounded(depth)?;
         if self.selected_tree {
             self.record_tree_entry(path, root, &directory, true)?;
         }
@@ -405,6 +404,7 @@ pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
     }
     let mut plan = CachePlan::new(false, budget);
     plan.selected_tree = true;
+    plan.bounded(0)?;
     plan.visit_pinned_tree(path, path, 0, pin)?;
     plan.bounded(0)?;
     let digest = plan.tree_digest(0);
