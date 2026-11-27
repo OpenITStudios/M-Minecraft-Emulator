@@ -128,7 +128,7 @@ pub(crate) unsafe fn lazytester_hud_renderer_destroy(renderer:*mut Renderer) {
     if !renderer.is_null() { drop(Box::from_raw(renderer)); }
 }
 pub(crate) unsafe fn lazytester_hud_renderer_reset(renderer:*mut Renderer) {
-    if let Some(r)=renderer.as_mut() { r.previous_dpi=0; }
+    if let Some(r)=renderer.as_mut() { r.previous_dpi=0;r.previous_bounds=Rect::default(); }
 }
 pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:*mut WindowHost,
     target:Handle,bound:u32,admitted:u32,milli:u32,valid:u32,out:*mut Composition)->u32 {
@@ -137,6 +137,7 @@ pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:
     let mut client=Rect::default();
     if bound==0 || lazytester_hud_physical_client(target,&mut client)==0 {
         if !h.window.is_null() && IsWindowVisible(h.window)!=0 { ShowWindow(h.window,0); }
+        r.previous_dpi=0;
         return 1;
     }
     if h.window.is_null() {
@@ -150,7 +151,21 @@ pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:
     lazytester_hud_placement(&client,dpi,&mut bounds);
     let fits=bounds.right>bounds.left;
     let visible=fits && admitted!=0 && IsWindowVisible(target)!=0 && IsIconic(target)==0;
-    if fits {
+    // Hidden HUDs keep their HWND geometry current (including monitor DPI)
+    // without drawing or uploading pixels. Invalidate the existing raster
+    // checkpoint so the next visible frame is current.
+    if !visible {
+        if IsWindowVisible(window)!=0 { ShowWindow(window,0); }
+        r.previous_dpi=0;
+        if fits && bounds!=r.previous_bounds {
+            if SetWindowPos(window,ptr::null_mut(),bounds.left,bounds.top,
+                bounds.right-bounds.left,bounds.bottom-bounds.top,0x14)==0 { return 0; }
+            r.previous_bounds=bounds;
+        }
+        out.window=window;out.bounds=bounds;out.dpi=dpi;
+        return 1;
+    }
+    {
         let rate=((u64::from(milli)+50)/100) as u32;
         let redraw=dpi!=r.previous_dpi || (valid!=0)!=r.previous_valid || rate!=r.previous_rate;
         if redraw {
@@ -166,6 +181,6 @@ pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:
         }
         r.previous_dpi=dpi;r.previous_bounds=bounds;r.previous_rate=rate;r.previous_valid=valid!=0;
     }
-    if (IsWindowVisible(window)!=0)!=visible { ShowWindow(window,if visible {4}else{0}); }
-    out.window=window;out.bounds=bounds;out.dpi=dpi;out.visible=u32::from(visible);1
+    if IsWindowVisible(window)==0 { ShowWindow(window,4); }
+    out.window=window;out.bounds=bounds;out.dpi=dpi;out.visible=1;1
 }

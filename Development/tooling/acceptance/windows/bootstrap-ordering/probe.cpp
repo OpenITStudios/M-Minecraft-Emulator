@@ -2695,10 +2695,11 @@ void presentationChecks(probe::Receipt& receipt) {
             const ULONGLONG started = GetTickCount64();
             for (;;) {
                 require(hudRead(&hud, sizeof(hud)) && !hud.failures);
-                if (hud.window && hud.draws && hud.bounds.right > hud.bounds.left) break;
+                if (hud.window && hud.bounds.right > hud.bounds.left) break;
                 require(GetTickCount64() - started < 3000); Sleep(5);
             }
-            require(!hud.visible && !IsWindowVisible(hud.window) && GetWindow(hud.window, GW_OWNER) == selected.value);
+            require(!hud.draws && !hud.visible && !IsWindowVisible(hud.window)
+                && GetWindow(hud.window, GW_OWNER) == selected.value);
             require(receipt.ready && receipt.finish && SetEvent(receipt.ready)
                 && WaitForSingleObject(receipt.finish, 10000) == WAIT_OBJECT_0);
             const auto presents = timing.pacedPresent;

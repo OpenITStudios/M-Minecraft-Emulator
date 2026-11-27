@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {traceFrontend,verifyDesktopWindowsDeps,verifyFrontendNativeIpcBoundary,
-  verifyNativeGraphicsExperimentBoundary} from './verify.mjs';
+  verifyNativeGraphicsExperimentBoundary,verifyNativeHudCompositionBoundary} from './verify.mjs';
 test('frontend reachability rejects missing/escaping imports and unmounted alternate apps',()=>{
   assert.deepEqual(traceFrontend({'main.ts':"import App from './App.svelte';",'App.svelte':"import './style.css';",'style.css':''}),['main.ts','App.svelte','style.css']);
   assert.throws(()=>traceFrontend({'main.ts':"import './missing.js';"}),/Missing/);
@@ -52,6 +53,14 @@ test('mounted native IPC is owned by typed bridges, not UI or Tauri window contr
   assert.throws(()=>verifyFrontendNativeIpcBoundary({...good,'main.ts':"window.__TAURI_INTERNALS__.invoke('lazy_tester_session')"}),/reach internals/);
   assert.throws(()=>verifyFrontendNativeIpcBoundary({...good,'app/bridge/workspaceSurface.ts':"import {invoke} from '@tauri-apps/api/core';"}),/raw Tauri core/);
   assert.throws(()=>verifyFrontendNativeIpcBoundary({...good,'app/bridge/invokeRuntime.ts':"export function invokeRuntime() {}"}),/must be owned by invokeRuntime.ts/);
+});
+
+test('native HUD guard follows Rust ownership and rejects inverted hidden admission',()=>{
+  const read = name => readFileSync(new URL('../acceptance/windows/bootstrap-ordering/'+name,import.meta.url),'utf8');
+  const worker=read('fps_hud.rs'), renderer=read('hud_window.rs'), canvas=read('hud_canvas.rs');
+  assert.doesNotThrow(()=>verifyNativeHudCompositionBoundary(worker,renderer,canvas));
+  assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer.replace('if !visible {','if visible {'),canvas),/Hidden HUD/);
+  assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer,canvas.replace('self.size==size && self.dpi==dpi { return true; }','self.size==size && self.dpi==dpi { return false; }')),/canvas must reuse/);
 });
 
 test('native graphics allocator canaries must not activate without a pinned opt-in',()=>{

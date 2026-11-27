@@ -149,15 +149,18 @@ int run() {
         check(fps_hud::physicalClient(owner, client)); expected = fps_hud::placement(client, state.dpi);
         until([&] { const auto s = hud.snapshot(); return memcmp(&s.bounds, &expected, sizeof(expected)) == 0; });
         RECT actual{}; check(GetWindowRect(state.window, &actual) && memcmp(&actual, &expected, sizeof(actual)) == 0);
+        check(!hud.snapshot().visible && hud.snapshot().draws == 0);
         hud.present(E_FAIL, 0); hud.present(DXGI_STATUS_OCCLUDED, 0); hud.present(S_OK, DXGI_PRESENT_TEST);
         check(hud.snapshot().reading.accepted == 0);
         hud.present(S_OK, 0); check(hud.snapshot().reading.accepted == 1);
         if (cycle == 0) {
             for (unsigned frame = 0; frame < 6; ++frame) { pump(); Sleep(100); hud.present(S_OK, 0); }
-            until([&] { return hud.snapshot().reading.valid && hud.snapshot().draws >= 2; });
+            until([&] { return hud.snapshot().reading.valid; });
+            check(hud.snapshot().draws == 0);
             const auto idleStart = cpu(); const auto idleTime = GetTickCount64();
             while (GetTickCount64() - idleTime < 2100) { pump(); Sleep(5); }
-            until([&] { return !hud.snapshot().reading.valid && hud.snapshot().draws >= 3; });
+            until([&] { return !hud.snapshot().reading.valid; });
+            check(hud.snapshot().draws == 0);
             idleCpuSeconds = static_cast<double>(cpu() - idleStart) / 10000000.0;
             check(!hud.snapshot().failures && !hud.snapshot().visible);
         }
@@ -172,6 +175,52 @@ int run() {
         // is not a correctness contract after an idle retirement.
         check(originalWorker != 0);
         hud.unbind(); until([&] { return hud.snapshot().window == nullptr; });
+    }
+    // A synthetic NOACTIVATE owner exercises actual hidden -> visible -> hidden
+    // composition without sending input or using a Minecraft process.
+    {
+        struct Event {
+            HANDLE value = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+            ~Event() { if (value) CloseHandle(value); }
+        } selected, stopped, controller;
+        check(selected.value && stopped.value && controller.value);
+        fps_hud::Hud hud(selected.value, stopped.value, controller.value);
+        ShowWindow(owner, SW_SHOWNOACTIVATE);
+        check(IsWindowVisible(owner) && hud.bind(owner, GetCurrentThreadId()));
+        until([&] { auto s=hud.snapshot(); check(!s.failures); return s.window && !s.visible; });
+        check(hud.snapshot().draws == 0);
+        for (unsigned i=0; i<6; ++i) { hud.present(S_OK,0); pump(); Sleep(100); }
+        until([&] { return hud.snapshot().reading.valid; });
+        check(!hud.snapshot().visible && hud.snapshot().draws == 0);
+        check(SetEvent(selected.value));
+        until([&] { auto s=hud.snapshot(); check(!s.failures); return s.visible && s.draws>0; });
+        auto shown=hud.snapshot();
+        RECT actual{}; check(GetWindowRect(shown.window,&actual) && memcmp(&actual,&shown.bounds,sizeof(actual))==0);
+        check(ResetEvent(selected.value));
+        until([&] { return !hud.snapshot().visible; });
+        const auto hiddenDraws=hud.snapshot().draws;
+        check(SetWindowPos(owner,nullptr,320,220,820,510,SWP_NOACTIVATE|SWP_NOZORDER));
+        RECT client{}; check(fps_hud::physicalClient(owner,client));
+        until([&] { auto s=hud.snapshot(); check(!s.failures);
+            auto desired=fps_hud::placement(client,s.dpi);
+            return desired.right>desired.left && memcmp(&s.bounds,&desired,sizeof(desired))==0;
+        });
+        auto hidden=hud.snapshot();
+        check(!IsWindowVisible(shown.window) && hidden.draws==hiddenDraws
+            && GetWindowRect(hidden.window,&actual) && memcmp(&actual,&hidden.bounds,sizeof(actual))==0);
+        check(SetEvent(selected.value));
+        until([&] { auto s=hud.snapshot(); check(!s.failures); return s.visible && s.draws>hiddenDraws; });
+        auto restored=hud.snapshot();
+        check(restored.window==shown.window && GetWindowRect(restored.window,&actual)
+            && memcmp(&actual,&restored.bounds,sizeof(actual))==0);
+        draws+=restored.draws;
+        ShowWindow(owner,SW_HIDE);
+        until([&] { return !hud.snapshot().visible; });
+        const auto ownerHiddenDraws=hud.snapshot().draws;
+        for (unsigned i=0;i<6;++i) { hud.present(S_OK,0); pump(); Sleep(100); }
+        check(!hud.snapshot().visible && hud.snapshot().draws==ownerHiddenDraws);
+        hud.unbind();
+        until([&] { return hud.snapshot().window==nullptr; });
     }
     // Dropping/recreating the window without unbinding is a realistic
     // Minecraft shutdown sequence: the GUI thread itself may remain alive.

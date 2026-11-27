@@ -138,8 +138,14 @@ worker and retains no native renderer object. Once the final swap-chain
 unbinds, a one-second grace period allows fast recreation; the HUD worker
 then retires even if the original game GUI thread/window remains alive.
 The private message loop processes at most 64 queued messages per wake so
-continuous location notifications cannot starve its STOP/retirement checks. Surface drawing happens only when displayed text/DPI
-changes; moving the panel reuses its pixels. The HUD's per-present addition is only a
+continuous location notifications cannot starve its STOP/retirement checks.
+Surface drawing happens only while visible, on first show/reappearance or
+when displayed text/DPI changes; moving a visible panel reuses its pixels.
+Hidden HUDs retain their host and update geometry only on changed bounds,
+but skip raster and layered upload. Keeping placement preserves monitor DPI
+observation. The existing raster checkpoint is invalidated so reappearance
+paints current content before showing. FPS sampling and owner/selection/stop/
+controller checks are unchanged. The HUD's per-present addition is only a
 QPC/counter update; its GDI/window work stays on the worker.
 
 [Layered-window transparency](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#layered-windows)
@@ -152,14 +158,16 @@ This adds no game backbuffer draw calls, process-wide DPI/timer changes,
 public command, persistent preference or third-party dependency.
 
 Build the existing explicit test-only CMake project and run
-`fps-hud-control.exe --run-self-test`. It uses hidden own windows, writes only
+`fps-hud-control.exe --run-self-test`. It uses synthetic own windows (including a
+NOACTIVATE visibility-transition fixture), writes only
 an ignored local bitmap preview, checks deterministic rates/invalid/stale
-samples, synthetic DPI geometry, actual resize/owner bounds, transparent
-hit-test/no-activation responses, same-worker rebinding and balanced GDI
-handles. Existing D3D11/D3D12 controls verify native-result sampling and TEST
-exclusion. A private sized BootstrapHudSnapshot export lets the Rust-owned
-C++ receivers check actual hidden HUD composition under the full compatibility
-DLL. No counter is opened on a live game by these commands.
+samples, synthetic DPI geometry, actual hidden/visible bounds,
+zero hidden draws, fresh visible redraw, transparent hit-test/no-activation
+responses, same-worker rebinding and balanced GDI handles. Existing D3D11/D3D12
+controls verify native-result sampling and TEST exclusion. A private sized
+BootstrapHudSnapshot export lets the C++ receivers check the hidden host and
+zero draws under the full compatibility DLL. No counter is opened on a live
+game by these commands. EFF-02 fixtures are authored, NOT_EXECUTED.
 
 The HUD worker now paints directly into the DIB supplied to UpdateLayeredWindow.
 The preview raster helper shares the same painter, but the live worker no longer
@@ -284,8 +292,9 @@ remain usable. No new worker or UI command. Native transition timing and
 payload validation remain NOT_EXECUTED. The old approved DLL hashes are no
 longer active for ABI v4. The existing own-child control retains v2 coverage
 and adds v4 stop/death rounds plus five malformed selection capabilities.
-The hidden HUD control tests selection, deselection, stop and signaled producer
-wait-object admission without displaying a window.
+The selection-admission control tests selection, deselection, stop and signaled
+producer wait objects without displaying a window; the separate NOACTIVATE
+fixture checks composition on selection and deselection.
 
 ## Private creation-to-pacing capability — 25 October 2026
 

@@ -65,6 +65,22 @@ export function verifyFrontendNativeIpcBoundary(sources) {
   }
 }
 
+// Source-only guard for the current Rust HUD owner, not native execution proof.
+export function verifyNativeHudCompositionBoundary(worker, renderer, canvas) {
+  assert.match(worker, /let draw=Draw\(lazytester_hud_renderer_create\(\)\);[\s\S]*?loop\s*\{/,
+    'HUD renderer must be owned outside the worker loop');
+  assert.match(canvas, /if !self\.bitmap\.is_null\(\) && !self\.font\.is_null\(\) && self\.size==size && self\.dpi==dpi \{ return true; \}/,
+    'HUD canvas must reuse matching bitmap and font');
+  const update = renderer.slice(renderer.indexOf('pub(crate) unsafe fn lazytester_hud_renderer_update('));
+  const hidden = update.indexOf('if !visible {');
+  const paint = update.indexOf('lazytester_hud_canvas_paint(r.canvas,');
+  const upload = update.indexOf('if UpdateLayeredWindow(');
+  const show = update.indexOf('ShowWindow(window,4)');
+  assert.ok(hidden >= 0 && hidden < paint && paint < upload && upload < show &&
+    /r\.previous_dpi=0;[\s\S]*?return 1;\s*\}/.test(update.slice(hidden,paint)),
+    'Hidden HUD must skip raster/upload and invalidate the paint checkpoint before visible composition');
+}
+
 // Heap experiments affect the game only in reviewed opt-in builds.
 // The release-compatible default has no allocator interception.
 export function verifyNativeGraphicsExperimentBoundary(cmake, source) {
@@ -398,16 +414,12 @@ export function verifyRepository(root,g0=false) {
   verifyNativeGraphicsExperimentBoundary(
     read('Development/tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt'),
     read('Development/tooling/acceptance/windows/bootstrap-ordering/graphics-warm-pools.cpp'));
-  const hudSource=read('Development/tooling/acceptance/windows/bootstrap-ordering/fps-hud.cpp');
+  const nativeHudRoot='Development/tooling/acceptance/windows/bootstrap-ordering/';
+  verifyNativeHudCompositionBoundary(read(nativeHudRoot+'fps_hud.rs'),
+    read(nativeHudRoot+'hud_window.rs'),read(nativeHudRoot+'hud_canvas.rs'));
   const memoryCollector=read('Development/tooling/acceptance/windows/collect-native-performance.ps1');
   const nativeMemoryCollector=read('Development/tooling/acceptance/windows/native-profile-baseline.ps1');
   const nativeMemoryReviewer=read('Development/tooling/acceptance/evaluate-native-performance.mjs');
-  assert.ok(hudSource.includes('Canvas upload;')
-    && hudSource.includes('extent.cx == requested.cx && extent.cy == requested.cy')
-    && hudSource.includes('font && fontDpi == dpi')
-    && hudSource.includes('SIZE size{}; paint(upload, value, dpi, size);')
-    && !hudSource.includes('SIZE size{}; Canvas upload; paint('),
-    'FPS HUD must reuse a single scoped GDI canvas in its existing native worker');
   assert.ok(memoryCollector.includes('QueryFullProcessImageNameW')
     && memoryCollector.includes('function Read-ProfileImageEvidence')
     && nativeMemoryCollector.includes('schema = 8')
