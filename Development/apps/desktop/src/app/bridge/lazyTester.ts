@@ -426,7 +426,19 @@ export function parseSelectedClose(value:unknown):SelectedCloseReport {
   return {schema:1,presentationReleased:value.presentationReleased as boolean,snapshot,issue:value.issue as string|null};
 }
 
+export interface ScreenshotReceipt {slot:ProfileSlot; width:number; height:number; bytes:number}
+export function parseScreenshotReceipt(value:unknown,slot:ProfileSlot):ScreenshotReceipt|null {
+  if(value===null)return null;
+  if(!record(value)||!exact(value,['slot','width','height','bytes'])||value.slot!==slot||
+    ![value.width,value.height].every(n=>typeof n==='number'&&Number.isInteger(n)&&n>0&&n<=4096)||
+    typeof value.bytes!=='number'||!Number.isInteger(value.bytes)||value.bytes<26||value.bytes>80*1024*1024)
+    throw new TypeError('Invalid screenshot receipt');
+  return value as unknown as ScreenshotReceipt;
+}
 export const lazyTester = {
+  screenshotAvailable:async()=>await invokeRuntime<unknown>('lazy_tester_screenshot_available')===true,
+  screenshot:async(slot:ProfileSlot,expected:OwnedProcess)=>parseScreenshotReceipt(
+    await invokeRuntime<unknown>('lazy_tester_screenshot',{slot,expected}),slot),
   saveStoragePreferences:async(preferences:StoragePreferences)=>{
     if(typeof preferences.autoClearWebCache!=='boolean'||preferences.autoClearDownloadCache===true||preferences.autoClearOldLogs===true)throw new TypeError('Unverified storage cleanup preference');
     const snapshot=settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveStoragePreferences',preferences}}));

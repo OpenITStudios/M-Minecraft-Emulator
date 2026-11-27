@@ -156,6 +156,20 @@ pub async fn lazy_tester_close_one(
 }
 
 #[tauri::command]
+pub fn lazy_tester_screenshot_available()->bool{
+    !crate::app_bootstrap::startup_diagnostic_mode()&&crate::engine::capture::screenshot_available()
+}
+
+#[tauri::command]
+pub async fn lazy_tester_screenshot(slot:u32,expected:crate::engine::process_identity::OwnedProcess)
+    ->Result<Option<crate::engine::capture::ScreenshotReceipt>,String>{
+    if crate::app_bootstrap::startup_diagnostic_mode(){return Err("Startup diagnostic cannot capture games".into());}
+    tauri::async_runtime::spawn_blocking(move||run_manager_operation(||crate::engine::capture::save_screenshot(slot,expected)))
+        .await.map_err(|_|"Screenshot task failed".to_string())?
+        .map_err(|error|error.to_string())
+}
+
+#[tauri::command]
 pub async fn lazy_tester_present(
     window: tauri::WebviewWindow,
     slot: u32,

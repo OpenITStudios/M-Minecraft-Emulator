@@ -71,8 +71,7 @@ success only after stdout completes. The worker accepts no file paths.
 The future product parent must admit a controller-verified slot, supervise
 the worker with an independent wall-clock timeout, validate the entire output
 and exit status, and publish only a complete file; it must not accept an
-arbitrary executable or PID from UI. No product command, UI, installer,
-file publisher or parent supervisor is connected yet.
+arbitrary executable or PID from UI. The source-only product command, UI, bounded parent supervisor and no-overwrite publisher are now connected (CAP-02). The product admission digest remains None; UI stays unavailable until exact binary review. The worker is not built or included in the installer.
 
 The one-shot path disables cursor capture, reads the original RGBA8 frame,
 checks DWM physical bounds against WGC size, crops the verified client

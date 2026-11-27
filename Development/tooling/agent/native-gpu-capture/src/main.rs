@@ -25,10 +25,10 @@ mod windows_capture {
     use wgc::{FrameSize, PixelFormat, Wgc};
     use windows::Win32::Foundation::HWND;
     use windows_sys::Win32::{
-        Foundation::{CloseHandle, FILETIME, HANDLE},
+        Foundation::{CloseHandle, FILETIME, HANDLE, WAIT_TIMEOUT},
         System::{
             RemoteDesktop::ProcessIdToSessionId,
-            Threading::{GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION},
+            Threading::{GetProcessTimes, OpenProcess, WaitForSingleObject, PROCESS_QUERY_LIMITED_INFORMATION, SYNCHRONIZATION_SYNCHRONIZE},
         },
         UI::WindowsAndMessaging::{
             GetAncestor, GetParent, GetWindowThreadProcessId, IsHungAppWindow, IsIconic,
@@ -96,7 +96,7 @@ mod windows_capture {
     // A HANDLE pins the process object through the capture attempt. A bare
     // HWND/PID from an external MCP request is NEVER authorization by itself.
     fn pin_target(target: &Target) -> io::Result<ProcessPin> {
-        let handle=unsafe {OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,0,target.pid)};
+        let handle=unsafe {OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZATION_SYNCHRONIZE,0,target.pid)};
         if handle.is_null() {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied,
                 "Target process cannot be verified"));
@@ -116,6 +116,7 @@ mod windows_capture {
         let mut kernel=created;
         let mut user=created;
         let ok=unsafe {
+            WaitForSingleObject(pin.0,0)==WAIT_TIMEOUT &&
             GetWindowThreadProcessId(window,&mut observed_pid)!=0 &&
             GetProcessTimes(pin.0,&mut created,&mut exited,&mut kernel,&mut user)!=0 &&
             ProcessIdToSessionId(target.pid,&mut game_session)!=0 &&
@@ -228,7 +229,7 @@ mod windows_capture {
         let pin=pin_target(&target)?;
         let hwnd=target.window_id as usize as *mut c_void;
         let geometry=super::screenshot::geometry(hwnd)?;
-        let session=Wgc::new_from_hwnd(HWND(hwnd))
+        let mut session=Wgc::new_from_hwnd(HWND(hwnd))
             .map_err(|_|io::Error::other("Windows Graphics Capture HWND unavailable"))?
             .pixel_format(PixelFormat::RGBA8)
             .frame_queue_length(1)
@@ -236,7 +237,7 @@ mod windows_capture {
             .build()
             .map_err(|_|io::Error::other("Windows GPU capture session refused"))?;
         let deadline=Instant::now()+Duration::from_millis(target.duration_ms);
-        let frame=session.into_iter().next()
+        let frame=session.next()
             .ok_or_else(||io::Error::other("WGC screenshot frame unavailable"))?
             .map_err(|_|io::Error::other("WGC screenshot frame unavailable"))?;
         if Instant::now()>=deadline {return Err(io::Error::new(io::ErrorKind::TimedOut,"Screenshot deadline elapsed"));}
@@ -244,6 +245,8 @@ mod windows_capture {
         let size=frame.size().map_err(|_|io::Error::other("Screenshot frame size unavailable"))?;
         let crop=geometry.crop(size.width,size.height)?;
         let pixels=frame.pixels().map_err(|_|io::Error::other("Screenshot readback unavailable"))?;
+        drop(frame);
+        drop(session); // release GPU capture resources before CPU encoding
         verify_target(&target,&pin)?;
         if super::screenshot::geometry(hwnd)?!=geometry {
             return Err(io::Error::other("Screenshot window geometry changed"));

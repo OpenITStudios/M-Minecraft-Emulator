@@ -97,6 +97,32 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    let (success, stdout, stderr) = bounded_process_bytes(program, args, timeout, input, OUTPUT_LIMIT)?;
+    require_success(program, success, &stdout, &stderr)
+}
+
+// Binary capture never turns private image bytes into diagnostic strings.
+// Share the existing reader admission, direct-child termination and deadline.
+pub(crate) const CAPTURE_OUTPUT_LIMIT: usize = 80 * 1024 * 1024;
+pub(crate) fn capture_output<I, S>(program: &Path, args: I, timeout: Duration) -> io::Result<Vec<u8>>
+where I: IntoIterator<Item = S>, S: AsRef<OsStr>,
+{
+    let (success, stdout, _) = bounded_process_bytes(program, args, timeout, None, CAPTURE_OUTPUT_LIMIT)?;
+    if !success { return Err(io::Error::other("Capture helper did not complete successfully")); }
+    Ok(stdout)
+}
+
+fn bounded_process_bytes<I, S>(
+    program: &Path,
+    args: I,
+    timeout: Duration,
+    input: Option<&[u8]>,
+    stdout_limit: usize,
+) -> io::Result<(bool, Vec<u8>, Vec<u8>)>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     // Reserve before spawning the process. An unavailable slot refuses work
     // without starting another helper or increasing resource pressure.
     let slots = reserve_io_workers(if input.is_some() { 3 } else { 2 })?;
@@ -161,7 +187,7 @@ where
     spawn_worker_or_reap(&mut child, program, || {
         thread::Builder::new().spawn(move || {
             let _slot = stdout_slot;
-            let _ = stdout_sender.send(drain_output(stdout, &stdout_overflow));
+            let _ = stdout_sender.send(drain_output_with_limit(stdout, &stdout_overflow, stdout_limit));
         })
     })?;
     spawn_worker_or_reap(&mut child, program, || {
@@ -177,7 +203,7 @@ where
         // overflowed. Terminate ONLY our direct helper, not game descendants.
         if oversized_output.load(Ordering::Acquire) {
             terminate_direct_child(&mut child, program, "oversized output")?;
-            return Err(oversized_output_error(program));
+            return Err(oversized_output_error(program, stdout_limit));
         }
         let observed_status = match child.try_wait() {
             Ok(status) => status,
@@ -203,12 +229,12 @@ where
             let remaining = timeout.saturating_sub(started.elapsed());
             let stderr = receive_output(&stderr_reader, remaining, &oversized_output)?;
             if oversized_output.load(Ordering::Acquire)
-                || stdout.len() > OUTPUT_LIMIT
+                || stdout.len() > stdout_limit
                 || stderr.len() > OUTPUT_LIMIT
             {
-                return Err(oversized_output_error(program));
+                return Err(oversized_output_error(program, stdout_limit));
             }
-            return require_success(program, status.success(), &stdout, &stderr);
+            return Ok((status.success(), stdout, stderr));
         }
         if started.elapsed() >= timeout {
             terminate_direct_child(&mut child, program, "timeout")?;
@@ -287,18 +313,21 @@ fn terminate_direct_child(child: &mut Child, program: &Path, context: &str) -> i
 // release that pipe promptly rather than draining unbounded producer output.
 const OUTPUT_LIMIT: usize = 64 * 1024;
 
-fn oversized_output_error(program: &Path) -> io::Error {
+fn oversized_output_error(program: &Path, stdout_limit:usize) -> io::Error {
     io::Error::new(
         io::ErrorKind::InvalidData,
         format!(
-            "{} output exceeded {} bytes per stream; refusing truncated provider evidence",
-            program.display(),
-            OUTPUT_LIMIT
+            "{} output exceeded its stream limit (stdout {} bytes, stderr {} bytes); refusing truncated provider evidence",
+            program.display(), stdout_limit, OUTPUT_LIMIT
         ),
     )
 }
 
-fn drain_output(mut pipe: impl Read, oversized: &AtomicBool) -> io::Result<Vec<u8>> {
+fn drain_output(pipe: impl Read, oversized: &AtomicBool) -> io::Result<Vec<u8>> {
+    drain_output_with_limit(pipe, oversized, OUTPUT_LIMIT)
+}
+
+fn drain_output_with_limit(mut pipe: impl Read, oversized: &AtomicBool, limit:usize) -> io::Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut chunk = [0_u8; 8192];
     loop {
@@ -315,9 +344,9 @@ fn drain_output(mut pipe: impl Read, oversized: &AtomicBool) -> io::Result<Vec<u
         }
         // Keep one sentinel byte, then close this reader: additional output
         // cannot make an already-invalid helper result trustworthy again.
-        let remaining = (OUTPUT_LIMIT + 1).saturating_sub(output.len());
+        let remaining = (limit + 1).saturating_sub(output.len());
         output.extend_from_slice(&chunk[..count.min(remaining)]);
-        if output.len() > OUTPUT_LIMIT {
+        if output.len() > limit {
             oversized.store(true, Ordering::Release);
             break;
         }
@@ -535,6 +564,17 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn binary_capture_reader_keeps_bytes_and_uses_its_explicit_limit() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let flag=AtomicBool::new(false);
+        let exact=[0,255,10,0,128];
+        assert_eq!(super::drain_output_with_limit(&exact[..], &flag, 5).unwrap(), exact);
+        assert!(!flag.load(Ordering::Acquire));
+        assert_eq!(super::drain_output_with_limit(&[1u8;20][..], &flag, 5).unwrap().len(),6);
+        assert!(flag.load(Ordering::Acquire));
     }
 
     #[test]

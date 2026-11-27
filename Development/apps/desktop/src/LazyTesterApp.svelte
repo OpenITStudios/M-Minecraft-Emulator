@@ -76,6 +76,21 @@
     catch { layoutPersistenceIssue = 'Layout applied for this session only. Preference could not be saved.'; }
   }
   let busy = false, refreshing = false, resizing = false, available = false;
+  let screenshotAvailable=false, screenshotBusy=false;
+  let screenshotNotice:{slot:ProfileSlot;message:string}|null=null;
+  async function saveScreenshot(){
+    const slot=active;
+    const target=profiles.find(p=>p.slot===slot&&p.state==='RUNNING')?.process;
+    if(!screenshotAvailable||slot===null||!target?.responding||busy||refreshing||resizing||
+      closeReviewPending||navigationReviewOpen||detached||page!=='workspace')return;
+    busy=true;screenshotBusy=true;screenshotNotice=null;
+    try{
+      const receipt=await lazyTester.screenshot(slot,target);
+      if(receipt&&!disposed)screenshotNotice={slot,message:`Screenshot saved · ${receipt.width} × ${receipt.height}`};
+    }catch{
+      if(!disposed)screenshotNotice={slot,message:'Screenshot unavailable. No successful save was confirmed.'};
+    }finally{busy=false;screenshotBusy=false;}
+  }
   let manualRefreshRequested=false, manualRefreshing=false;
   // One clock for the same Inspect/InspectSettings path, including startup
   // and explicit Refresh. It throttles idle scheduling only, not mutations.
@@ -943,6 +958,7 @@
     try { workspaceLayout = window.localStorage.getItem(workspaceLayoutKey) === 'Right' ? 'Right' : 'Bottom'; }
     catch { layoutPersistenceIssue = 'Saved layout unavailable. Using Bottom.'; }
     mounted = true; void initializeLaunchers();
+    void lazyTester.screenshotAvailable().then(value=>{if(!disposed)screenshotAvailable=value;}).catch(()=>{});
     // Keep a review stable while the user decides; the backend rechecks admission on action.
     // Reuse this observer rather than adding another interval or process watcher.
     const interval = setInterval(() => {
@@ -1073,6 +1089,10 @@
         <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Workspace'):active?'Minecraft '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Workspace'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Select a Minecraft launcher.'):active?'Select another Minecraft launcher to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lazytester-header-actions">
           {#if page==='workspace' && nativeBackend==='WindowsNative'}<span class="lazytester-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>{/if}
+          {#if page==='workspace'&&screenshotAvailable&&active!==null&&!detached}
+          <button class="lazytester-secondary" disabled={busy||refreshing||resizing||closeReviewPending||navigationReviewOpen}
+            on:click={()=>void saveScreenshot()}>{screenshotBusy?'Saving…':'Screenshot'}</button>
+          {/if}
           {#if showHeaderRefresh}
           <button class="lazytester-secondary" bind:this={headerRefreshButton}
             disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
@@ -1161,6 +1181,8 @@
           <div class="lazytester-workspace-preview-feedback" role="status" tabindex="0">
             <strong>Preview unavailable</strong><span>{previewIssue}</span>
           </div>
+        {:else if screenshotNotice&&screenshotNotice.slot===active}
+          <p role="status">{screenshotNotice.message} <button class="lazytester-secondary" on:click={()=>screenshotNotice=null}>Dismiss</button></p>
         {/if}
         </div>
         {/if}

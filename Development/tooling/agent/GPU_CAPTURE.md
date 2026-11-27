@@ -21,7 +21,7 @@ provider. This transport is connected to the existing MCP
 `stop_visual_observation` / `observe_client` code when explicitly configured
 with `--gpu-capture-exe`. It is not packaged or runtime validated.
 
-The worker also has an explicit one-shot WebP screenshot source mode, not used by MCP. The existing LTG1 decoder, stream admission and PNG format are unchanged. No product parent or installer integration is available yet.
+The worker also has an explicit one-shot WebP screenshot source mode, not used by MCP. The existing LTG1 decoder, stream admission and PNG format are unchanged. The product parent is source-integrated with a closed reviewed-binary gate; no installer or native validation is available yet.
 
 See `native-gpu-capture/README.md` for the upstream WGC crate,
 frame protocol, licensing and unverified platform limitations.

@@ -91,6 +91,8 @@ pub fn run() {
             commands::native_clients::lazy_tester_data_location,
             commands::native_clients::lazy_tester_coordinate_bookmarks,
             commands::native_clients::lazy_tester_present,
+            commands::native_clients::lazy_tester_screenshot_available,
+            commands::native_clients::lazy_tester_screenshot,
             commands::native_clients::lazy_tester_previews,
             commands::native_clients::lazy_tester_clear_previews,
             commands::native_clients::desktop_update_workspace,

@@ -37,3 +37,11 @@ where
 {
     process::command_output_with_stdin(program, args, timeout, input)
 }
+
+// Only for a reviewed one-shot capture helper. Binary stdout is never decoded as text.
+#[doc(hidden)]
+pub fn bounded_capture_output<I,S>(program:&std::path::Path,args:I,timeout:std::time::Duration)->std::io::Result<Vec<u8>>
+where I:IntoIterator<Item=S>,S:AsRef<std::ffi::OsStr>,
+{
+    process::capture_output(program,args,timeout)
+}

@@ -31,3 +31,4 @@ pub mod manager_settings;
 pub mod coordinate_bookmarks;
 pub mod native_clients;
 pub mod workspace_surface;
+pub mod capture;

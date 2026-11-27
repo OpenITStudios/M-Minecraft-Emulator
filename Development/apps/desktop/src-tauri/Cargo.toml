@@ -18,6 +18,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11.1"
 tauri = { version = "2.12.4", features = [] }
+tempfile = "=3.27.0"
 virtual-clients-core = { package = "m-bedrock-virtual-clients-core", path = "../../../engine/runtime-core" }
 # Windows owns native Minecraft process/window/audio/HKCU behavior.
 # Keep these Win32 bindings out of non-Windows compilation units; this does
