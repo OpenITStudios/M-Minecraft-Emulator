@@ -681,6 +681,7 @@ pub enum SessionRequest {
     InspectStorage,
     InspectSelectiveInventory { slot: u32, category: SelectiveCategory },
     ReviewSelectiveInventory { slot: u32, selections: Vec<SelectiveSelection> },
+    ConfirmSelectedWorlds { slot: u32, selections: Vec<SelectiveSelection>, #[serde(rename="confirmationToken")] confirmation_token: String },
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
     ResetGameSettings { slot: u32 },
@@ -1211,7 +1212,7 @@ fn can_reconcile_pending_transport(request:&SessionRequest)->bool {
 
 #[cfg(windows)]
 pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
-    if let SessionRequest::ReviewSelectiveInventory { selections, .. } = request {
+    if let SessionRequest::ReviewSelectiveInventory { selections, .. } | SessionRequest::ConfirmSelectedWorlds { selections, .. } = request {
         let mut identities = std::collections::HashSet::new();
         let mut names = std::collections::HashSet::new();
         if selections.is_empty() || selections.len() > 128 || selections.iter().any(|s| {
@@ -1233,6 +1234,11 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
         // Bound the existing pipe contract before starting a transport worker.
         if serde_json::to_vec(request).map_err(io::Error::other)?.len() >= 32768 {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Selection exceeds the session request limit"));
+        }
+    }
+    if let SessionRequest::ConfirmSelectedWorlds { slot, selections, confirmation_token } = request {
+        if !(1..=5).contains(slot) || selections.iter().any(|s| s.category != SelectiveCategory::Worlds) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selected-world confirmation"));
         }
     }
     match request {

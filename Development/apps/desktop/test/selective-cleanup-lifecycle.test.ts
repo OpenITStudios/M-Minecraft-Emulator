@@ -49,3 +49,14 @@ describe('Selective Cleanup lifecycle source contract',()=>{
     expect(app).toContain('bind:selectiveOpen');
   });
 });
+
+
+describe('World cleanup source admission',()=>{
+  it('requires explicit acknowledgement and keeps native disposition held',()=>{
+    const dialog=source('SelectiveCleanup.svelte');
+    expect(dialog).toContain('worldDeletionAvailable = false');
+    expect(dialog).toContain('!acknowledged||!receipt');
+    expect(dialog).toContain('Do not retry automatically.');
+    expect(source('app/bridge/lazyTester.ts')).toContain("operation:'ConfirmSelectedWorlds'");
+  });
+});

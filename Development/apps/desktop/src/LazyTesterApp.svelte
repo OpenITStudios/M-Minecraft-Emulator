@@ -833,6 +833,18 @@
     catch (error) { issueKey='folder'; }
     finally { busy = false; }
   }
+  async function confirmWorlds(slot: ProfileSlot, receipt: import('./app/bridge/lazyTester.js').SelectiveReviewReceipt): Promise<void> {
+    if(busy||refreshing||resizing||!available||!selectiveOpen||slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending)throw new Error('World cleanup is unavailable');
+    busy=true;storageNotice='';
+    try {
+      const snapshot=await lazyTester.confirmSelectedWorlds(slot,receipt);
+      applyStorageSnapshot(snapshot);
+      storageNotice='Selected worlds deleted.';
+    } catch(error) {
+      storageNotice='Cleanup was refused or its result is uncertain. Refresh session and storage.';
+      throw error;
+    } finally {busy=false;}
+  }
   async function clearCache(slot: ProfileSlot) {
     if (busy || refreshing || resizing || clearSlot !== slot || !storage?.find(item=>item.slot===slot)?.cache.canClear) return;
     busy = true; issueKey=null; storageNotice = ''; clearSlot = null;
@@ -1148,6 +1160,7 @@
           bind:selectiveOpen nativeClosePending={closeReviewPending}
           onInspectSelective={lazyTester.selectiveInventory}
           onReviewSelective={lazyTester.reviewSelectiveInventory}
+          onConfirmWorlds={confirmWorlds}
           onReviewCache={() => {if (!navigationReviewOpen && !busy && !refreshing && !resizing) {fullReview=null;recovery=null;clearSlot=selectedSlot;}}}
           onClearCache={clearCache}
           onCancelCacheReview={() => {clearSlot=null;}}

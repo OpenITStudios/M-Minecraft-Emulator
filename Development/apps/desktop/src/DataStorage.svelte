@@ -38,6 +38,7 @@
   export let onChooseSlot: (slot: ProfileSlot) => void;
   export let onInspectSelective: (slot: ProfileSlot, category: SelectiveCategory) => Promise<SelectiveInventory>;
   export let onReviewSelective: (slot: ProfileSlot, selections: SelectiveSelection[]) => Promise<SelectiveReviewReceipt>;
+  export let onConfirmWorlds: (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => Promise<void>;
   let selectiveSlot: ProfileSlot | null = null;
   let maintenanceOpen = false;
   export let nativeClosePending = false;
@@ -254,5 +255,5 @@
         </div>
 
 {#if selectiveSlot!==null}
-  <SelectiveCleanup slot={selectiveSlot} inspect={onInspectSelective} review={onReviewSelective} onClose={closeSelective}/>
+  <SelectiveCleanup slot={selectiveSlot} inspect={onInspectSelective} review={onReviewSelective} confirmWorlds={onConfirmWorlds} onClose={closeSelective}/>
 {/if}

@@ -446,6 +446,10 @@ export const lazyTester = {
       throw new TypeError('Review receipt does not match request');
     return review;
   },
+  confirmSelectedWorlds: async (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => {
+    if (!profileSlots.includes(slot)||receipt.slot!==slot||receipt.warnings.length||!receipt.confirmationToken||!/^[0-9a-f]{64}$/.test(receipt.confirmationToken)||!receipt.items.length||receipt.items.some(item=>item.category!=='Worlds')) throw new TypeError('Invalid world cleanup confirmation');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ConfirmSelectedWorlds',slot,selections:receipt.items,confirmationToken:receipt.confirmationToken}}));
+  },
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
   recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {

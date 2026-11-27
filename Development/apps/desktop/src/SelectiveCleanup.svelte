@@ -7,6 +7,13 @@
   export let inspect: (slot: ProfileSlot, category: SelectiveCategory) => Promise<SelectiveInventory>;
   export let review: (slot: ProfileSlot, selections: SelectiveSelection[]) => Promise<SelectiveReviewReceipt>;
   export let onClose: () => void;
+  export let confirmWorlds: (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => Promise<void>;
+  // Source-only until native disposition acceptance; never imply deletion is available.
+  export let worldDeletionAvailable = false;
+  let acknowledged = false;
+  let deleting = false;
+  $: eligible = !!receipt?.confirmationToken && receipt.warnings.length===0 && receipt.items.length>0 && receipt.items.every(item=>item.category==='Worlds');
+  $: if (!receipt) acknowledged=false;
 
   const categories: {value: SelectiveCategory; label: string}[] = [
     {value:'Worlds',label:'Worlds'}, {value:'ResourcePacks',label:'Resource Packs'}, {value:'BehaviorPacks',label:'Behavior Packs'}
@@ -31,7 +38,7 @@
     void load('Worlds');
   });
   function close(): void {
-    if(closed)return;
+    if(closed||deleting)return;
     closed=true;
     generation++;
     if(dialog?.open)dialog.close();
@@ -86,6 +93,25 @@
     selected=[...others,...items.map(item=>({category,...item}))];
     issue='';
   }
+  async function deleteWorlds(): Promise<void> {
+    if(closed||loading||deleting||!worldDeletionAvailable||!eligible||!acknowledged||!receipt)return;
+    const confirmed=receipt;
+    const request=++generation;
+    deleting=true;loading=true;receipt=null;acknowledged=false;issue='';
+    try {
+      await confirmWorlds(slot,confirmed);
+      if(request!==generation)return;
+      inventories={};selected=[];
+      loading=false;
+      await load('Worlds',true);
+      if(!closed && !issue)issue='Selected worlds deleted.';
+    } catch {
+      if(request===generation){
+        inventories={};selected=[];
+        issue='Cleanup was refused or its result is uncertain. Refresh session and inventory before reviewing again. Do not retry automatically.';
+      }
+    } finally {if(!closed){deleting=false;loading=false;}}
+  }
   async function inspectSelection(): Promise<void> {
     if(closed||loading||!selected.length)return;
     const request=++generation;
@@ -111,7 +137,7 @@
 <dialog class="lazytester-selective-dialog" bind:this={dialog} aria-labelledby="lazytester-selective-title" on:cancel|preventDefault={close}>
   <header class="lazytester-selective-heading">
     <div><h2 id="lazytester-selective-title">Selective Cleanup</h2><p>Minecraft {slot}</p></div>
-    <button class="lazytester-secondary" bind:this={closeButton} on:click={close}>Close</button>
+    <button class="lazytester-secondary" bind:this={closeButton} disabled={deleting} on:click={close}>Close</button>
   </header>
   <div class="lazytester-selective-categories" role="group" aria-label="Data category">
     {#each categories as entry}
@@ -124,7 +150,7 @@
     <button class="lazytester-secondary" disabled={loading} on:click={()=>load(category,true)}>Refresh</button>
   </div>
   <div class="lazytester-selective-items" aria-busy={loading}>
-    {#if loading}<p role="status">Inspecting data…</p>{/if}
+    {#if loading}<p role="status">{deleting?'Deleting selected worlds…':'Inspecting data…'}</p>{/if}
     {#if !loading && inventories[category] && !items.length}<p>No items found.</p>{/if}
     {#if !loading && !inventories[category]}<p>Inventory not available. Select Refresh to inspect this category.</p>{/if}
     {#each items as item (item.identity)}
@@ -145,7 +171,12 @@
         </ul>
       </details>
       {#each receipt.warnings as warning}<p class="lazytester-help">{warning}</p>{/each}
-      <p role="status">Deletion is unavailable until native validation is complete. No data has been changed.</p>
+      {#if eligible}
+        <p>Selected worlds will be permanently deleted. Other profile data is not targeted.</p>
+        <label><input type="checkbox" bind:checked={acknowledged} disabled={!worldDeletionAvailable||loading}/> I understand this action cannot be undone.</label>
+        <button class="lazytester-danger" disabled={!worldDeletionAvailable||!acknowledged||loading} on:click={deleteWorlds}>Delete Selected Worlds</button>
+      {/if}
+      {#if !worldDeletionAvailable || !eligible}<p role="status">Deletion is unavailable until native validation is complete. No data has been changed by this review.</p>{/if}
     </section>
   {/if}
   <footer class="lazytester-selective-footer">

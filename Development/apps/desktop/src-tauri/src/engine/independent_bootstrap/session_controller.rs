@@ -937,7 +937,7 @@ impl Sessions {
         Ok(SelectiveReviewReceipt { slot, bytes: review.bytes, files: review.files, items: selections, warnings: review.warnings, confirmation_token })
     }
 
-    // Internal only: public mutation admission stays held until native
+    // Integrated through a fail-closed session request: mutation admission stays held until native
     // directory sharing/disposition evidence and wire consumer review exist.
     // The fingerprint is not authorization; repeat the original admission,
     // selection identity review and exclusive preflight before disposition.
@@ -1776,6 +1776,14 @@ fn run() -> io::Result<()> {
                 SessionRequest::ReviewSelectiveInventory { slot, selections } => {
                     selective_review = Some(sessions.review_selective_inventory(slot, selections).map_err(|error| error.to_string())?);
                 }
+                SessionRequest::ConfirmSelectedWorlds { slot, selections, confirmation_token } => {
+                    // Source integration only: the existing native disposition hold remains.
+                    if !SELECTED_WORLD_DISPOSITION_REVIEWED {
+                        return Err("World deletion is held for native filesystem validation".into());
+                    }
+                    sessions.confirm_selected_worlds(slot, &selections, &confirmation_token).map_err(|error| error.to_string())?;
+                    storage = Some(sessions.storage().map_err(|error| error.to_string())?);
+                }
                 SessionRequest::ClearProfileCache { slot } => {
                     sessions
                         .clear_cache(slot)
@@ -2409,3 +2417,6 @@ mod tests {
 
 
 }
+
+// Enable only after matching native directory sharing/disposition acceptance and explicit approval.
+const SELECTED_WORLD_DISPOSITION_REVIEWED: bool = false;
