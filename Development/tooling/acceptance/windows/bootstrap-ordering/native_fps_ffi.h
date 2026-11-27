@@ -89,3 +89,5 @@ struct LazyTesterPresentationAdmission {
 static_assert(sizeof(LazyTesterPresentationAdmission)==72 && offsetof(LazyTesterPresentationAdmission,oldEntry)==16);
 extern "C" std::uint32_t lazytester_presentation_admit(std::uint32_t pid,std::uint32_t session,
     std::uint32_t birthLow,std::uint32_t birthHigh,LazyTesterPresentationAdmission*);
+
+extern "C" std::uint32_t lazytester_presentation_candidate(HWND window);

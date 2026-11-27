@@ -113,3 +113,23 @@ mod tests{
         assert_eq!(parse_handle(&[45,49]),None);assert_eq!(parse_handle(&[57;32]),None);
     }
 }
+
+ // Candidate classification is observation only: no retained HWND or COM reference.
+#[link(name="user32")]
+extern "system" {
+    fn GetWindowThreadProcessId(window:Handle,pid:*mut u32)->u32;
+    fn GetAncestor(window:Handle,flags:u32)->Handle;
+    fn GetClassNameW(window:Handle,name:*mut u16,max:i32)->i32;
+}
+#[link(name="kernel32")]
+extern "system" { fn GetCurrentProcessId()->u32; }
+#[no_mangle]
+pub unsafe extern "C" fn lazytester_presentation_candidate(window:Handle)->u32 {
+    if window.is_null(){return 0;}
+    let mut pid=0;
+    if GetWindowThreadProcessId(window,&mut pid)==0 || pid!=GetCurrentProcessId()
+        || GetAncestor(window,2)!=window {return 0;}
+    let mut name=[0u16;128];
+    let len=GetClassNameW(window,name.as_mut_ptr(),128);
+    u32::from(len==5 && name[..5]==[79,71,76,69,83])
+}

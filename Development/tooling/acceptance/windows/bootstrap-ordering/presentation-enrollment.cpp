@@ -2,8 +2,6 @@
 #include <dxgi1_6.h>
 #include <detours.h>
 #include <atomic>
-#include <cstring>
-#include <cwchar>
 #include <wrl/client.h>
 #include "dxgi-pacing.h"
 #include "graphics-warm-pools.h"
@@ -39,11 +37,7 @@ struct CreationCall {
     ~CreationCall() { if (outer) insideCreation = false; }
 };
 bool observe(HWND window, UINT w, UINT h) noexcept {
-    DWORD process = 0;
-    wchar_t name[128]{};
-    if (!window || !GetWindowThreadProcessId(window, &process) || process != GetCurrentProcessId()
-        || GetAncestor(window, GA_ROOT) != window || !GetClassNameW(window, name, 128)
-        || wcscmp(name, L"OGLES") != 0) {
+    if (!lazytester_presentation_candidate(window)) {
         ignored.fetch_add(1, std::memory_order_relaxed);
         return false;
     }

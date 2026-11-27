@@ -3,6 +3,8 @@
 #include <dxgi1_5.h>
 #include <wrl/client.h>
 #include <memory>
+#include <atomic>
+#include <stdexcept>
 #if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
 #include "education-client-f3.h"
 #endif

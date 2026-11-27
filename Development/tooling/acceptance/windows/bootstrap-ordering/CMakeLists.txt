@@ -66,7 +66,7 @@ target_include_directories(probe-detours PUBLIC "${DETOURS_ROOT}/src")
 target_compile_definitions(probe-detours PRIVATE DETOUR_DEBUG=0 WIN32_LEAN_AND_MEAN)
 target_compile_options(probe-detours PRIVATE /W4 /WX)
 
-# One dependency-free Rust FPS library for measurement and pacing arithmetic.
+# One dependency-free Rust library for native FPS and presentation admission.
 # Use the installed MSVC-target toolchain; no dependency resolution or download.
 find_program(LAZYTESTER_RUSTC rustc REQUIRED)
 set(native_fps_lib "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/lazytester-native-fps.lib")

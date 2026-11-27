@@ -205,6 +205,28 @@ Host World/focus/resource acceptance next action stay in planning/development.md
 
 ## Rust native FPS core
 
+### Native compatibility source boundary
+
+The receiver presentation admission and candidate classification are Rust-owned.
+The remaining C++ code is not treated as universally impossible to migrate:
+
+| Source group | Retained responsibility |
+|---|---|
+| `dxgi-pacing.cpp` | Typed DXGI COM forwarding, QueryInterface/AddRef/Release identity and caller reference transfer; existing pacing adapter and counters |
+| `presentation-enrollment.cpp` | Typed factory callbacks, original HRESULT/LastError and Detours attachment in existing transaction |
+| `compat.cpp`, `enroll.cpp`, `education-config.h`, `owned-helper-handoff.h`, `startup-observation.h`, `receipt.h` | Bootstrap, storage/registry and helper native contracts; broader migration not established by FPS/enrollment source review |
+| `fps-hud.cpp`, `fps-hud.h`, `frame-pacing.h` and FFI headers | Thin adapters and diagnostic controls |
+| `graphics-warm-pools.cpp`, `education-client-f3.cpp`, `mc02-virtual-input.cpp` and associated headers | Existing version-bound or opt-in experimental source; no expansion or activation |
+| `dependency.cpp`, `probe.cpp`, `*-control.cpp`, sibling `appcontainer-probe.cpp`, `heap-reclaim.cpp` | Standalone probes and acceptance fixtures; not a new runtime implementation |
+
+Microsoft Detours remains the existing pinned third-party implementation.
+No parallel hook engine, COM wrapper, or worker is added. Replacing the typed
+COM boundary with handwritten Rust vtables is not justified without matching
+ABI and lifecycle evidence. Bootstrap and other non-presentation native
+owners require independent scope and review; do not claim full repository
+migration. Windows build/link and tests remain NOT_EXECUTED.
+
+
 `presentation_transport.rs` owns the receiver's environment parsing, read-only mapping lifetime, fault-contained bounded ReadProcessMemory copy, exact capability identity and admission. C++ `prepare` consumes a single validated result. The typed COM wrapper and Detours transaction remain C++ for existing interface identity, reference ownership, native calling convention and transaction behavior; no replacement hook engine. Windows build/link and controls NOT_EXECUTED.
 
 `presentation_image.rs` shares DXGI image identity, bounded PE header parsing, versioned capability sizes and executable RVA admission between enrollment producer and receiver. C++ retains the native mapping copy protected by SEH and the COM/Detours bridge. Image header reads use bounded ReadProcessMemory on the current process; no allocation or device creation. Windows controls NOT_EXECUTED.
