@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective inventory: added separate Behavior Packs classification for conventional installed/development roots, with the same bounded read-only marker and identity checks. Shared declaration parser now retains UUID/version instead of discarding them at parse time; existing summary still projects counts unchanged. Roots are source candidates, not native-verified deletion targets. Cross-pack manifest dependencies, world reference traversal, IPC and deletion remain pending. Fixture authored NOT_EXECUTED; capture held.
+
 Selective inventory source checkpoint: existing inventory owner now exposes a bounded read-only per-category list of marked world and resource-pack directories with native directory identity, root category and exact name. No recursive size scan or automatic deletion; no IPC/UI consumer yet. Marker presence is classification only, not proof of valid content or safe deletion. Behavior packs, dependency analysis, review tokens and deletion admission remain pending. Fixture authored NOT_EXECUTED; capture held.
 
 Selective Cleanup inventory foundation: existing read-only resource-pack/world declaration scan retains ordinary directory handles for the complete ancestor and category traversal, with budget checks before each ancestor and after the last open. This fixes prematurely dropped pins without expanding the existing report or adding deletion authority. Fixture authored, NOT_EXECUTED. Individual selection inventory, stable review tokens and safe deletion remain pending; capture held.

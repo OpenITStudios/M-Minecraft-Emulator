@@ -21,7 +21,7 @@ const MAX_DECLARATIONS_BYTES: usize = 32 * 1024;
 // Selective inventory is read-only and on demand. A directory identity is
 // evidence for a future review, not deletion authorization.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum InventoryCategory { Worlds, ResourcePacks }
+pub(super) enum InventoryCategory { Worlds, ResourcePacks, BehaviorPacks }
 
 pub(super) struct InventoryItem {
     pub(super) category: InventoryCategory,
@@ -39,6 +39,7 @@ pub(super) fn individual_inventory(private: &File, category: InventoryCategory,
     let (roots, marker, limit): (&[&'static str], &str, u32) = match category {
         InventoryCategory::Worlds => (&["minecraftWorlds"], "level.dat", MAX_WORLD_ENTRIES),
         InventoryCategory::ResourcePacks => (&["resource_packs", "development_resource_packs"], "manifest.json", MAX_PACK_ENTRIES),
+        InventoryCategory::BehaviorPacks => (&["behavior_packs", "development_behavior_packs"], "manifest.json", MAX_PACK_ENTRIES),
     };
     let mut items = Vec::new();
     let mut visited = 0;
@@ -141,7 +142,7 @@ fn count_manifested(base: &Path, budget: InspectionBudget) -> io::Result<u32> {
     Ok(manifested)
 }
 
-#[derive(serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 struct DeclaredPack {
     pack_id: String,
     version: [u32; 3],
@@ -156,7 +157,7 @@ fn valid_uuid(value: &str) -> bool {
 
 // A world may reference resource packs using a small JSON manifest. This is
 // not the world database, level.dat, player data, behavior packs or pack assets.
-fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
+fn read_pack_references(path: &Path) -> io::Result<Option<Vec<DeclaredPack>>> {
     match fs::symlink_metadata(path) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
@@ -180,7 +181,11 @@ fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
         !valid_uuid(&entry.pack_id) || entry.version.iter().any(|version| *version > 65535)) {
         return Err(io::Error::other("World resource-pack declaration is invalid or too large"));
     }
-    Ok(Some(refs.len() as u32))
+    Ok(Some(refs))
+}
+
+fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
+    Ok(read_pack_references(path)?.map(|refs| refs.len() as u32))
 }
 
 fn scan_world_declarations(base: &Path, budget: InspectionBudget) -> io::Result<WorldPackDeclarations> {
@@ -316,6 +321,35 @@ mod tests {
         assert!(!super::super::same_image(&worlds[0].identity, &packs[0].identity));
         assert!(individual_inventory(&private, InventoryCategory::Worlds, InspectionBudget::new(Duration::ZERO)).is_err());
         drop(world_pin);
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn behavior_inventory_is_separate_from_resource_inventory() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let base = parent.join("Roaming/Minecraft Education Edition/games/com.mojang");
+        for root in ["behavior_packs", "development_behavior_packs", "resource_packs"] {
+            let pack = base.join(root).join("one");
+            fs::create_dir_all(&pack).unwrap();
+            fs::write(pack.join("manifest.json"), b"{}").unwrap();
+        }
+        let behavior = individual_inventory(&private, InventoryCategory::BehaviorPacks,
+            InspectionBudget::new(Duration::from_secs(2))).unwrap();
+        assert_eq!(behavior.len(), 2);
+        assert!(behavior.iter().all(|item| item.category == InventoryCategory::BehaviorPacks));
+        assert_eq!(behavior[0].root, "behavior_packs");
+        assert_eq!(behavior[1].root, "development_behavior_packs");
+        let resource = individual_inventory(&private, InventoryCategory::ResourcePacks,
+            InspectionBudget::new(Duration::from_secs(2))).unwrap();
+        assert_eq!(resource.len(), 1);
+        assert!(!super::super::same_image(&behavior[0].identity, &resource[0].identity));
+        let declaration = base.join("world_behavior_packs.json");
+        fs::write(&declaration, br#"[{"pack_id":"11111111-2222-3333-4444-555555555555","version":[1,2,3]}]"#).unwrap();
+        let refs = read_pack_references(&declaration).unwrap().unwrap();
+        assert_eq!(refs[0].pack_id, "11111111-2222-3333-4444-555555555555");
+        assert_eq!(refs[0].version, [1,2,3]);
         drop(private);
         fs::remove_dir_all(parent).unwrap();
     }
