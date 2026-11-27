@@ -1,6 +1,7 @@
 //! Optional Windows Graphics Capture producer for one controller-owned Minecraft.
 //! Source only: not built, not installed, not executed. No game inputs.
-//! stdout is *only* bounded binary PNG frames (LTG1), stderr is for errors.
+//! stdout is LTG1 PNG for observation, or one raw WebP for explicit screenshot mode.
+//! stderr is for errors; no file paths, input or game lifecycle commands.
 //! Existing Lazy Tester MCP remains the only AI-facing tool owner.
 #![cfg_attr(not(windows), allow(unused))]
 
@@ -9,6 +10,9 @@ fn main() {
     eprintln!("WINDOWS_ONLY_GPU_CAPTURE");
     std::process::exit(2);
 }
+
+#[cfg(windows)]
+mod screenshot;
 
 #[cfg(windows)]
 mod windows_capture {
@@ -54,28 +58,36 @@ mod windows_capture {
         fps: u32,
     }
 
-    fn read_args() -> io::Result<Target> {
-        let args: Vec<String> = std::env::args().skip(1).collect();
-        if args.len() != 12 ||
+    enum Mode { Observe(Target), Screenshot(Target) }
+
+    fn read_args() -> io::Result<Mode> {
+        parse_args(&std::env::args().skip(1).collect::<Vec<_>>())
+    }
+
+    fn parse_args(args: &[String]) -> io::Result<Mode> {
+        let screenshot = args.first().is_some_and(|arg| arg == "--screenshot");
+        let args = if screenshot { &args[1..] } else { args };
+        if args.len() != (if screenshot { 8 } else { 12 }) ||
             args[0] != "--pid" || args[2] != "--window-id" ||
             args[4] != "--birth" || args[6] != "--session" ||
-            args[8] != "--duration-ms" || args[10] != "--fps" {
+            (!screenshot && (args[8] != "--duration-ms" || args[10] != "--fps")) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
-                "Expected six bounded exact-target flags"));
+                "Expected bounded exact-target capture flags"));
         }
         let parse = |index: usize| args[index].parse::<u64>().ok();
         let pid = parse(1).and_then(|n| u32::try_from(n).ok()).filter(|n| *n != 0);
         let window_id = parse(3).filter(|n| *n > 0 && *n <= 0x001f_ffff_ffff_ffff);
         let birth = parse(5).filter(|n| *n != 0);
         let session_id = parse(7).and_then(|n| u32::try_from(n).ok());
-        let duration_ms = parse(9).filter(|n| (5000..=90000).contains(n));
-        let fps = parse(11).and_then(|n| u32::try_from(n).ok())
-            .filter(|n| (1..=10).contains(n));
+        let duration_ms = if screenshot { Some(5000) } else { parse(9).filter(|n| (5000..=90000).contains(n)) };
+        let fps = if screenshot { Some(1) } else { parse(11).and_then(|n| u32::try_from(n).ok())
+            .filter(|n| (1..=10).contains(n)) };
         match (pid, window_id, birth, session_id, duration_ms, fps) {
             (Some(pid), Some(window_id), Some(birth), Some(session_id),
-             Some(duration_ms), Some(fps)) => Ok(Target {
-                pid, window_id, birth, session_id, duration_ms, fps,
-            }),
+             Some(duration_ms), Some(fps)) => {
+                let target=Target { pid, window_id, birth, session_id, duration_ms, fps };
+                Ok(if screenshot { Mode::Screenshot(target) } else { Mode::Observe(target) })
+            },
             _ => Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Invalid capture target or limits")),
         }
@@ -209,13 +221,64 @@ mod windows_capture {
         Ok(())
     }
 
+    fn capture_screenshot(target: Target) -> io::Result<()> {
+        // The parent must supervise this one-shot process: WGC can block
+        // without delivering a frame. No user-provided output path is accepted.
+        let _dpi=super::screenshot::DpiContext::enter()?;
+        let pin=pin_target(&target)?;
+        let hwnd=target.window_id as usize as *mut c_void;
+        let geometry=super::screenshot::geometry(hwnd)?;
+        let session=Wgc::new_from_hwnd(HWND(hwnd))
+            .map_err(|_|io::Error::other("Windows Graphics Capture HWND unavailable"))?
+            .pixel_format(PixelFormat::RGBA8)
+            .frame_queue_length(1)
+            .capture_cursor(false)
+            .build()
+            .map_err(|_|io::Error::other("Windows GPU capture session refused"))?;
+        let deadline=Instant::now()+Duration::from_millis(target.duration_ms);
+        let frame=session.into_iter().next()
+            .ok_or_else(||io::Error::other("WGC screenshot frame unavailable"))?
+            .map_err(|_|io::Error::other("WGC screenshot frame unavailable"))?;
+        if Instant::now()>=deadline {return Err(io::Error::new(io::ErrorKind::TimedOut,"Screenshot deadline elapsed"));}
+        verify_target(&target,&pin)?;
+        let size=frame.size().map_err(|_|io::Error::other("Screenshot frame size unavailable"))?;
+        let crop=geometry.crop(size.width,size.height)?;
+        let pixels=frame.pixels().map_err(|_|io::Error::other("Screenshot readback unavailable"))?;
+        verify_target(&target,&pin)?;
+        if super::screenshot::geometry(hwnd)?!=geometry {
+            return Err(io::Error::other("Screenshot window geometry changed"));
+        }
+        let webp=super::screenshot::encode_client(size.width,size.height,pixels,crop)?;
+        verify_target(&target,&pin)?;
+        if super::screenshot::geometry(hwnd)?!=geometry || Instant::now()>=deadline {
+            return Err(io::Error::other("Screenshot target changed or deadline elapsed"));
+        }
+        let mut output=io::stdout().lock();
+        output.write_all(&webp)?;
+        output.flush()
+    }
+
     pub fn run() -> io::Result<()> {
-        capture(read_args()?)
+        match read_args()? {
+            Mode::Observe(target) => capture(target),
+            Mode::Screenshot(target) => capture_screenshot(target),
+        }
     }
 
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn screenshot_and_observation_have_distinct_strict_arguments() {
+            let args=|s:&str|s.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
+            let target="--pid 42 --window-id 123 --birth 134000000000000001 --session 1";
+            assert!(matches!(parse_args(&args(&format!("--screenshot {target}"))),Ok(Mode::Screenshot(_))));
+            assert!(matches!(parse_args(&args(&format!("{target} --duration-ms 5000 --fps 10"))),Ok(Mode::Observe(_))));
+            assert!(parse_args(&args(&format!("--screenshot {target} --duration-ms 5000 --fps 1"))).is_err());
+            assert!(parse_args(&args(target)).is_err());
+            assert!(parse_args(&args("--screenshot")).is_err());
+        }
 
         #[test]
         fn two_frames_reuse_png_scratch_and_preserve_lt_g1_wire_bytes() {

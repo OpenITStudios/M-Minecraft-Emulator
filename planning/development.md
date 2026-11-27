@@ -68,6 +68,27 @@ private profile data. Broader bootstrap migration, experimental MCP/AI, F3
 and screenshot/video capture are outside this scoped roadmap. No new runner,
 second status owner or automatic test/release. STOP at source proof ceiling.
 
+## Capture and recording — separately authorized source workstream
+
+The prior Phase 01–06 readiness checkpoint remains scoped to its original
+roadmap; this new capture workstream does not release any validation holds.
+
+| Work ID | Scope and proof |
+|---|---|
+| CAP-01 | Explicit WGC one-shot screenshot source in the existing optional worker; original client-area RGBA8 → WebP VP8L, bounded geometry/bytes, separate from LTG1 PNG AI observation. Fixture source authored, NOT_EXECUTED; no product parent or installation. |
+| CAP-02 | Product screenshot admission/publisher: verified controller slot, bounded trusted worker supervisor and complete WebP receipt, explicit local save and no overwrite; preserve selected instance and DWM preview. Pending. |
+| CAP-03 | GPU frame recording: same verified source principle, 30 FPS original client resolution, constant quality, AV1 preferred, hardware H.264 fallback only after capability and muxer support; MKV output, no PNG/CPU frame loop. Backend, GPU resource interoperability and container implementation pending. |
+| CAP-04 | Recording ownership: independent per-slot explicit start/stop, up to five logical slots subject to shared hardware/memory/disk budget, no auto-record; exact target loss/resize policy, bounded queue and finalization before successful publication. Pending. |
+| CAP-05 | Minimal UI integration and lifecycle/close consumers; source fixtures and later exact Windows acceptance (one then five, text/texture quality, GPU/CPU/RAM, recovery, target isolation). Audio optional, off until instance-specific capture is verified. Pending. |
+
+Source reference: [native GPU capture worker](../Development/tooling/agent/native-gpu-capture/README.md).
+The WGC crate exposes native frame readback and conversion into
+Direct3D11CaptureFrame; recording must use GPU surfaces rather than the
+readback path. No new third-party video dependency is admitted yet:
+hardware AV1/MKV compatibility, dependency/licensing and finalization
+behavior need source review. No automatic software fallback or new game
+lifecycle owner. Source only, no CI, no test execution, no release.
+
 ## Desktop UI refinement — 27 November 2026
 
 Rust-first native pacing lifetime: move original Windows waitable timer, duplicated read-only policy handles, QPC sampling, atomic foreground/stop state and wait loop into frame-pacing.rs. C++ Pacer is now a thin opaque-owner adapter; no new worker, policy source or game modifications. One small Rust allocation per existing Pacer lifetime; no per-frame allocation. Existing native controls exercise the same interface, NOT_EXECUTED. Native linking and payload review held.

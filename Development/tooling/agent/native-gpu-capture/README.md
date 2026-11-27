@@ -32,7 +32,7 @@ lazy-tester-gpu-capture.exe
 ```
 
 The capture session owns one WGC window item. No interactive picker,
-monitor capture, full-desktop capture or file recording.
+monitor capture, full-desktop capture or file recording. The observation mode remains unchanged.
 
 Frames are fitted with letterboxing to fixed 960×540 RGBA, encoded into
 PNG and emitted as a binary stdout protocol. The worker reuses one PNG output
@@ -57,5 +57,33 @@ only selected frames to Codex. No callback into a game process is required.
 Windows may show a native capture border. WGC may return a black/stale
 surface or refuse certain protected/minimized windows. Runtime behavior
 for Minecraft Education 26.32/26.33 remains UNKNOWN.
+
+## Explicit one-shot product screenshot candidate (CAP-01)
+
+A separate strict mode preserves the existing observation arguments and LTG1 protocol:
+
+```text
+lazy-tester-gpu-capture.exe --screenshot --pid <verified-pid> --window-id <verified-HWND-as-number> --birth <verified-FILETIME> --session <verified-session>
+```
+
+Output is exactly one bounded binary WebP (VP8L), not LTG1 or Base64, with
+success only after stdout completes. The worker accepts no file paths.
+The future product parent must admit a controller-verified slot, supervise
+the worker with an independent wall-clock timeout, validate the entire output
+and exit status, and publish only a complete file; it must not accept an
+arbitrary executable or PID from UI. No product command, UI, installer,
+file publisher or parent supervisor is connected yet.
+
+The one-shot path disables cursor capture, reads the original RGBA8 frame,
+checks DWM physical bounds against WGC size, crops the verified client
+rectangle without resizing (in-place row compaction), and uses pure-Rust
+`image-webp = 0.2.4` directly, without intermediate PNG. It refuses mismatched
+or changed geometry, nonopaque premultiplied pixels, invalid length, and
+dimensions above 4096 on either side. Raw and encoded limits are 64 and
+80 MiB respectively; these bound the payload, not total codec/GPU memory.
+See [WGC 3.1.0 Frame](https://docs.rs/wgc/3.1.0/wgc/frame/struct.Frame.html)
+and [image-webp 0.2.4](https://docs.rs/image-webp/0.2.4/image_webp/struct.WebPEncoder.html).
+Native DWM/WGC mapping, DPI, opacity, deadline and actual file size are
+unverified. No GPU or CPU recording encoder has been selected or added.
 
 No tests or builds may be run until the operator explicitly authorizes them.
