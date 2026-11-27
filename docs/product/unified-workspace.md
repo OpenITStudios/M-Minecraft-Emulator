@@ -72,7 +72,7 @@ Frame Rate explains FPS as limits, not measured game performance. Data Storage i
 General has no duplicate folder actions or navigation section. Data Storage reports byte units
 honestly (B/KiB/MiB/GiB), distinguishes zero from unavailable and incomplete
 measurements, and labels the UI receipt time rather than claiming an exact
-native measurement timestamp. Global Settings contains the all-launcher maintenance preferences. Profile
+native measurement timestamp. Data Location shows Project Data and connected launcher data with the original native Open action; Profile Management shows the selected verified profile folder. See [data layout](../system/data-layout.md). Global Settings contains the all-launcher maintenance preferences. Profile
 Management contains profile selection, Open Folder, Selective Cleanup and
 Clear All Data; detailed inventory and recovery controls remain in the
 maintenance disclosure. Native confirmation and data-safety gates remain.

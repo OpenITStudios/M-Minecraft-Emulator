@@ -967,14 +967,21 @@
     }
   }
   async function loadLocation(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect') {
-    if(activeOperation !== null||refreshing||resizing||disposed)return;
+    if(activeOperation !== null||refreshing||resizing||disposed||navigationReviewOpen||closeReviewActive(reviewState()))return;
+    if(action==='Open'&&(!available||!binding?.configured||!dataLocation?.path))return;
+    const issued = observationEpoch;
     activeOperation = 'dataLocation';issueKey=null;locationIssue='';
     try {
       const previousPath = dataLocation?.path;
-      dataLocation=await lazyTester.dataLocation(action);
+      const location=await lazyTester.dataLocation(action);
+      // Opening Explorer may finish during a native exit review; do not
+      // publish its old observation. Locate/Choose retain mutation receipts.
+      if(disposed||(action==='Open'&&!isCurrentObservation(issued)))return;
+      dataLocation=location;
       if (dataLocation.path !== previousPath) { storage = null; cancelStorageReview('cache'); storageNotice = ''; }
       if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();
     } catch(error){
+      if(disposed||(action==='Open'&&!isCurrentObservation(issued)))return;
       locationIssue=userMessage('location');
       if(action==='Inspect'){
         dataLocation=null;storage=null;cancelStorageReview('cache');storageNotice='';

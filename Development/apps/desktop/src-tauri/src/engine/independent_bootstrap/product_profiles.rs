@@ -327,6 +327,18 @@ fn write_json<T: Serialize>(path: &Path, value: &T, replace: bool) -> io::Result
     result
 }
 fn resolve_location(home: &Path, locator: &Path) -> io::Result<(PathBuf, bool)> {
+    // Missing is distinct from an existing invalid/dangling pointer.
+    let metadata = match std::fs::symlink_metadata(locator) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound =>
+            return Ok((home.join("Data"), true)),
+        Err(error) => return Err(error),
+    };
+    if !metadata.is_file() || std::os::windows::fs::MetadataExt::file_attributes(&metadata)
+        & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        return Err(invalid("Saved data location is not an ordinary file"));
+    }
+    let _parents = pin_chain(locator.parent().ok_or_else(|| invalid("Metadata parent unavailable"))?)?;
     match read_json::<Locator>(locator) {
         Ok(value) if value.schema == 1 && value.path == "Data" => Ok((home.join("Data"), false)),
         Ok(value) if value.schema == 1 && Path::new(&value.path).is_absolute() => {
@@ -340,8 +352,7 @@ fn resolve_location(home: &Path, locator: &Path) -> io::Result<(PathBuf, bool)> 
             Ok((path, false))
         }
         Ok(_) => Err(invalid("Saved data location is invalid; it was preserved")),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok((home.join("Data"), true)),
-        Err(error) => Err(error),
+        Err(error) => Err(error), // A selected pointer that disappears must not become fresh setup.
     }
 }
 fn disjoint(logical: &File, data: &Path) -> io::Result<()> {
@@ -430,11 +441,10 @@ fn recover_confirmed(root:&Path) {
 }
 // Canonical locator wins; an existing legacy locator is never fresh setup.
 fn resolve_saved_location(home: &Path) -> io::Result<(PathBuf, bool, bool)> {
-    let locator = locator_path(home);
-    let legacy = home.join("App").join(LOCATOR);
-    let legacy_locator = !locator.try_exists()? && legacy.try_exists()?;
-    let (root, default) = resolve_location(home, if legacy_locator { &legacy } else { &locator })?;
-    Ok((root, default && !legacy_locator, legacy_locator))
+    let (root, missing) = resolve_location(home, &locator_path(home))?;
+    if !missing { return Ok((root, false, false)); }
+    let (root, missing) = resolve_location(home, &home.join("App").join(LOCATOR))?;
+    Ok((root, missing, !missing))
 }
 fn open_mode(home: &Path, persist_location: bool) -> io::Result<Option<(PathBuf, [SlotStorage; 5])>> {
     let (root, default, legacy_locator) = resolve_saved_location(home)?;
@@ -1153,6 +1163,11 @@ mod tests {
         assert!(resolve_saved_location(home).is_err());
         assert_eq!(std::fs::read(&canonical).unwrap(), b"corrupt");
         std::fs::remove_file(&canonical).unwrap();
+        // A non-file canonical pointer is invalid, not permission to use legacy.
+        std::fs::create_dir(&canonical).unwrap();
+        assert!(resolve_saved_location(home).is_err());
+        assert!(canonical.is_dir());
+        std::fs::remove_dir(&canonical).unwrap();
         std::fs::write(&legacy, b"corrupt").unwrap();
         assert!(resolve_saved_location(home).is_err());
         assert!(!canonical.exists());

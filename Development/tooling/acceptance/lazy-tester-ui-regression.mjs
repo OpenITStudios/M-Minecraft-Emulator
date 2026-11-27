@@ -668,13 +668,20 @@ try {
   assert.equal(await page.locator('#graphics-preset').count(),0);
   assert.equal(await page.locator('#lazytester-graphics-policy').count(),0);
   await page.getByLabel('Active FPS',{exact:true}).fill('60');await page.getByLabel('Background FPS',{exact:true}).fill('5');
+  // Explicit connected-location fixture; other scenarios retain the missing-location state.
+  await page.evaluate(()=>{window.__dataPath='D:\\Lazy Tester\\Data';});
   await section('Data Storage').click();await heading('Data Storage').waitFor();
   await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
   const locationPanel=page.getByRole('region',{name:'Data Location'});
   await locationPanel.getByText('Project Data',{exact:true}).waitFor();
   await locationPanel.getByText('D:\\Lazy Tester\\Data',{exact:true}).waitFor();
   await locationPanel.getByText('Same as Project Data',{exact:true}).waitFor();
-  await locationPanel.getByRole('button',{name:'Open Launcher Data',exact:true}).click();
+  const openLauncherData=locationPanel.getByRole('button',{name:'Open Launcher Data',exact:true});
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',true));
+  await page.waitForFunction(()=>document.querySelector('#lazytester-data-location-heading')?.parentElement?.querySelector('button')?.disabled===true);
+  assert.equal(await openLauncherData.isDisabled(),true);
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
+  await openLauncherData.click();
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.command==='lazy_tester_data_location'&&call.args?.action==='Open')),true);
   const maintenance=page.locator('details.lazytester-storage-maintenance');
   assert.equal(await maintenance.getAttribute('open'),null,'Maintenance starts collapsed');

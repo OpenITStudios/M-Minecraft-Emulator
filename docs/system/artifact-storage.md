@@ -228,11 +228,12 @@ The manifest is written last, records the full source SHA and installer digest,
 and always marks publication disabled, signing unverified and runtime acceptance
 not executed. It is a build receipt, not a second runtime-readiness store.
 Existing exports are never overwritten or recursively copied into newer ones.
-This command does not sign, upload, install or run the application.
+This command does not sign, upload or install the exported installer.
 
-With `--export-only`, export stops before changing App or Data. Otherwise,
-after exporting, the same command stages only the four required runtime payload
-files into the ignored root `App/`, with a source/hash receipt. Root `RUN.cmd`
+With `--export-only`, export stops before changing App or Data or running
+the app. Otherwise, the same command stages the allowlisted runtime payload
+and role aliases into the ignored root `App/`, with a source/hash receipt,
+and performs the existing separately gated local desktop startup check. Root `RUN.cmd`
 opens this app without a folder picker. It creates an empty `Data/` only when
 absent, preserves an existing data locator, and archives the previous `App/`
 under `workspace/private/local-app-backups/` before replacement. Running local
