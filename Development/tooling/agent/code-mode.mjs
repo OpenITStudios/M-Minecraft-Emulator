@@ -18,7 +18,7 @@ const ROUTES = [
   ['diagnostics.details','get_issue_details',['run','id']],
   ['diagnostics.evidence','query_diagnostic_evidence',['run','id','cursor','limit']],
   ['observation.state','get_multi_client_visual_state',['slots','since']],
-  ['input.plan','plan_player_actions',['actions','includeTimeline','includeClientFrames']],
+  ['input.plan','plan_player_actions',['actions','groups','includeTimeline','includeClientFrames']],
   ['input.assess','assess_input_route',['actions']],
   ['capabilities','agent_capabilities',[]],
 ];

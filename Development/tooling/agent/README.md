@@ -132,6 +132,60 @@ same MCP request/result bounds; no additional native ownership or
 execution privilege is granted. Tool count is not measured latency,
 CPU, memory or token savings.
 
+### Compact player action authoring (source-only)
+
+The intended playtest input boundary is one bounded action timeline plus
+optional fresh observation and independent cancellation, not gameplay presets.
+Codex chooses controls, overlap, timing and camera paths. Local deterministic
+compilation/scheduling should expand them; no model invocation per key, tick,
+heartbeat or mouse sample. OpenAI VPT's 20 Hz keyboard/mouse interface is a
+reference for human-like control granularity, not Education backend proof:
+https://openai.com/index/vpt/. Code execution with MCP supports filtering
+intermediate results before model context:
+https://www.anthropic.com/research/code-execution-with-mcp.
+
+The existing **read-only** planner in the restricted/legacy profiles accepts
+either the original `actions` or compact `groups`, never both. The trusted
+SDK's existing `tester.input.plan` accepts the same groups. For example:
+
+```js
+await tester.input.plan({groups:[
+  {slot:2,atMs:0,durationMs:600,hold:['move_forward','strafe_right']},
+  {slot:2,atMs:100,durationMs:300,look:{deltaX:80,deltaY:-12,steps:3}},
+  {slot:2,atMs:200,durationMs:100,hold:['jump','attack']}
+]});
+```
+
+One group can describe several independent held controls with a shared
+interval and an optional relative camera path. Separate groups overlap
+freely subject to the original channel rules. Gaps are expressed by offsets.
+Camera defaults to deterministic smoothstep interpolation, with optional
+linear curve or explicit sample count; the default count is ceil(duration /
+100 ms). Integer cumulative quantization preserves the exact total delta,
+omits zero-motion samples, and divides time without accumulating rounding
+drift. Each nonzero sample retains the existing 50–250 ms duration bound.
+Expanded actions retain the original 32-action/mode/channel bounds;
+experimental native limits are unchanged. This is sampled authoring, not
+verified smooth game-camera movement, degrees, or keybind calibration.
+
+Grouped preview defaults to only slots, expanded action count, last nonzero
+control's authored end (horizon),
+concurrency and the blocked execution gate. Ask includeTimeline or
+includeClientFrames only when reviewing details. The local source export
+`expandActionGroups` in control-plan.mjs expands to the same canonical
+actions for trusted host composition. No additional preview/execute tool
+is exposed in Playtest (15 tools). Actual input is still blocked; raw keys,
+sprint, menu pointer, scroll, inventory, hotbar and backend calibration are
+not newly supported. No preset, random humanization, native ABI change,
+new scheduler, or experimental activation.
+
+The existing experimental multi-client pulse builder now reuses one
+validated cross-client compilation rather than recompiling per slot; exact
+per-slot validation, heartbeat, expiry, retrigger refusal and neutral
+behavior are preserved. Fingerprints reuse the already-compiled plan
+where available. This reduces deterministic compiler work, not a measured
+runtime or token saving. Source fixtures are authored NOT_EXECUTED.
+
 ### Direct SDK for independently trusted hosts
 
 For a separately authorized trusted PC-local host, create one

@@ -1,7 +1,7 @@
 // Authored contracts; do not run until the operator explicitly permits tests.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {slotsForMode,planPeerSession,planPlayerActions} from './control-plan.mjs';
+import {slotsForMode,planPeerSession,planPlayerActions,expandActionGroups} from './control-plan.mjs';
 
 const profile = slot => ({
   slot, state: slot === 4 ? 'STOPPED' : 'RUNNING',
@@ -85,4 +85,50 @@ test('unknown, oversized and malformed actions are refused',() => {
     {slot:2,kind:'move_forward',atMs:0,durationMs:80,deltaX:1},
   ]) assert.throws(()=>planPlayerActions('five-ai',[action]));
   assert.throws(()=>planPeerSession('five-ai',{...snapshot(),operation:'launch'}));
+});
+
+test('compact groups reuse canonical simultaneous controls and preserve exact eased mouse displacement',()=>{
+  const actions=expandActionGroups([
+    {slot:2,atMs:0,durationMs:800,hold:['move_forward','strafe_right']},
+    {slot:2,atMs:100,durationMs:400,look:{deltaX:97,deltaY:-31,steps:4}},
+    {slot:2,atMs:200,durationMs:100,hold:['jump','attack']},
+    {slot:3,atMs:200,durationMs:300,hold:['use']},
+  ]);
+  const plan=planPlayerActions('human-plus-four-ai',actions);
+  const look=actions.filter(a=>a.kind==='look_relative');
+  assert.equal(actions.length,9);
+  assert.deepEqual(look.map(a=>a.atMs),[100,200,300,400]);
+  assert.equal(look.reduce((n,a)=>n+a.deltaX,0),97);
+  assert.equal(look.reduce((n,a)=>n+a.deltaY,0),-31);
+  assert.ok(Math.abs(look[0].deltaX)<Math.abs(look[1].deltaX));
+  assert.equal(plan.maximumConcurrentIntents,6);
+  assert.equal(plan.execution,'NOT_DISPATCHED');
+});
+test('compact camera timing partitions non-divisible durations, preserves exact signed totals',()=>{
+  const actions=expandActionGroups([
+    {slot:2,atMs:13,durationMs:203,look:{deltaX:-101,deltaY:17,steps:3,curve:'linear'}},
+  ]);
+  assert.deepEqual(actions.map(a=>[a.atMs,a.durationMs]),[[13,67],[80,68],[148,68]]);
+  assert.equal(actions.reduce((n,a)=>n+a.deltaX,0),-101);
+  assert.equal(actions.reduce((n,a)=>n+a.deltaY,0),17);
+  assert.equal(actions.at(-1).atMs+actions.at(-1).durationMs,216);
+});
+test('compact authoring refuses expansion overflow and unsupported controls, canonical mode/conflicts remain authoritative',()=>{
+  for(const groups of [
+    [], [{slot:2,atMs:0,durationMs:100,hold:['sprint']}],
+    [{slot:2,atMs:0,durationMs:100,hold:['attack','attack']}],
+    [{slot:2,atMs:0,durationMs:100,hold:['look_relative']}],
+    [{slot:2,atMs:0,durationMs:100,look:{deltaX:1,deltaY:0,steps:3}}],
+    [{slot:2,atMs:0,durationMs:100,look:{deltaX:1,deltaY:0,steps:null}}],
+    [{slot:2,atMs:0,durationMs:100,look:{deltaX:1,deltaY:0,curve:'random'}}],
+    [{slot:2,atMs:0,durationMs:100,hold:['attack'],command:'unsafe'}],
+    Array.from({length:5},(_,i)=>({slot:2,atMs:i*100,durationMs:100,
+      hold:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use']})),
+  ])assert.throws(()=>expandActionGroups(groups));
+  assert.throws(()=>planPlayerActions('human-plus-four-ai',expandActionGroups([
+    {slot:1,atMs:0,durationMs:100,hold:['attack']},
+  ])),/human-owned/);
+  assert.throws(()=>planPlayerActions('five-ai',expandActionGroups([
+    {slot:2,atMs:0,durationMs:100,hold:['move_forward','move_backward']},
+  ])),/input channel/);
 });

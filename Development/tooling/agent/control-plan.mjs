@@ -90,6 +90,68 @@ export function planPeerSession(mode,snapshot) {
   };
 }
 
+// Compact authoring only: one group describes independent held controls and
+// an optional relative camera path. Expand to the existing canonical actions;
+// the existing planner remains the sole mode/channel/timing admission owner.
+// No game presets, random jitter, input transport or provider capability.
+export function expandActionGroups(groups) {
+  if(!Array.isArray(groups)||groups.length<1||groups.length>MAX_ACTIONS) {
+    throw new TypeError('Provide 1-32 bounded action groups');
+  }
+  const actions=[];
+  const append=action=>{
+    if(actions.length>=MAX_ACTIONS)throw new TypeError('Expanded action limit exceeded');
+    actions.push(action);
+  };
+  for(const group of groups) {
+    record(group,['slot','atMs','durationMs','hold','look']);
+    const {slot,atMs,durationMs,hold=[],look}=group;
+    validSlot(slot);
+    if(!Number.isInteger(atMs)||atMs<0||atMs>MAX_OFFSET_MS||
+       !Number.isInteger(durationMs)||durationMs<50||durationMs>MAX_DURATION_MS||
+       !Array.isArray(hold)||hold.length>8||new Set(hold).size!==hold.length||
+       (hold.length===0&&look===undefined)) {
+      throw new TypeError('Invalid compact action group');
+    }
+    for(const kind of hold) {
+      if(!ACTIONS.has(kind)||kind==='wait'||INPUT_CHANNELS[kind]==='camera') {
+        throw new TypeError('Unsupported held control');
+      }
+      append({slot,kind,atMs,durationMs});
+    }
+    if(look===undefined)continue;
+    record(look,['deltaX','deltaY','steps','curve']);
+    const {deltaX,deltaY,curve='smooth'}=look;
+    // Default to a small bounded set of samples, with user-selected density
+    // when needed. These are authored samples, not a verified frame rate.
+    const steps=look.steps===undefined?Math.ceil(durationMs/100):look.steps;
+    if(!Number.isInteger(deltaX)||!Number.isInteger(deltaY)||
+       Math.abs(deltaX)>512||Math.abs(deltaY)>512||(deltaX===0&&deltaY===0)||
+       !Number.isInteger(steps)||steps<1||steps>MAX_ACTIONS||
+       Math.floor(durationMs/steps)<50||Math.ceil(durationMs/steps)>250||
+       !['linear','smooth'].includes(curve)) {
+      throw new TypeError('Invalid compact camera path');
+    }
+    // Quantize cumulative positions instead of rounding each relative delta:
+    // the final sum is exactly the authored integer displacement. An eased
+    // curve is deterministic acceleration/deceleration, not gameplay AI.
+    let x=0,y=0;
+    for(let i=0;i<steps;i++) {
+      const t=(i+1)/steps;
+      const fraction=curve==='smooth'?t*t*(3-2*t):t;
+      const nextX=Math.round(deltaX*fraction),nextY=Math.round(deltaY*fraction);
+      const dx=nextX-x,dy=nextY-y;
+      x=nextX;y=nextY;
+      if(dx===0&&dy===0)continue; // no invented mouse movement
+      const start=Math.floor(i*durationMs/steps);
+      const end=Math.floor((i+1)*durationMs/steps);
+      append({slot,kind:'look_relative',atMs:atMs+start,
+        durationMs:end-start,deltaX:dx,deltaY:dy});
+    }
+  }
+  return actions;
+}
+
 // This is a bounded multi-player INTENT contract, reusable when an actual
 // per-client input transport is proven. The current bridge does not dispatch it.
 export function planPlayerActions(mode,actions) {

@@ -5399,3 +5399,29 @@ test('combined preflight preserves refusal and restricted compatibility',async()
     await assert.rejects(restricted.callTool('agent_capabilities',{inspectProfiles:true}),/Invalid tool arguments/);
   }finally{h.shutdown();restricted.shutdown();}
 });
+
+test('compact group preview uses existing planner, bounded receipt and no native dispatch',async()=>{
+  const core=createOperationCore(config(),{native:async()=>{throw Error('Must not invoke native');}});
+  const code=createCodeModeClient(core);
+  const h=createMcpHandler(core,'code-mode');
+  const playtest=createMcpHandler(core,'playtest');
+  const groups=[{slot:2,atMs:0,durationMs:400,hold:['move_forward','strafe_right'],
+    look:{deltaX:80,deltaY:-12,steps:4}}];
+  try {
+    const summary=await code.tester.input.plan({groups});
+    assert.deepEqual(summary.slots,[2]);
+    assert.equal(summary.actionCount,6);
+    assert.equal(summary.horizonMs,400);
+    assert.equal(summary.execution,'NOT_DISPATCHED');
+    assert.equal(Object.hasOwn(summary,'actions'),false);
+    const detailed=await h.callTool('plan_player_actions',{groups,includeClientFrames:true});
+    assert.equal(detailed.execution,'NOT_DISPATCHED');
+    assert.equal(detailed.batches.reduce((n,b)=>n+b.frames.reduce((m,f)=>m+f.lookDX,0),0),80);
+    await assert.rejects(h.callTool('plan_player_actions',{groups,actions:[]}),/Invalid tool arguments/);
+    await assert.rejects(h.callTool('plan_player_actions',{}),/Invalid tool arguments/);
+    const listing=(await playtest.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    assert.equal(listing.length,15);
+    assert.equal(listing.some(t=>t.name==='plan_player_actions'||t.name==='execute_actions'),false);
+    await assert.rejects(playtest.callTool('plan_player_actions',{groups}),/Unknown tool/);
+  }finally{code.close();core.shutdown();}
+});

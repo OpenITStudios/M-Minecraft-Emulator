@@ -5,6 +5,11 @@ export interface Action {
   slot:Slot; kind:'move_forward'|'move_backward'|'strafe_left'|'strafe_right'|'jump'|'sneak'|'attack'|'use'|'look_left'|'look_right'|'look_relative'|'wait';
   atMs:number; durationMs:number; deltaX?:number; deltaY?:number;
 }
+export interface ActionGroup {
+  slot:Slot; atMs:number; durationMs:number;
+  hold?:('move_forward'|'move_backward'|'strafe_left'|'strafe_right'|'jump'|'sneak'|'attack'|'use')[];
+  look?:{deltaX:number;deltaY:number;steps?:number;curve?:'linear'|'smooth'};
+}
 type Result=Promise<Json>;
 type Scope='full'|'smoke'|'affected';
 export interface Tester {
@@ -24,7 +29,7 @@ export interface Tester {
   };
   observation:{state(args?:{slots?:Slot[];since?:Json[]}):Result};
   input:{
-    plan(args:{actions:Action[];includeTimeline?:boolean;includeClientFrames?:boolean}):Result;
+    plan(args:({actions:Action[];groups?:never}|{groups:ActionGroup[];actions?:never})&{includeTimeline?:boolean;includeClientFrames?:boolean}):Result;
     assess(args:{actions:Action[]}):Result;
   };
   capabilities(args?:Record<string,never>):Result;

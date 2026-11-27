@@ -20,16 +20,10 @@ const sleep=(ms,signal)=>delay(ms,undefined,{signal});
  * Rejections here are additional limitations of the MC02 experimental
  * backend, not a restriction on the five-client preview-only planner.
  */
-export function prepareAiActionSequence(mode,slot,actions) {
+function validateAiSequenceFrames(mode,slot,actions,frames) {
   if(!Array.isArray(actions)||actions.length<1||
-     actions.length>MC02_SEQUENCE_LIMITS.maxActions) {
-    throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
-  }
-  let timeline;
-  try {timeline=compilePerClientInputFrames(mode,actions);}
-  catch {throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');}
-  const frames=timeline.batches.flatMap(batch=>batch.frames);
-  if(!Number.isInteger(slot)||slot<1||slot>5||
+     actions.length>MC02_SEQUENCE_LIMITS.maxActions||
+     !Number.isInteger(slot)||slot<1||slot>5||
      (mode==='human-plus-four-ai'&&slot===1)||
      actions.some(a=>a.slot!==slot||!ALLOWED.has(a.kind)) ||
      frames.length===0 ||
@@ -39,13 +33,23 @@ export function prepareAiActionSequence(mode,slot,actions) {
        frame.retriggeredButtons.length>0)) {
     throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
   }
-  return Object.freeze({
-    frames:frames.map(frame=>Object.freeze({
-      ...frame,buttons:Object.freeze([...frame.buttons]),
-    })),
-    eventCount:timeline.inputEventCount,
-    finalEventMs:frames.at(-1).atMs,
-  });
+  return frames.map(frame=>Object.freeze({
+    ...frame,buttons:Object.freeze([...frame.buttons]),
+  }));
+}
+
+export function prepareAiActionSequence(mode,slot,actions) {
+  if(!Array.isArray(actions)||actions.length<1||
+     actions.length>MC02_SEQUENCE_LIMITS.maxActions) {
+    throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
+  }
+  let timeline;
+  try {timeline=compilePerClientInputFrames(mode,actions);}
+  catch {throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');}
+  const frames=validateAiSequenceFrames(mode,slot,actions,
+    timeline.batches.flatMap(batch=>batch.frames));
+  return Object.freeze({frames,eventCount:timeline.inputEventCount,
+    finalEventMs:frames.at(-1).atMs});
 }
 
 // Compatibility wrapper for the original MC02-only pilot and its fixtures.
@@ -59,21 +63,26 @@ export function prepareMc02ActionSequence(actions) {
  * The native controller still validates every pulse independently.
  */
 export function prepareAiPulseBatch(mode,slot,actions) {
-  const prepared=prepareAiActionSequence(mode,slot,actions);
+  return buildPulseBatch(prepareAiActionSequence(mode,slot,actions).frames,actions);
+}
+
+// Both single-client and already-compiled multi-client paths use this
+// identical pulse builder, including original expiry and neutral rules.
+function buildPulseBatch(frames,actions) {
   const pulses=[];
   let cursor=0,buttons=[],keyMask=0,heartbeatAt=Infinity;
-  while(cursor<prepared.frames.length || buttons.length>0) {
-    const eventAt=cursor<prepared.frames.length?
-      prepared.frames[cursor].atMs:Infinity;
+  while(cursor<frames.length || buttons.length>0) {
+    const eventAt=cursor<frames.length?
+      frames[cursor].atMs:Infinity;
     const due=Math.min(eventAt,heartbeatAt);
     if(!Number.isFinite(due)||due>MC02_SEQUENCE_LIMITS.maxHorizonMs||
        pulses.length>=MC02_SEQUENCE_LIMITS.maxPulses) {
       throw new Error('MC02_SEQUENCE_DEADLINE');
     }
     let dx=0,dy=0;
-    if(cursor<prepared.frames.length&&
-       prepared.frames[cursor].atMs===due) {
-      const frame=prepared.frames[cursor++];
+    if(cursor<frames.length&&
+       frames[cursor].atMs===due) {
+      const frame=frames[cursor++];
       buttons=frame.buttons;keyMask=frame.keyMask;
       dx=frame.lookDX;dy=frame.lookDY;
     }
@@ -125,7 +134,7 @@ export function prepareAiPulseBatch(mode,slot,actions) {
   return Object.freeze({
     pulses:Object.freeze(pulses),
     count:pulses.length,
-    finalEventMs:prepared.finalEventMs,
+    finalEventMs:frames.at(-1).atMs,
   });
 }
 
@@ -140,13 +149,20 @@ export function prepareMultiClientPulseBatches(mode,actions) {
   if(!Array.isArray(actions)||actions.length<1||actions.length>32) {
     throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
   }
-  try { compilePerClientInputFrames(mode,actions); }
+  let timeline;
+  try {timeline=compilePerClientInputFrames(mode,actions);}
   catch {throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');}
-  const slots=[...new Set(actions.map(a=>a.slot))].sort((a,b)=>a-b);
+  // The full compiler already validated the exact per-slot channels.
+  // Project its independent frames rather than compiling again per slot.
+  const slots=timeline.clients;
+  const framesBySlot=new Map(slots.map(slot=>[slot,[]]));
+  for(const group of timeline.batches)for(const frame of group.frames) {
+    framesBySlot.get(frame.slot).push(frame);
+  }
   const batches=slots.map(slot=>{
-    const batch=prepareAiPulseBatch(mode,slot,
-      actions.filter(action=>action.slot===slot));
-    return Object.freeze({slot,...batch});
+    const selected=actions.filter(action=>action.slot===slot);
+    const frames=validateAiSequenceFrames(mode,slot,selected,framesBySlot.get(slot));
+    return Object.freeze({slot,...buildPulseBatch(frames,selected)});
   });
   return Object.freeze({mode,slots:Object.freeze(slots),
     batches:Object.freeze(batches),

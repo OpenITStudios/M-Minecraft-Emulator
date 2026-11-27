@@ -3,7 +3,7 @@
 // Every native mutation goes through the existing authenticated Lazy Tester controller.
 import {createHash,randomBytes} from 'node:crypto';
 import path from 'node:path';
-import {planPeerSession,planPlayerActions} from './control-plan.mjs';
+import {planPeerSession,planPlayerActions,expandActionGroups} from './control-plan.mjs';
 import {compilePlayerInputTimeline,compilePerClientInputFrames} from './input-timeline.mjs';
 import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
@@ -179,7 +179,9 @@ export function parseConfiguration(argv, env = process.env) {
 // evaluation against a different action list; it does not authenticate an
 // externally copied or fabricated receipt and proves no Minecraft effect.
 export function fingerprintActions(mode,actions) {
-  const plan=prepareMultiClientPulseBatches(mode,actions);
+  return fingerprintPulsePlan(mode,prepareMultiClientPulseBatches(mode,actions));
+}
+function fingerprintPulsePlan(mode,plan) {
   const projected=plan.batches.map(batch=>({
     slot:batch.slot,pulses:batch.pulses.map(pulse=>({
       atMs:pulse.atMs,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,ttlMs:pulse.ttlMs,
@@ -1506,21 +1508,32 @@ export function createOperationCore(config,{
       }finally {evidenceWindowBusy=false;}
     }
     if (name==='plan_player_actions') {
-      keysExactly(args,['actions','includeTimeline','includeClientFrames']);
-      if ((args.includeTimeline!==undefined &&
+      keysExactly(args,['actions','groups','includeTimeline','includeClientFrames']);
+      if (Object.hasOwn(args,'actions')===Object.hasOwn(args,'groups')||
+          (args.includeTimeline!==undefined &&
            typeof args.includeTimeline!=='boolean') ||
           (args.includeClientFrames!==undefined &&
            typeof args.includeClientFrames!=='boolean') ||
           (args.includeTimeline===true && args.includeClientFrames===true)) {
         throw new Error('Invalid tool arguments');
       }
+      const compact=Object.hasOwn(args,'groups');
+      const actions=compact?expandActionGroups(args.groups):args.actions;
       if(args.includeClientFrames===true) {
         // Pure preview: NEVER contacts native controller or sends input.
-        return compilePerClientInputFrames(config.mode,args.actions);
+        return compilePerClientInputFrames(config.mode,actions);
       }
-      return args.includeTimeline===true ?
-        compilePlayerInputTimeline(config.mode,args.actions) :
-        planPlayerActions(config.mode,args.actions);
+      if(args.includeTimeline===true)return compilePlayerInputTimeline(config.mode,actions);
+      const plan=planPlayerActions(config.mode,actions);
+      // Old callers keep their detailed response. Compact authoring returns
+      // only counts and the gate unless detailed preview is explicitly asked.
+      if(!compact)return plan;
+      return {schema:plan.schema,mode:plan.mode,
+        slots:[...new Set(plan.actions.map(action=>action.slot))].sort((a,b)=>a-b),
+        actionCount:plan.actions.length,
+        horizonMs:Math.max(...plan.actions.map(action=>action.endMs)),
+        maximumConcurrentIntents:plan.maximumConcurrentIntents,
+        execution:plan.execution,gate:plan.gate};
     }
     if (name==='stop_experimental_multi_client_actions') {
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
@@ -1591,8 +1604,7 @@ export function createOperationCore(config,{
       // were requested. A caller cannot invent an evaluation of MC01
       // human actions or an unrelated attack/interaction.
       const scheduled=prepareMultiClientPulseBatches(config.mode,args.actions);
-      if(args.receipt?.actionFingerprint!==fingerprintActions(
-          config.mode,args.actions)) {
+      if(args.receipt?.actionFingerprint!==fingerprintPulsePlan(config.mode,scheduled)) {
         throw new Error('TEAM_ACTION_RECEIPT_MISMATCH');
       }
       if(multiSequence!==null||inFlight) {
@@ -1695,7 +1707,7 @@ export function createOperationCore(config,{
         const transportCompletedAt=new Date().toISOString();
         const prior=observedRound.basis;
         return {...receipt,mode:config.mode,visualBaseline:prior,
-          actionFingerprint:fingerprintActions(config.mode,args.actions),
+          actionFingerprint:fingerprintPulsePlan(config.mode,schedule),
           transportStartedAt,transportCompletedAt,
           decision:'EXTERNAL_AI_DECISION_NOT_VERIFIED_BY_MCP',
           actionResult:'NATIVE_TRANSPORT_ONLY_NOT_GAMEPLAY_EVIDENCE',

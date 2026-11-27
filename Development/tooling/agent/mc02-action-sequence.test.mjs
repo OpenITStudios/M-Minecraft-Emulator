@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import {prepareMc02ActionSequence,prepareMc02PulseBatch,
+import {prepareMc02ActionSequence,prepareMc02PulseBatch,prepareAiPulseBatch,
   prepareMultiClientPulseBatches,runExperimentalMc02Sequence,MC02_SEQUENCE_LIMITS} from './mc02-action-sequence.mjs';
 import {createHandler,parseConfiguration} from './mcp.mjs';
 const move=(kind,atMs,durationMs,other={})=>({slot:2,kind,atMs,durationMs,...other});
@@ -234,4 +234,23 @@ test('four/five-client compiler yields grouped shared timestamps without merging
     }
     assert.equal(plan.slots.includes(1),mode==='five-ai');
   }
+});
+
+test('one cross-client compile preserves independent single-slot pulse schedules exactly',()=>{
+  for(const mode of ['human-plus-four-ai','five-ai']) {
+    const slots=mode==='five-ai'?[1,2,3,4,5]:[2,3,4,5];
+    const actions=slots.flatMap((slot,i)=>[
+      {slot,kind:'move_forward',atMs:i*20,durationMs:600},
+      {slot,kind:'look_relative',atMs:100,durationMs:100,deltaX:25-i,deltaY:-5},
+      {slot,kind:'attack',atMs:200,durationMs:100},
+    ]);
+    const combined=prepareMultiClientPulseBatches(mode,actions);
+    assert.deepEqual(combined.slots,slots);
+    assert.deepEqual(combined.batches,slots.map(slot=>({slot,
+      ...prepareAiPulseBatch(mode,slot,actions.filter(a=>a.slot===slot))})));
+  }
+  assert.throws(()=>prepareMultiClientPulseBatches('five-ai',[
+    {slot:2,kind:'wait',atMs:0,durationMs:100},
+    {slot:3,kind:'attack',atMs:0,durationMs:100},
+  ]),/MC02_SEQUENCE_INVALID_ACTIONS/);
 });
