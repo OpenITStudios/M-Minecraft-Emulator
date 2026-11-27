@@ -21,6 +21,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(css).toContain('@container lazytester-workspace (min-width:960px) and (min-height:840px)');
     expect(css).toContain('min-height:42px;padding-right:0');
     expect(css).not.toContain('@media(max-width:1199px)');
+    expect(css).toContain('.lazytester-workspace > .lazytester-launcher-action-strip:empty{display:none}');
   });
 
   it('limits global Play warnings without obscuring their text or shrinking the native game owner',()=>{
@@ -56,7 +57,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     const app=source('LazyTesterApp.svelte');
     const css=source('lazytester.css');
     expect(app).toContain('gamesStatusSummary = available && binding?.configured');
-    expect(app).toContain("observedRunningCount + ' of 5 reported running'");
+    expect(app).toContain("observedRunningCount + ' of 5 running'");
     expect(app).toContain("startingCount > 0 ? ' · ' + startingCount + ' starting'");
     expect(app).toContain("attentionCount > 0 ? ' · ' + attentionCount + ' need attention'");
     expect(app).toContain('class="lazytester-games-count" title={gamesStatusSummary}');
