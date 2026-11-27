@@ -6,7 +6,7 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -160,37 +160,49 @@ describe('Lazy Tester profile contract', () => {
       expect(()=>parseNativeBackendSupport(forged)).toThrow('Invalid native backend capability');
     }
   });
-  it('throttles read-only idle settings/storage inspection without delaying live or recovery views', () => {
+  it('schedules 10s healthy idle deadlines and 2s live or recovery deadlines', () => {
     for (const page of ['settings', 'storage'] as const) {
-      for (const elapsed of [0, 1999, 2000, 9999]) {
-        expect(periodicInspectionDue(page, 0, true, elapsed)).toBe(false);
-      }
-      expect(periodicInspectionDue(page, 0, true, 10000)).toBe(true);
-      expect(periodicInspectionDue(page, 1, true, 0)).toBe(true);
-      expect(periodicInspectionDue(page, 0, false, 0)).toBe(true);
+      expect(periodicInspectionInterval(page, 0, true)).toBe(10_000);
+      expect(periodicInspectionInterval(page, 1, true)).toBe(2000);
+      expect(periodicInspectionInterval(page, 0, false)).toBe(2000);
     }
-    expect(periodicInspectionDue('workspace', 0, true, 0)).toBe(true);
-    expect(periodicInspectionDue('workspace', 0, false, 0)).toBe(true);
-    for (const elapsed of [0, 2000, 9999]) {
-      expect(periodicInspectionDue('workspace', 0, true, elapsed, true)).toBe(false);
-    }
-    expect(periodicInspectionDue('workspace', 0, true, 10000, true)).toBe(true);
-    expect(periodicInspectionDue('workspace', 1, true, 0, true)).toBe(true);
-    expect(periodicInspectionDue('workspace', 0, false, 0, true)).toBe(true);
+    expect(periodicInspectionInterval('workspace', 0, true)).toBe(2000);
+    expect(periodicInspectionInterval('workspace', 0, true, true)).toBe(10_000);
+    expect(periodicInspectionInterval('workspace', 1, true, true)).toBe(2000);
+    expect(periodicInspectionInterval('workspace', 0, false, true)).toBe(2000);
   });
-  it('shares the idle inspection clock across startup, explicit and automatic Refresh', () => {
-    const start = 1200;
-    // Same validated Inspect was just issued by startup or explicit Refresh.
-    expect(periodicInspectionDue('workspace', 0, true, 2000 - start, true)).toBe(false);
-    expect(periodicInspectionDue('settings', 0, true, 2000 - start)).toBe(false);
-    expect(periodicInspectionDue('workspace', 0, true, 11200 - start, true)).toBe(true);
-    // Recent reads must never delay live, unresolved or disconnected Play.
-    expect(periodicInspectionDue('workspace', 1, true, 2000 - start, false)).toBe(true);
-    expect(periodicInspectionDue('workspace', 0, true, 2000 - start, false)).toBe(true);
-    expect(periodicInspectionDue('workspace', 0, false, 2000 - start, true)).toBe(true);
+  it('uses one earliest deadline without accelerating the other lane', () => {
+    const start=1200;
+    const session=start+periodicInspectionInterval('workspace',0,true,true);
+    expect(session).toBe(11200);
+    expect(nextBackgroundDeadline(session,3200)).toBe(3200);
+    expect(nextBackgroundDeadline(session,5200)).toBe(5200);
+    expect(nextBackgroundDeadline(session,null)).toBe(11200);
+    expect(nextBackgroundDeadline(null,3200)).toBe(3200);
+    expect(nextBackgroundDeadline(null,null)).toBeNull();
+    expect(nextBackgroundDeadline(11200,13200)).toBe(11200);
+    expect(nextBackgroundDeadline(Number.NEGATIVE_INFINITY,null)).toBe(Number.NEGATIVE_INFINITY);
+  });
+  it('shares the observation clocks, pauses blocked lanes, and cancels the one timer on teardown', () => {
     const mounted = readFileSync(new URL('../src/LazyTesterApp.svelte', import.meta.url), 'utf8');
     expect(mounted).toMatch(/async function refresh\(\)[\s\S]*?refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/);
-    expect(mounted).toMatch(/periodicInspectionDue\(page, runningCount, available,\s*now - lastInspectionStartedAt, workspaceSettledIdle\)/);
+    expect(mounted).toContain('lastInspectionStartedAt + periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle)');
+    expect(mounted).toContain('lastRecordingInspectionStartedAt + 2000');
+    expect(mounted).toContain('sessionObservationEnabled = mounted && !disposed && managerVisible');
+    expect(mounted).toContain('recordingObservationEnabled = mounted && !disposed && managerVisible');
+    expect(mounted).toContain('!closeReviewPending && !!binding?.configured');
+    expect(mounted).toContain('!selectiveOpen && storageReview===null');
+    expect(mounted).toContain('recordingAvailable && recordingWatch && !recordingStatusPending');
+    expect(mounted).toContain('const due = nextBackgroundDeadline(sessionDue, recordingDue)');
+    expect(mounted).toContain('if (due === null || disposed) return;');
+    expect(mounted).toContain('if (observationTimer !== timer || disposed) return;');
+    expect(mounted).toContain('if (document.hidden) return;');
+    expect(mounted).toContain('sessionDue <= now && sessionObservationEnabled');
+    expect(mounted).toContain('recordingDue <= now && recordingObservationEnabled');
+    expect(mounted).toContain('managerVisible = !document.hidden;');
+    expect(mounted).toContain('disposed = true; clearBackgroundObservation();');
+    expect(mounted.match(/window\.setTimeout\(/g)).toHaveLength(1);
+    expect(mounted).not.toContain('setInterval(');
     expect(mounted).not.toContain('lastAutomaticInspectionAt');
   });
   it('suspends automatic inspection through every close review and drops stale results', () => {

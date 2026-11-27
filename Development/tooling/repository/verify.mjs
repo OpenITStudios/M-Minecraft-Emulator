@@ -222,14 +222,18 @@ export function verifyRepository(root,g0=false) {
     read('Development/tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt'),
     read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs'));
   const inspectionPolicy=read('Development/apps/desktop/src/app/inspectionScheduling.ts');
-  assert.ok(inspectionPolicy.includes('export function periodicInspectionDue(') &&
+  assert.ok(inspectionPolicy.includes('export function periodicInspectionInterval(') &&
     inspectionPolicy.includes("(page === 'workspace' && !workspaceSettledIdle) ||") &&
-    inspectionPolicy.includes('runningCount > 0 || !available || elapsedMs >= 10_000;'),
+    inspectionPolicy.includes('runningCount > 0 || !available ? 2000 : 10_000;') &&
+    inspectionPolicy.includes('export function nextBackgroundDeadline('),
     'Healthy idle observer must throttle without delaying live sessions or recovery');
   const mountedUI=read('Development/apps/desktop/src/LazyTesterApp.svelte');
   const titlebar=read('Development/apps/desktop/src/WindowTitlebar.svelte');
-  assert.ok(mountedUI.includes("if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured") &&
-    /periodicInspectionDue\(page, runningCount, available,\s*now - lastInspectionStartedAt, workspaceSettledIdle\)/.test(mountedUI) &&
+  assert.ok(mountedUI.includes("nativeBackend === 'WindowsNative' && !closeReviewPending && !!binding?.configured") &&
+    mountedUI.includes('sessionObservationEnabled = mounted && !disposed && managerVisible') &&
+    mountedUI.includes('lastInspectionStartedAt + periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle)') &&
+    mountedUI.includes('const due = nextBackgroundDeadline(sessionDue, recordingDue)') &&
+    mountedUI.includes('disposed = true; clearBackgroundObservation();') &&
     /refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/.test(mountedUI) &&
     mountedUI.includes("profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null)") &&
     mountedUI.includes('active === null && requested === null && queued === null && queuedLaunch === null') &&

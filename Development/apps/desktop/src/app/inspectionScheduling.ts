@@ -114,18 +114,24 @@ export function releasedSelectionStillCurrent(
     released.identity === current.identity;
 }
 
-// Keep the 2s observer for live sessions, recovery and unresolved workspace
-// state. Healthy idle Play uses the same bounded 10s cadence as idle
-// Settings/Storage. Explicit actions and native mutation admission are unchanged.
-export function periodicInspectionDue(
+// Schedule the actual deadline, not a 2s tick that merely checks a 10s
+// threshold. Keep the existing live/recovery and healthy idle policies.
+export function periodicInspectionInterval(
   page: 'workspace' | 'storage' | 'settings',
   runningCount: number,
   available: boolean,
-  elapsedMs: number,
   workspaceSettledIdle = false,
-): boolean {
+): number {
   return (page === 'workspace' && !workspaceSettledIdle) ||
-    runningCount > 0 || !available || elapsedMs >= 10_000;
+    runningCount > 0 || !available ? 2000 : 10_000;
+}
+
+// A blocked lane has no deadline. A recording never accelerates session
+// inspection; the single UI timer wakes for the earlier independent read.
+export function nextBackgroundDeadline(session: number | null, recording: number | null): number | null {
+  if (session === null) return recording;
+  if (recording === null) return session;
+  return Math.min(session, recording);
 }
 
 

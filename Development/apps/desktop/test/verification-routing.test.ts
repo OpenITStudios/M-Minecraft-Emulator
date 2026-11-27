@@ -56,7 +56,8 @@ describe("Emulator source verification routing", () => {
     expect(ui).toContain("case 'selection':");
     expect(ui).toContain("case 'layout':");
     expect(ui).not.toContain("$: if (mounted && nativeBackend === 'WindowsNative'");
-    expect((ui.match(/setInterval\(/g)??[])).toHaveLength(1);
+    expect((ui.match(/window\.setTimeout\(/g)??[])).toHaveLength(1);
+    expect(ui).not.toContain("setInterval(");
     expect(policy).not.toMatch(/invokeRuntime\s*\(|lazyTester\s*\.|setInterval\s*\(/);
   });
 
@@ -70,7 +71,8 @@ describe("Emulator source verification routing", () => {
     expect(ui).toContain("selectedReview: closeOneSlot !== null");
     expect(ui).toContain("selectedCloseRunning: closingOneSlot !== null");
     expect(scheduling).toContain("state.selectedReview || state.selectedCloseRunning");
-    expect((ui.match(/setInterval\(/g)??[])).toHaveLength(1);
+    expect((ui.match(/window\.setTimeout\(/g)??[])).toHaveLength(1);
+    expect(ui).not.toContain("setInterval(");
   });
 
   it("fails closed on Storage Refresh when profile binding remains unverified", () => {

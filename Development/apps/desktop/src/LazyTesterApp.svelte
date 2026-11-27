@@ -15,7 +15,7 @@
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
   import type {StorageReview, StorageReviewKind, StorageSettingsAction} from './app/storageReview.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -103,6 +103,7 @@
   async function refreshRecordingStatus(){
     if(!recordingAvailable||recordingStatusPending||disposed)return;
     recordingStatusPending=true;
+    lastRecordingInspectionStartedAt=performance.now();
     try{
       const result=await lazyTester.recordingStatus();
       if(disposed)return;
@@ -153,9 +154,11 @@
     }finally{activeOperation = null;}
   }
   let manualRefreshRequested=false, manualRefreshing=false;
-  // One clock for the same Inspect/InspectSettings path, including startup
-  // and explicit Refresh. It throttles idle scheduling only, not mutations.
+  // Each observation uses its own last-start deadline; both share one timer.
   let lastInspectionStartedAt = Number.NEGATIVE_INFINITY;
+  let lastRecordingInspectionStartedAt = Number.NEGATIVE_INFINITY;
+  let managerVisible = false;
+  let observationTimer: number | undefined;
   let queuedLaunch:ProfileSlot|null=null;
   let mounted = false, disposed = false, dirty = false, detached = false;
   // Alert context is authored, not a retained raw backend exception.
@@ -231,6 +234,27 @@
     previewsVisible: page === 'workspace' && !detached,
   });
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
+  // Only a fully observed healthy stopped roster may slow Play. Keep
+  // existing rapid observation for launch, recovery and agent activity.
+  $: workspaceSettledIdle = profiles.length === 5 &&
+    profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null) &&
+    active === null && requested === null && queued === null && queuedLaunch === null &&
+    !detached && attentionCount === 0 && issueKey === null && connectionIssueKey === null &&
+    previewIssue === '' && !closeFailure && agentActivity === null;
+  // All reactive dependencies are explicit. A blocked lane has no deadline;
+  // resuming uses its last start, not a fresh full delay after each UI event.
+  $: sessionObservationEnabled = mounted && !disposed && managerVisible &&
+    nativeBackend === 'WindowsNative' && !closeReviewPending && !!binding?.configured &&
+    !selectiveOpen && storageReview===null &&
+    activeOperation === null && !refreshing && !resizing && !initializing;
+  $: recordingObservationEnabled = mounted && !disposed && managerVisible &&
+    recordingAvailable && recordingWatch && !recordingStatusPending &&
+    activeOperation === null && !closeInProgress && !nativeExitReview;
+  $: sessionDeadline = sessionObservationEnabled
+    ? lastInspectionStartedAt + periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle)
+    : null;
+  $: recordingDeadline = recordingObservationEnabled ? lastRecordingInspectionStartedAt + 2000 : null;
+  $: scheduleBackgroundObservation(sessionDeadline, recordingDeadline);
   // Normal Play is already inspected automatically. Keep explicit Refresh
   // for exceptional states, settings/storage and an in-flight manual action.
   $: showHeaderRefresh = nativeBackend==='WindowsNative' &&
@@ -470,6 +494,7 @@
         if (!current()) return;
       }
       if(next==='settings'||next==='storage') {
+        lastInspectionStartedAt=performance.now();
         const snapshot=await lazyTester.settings();
         if (!current()) return;
         publishProfiles(snapshot.profiles);observeSettings(snapshot.settings);available=true;
@@ -1028,38 +1053,43 @@
     } catch(error) {issueKey='clearData';storage=null;}
     finally {activeOperation = null;}
   }
+  function clearBackgroundObservation() {
+    if (observationTimer !== undefined) window.clearTimeout(observationTimer);
+    observationTimer = undefined;
+  }
+  function scheduleBackgroundObservation(sessionDue: number | null, recordingDue: number | null) {
+    clearBackgroundObservation();
+    const due = nextBackgroundDeadline(sessionDue, recordingDue);
+    if (due === null || disposed) return;
+    const timer = window.setTimeout(() => {
+      if (observationTimer !== timer || disposed) return;
+      observationTimer = undefined;
+      if (document.hidden) return;
+      const now = performance.now();
+      // A timer that fires early must not lose either original deadline.
+      if (now < due) {
+        scheduleBackgroundObservation(sessionDue, recordingDue);
+        return;
+      }
+      // As before, capture status is an independent bounded read. Native
+      // admission and the existing action dispatcher remain authoritative.
+      if (recordingDue !== null && recordingDue <= now && recordingObservationEnabled)
+        void refreshRecordingStatus();
+      if (sessionDue !== null && sessionDue <= now && sessionObservationEnabled &&
+          !closeReviewActive(reviewState()) && binding?.configured && !selectiveOpen && storageReview===null)
+        void refresh();
+    }, Math.max(0, Math.ceil(due - performance.now())));
+    observationTimer = timer;
+  }
   onMount(() => {
     try { workspaceLayout = window.localStorage.getItem(workspaceLayoutKey) === 'Right' ? 'Right' : 'Bottom'; }
     catch { layoutPersistenceIssue = 'Saved layout unavailable. Using Bottom.'; }
+    managerVisible = !document.hidden;
     mounted = true; void initializeLaunchers();
     void lazyTester.screenshotAvailable().then(value=>{if(!disposed)screenshotAvailable=value;}).catch(()=>{});
     void lazyTester.recordingAvailable().then(value=>{
       if(!disposed&&value){recordingAvailable=true;void refreshRecordingStatus();}
     }).catch(()=>{});
-    // Keep a review stable while the user decides; the backend rechecks admission on action.
-    // Reuse this observer rather than adding another interval or process watcher.
-    const interval = setInterval(() => {
-      // Capture status is a bounded local read, only while a recording may
-      // be active or its terminal receipt is unknown. No second interval.
-      if(recordingWatch&&activeOperation === null&&!closeInProgress&&!nativeExitReview&&!document.hidden)void refreshRecordingStatus();
-      // Unsupported, hidden and closing views never schedule Minecraft IPC.
-      if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
-          !selectiveOpen && storageReview===null &&
-          activeOperation === null && !refreshing && !resizing && !initializing) {
-        const now = performance.now();
-        // Only a fully observed, healthy stopped roster may slow Play.
-        // Keep rapid observation for launch, recovery and agent activity.
-        const workspaceSettledIdle = profiles.length === 5 &&
-          profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null) &&
-          active === null && requested === null && queued === null && queuedLaunch === null &&
-          !detached && attentionCount === 0 && issueKey === null && connectionIssueKey === null &&
-          previewIssue === '' && !closeFailure && agentActivity === null;
-        if (periodicInspectionDue(page, runningCount, available,
-          now - lastInspectionStartedAt, workspaceSettledIdle)) {
-          void refresh();
-        }
-      }
-    }, 2000);
     observer = new ResizeObserver(() => { dirty = true; });
     try { observer.observe(viewport, {box: 'device-pixel-content-box'}); }
     catch { observer.observe(viewport); } // Older WebView fallback; DPR listener below remains active.
@@ -1068,7 +1098,8 @@
     const changed = () => {
       // Hidden/minimized WebViews cannot claim current DWM visibility.
       // Losing focus while the manager remains shown is not a hide.
-      if (document.hidden) {
+      managerVisible = !document.hidden;
+      if (!managerVisible) {
         previewStatuses=[];pendingPreviewInvalidations.clear();
       }
       dirty = true;
@@ -1131,7 +1162,7 @@
       if ([1,2,3,4,5].includes(event.payload)) select(event.payload as ProfileSlot);
     }).then(retain).catch(error => { previewIssue = userMessage('preview'); });
     return () => {
-      mounted = false; disposed = true; clearInterval(interval); observer?.disconnect();stopDisplayScale();
+      mounted = false; disposed = true; clearBackgroundObservation(); observer?.disconnect();stopDisplayScale();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
       document.removeEventListener('scroll', workspaceScrolled, true);
       stops.forEach(stop => stop());pendingPreviewInvalidations.clear();
