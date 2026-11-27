@@ -4,7 +4,6 @@
 #include <atomic>
 #include <cstring>
 #include <cwchar>
-#include <winternl.h>
 #include <wrl/client.h>
 #include "dxgi-pacing.h"
 #include "graphics-warm-pools.h"
@@ -27,42 +26,6 @@ BOOL CALLBACK initializePolicy(PINIT_ONCE, PVOID, PVOID*) {
     for (HANDLE handle : {input.level, input.changed, input.stop, input.controller, input.hudSelected}) if (handle) CloseHandle(handle);
     input = {};
     return TRUE; // A failed initialization is sticky; preserve native presentation.
-}
-// Native queries are dynamically resolved and unavailable layouts fail closed.
-// NtQueryEvent is not a supported Win32 contract; see the primary-source caveat in README.
-bool validPolicy(const PolicyConfig& config, const education_bootstrap::Config& child) noexcept {
-    using Query = NTSTATUS (NTAPI*)(HANDLE, ULONG, PVOID, ULONG, PULONG);
-    using Compare = BOOL (WINAPI*)(HANDLE, HANDLE);
-    const auto object = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryObject"));
-    const auto event = reinterpret_cast<Query>(GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtQueryEvent"));
-    const auto compare = reinterpret_cast<Compare>(GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles"));
-    unsigned active=0, background=0;
-    const bool limits = pacingLimits(config,active,background);
-    if (!object || !event || !compare || !limits || config.controllerPid == child.pid) return false;
-    const HANDLE handles[]{config.level, config.changed, config.stop, config.controller, config.hudSelected};
-    const unsigned count = config.creation.version == 4 ? 5U : 4U;
-    for (unsigned i = 0; i < count; ++i) {
-        const HANDLE handle = handles[i];
-        if (reinterpret_cast<INT_PTR>(handle) <= 0) return false;
-        for (unsigned j = 0; j < i; ++j) if (handle == handles[j] || compare(handle, handles[j])) return false;
-        PUBLIC_OBJECT_BASIC_INFORMATION basic{}; ULONG returned = 0;
-        const ACCESS_MASK expected = SYNCHRONIZE | (i == 3 ? PROCESS_QUERY_LIMITED_INFORMATION : 1UL);
-        if (object(handle, 0, &basic, sizeof(basic), &returned) != 0 || returned != sizeof(basic)
-            || basic.GrantedAccess != expected) return false;
-        if (i != 3) {
-            struct EventInfo { LONG type, state; } info{};
-            if (event(handle, 0, &info, sizeof(info), &returned) != 0 || returned != sizeof(info)
-                || info.type != (i == 1 ? 1 : 0) || (i == 2 && info.state != 0)) return false;
-        }
-    }
-    FILETIME birth{}, exit{}, kernel{}, user{}; DWORD session = 0;
-    if (GetProcessId(config.controller) != config.controllerPid
-        || !GetProcessTimes(config.controller, &birth, &exit, &kernel, &user)
-        || memcmp(&birth, &config.controllerCreated, sizeof(birth))
-        || !ProcessIdToSessionId(config.controllerPid, &session) || session != child.session
-        || WaitForSingleObject(config.controller, 0) != WAIT_TIMEOUT) return false;
-    for (unsigned i = 0; i < count; ++i) if (!SetHandleInformation(handles[i], HANDLE_FLAG_INHERIT, 0)) return false;
-    return true;
 }
 thread_local bool insideFactory = false;
 CreateOld originalOld = nullptr;
@@ -215,13 +178,13 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
     originalHwnd = reinterpret_cast<CreateHwnd>(entry(config.hwndRva));
     if (!originalOld || !originalHwnd || config.oldRva == config.hwndRva) return false;
     if (pacing) {
-        if (!validPolicy(capability, process)) return false;
-        input = {capability.level, capability.changed, capability.stop, capability.controller};
+        unsigned active=0, background=0;
+        if (!lazytester_presentation_validate(config.version, capability.reserved,
+            capability.level, capability.changed, capability.stop, capability.controller, capability.hudSelected,
+            capability.controllerPid, capability.controllerCreated.dwLowDateTime, capability.controllerCreated.dwHighDateTime,
+            process.pid, process.session, &active, &background)) return false;
+        input = {capability.level, capability.changed, capability.stop, capability.controller, active, background};
         if (config.version == 4) input.hudSelected = capability.hudSelected;
-        if (config.version == 3 || config.version == 4) {
-            input.activeFps = capability.reserved & 0xffff;
-            input.backgroundFps = capability.reserved >> 16;
-        }
     }
     armed = true;
     return true;

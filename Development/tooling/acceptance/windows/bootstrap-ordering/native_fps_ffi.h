@@ -68,3 +68,8 @@ std::uint32_t lazytester_hud_selection(std::uint32_t,HANDLE,HANDLE,HANDLE);
 }
 
 extern "C" std::uint32_t lazytester_presentation_limits(std::uint32_t version, std::uint32_t reserved, std::uint32_t* active, std::uint32_t* background);
+
+extern "C" std::uint32_t lazytester_presentation_validate(std::uint32_t version, std::uint32_t reserved,
+    HANDLE level, HANDLE changed, HANDLE stop, HANDLE controller, HANDLE selected,
+    std::uint32_t controllerPid, std::uint32_t birthLow, std::uint32_t birthHigh,
+    std::uint32_t childPid, std::uint32_t childSession, std::uint32_t* active, std::uint32_t* background);

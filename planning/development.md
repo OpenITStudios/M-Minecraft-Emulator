@@ -9,7 +9,8 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 01 Native FPS | FPS-01 meter; FPS-02 pacing; FPS-03 events/timer; FPS-04 geometry/DPI; FPS-05 GDI canvas | Source integrated; native proof held |
 | 01 Native FPS | FPS-06 window/worker; FPS-08 remove replaced C++ | HUD runtime source integrated; C++ diagnostic and DXGI adapters retained |
 | 01 Native FPS | FPS-07 FFI/naming | Source integrated; canonical native_fps_ffi.h and snake_case Rust modules |
-| 02 Native compatibility | NAT-01 inventory; NAT-02 enrollment; NAT-03 handles; NAT-04 DXGI/COM; NAT-05 Detours bridge; NAT-06 obsolete source | Open; concrete reasons for any retained C++ |
+| 02 Native compatibility | NAT-02 policy enrollment; NAT-03 presentation handles/controller identity | Source integrated for presentation policy admission; native evidence held |
+| 02 Native compatibility remaining | NAT-01 inventory; NAT-02 mapping/image enrollment; NAT-04 DXGI/COM; NAT-05 Detours bridge; NAT-06 obsolete source | Open; concrete reasons for any retained C++ |
 | 03 Storage | STG-01 review; STG-02 bounds; STG-03 dependency metadata | Source available; not deletion authorization |
 | 03 Storage remaining | STG-04 world; STG-05 resource pack; STG-06 behavior pack; STG-07 cache; STG-08 logs (7 days) | Open; fail closed on unverified targets/activation |
 | 04 Desktop/workspace | UI-01 layouts; UI-02 selected HUD; UI-03 launcher; UI-04 storage UI; UI-05 consumers; UI-06 DPI | 01/02 source available; remaining open |
@@ -17,7 +18,7 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 06 Integration | INT-01 naming; INT-02 ABI; INT-03 build; INT-04 fixtures; INT-05 docs/Unreleased; INT-06 readiness | Open |
 | 07 Native validation | VAL-01 compile/link; VAL-02 DLL/payload; VAL-03 five sessions; VAL-04 storage safety; VAL-05 performance; VAL-06 installer | Held for separately authorized PC-local phase |
 
-Phase 01 source checkpoint complete (FPS-01–08); native validation remains held. Phase 02 started: NAT-02 versioned FPS policy decoding moved to Rust presentation_policy.rs. Next: NAT-01/03 inventory and handle admission, then remaining enrollment and COM/Detours boundary. Legacy v2/v3 HUD remains hidden without disabling pacing; v4 uses selection event. Compatibility forwarding headers retained for existing consumers. No source tests/build executed.
+Phase 01 source checkpoint complete; native validation held. Phase 02: Rust presentation_policy.rs now owns version decoding, exact access/type/alias checks, controller process identity and handle inheritance clearing. C++ enrollment consumes validated ceilings once; retains mapped capability copy, image/RVA checks and COM/Detours integration. Next: inventory remaining native source owners, migrate mapping/image validation where safe; retain the verified native bridge only where required. No build/test executed.
 
 ## Desktop UI refinement — 27 November 2026
 

@@ -205,6 +205,8 @@ Host World/focus/resource acceptance next action stay in planning/development.md
 
 ## Rust native FPS core
 
+Presentation capability admission now lives in `presentation_policy.rs`: exact granted access, distinct handles, event reset modes, unsignaled stop, controller PID/birth/session/liveness, non-inheritance and FPS limits. The C++ enrollment bridge passes scalar values from the unchanged mapping and uses the validated limits directly. No new worker, allocation or DLL loading during admission. The existing undocumented NtQueryEvent compatibility limitation remains; native controls NOT_EXECUTED.
+
 `fps_hud.rs` owns HUD session, binding, worker, synchronization and retirement. `fps-hud.cpp` is now a compatibility and diagnostic adapter; native controls remain NOT_EXECUTED.
 
 `hud_window.rs` owns the thread-local native window host, location hook, DPI context and bounded message pump. The existing HUD worker invokes that host; worker state, visibility and composition remain C++ pending FPS-06 completion. No extra thread.
