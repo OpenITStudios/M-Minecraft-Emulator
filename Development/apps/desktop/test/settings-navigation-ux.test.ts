@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {describe,expect,it} from 'vitest';
 
 const load=(path:string)=>readFileSync(new URL('../src/'+path,import.meta.url),'utf8');
+const chooseGuard=(app:string)=>app.split('function chooseSlot(slot:ProfileSlot){')[1]?.split('selectedSlot=slot;')[0]??'';
 
 describe('General / Data Storage navigation UX — source contracts',()=>{
   it('keeps graphics automatic without exposing a setting',()=>{
@@ -24,7 +25,8 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
   });
   it('moves screen-reader focus only to Settings / Storage headings on explicit navigation',()=>{
     const app=load('LazyTesterApp.svelte');
-    expect(app).toContain('if (next !== \'workspace\' && !disposed && pageHeading?.isConnected)');
+    expect(app).toContain("if (next !== 'workspace' && pageHeading?.isConnected)");
+    expect(app).toContain('page = next; await tick();\n      if (!current()) return;');
     expect(app).toContain('pageHeading.focus({preventScroll:true})');
     expect(app).toContain('<h1 bind:this={pageHeading} tabindex="-1">');
     expect(app).toContain('loadingPage = next;');
@@ -36,8 +38,9 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
   it('retains all original data-operation guards while keeping profile review local',()=>{
     const app=load('LazyTesterApp.svelte');
     const storage=load('DataStorage.svelte');
-    expect(storage).toContain('disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null}');
-    expect(storage).toContain("aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lazytester-storage-review-guidance':undefined}");
+    expect(storage).toContain('disabled={busy||storageReviewOpen}');
+    expect(chooseGuard(app)).toContain('selectiveOpen');
+    expect(storage).toContain("aria-describedby={storageReviewOpen?'lazytester-storage-review-guidance':undefined}");
     expect(storage).toContain('Finish or cancel this review before switching profiles.');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');
     expect(app).toContain('status.confirmationToken!==pending.token');

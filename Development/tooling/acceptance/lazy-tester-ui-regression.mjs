@@ -607,19 +607,23 @@ try {
   await page.getByLabel('Active FPS',{exact:true}).fill('60');await page.getByLabel('Background FPS',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
   await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
-  assert.match(await page.locator('[aria-labelledby="lazytester-storage-overview-section"] .lazytester-help').textContent()??'',
+  const maintenance=page.locator('details.lazytester-storage-maintenance');
+  assert.equal(await maintenance.getAttribute('open'),null,'Maintenance starts collapsed');
+  await maintenance.locator('summary').click();
+  assert.match(await maintenance.getByText(/Last storage report received:/).textContent()??'',
     /Last storage report received:/,
     'UI report receipt time is not presented as a native measurement timestamp');
   assert.ok(await page.locator('.lazytester-data-path').first().evaluate(node=>
     Number.parseFloat(getComputedStyle(node).fontSize)>=13),
     'Long data paths remain readable within the one Data Storage owner');
   const storageOrder=await page.evaluate(()=>{
-    const loc=document.querySelector('.lazytester-location-options');
+    const folder=document.querySelector('.lazytester-profile-clear')?.parentElement;
     const danger=document.querySelector('.lazytester-profile-clear');
-    return loc&&danger&&Boolean(loc.compareDocumentPosition(danger)&Node.DOCUMENT_POSITION_FOLLOWING);
+    const rows=folder?.querySelectorAll(':scope > .lazytester-setting');
+    return rows?.length===3&&rows[2]===danger&&rows[0].textContent.includes('Profile Folder')&&rows[1].textContent.includes('Selective Cleanup');
   });
   assert.equal(storageOrder,true,
-    'Connect/locate must appear before the final permanent-delete danger zone');
+    'Profile Folder, Selective Cleanup and Clear All Data share one ordered panel');
   await section('General').click();assert.equal(await page.getByLabel('Active FPS',{exact:true}).inputValue(),'60');
   await page.getByRole('button',{name:'Save Changes',exact:true}).click();
   await page.getByText('FPS limits saved. Applies when each game next starts.').waitFor();
@@ -832,6 +836,7 @@ try {
   assert.equal(await page.locator('.lazytester-storage-packs-body button').count(),0,
     'Viewing pack diagnostics must not expose an invented mutation control');
   await packDetails.locator('summary').click();
+  await page.locator('details.lazytester-storage-maintenance summary').click();
   await page.getByRole('button',{name:'Clear cache…',exact:true}).click();
   const cacheReview=page.getByRole('region',{name:'Confirm cache cleanup'});
   await cacheReview.waitFor();
@@ -863,6 +868,7 @@ try {
   await page.getByRole('button',{name:'Clear All…',exact:true}).click();
   const fullReview=page.getByRole('form',{name:'Confirm full launcher data deletion'});
   await fullReview.waitFor();
+  if(!(await page.locator('details.lazytester-storage-maintenance').evaluate(node=>node.open))) await page.locator('details.lazytester-storage-maintenance summary').click();
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).isDisabled(),true,
     'Permanent deletion review blocks refresh until cancellation');
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
@@ -1417,6 +1423,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.args?.request?.operation==='InspectStorage').length),0,
     'Failed profile binding must never issue InspectStorage or reuse a previous report');
+  await page.locator('details.lazytester-storage-maintenance summary').click();
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'No storage mutation may be enabled from an unverified profile binding');
   if (!(await page.locator('.lazytester-location-options').evaluate(node=>node.open))) await page.getByText('Find existing profile data',{exact:true}).click();

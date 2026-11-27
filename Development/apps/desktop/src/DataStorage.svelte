@@ -39,10 +39,12 @@
   export let onInspectSelective: (slot: ProfileSlot, category: SelectiveCategory) => Promise<SelectiveInventory>;
   export let onReviewSelective: (slot: ProfileSlot, selections: SelectiveSelection[]) => Promise<SelectiveReviewReceipt>;
   let selectiveSlot: ProfileSlot | null = null;
+  let maintenanceOpen = false;
+  export let nativeClosePending = false;
   export let selectiveOpen = false;
   $: selectiveOpen = selectiveSlot !== null;
   let selectiveTrigger: HTMLButtonElement | undefined;
-  $: if (selectiveSlot !== null && (selectiveSlot !== selectedSlot || !available || !bindingConfigured || selectedProfile?.state !== 'STOPPED' || !selectedStorage || selectedStorage.fullClear?.pending === true || clearSlot !== null || recovery !== null || fullReview !== null)) closeSelective();
+  $: if (selectiveSlot !== null && (selectiveSlot !== selectedSlot || !available || !bindingConfigured || selectedProfile?.state !== 'STOPPED' || !selectedStorage || selectedStorage.fullClear?.pending === true || nativeClosePending || clearSlot !== null || recovery !== null || fullReview !== null)) closeSelective();
   function closeSelective(): void {
     selectiveSlot = null;
     void tick().then(() => {
@@ -78,6 +80,8 @@
   // Presentation-only input feedback; native data-clear admission is unchanged.
   $: typedFullClearNameIncorrect = fullReview !== null && fullName.length > 0 &&
     fullName !== `Minecraft - ${fullReview.slot}`;
+
+  $: if(clearSlot!==null) maintenanceOpen=true;
 
   function showCacheReview(trigger: HTMLButtonElement): void {
     if (storageReviewOpen || busy || refreshing || resizing) return;
@@ -192,7 +196,7 @@
             <div class="lazytester-setting"><div><h3>Selective Cleanup</h3><p>Review individual worlds and packs.</p></div><button class="lazytester-secondary" bind:this={selectiveTrigger} disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured||selectedProfile?.state!=='STOPPED'||!selectedStorage||selectedStorage.fullClear?.pending===true} on:click={()=>selectiveSlot=selectedSlot}>Select Data</button></div>
           <section class="lazytester-setting lazytester-profile-clear" aria-labelledby="lazytester-clear-data-heading"><div><h3 id="lazytester-clear-data-heading" tabindex="-1">Clear All Data</h3><p>Permanently deletes this launcher's local accounts, worlds, cache, settings and backups. Minecraft and app preferences stay.</p><p>Export worlds first: no recovery backup is made. Windows sign-in may remain. External backups stay.</p>{#if selectedStorage?.fullClear?.pending}<p>Cleanup is pending. This launcher cannot start until it finishes.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{userMessage('clearData')}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lazytester-secondary lazytester-danger" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.fullClear?.canClear} on:click={event=>showFullReview(event.currentTarget)}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear All…'}</button></section>
           </div>
-          <details class="lazytester-storage-maintenance" open={clearSlot!==null}><summary aria-disabled={clearSlot!==null} on:click={event=>{if(clearSlot!==null)event.preventDefault();}}>Storage details and maintenance</summary><div class="lazytester-settings-panel">
+          <details class="lazytester-storage-maintenance" bind:open={maintenanceOpen}><summary aria-disabled={clearSlot!==null} on:click={event=>{if(clearSlot!==null)event.preventDefault();}}>Storage details and maintenance</summary><div class="lazytester-settings-panel">
             <div class="lazytester-setting"><h3>Web cache</h3>
               <span>{selectedStorage ? formatStorageExtent(selectedStorage.cache.bytes,selectedStorage.cache.partial) : 'Not measured'}</span>
             </div>

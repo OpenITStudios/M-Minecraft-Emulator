@@ -31,7 +31,7 @@
   function chooseSlot(slot:ProfileSlot){
     // A profile switch is display-only. It must never silently dismiss
     // an active CloseOne/Storage confirmation or an in-flight mutation.
-    if (slot===selectedSlot || busy ||
+    if (slot===selectedSlot || busy || selectiveOpen ||
         closeReviewActive(reviewState()) || clearingData ||
         clearSlot!==null || recovery!==null || fullReview!==null) return;
     selectedSlot=slot;
@@ -368,7 +368,7 @@
   function navigate(next: typeof page) {
     // Settings and storage require the Windows native session owner.
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) ||
-        clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;
+        selectiveOpen || clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;
     closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
     // A queued Refresh belongs to its original page; moving to another
     // page cancels only the undispatched UI request, never a native action.
@@ -897,7 +897,7 @@
     const interval = setInterval(() => {
       // Unsupported, hidden and closing views never schedule Minecraft IPC.
       if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
-          clearSlot===null && recovery===null && fullReview===null &&
+          !selectiveOpen && clearSlot===null && recovery===null && fullReview===null &&
           !busy && !refreshing && !resizing && !initializing) {
         const now = performance.now();
         // Only a fully observed, healthy stopped roster may slow Play.
@@ -1145,7 +1145,7 @@
           {clearSlot} {recovery} {fullReview} {clearingData}
           {dataLocation} {locationIssue} {runningCount}
           onChooseSlot={chooseSlot}
-          bind:selectiveOpen
+          bind:selectiveOpen nativeClosePending={closeReviewPending}
           onInspectSelective={lazyTester.selectiveInventory}
           onReviewSelective={lazyTester.reviewSelectiveInventory}
           onReviewCache={() => {if (!navigationReviewOpen && !busy && !refreshing && !resizing) {fullReview=null;recovery=null;clearSlot=selectedSlot;}}}
