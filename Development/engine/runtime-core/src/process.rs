@@ -711,7 +711,7 @@ mod tests {
         let host = directory.join("gui-host.exe");
         let compiled = Command::new(std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into()))
             .arg("--edition=2021")
-            .arg(root.join("src/provider/fixtures/gui_helper_host.rs"))
+            .arg(root.join("src/fixtures/gui_helper_host.rs"))
             .arg("-o")
             .arg(&host)
             .output()
