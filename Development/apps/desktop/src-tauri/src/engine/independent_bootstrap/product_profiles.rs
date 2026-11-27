@@ -236,8 +236,8 @@ fn layout(executable: &Path) -> io::Result<PathBuf> {
 fn home() -> io::Result<PathBuf> {
     layout(&std::env::current_exe()?)
 }
-fn locator_path() -> io::Result<PathBuf> {
-    Ok(home()?.join("Data/Settings").join(LOCATOR))
+fn locator_path(home: &Path) -> PathBuf {
+    home.join("Data/Settings").join(LOCATOR)
 }
 fn pin_chain(path: &Path) -> io::Result<Vec<File>> {
     if !path.is_absolute()
@@ -418,22 +418,26 @@ fn open_at(logical: File, root: &Path) -> io::Result<[SlotStorage; 5]> {
         .map_err(|_| invalid("Missing product profile"))
 }
 pub(super) fn open() -> io::Result<Option<[SlotStorage; 5]>> {
-    open_mode(true)
+    Ok(open_mode(&home()?, true)?.map(|(_, stores)| stores))
 }
 pub(super) fn inspect_existing() -> io::Result<Option<[SlotStorage; 5]>> {
-    open_mode(false)
+    Ok(open_mode(&home()?, false)?.map(|(_, stores)| stores))
 }
 fn recover_confirmed(root:&Path) {
     // Startup restores unfinished cutovers; large committed purges require Finish clear.
     // Inspection/Locate stay read-only and unrelated catalog-valid peers remain available.
     for slot in 1..=5 {let _=clear::rollback_uncommitted(root,slot);}
 }
-fn open_mode(persist_location: bool) -> io::Result<Option<[SlotStorage; 5]>> {
-    let home = home()?;
-    let locator = locator_path()?;
+// Canonical locator wins; an existing legacy locator is never fresh setup.
+fn resolve_saved_location(home: &Path) -> io::Result<(PathBuf, bool, bool)> {
+    let locator = locator_path(home);
     let legacy = home.join("App").join(LOCATOR);
     let legacy_locator = !locator.try_exists()? && legacy.try_exists()?;
-    let (root, default) = resolve_location(&home, if legacy_locator { &legacy } else { &locator })?;
+    let (root, default) = resolve_location(home, if legacy_locator { &legacy } else { &locator })?;
+    Ok((root, default && !legacy_locator, legacy_locator))
+}
+fn open_mode(home: &Path, persist_location: bool) -> io::Result<Option<(PathBuf, [SlotStorage; 5])>> {
+    let (root, default, legacy_locator) = resolve_saved_location(home)?;
     let (logical, _) = replay_roots()?;
     if persist_location {recover_confirmed(&root);}
     match open_at(logical, &root) {
@@ -444,7 +448,7 @@ fn open_mode(persist_location: bool) -> io::Result<Option<[SlotStorage; 5]>> {
                 let settings = home.join("Data/Settings");
                 std::fs::create_dir_all(&settings)?;
                 write_json(
-                    &locator_path()?,
+                    &locator_path(home),
                     &Locator {
                         schema: 1,
                         path: if root == home.join("Data") {
@@ -456,7 +460,7 @@ fn open_mode(persist_location: bool) -> io::Result<Option<[SlotStorage; 5]>> {
                     false,
                 )?;
             }
-            Ok(Some(stores))
+            Ok(Some((root, stores)))
         }
         Err(error)
             if default && error.kind() == io::ErrorKind::NotFound && empty_default(&root)? =>
@@ -789,7 +793,8 @@ pub(super) fn prepare() -> io::Result<()> {
     require_idle()?;
     drop(registered_image(true)?);
     drop(BootstrapLibrary::reviewed()?);
-    let (path, default) = resolve_location(&home()?, &locator_path()?)?;
+    let home = home()?;
+    let (path, default, _) = resolve_saved_location(&home)?;
     if !default {
         return Err(invalid(
             "The saved data folder is unavailable; locate it instead of creating new profiles",
@@ -797,9 +802,9 @@ pub(super) fn prepare() -> io::Result<()> {
     }
     let (logical, _) = replay_roots()?;
     initialize_at(&logical, &path)?;
-    std::fs::create_dir_all(home()?.join("Data/Settings"))?;
+    std::fs::create_dir_all(home.join("Data/Settings"))?;
     write_json(
-        &locator_path()?,
+        &locator_path(&home),
         &Locator {
             schema: 1,
             path: "Data".into(),
@@ -820,7 +825,7 @@ fn verify_selected_location(logical: File, root: &Path) -> io::Result<()> {
 
 pub(crate) fn location(action: DataLocationAction) -> io::Result<DataLocation> {
     let home = home()?;
-    let locator = locator_path()?;
+    let locator = locator_path(&home);
     if matches!(
         action,
         DataLocationAction::Locate | DataLocationAction::Choose
@@ -868,10 +873,10 @@ pub(crate) fn location(action: DataLocationAction) -> io::Result<DataLocation> {
             )?;
         }
     }
-    let (path, _) = resolve_location(&home, &locator)?;
-    let (current, profiles) = match open()? {
-        Some(stores) => (
-            Some(path.clone()),
+    // Report the exact catalog root from the same successful open.
+    let (current, profiles) = match open_mode(&home, true)? {
+        Some((root, stores)) => (
+            Some(root),
             stores
                 .into_iter()
                 .map(|store| ProfilePath {
@@ -1126,6 +1131,31 @@ mod tests {
         assert_eq!(std::fs::read(&marker).unwrap(), b"keep");
         assert!(!data.join(CATALOG).exists());
         assert!(!data.join(LOCATOR).exists());
+    }
+    #[test]
+    fn canonical_and_legacy_locator_share_one_resolution_without_fresh_fallback() {
+        let fixture = Fixture::new();
+        let home = &fixture.root;
+        let data = home.join("Data");
+        let saved = data.join("Saved");
+        std::fs::create_dir_all(&saved).unwrap();
+        std::fs::create_dir_all(home.join("App")).unwrap();
+        std::fs::create_dir_all(data.join("Settings")).unwrap();
+        let canonical = locator_path(home);
+        let legacy = home.join("App").join(LOCATOR);
+        assert_eq!(resolve_saved_location(home).unwrap(), (data.clone(), true, false));
+        write_json(&legacy, &Locator { schema: 1, path: saved.to_string_lossy().into_owned() }, false).unwrap();
+        assert_eq!(resolve_saved_location(home).unwrap(), (saved, false, true));
+        assert!(!canonical.exists());
+        write_json(&canonical, &Locator { schema: 1, path: "Data".into() }, false).unwrap();
+        assert_eq!(resolve_saved_location(home).unwrap(), (data, false, false));
+        std::fs::write(&canonical, b"corrupt").unwrap();
+        assert!(resolve_saved_location(home).is_err());
+        assert_eq!(std::fs::read(&canonical).unwrap(), b"corrupt");
+        std::fs::remove_file(&canonical).unwrap();
+        std::fs::write(&legacy, b"corrupt").unwrap();
+        assert!(resolve_saved_location(home).is_err());
+        assert!(!canonical.exists());
     }
     #[test]
     fn relative_default_follows_home_and_custom_missing_paths_never_fall_back() {

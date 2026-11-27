@@ -133,6 +133,9 @@ Healthy Play relies on existing automatic inspection; the header Refresh is
 shown only for actionable exceptions or an in-flight manual refresh. Settings
 and Data Storage retain explicit inspection controls.
 
+Data Storage shows Project Data and the connected launcher data location together,
+with the existing native Open action and each selected launcher's verified folder.
+It does not move data or treat a path as proof of account readiness.
 Data Storage separates global preferences from per-launcher management. The
 verified temporary web-cache preference is persisted (default enabled); eligible
 post-exit maintenance uses the existing controller, without an extra worker.

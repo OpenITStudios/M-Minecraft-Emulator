@@ -670,6 +670,12 @@ try {
   await page.getByLabel('Active FPS',{exact:true}).fill('60');await page.getByLabel('Background FPS',{exact:true}).fill('5');
   await section('Data Storage').click();await heading('Data Storage').waitFor();
   await page.getByText('At least 1.0 MiB',{exact:true}).waitFor();
+  const locationPanel=page.getByRole('region',{name:'Data Location'});
+  await locationPanel.getByText('Project Data',{exact:true}).waitFor();
+  await locationPanel.getByText('D:\\Lazy Tester\\Data',{exact:true}).waitFor();
+  await locationPanel.getByText('Same as Project Data',{exact:true}).waitFor();
+  await locationPanel.getByRole('button',{name:'Open Launcher Data',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.command==='lazy_tester_data_location'&&call.args?.action==='Open')),true);
   const maintenance=page.locator('details.lazytester-storage-maintenance');
   assert.equal(await maintenance.getAttribute('open'),null,'Maintenance starts collapsed');
   await maintenance.locator('summary').click();

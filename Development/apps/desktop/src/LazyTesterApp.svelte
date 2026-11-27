@@ -1407,6 +1407,7 @@
           onRecoverSettings={recoverSettings}
           onReviewFullClear={reviewFullClear} onClearAllData={clearAllData}
           onCancelReview={cancelStorageReview}
+          onOpenData={() => loadLocation('Open')}
           onLocateData={() => loadLocation('Locate')}
           onChooseData={() => loadLocation('Choose')}/>
       {/if}

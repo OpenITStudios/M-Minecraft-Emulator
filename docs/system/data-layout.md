@@ -81,7 +81,14 @@ canonical location after valid stores reopen. Installer layout detection and
 local App refresh preserve the legacy pointer. Catalog schema 1 uses
 `Data/Profiles/`; new schema 2 profiles use `Data/Launchers/`.
 This compatibility route never grants permission to move, overwrite, copy
-or recreate private account/world data.
+or recreate private account/world data. Opening, inspecting and preparing
+profiles share the same canonical-first locator selection; a legacy pointer
+does not admit fresh setup. The Data Storage report uses the exact catalog
+root returned by that successful open, not an independent earlier lookup.
+The UI shows Project Data (manager root), connected launcher data (catalog
+root or preserved legacy location) and the selected profile folder. The
+existing Open action opens only the reported, native-checked launcher root.
+These are locations, not account or gameplay evidence.
 
 The old optional `Data/Coordinates/bookmarks.json` store is **dormant**:
 the operator removed desktop F3 Inspector and Coordinates & Saves on

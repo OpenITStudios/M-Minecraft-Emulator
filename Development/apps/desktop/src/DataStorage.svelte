@@ -66,6 +66,7 @@
   export let onRecoverSettings: () => void;
   export let onReviewFullClear: () => void;
   export let onClearAllData: () => void;
+  export let onOpenData: () => void;
   export let onLocateData: () => void;
   export let onChooseData: () => void;
   // Presentation-only keyboard context. The original parent and native engine
@@ -161,6 +162,14 @@
 <svelte:window on:keydown={onReviewEscape}/>
 
         <div class="lazytester-settings-content">
+          <section class="lazytester-group" aria-labelledby="lazytester-data-location-heading">
+            <h2 id="lazytester-data-location-heading">Data Location</h2>
+            <div class="lazytester-settings-panel">
+              <div class="lazytester-setting"><div><h3>Project Data</h3><p class="lazytester-data-path">{dataLocation?.defaultPath??'Location unavailable.'}</p><p>App settings and local data belong here.</p></div></div>
+              <div class="lazytester-setting"><div><h3>Connected Launcher Data</h3>{#if dataLocation?.path}<p class="lazytester-data-path">{dataLocation.path===dataLocation.defaultPath?'Same as Project Data':dataLocation.path}</p>{:else}<p>No data folder connected.</p>{/if}<p>Each launcher keeps its own profile. Select a launcher below to see its exact folder.</p></div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||nativeClosePending||!available||!bindingConfigured||!dataLocation?.path} on:click={onOpenData}>Open Launcher Data</button></div>
+              {#if locationIssue}<p class="lazytester-error" role="status">{locationIssue}</p>{/if}
+            </div>
+          </section>
           <section class="lazytester-group" aria-labelledby="lazytester-global-storage-heading">
             <div class="lazytester-profile-management-heading">
               <h2 id="lazytester-global-storage-heading">Global Settings</h2>
@@ -218,7 +227,7 @@
           <div class="lazytester-setting"><div><h3>Clear cache</h3><p>Remove temporary web cache. Accounts, worlds and settings stay.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lazytester-help">Cache cleanup unavailable. Refresh to check again.</p>{/if}</div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></div>
           {#if clearSlot===selectedSlot}<section class="lazytester-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts, settings and other launchers stay.</p><div class="lazytester-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>commitCacheReview(selectedSlot)}>Clear web cache</button><button class="lazytester-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview('cache')}>Cancel</button></div></section>{/if}
           </div></details>
-          <details class="lazytester-location-options" open={!bindingConfigured || !dataLocation?.path}><summary>Find existing profile data</summary><p class="lazytester-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lazytester-error">{locationIssue}</p>{/if}<div class="lazytester-actions"><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing||storageReviewOpen} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
+          <details class="lazytester-location-options" open={!bindingConfigured || !dataLocation?.path}><summary>Find existing profile data</summary><div class="lazytester-actions"><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing||storageReviewOpen} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
           <details class="lazytester-storage-packs">
             <summary><strong>Resource pack details</strong></summary>
             <div class="lazytester-storage-packs-body">
