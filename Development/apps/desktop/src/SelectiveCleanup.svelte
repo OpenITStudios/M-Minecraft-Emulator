@@ -1,12 +1,18 @@
 <script lang="ts">
   import {onMount, onDestroy, tick} from 'svelte';
-  import type {ProfileSlot, SelectiveCategory, SelectiveInventory, SelectiveSelection, SelectiveReviewReceipt} from './app/bridge/lazyTester.js';
+  import type {ProfileStorage, ProfileSlot, SelectiveCategory, SelectiveInventory, SelectiveSelection, SelectiveReviewReceipt} from './app/bridge/lazyTester.js';
   import {formatStorageBytes} from './app/presentation/storageSize.js';
 
   export let slot: ProfileSlot;
   export let inspect: (slot: ProfileSlot, category: SelectiveCategory) => Promise<SelectiveInventory>;
   export let review: (slot: ProfileSlot, selections: SelectiveSelection[]) => Promise<SelectiveReviewReceipt>;
   export let onClose: () => void;
+  export let downloadCache: ProfileStorage['cache'] | undefined = undefined;
+  export let confirmDownloadCache: (slot: ProfileSlot) => Promise<void>;
+  let downloadView=false;
+  let downloadAck=false;
+  $: downloadEligible=!!downloadCache?.canClear&&!downloadCache.partial&&downloadCache.issue===null&&downloadCache.files>0;
+  $: if(!downloadEligible)downloadAck=false;
   export let confirmWorlds: (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => Promise<void>;
   // Source-only until native disposition acceptance; never imply deletion is available.
   export let worldDeletionAvailable = false;
@@ -56,6 +62,7 @@
   async function load(next: SelectiveCategory, refresh=false): Promise<void> {
     if(closed||loading)return;
     category=next;
+    downloadView=false;downloadAck=false;
     // Review totals belong to the exact selection, not the visible category.
     receipt=null;
     issue='';
@@ -96,6 +103,24 @@
     if(others.length+items.length>128){issue='Select up to 128 items per review.';return;}
     selected=[...others,...items.map(item=>({category,...item}))];
     issue='';
+  }
+  function showDownloadCache():void {
+    if(closed||loading||deleting)return;
+    generation++;
+    downloadView=true;downloadAck=false;receipt=null;issue='';selected=[];
+  }
+  async function deleteDownloadCache():Promise<void> {
+    if(closed||loading||deleting||!downloadView||!downloadEligible||!downloadAck)return;
+    const request=++generation;
+    deleting=true;loading=true;downloadAck=false;issue='';
+    try {
+      await confirmDownloadCache(slot);
+      if(request===generation)issue='Download cache cleanup completed.';
+    } catch {
+      if(request===generation)issue='Download cache cleanup was refused or its result is uncertain. Refresh session and storage before retrying.';
+    } finally {
+      if(request===generation){deleting=false;loading=false;}
+    }
   }
   async function deleteWorlds(): Promise<void> {
     if(closed||loading||deleting||!deletionAvailable||!eligible||!acknowledged||!receipt)return;
@@ -145,10 +170,29 @@
   </header>
   <div class="lazytester-selective-categories" role="group" aria-label="Data category">
     {#each categories as entry}
-      <button class="lazytester-secondary" aria-pressed={category===entry.value} disabled={loading} on:click={()=>load(entry.value)}>{entry.label}</button>
+      <button class="lazytester-secondary" aria-pressed={!downloadView&&category===entry.value} disabled={loading} on:click={()=>load(entry.value)}>{entry.label}</button>
     {/each}
-    <button class="lazytester-secondary" disabled title="Download cache location is not verified">Download Cache</button>
+    <button class="lazytester-secondary" aria-pressed={downloadView} disabled={loading} on:click={showDownloadCache}>Download Cache</button>
   </div>
+  {#if downloadView}
+    <section class="lazytester-cache-confirm" aria-label="Download cache review">
+      <h3>Download Cache — Minecraft {slot}</h3>
+      {#if downloadCache&&!downloadCache.partial}
+        <p>{downloadCache.files} files · {formatStorageBytes(downloadCache.bytes)}</p>
+      {:else}
+        <p>Size unavailable. Unknown does not mean empty.</p>
+      {/if}
+      {#if !downloadEligible}
+        <p role="status">{downloadCache?.issue??'Download cache cleanup is unavailable. Refresh storage to check again.'}</p>
+      {:else}
+        <p>Only the reviewed download cache for this launcher will be cleared. Worlds, packs, accounts and web cache are not targeted.</p>
+        <label><input type="checkbox" bind:checked={downloadAck} disabled={loading}/> I understand this will remove downloaded cache files.</label>
+        <button class="lazytester-danger" disabled={loading||!downloadAck||!downloadEligible} on:click={deleteDownloadCache}>Clear Download Cache</button>
+      {/if}
+      {#if deleting}<p role="status">Clearing download cache…</p>{/if}
+      {#if issue}<p role="status">{issue}</p>{/if}
+    </section>
+  {:else}
   <div class="lazytester-selective-toolbar">
     <button class="lazytester-secondary" disabled={loading||!items.length} on:click={selectAll}>{allSelected?'Deselect All':'Select All'}</button>
     <button class="lazytester-secondary" disabled={loading} on:click={()=>load(category,true)}>Refresh</button>
@@ -191,4 +235,5 @@
     <span>{selected.length} selected{receipt?' · '+formatStorageBytes(receipt.bytes):''}</span>
     <button class="lazytester-secondary" disabled={loading||!selected.length} on:click={inspectSelection}>Review Selection</button>
   </footer>
+  {/if}
 </dialog>

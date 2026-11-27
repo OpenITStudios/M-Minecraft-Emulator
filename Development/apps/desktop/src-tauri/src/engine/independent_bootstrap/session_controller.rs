@@ -1812,6 +1812,9 @@ fn run() -> io::Result<()> {
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ClearProfileDownloadCache { slot } => {
+                    if !crate::engine::manager_settings::DOWNLOAD_CACHE_REVIEWED {
+                        return Err("Download cache location is not native-verified".into());
+                    }
                     sessions.admit_profile_mutation(slot).map_err(|error|error.to_string())?;
                     let store=sessions.store(slot).map_err(|error|error.to_string())?;
                     #[cfg(feature="lazy-tester-package")]

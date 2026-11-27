@@ -307,7 +307,7 @@
       // presentation receipt below may clear the uncertainty warning.
       if(snapshot.settings){
         if(!performanceDirty){activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;}
-        if (!sameSettingsObservation(settings, snapshot.settings) || settings?.storagePreferences?.autoClearWebCache!==snapshot.settings.storagePreferences?.autoClearWebCache) settings=snapshot.settings;
+        if (!sameSettingsObservation(settings, snapshot.settings)) settings=snapshot.settings;
       }
       if (active !== null && selectedIdentity !== identity(profiles.find(profile => profile.slot === active))) {
         const released = {slot: active, identity: selectedIdentity};
@@ -860,6 +860,23 @@
       throw error;
     } finally {busy=false;}
   }
+  async function confirmDownloadCache(slot:ProfileSlot):Promise<void> {
+    const report=storage?.find(item=>item.slot===slot)?.downloadCache;
+    if(busy||refreshing||resizing||!available||!binding?.configured||!selectiveOpen||
+      slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending||
+      selectedStorage?.fullClear?.pending===true||!report?.canClear||report.partial||
+      report.issue!==null||!report.files)throw new Error('Download cache cleanup is unavailable');
+    busy=true;storageNotice='';
+    try {
+      const snapshot=await lazyTester.clearDownloadCache(slot);
+      applyStorageSnapshot(snapshot);
+      storageNotice='Download cache cleared.';
+    } catch(error) {
+      storage=null;
+      storageNotice='Download cache cleanup was refused or its result is uncertain. Refresh session and storage.';
+      throw error;
+    } finally {busy=false;}
+  }
   async function clearCache(slot: ProfileSlot) {
     if (busy || refreshing || resizing || clearSlot !== slot || !storage?.find(item=>item.slot===slot)?.cache.canClear) return;
     busy = true; issueKey=null; storageNotice = ''; clearSlot = null;
@@ -1176,7 +1193,7 @@
           autoClearWebCache={settings?.storagePreferences?.autoClearWebCache} onSaveWebCachePreference={saveWebCachePreference}
           onInspectSelective={lazyTester.selectiveInventory}
           onReviewSelective={lazyTester.reviewSelectiveInventory}
-          onConfirmWorlds={confirmWorlds}
+          onConfirmWorlds={confirmWorlds} onConfirmDownloadCache={confirmDownloadCache}
           onReviewCache={() => {if (!navigationReviewOpen && !busy && !refreshing && !resizing) {fullReview=null;recovery=null;clearSlot=selectedSlot;}}}
           onClearCache={clearCache}
           onCancelCacheReview={() => {clearSlot=null;}}

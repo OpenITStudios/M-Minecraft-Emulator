@@ -82,3 +82,13 @@ it('does not expose native-held automatic cleanup as enabled',()=>{
   const app=source('LazyTesterApp.svelte');
   expect(app).toContain('...settings.storagePreferences,autoClearWebCache:enabled');
 });
+
+
+it('uses native download cache report and explicit acknowledgement in the shared modal',()=>{
+  const dialog=source('SelectiveCleanup.svelte');
+  expect(dialog).toContain('downloadCache?.canClear');
+  expect(dialog).toContain('!downloadEligible||!downloadAck');
+  expect(dialog).toContain('Unknown does not mean empty.');
+  expect(source('DataStorage.svelte')).toContain('confirmDownloadCache={onConfirmDownloadCache}');
+  expect(source('LazyTesterApp.svelte')).toContain('await lazyTester.clearDownloadCache(slot)');
+});

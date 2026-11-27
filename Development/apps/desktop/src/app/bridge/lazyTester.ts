@@ -430,7 +430,7 @@ export const lazyTester = {
     if(typeof preferences.autoClearWebCache!=='boolean'||preferences.autoClearDownloadCache===true||preferences.autoClearOldLogs===true)throw new TypeError('Unverified storage cleanup preference');
     const snapshot=settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveStoragePreferences',preferences}}));
     const saved=snapshot.settings.storagePreferences;
-    if(saved?.autoClearWebCache!==preferences.autoClearWebCache||(saved.autoClearDownloadCache??false)!==(preferences.autoClearDownloadCache??false)||(saved.autoClearOldLogs??false)!==(preferences.autoClearOldLogs??false))throw new TypeError('Storage preference could not be confirmed');
+    if(!saved||saved.autoClearWebCache!==preferences.autoClearWebCache||(saved.autoClearDownloadCache??false)!==(preferences.autoClearDownloadCache??false)||(saved.autoClearOldLogs??false)!==(preferences.autoClearOldLogs??false))throw new TypeError('Storage preference could not be confirmed');
     return snapshot;
   },
   saveAudio:async(mode:BackgroundAudio)=>{
@@ -476,7 +476,12 @@ export const lazyTester = {
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ConfirmSelectedWorlds',slot,selections:receipt.items,confirmationToken:receipt.confirmationToken}}));
   },
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
-  clearDownloadCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileDownloadCache',slot}})),
+  clearDownloadCache: async (slot: ProfileSlot) => {
+    if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
+    const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileDownloadCache',slot}}));
+    if(!snapshot.storage)throw new TypeError('Download cache result unavailable');
+    return snapshot;
+  },
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
   recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {
     if(!profileSlots.includes(slot)||!['Reset','Restore'].includes(action))throw new TypeError('Invalid settings recovery request');

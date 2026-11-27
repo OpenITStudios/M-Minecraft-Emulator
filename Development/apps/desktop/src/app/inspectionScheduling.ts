@@ -23,7 +23,11 @@ export function sameProfileObservation(
 // ordered preset/item arrays remain significant; freshness is never inferred.
 export function sameSettingsObservation(a: SettingsReport | null, b: SettingsReport): boolean {
   return a !== null && a.backgroundAudio === b.backgroundAudio &&
-    a.audioIssue === b.audioIssue && a.activeFps === b.activeFps &&
+    a.audioIssue === b.audioIssue &&
+    a.storagePreferences?.autoClearWebCache === b.storagePreferences?.autoClearWebCache &&
+    a.storagePreferences?.autoClearDownloadCache === b.storagePreferences?.autoClearDownloadCache &&
+    a.storagePreferences?.autoClearOldLogs === b.storagePreferences?.autoClearOldLogs &&
+    a.activeFps === b.activeFps &&
     a.backgroundFps === b.backgroundFps && a.renderDistanceChunks === b.renderDistanceChunks &&
     a.canApplyPreset === b.canApplyPreset && a.changedProfiles === b.changedProfiles &&
     (a.graphicsPresets === b.graphicsPresets ||
