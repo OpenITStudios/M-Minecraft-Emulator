@@ -59,22 +59,25 @@ function boundedRead(path,max) {
     return buffer.toString('utf8');
   }finally{closeSync(fd);}
 }
-function digestFile(path,expectedSize) {
+// Shared bounded installer hash for export and candidate retention.
+export function digestInstallerFile(path,expectedSize) {
   const before=ordinaryFile(path,MAX_INSTALLER);
   if(before.size!==expectedSize || before.size<64)throw Error('Installer byte count changed');
   const fd=openSync(path,'r'), hash=createHash('sha256'), buffer=Buffer.alloc(HASH_CHUNK);
+  const prefix=Buffer.alloc(2);
   try {
     if(!unchanged(before,fstatSync(fd)))throw Error('Installer identity changed during read');
     let offset=0;
     while(offset<before.size){
       const n=readSync(fd,buffer,0,Math.min(buffer.length,before.size-offset),offset);
       if(!n)throw Error('Incomplete installer hash');
+      if(offset<prefix.length)buffer.copy(prefix,offset,0,Math.min(n,prefix.length-offset));
       hash.update(buffer.subarray(0,n));
       offset+=n;
     }
   }finally{closeSync(fd);}
   if(!unchanged(before,lstatSync(path)))throw Error('Installer metadata changed during hash');
-  return {hash:hash.digest('hex'),stat:before};
+  return {hash:hash.digest('hex'),stat:before,windowsExecutable:prefix[0]===0x4d&&prefix[1]===0x5a};
 }
 function exactContents(folder,names){
   const handle=opendirSync(folder),found=new Set();
@@ -109,7 +112,7 @@ function validateCandidate(parent,name) {
      sums!==`${checksum}  ${installer}\n`){
     throw Error('Candidate metadata is inconsistent');
   }
-  const actual=digestFile(join(folder,installer),manifest.installer.bytes);
+  const actual=digestInstallerFile(join(folder,installer),manifest.installer.bytes);
   if(actual.hash!==checksum)throw Error('Installer SHA-256 does not match verified receipt');
   return {folder,name,stat,files:files.map(file=>({name:file,
     stat:file===installer?actual.stat:ordinaryFile(join(folder,file),file===files[0]?4096:256)}))};

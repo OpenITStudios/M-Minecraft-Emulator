@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest';
+import {createHash} from 'node:crypto';
 import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 import {execFileSync} from 'node:child_process';
@@ -159,13 +160,16 @@ describe('Development source and distribution candidates',()=>{
     try {
       const build=join(root,'build');mkdirSync(build);
       const installer=join(build,'setup.exe');
-      const bytes=Buffer.alloc(128);bytes.write('MZ');writeFileSync(installer,bytes);
+      // Cross the shared 1 MiB digest chunk boundary.
+      const bytes=Buffer.alloc(1024*1024+17,0x5a);bytes.write('MZ');writeFileSync(installer,bytes);
       writeFileSync(join(build,'profile-binding-five.bin'),'private fixture');
       writeFileSync(join(build,'source.rs'),'developer source');
       const args=[root,installer,'a'.repeat(40),'0.1.0','20261026T070000000Z'] as const;
       const {output,manifest}=assembleCandidate(...args);
       expect(readdirSync(output).sort()).toEqual(['Lazy-Tester-0.1.0-windows-x86_64-setup.exe','SHA256SUMS.txt','package-manifest.json']);
       expect(readFileSync(join(output,manifest.installer.name))).toEqual(bytes);
+      expect(manifest.installer.bytes).toBe(bytes.length);
+      expect(manifest.installer.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
       expect(readFileSync(join(output,'SHA256SUMS.txt'),'utf8')).toContain(manifest.installer.sha256);
       expect(JSON.parse(readFileSync(join(output,'package-manifest.json'),'utf8')).releaseReady).toBe(false);
       expect(()=>assembleCandidate(...args)).toThrow();

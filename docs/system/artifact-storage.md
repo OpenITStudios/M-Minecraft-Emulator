@@ -226,7 +226,8 @@ outside this process-local scope. Use DEV.cmd for the full portable environment.
 Each export is a new ignored
 `workspace/packages/lazy-tester/<version>-<12-character-SHA>-<UTC>/` directory.
 It contains exactly the renamed installer, SHA256SUMS.txt and package-manifest.json.
-The manifest is written last, records the full source SHA and installer digest,
+The manifest is written last, records the full source SHA and installer digest
+(computed using the same bounded 1 MiB reader as candidate retention),
 and always marks publication disabled, signing unverified and runtime acceptance
 not executed. It is a build receipt, not a second runtime-readiness store.
 Existing exports are never overwritten or recursively copied into newer ones.

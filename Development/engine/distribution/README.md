@@ -75,7 +75,11 @@ including a signature added after digest approval, blocks export. The
 installer must be an ordinary fresh build output (mtime not older than the
 attempt); this timestamp check is not proof of its internal payload.
 The existing final SHA-256 and immutable three-file receipt remain the
-candidate identity. Export-only skips the unrelated checkout root-launcher build.
+candidate identity. Export and retention share the same bounded 1 MiB
+installer hash reader; no full installer buffer is needed for either hash.
+Staged DLLs must be independent ordinary files, not hardlinks to the reviewed
+source or another artifact; the final locale allowlist is checked again before
+export. Export-only skips the unrelated checkout root-launcher build.
 
 For a separately approved signed distribution, use the existing Tauri
 Windows signing mechanism and Windows SDK SignTool, not a new signing service.

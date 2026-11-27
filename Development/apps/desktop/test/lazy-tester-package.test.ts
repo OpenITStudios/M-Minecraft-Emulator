@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {createHash} from 'node:crypto';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,linkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
 import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload,verifyInstallerLayout,verifyCandidateReleasePolicy} from '../scripts/check-lazy-tester-package.mjs';
@@ -155,6 +155,14 @@ describe('Lazy Tester native package',()=>{
       expect(verifyNativePayload(destination,expected)).toEqual(receipts);
       expect(existsSync(join(destination,'replay-profile-five.bin'))).toBe(false);
       expect(stageNativePayload(source,destination,expected)).toHaveLength(2);
+      const linked=join(root,'linked');mkdirSync(linked);
+      linkSync(join(source,'bootstrap-enroll.dll'),join(linked,'bootstrap-enroll.dll'));
+      // Even exact reviewed bytes must not be signed through a shared file.
+      expect(()=>stageNativePayload(source,linked,expected)).toThrow(/Stale/);
+      expect(existsSync(join(linked,'bootstrap-compat.dll'))).toBe(false);
+      linkSync(join(destination,'bootstrap-compat.dll'),join(root,'external-alias.dll'));
+      expect(()=>verifyNativePayload(destination,expected)).toThrow(/Unsupported native DLL/);
+      rmSync(join(root,'external-alias.dll'));
       writeFileSync(join(source,'bootstrap-compat.dll'),Buffer.alloc(128,0));
       expect(()=>stageNativePayload(source,join(root,'refused'),expected)).toThrow(/reviewed/);
       expect(existsSync(join(root,'refused'))).toBe(false);

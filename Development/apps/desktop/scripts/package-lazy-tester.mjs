@@ -6,8 +6,8 @@ import {basename, dirname, isAbsolute, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
 import {buildRootLauncher} from './build-root-launcher.mjs';
-import {pruneSupersededCandidates} from '../../../tooling/storage/package-recycle.mjs';
-import {processRoles,roleMuiNames} from './prepare-process-roles.mjs';
+import {digestInstallerFile,pruneSupersededCandidates} from '../../../tooling/storage/package-recycle.mjs';
+import {processRoles,roleMuiNames,verifyRoleResources} from './prepare-process-roles.mjs';
 import {reviewedDigests,verifyNativePayload} from './prepare-native-payload.mjs';
 
 const developmentRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
@@ -79,23 +79,23 @@ export function assembleCandidate(cwd, installer, sha, version, stamp) {
   if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 || info.size < 64 || info.size > 512 * 1024 * 1024) {
     throw new Error('Expected an ordinary built installer');
   }
-  const bytes = readFileSync(installer);
-  if (bytes[0] !== 0x4d || bytes[1] !== 0x5a) throw new Error('Expected a Windows executable');
+  const {hash,windowsExecutable}=digestInstallerFile(installer,info.size);
+  if (!windowsExecutable) throw new Error('Expected a Windows executable');
   const name = `Lazy-Tester-${version}-windows-x86_64-setup.exe`;
   const output = resolve(cwd, 'workspace/packages/lazy-tester', `${version}-${sha.slice(0,12)}-${stamp}`);
   ordinaryDirectories(dirname(output));
   mkdirSync(dirname(output), {recursive:true});
   mkdirSync(output); // Never overwrite or merge an earlier candidate.
-  const target = resolve(output, name), hash = digest(bytes);
+  const target = resolve(output, name);
   copyFileSync(installer, target, constants.COPYFILE_EXCL);
-  if (digest(readFileSync(target)) !== hash) throw new Error('Installer changed while exporting; candidate is incomplete');
+  if (digestInstallerFile(target,info.size).hash !== hash) throw new Error('Installer changed while exporting; candidate is incomplete');
   writeFileSync(resolve(output,'SHA256SUMS.txt'), `${hash}  ${name}\n`, {flag:'wx'});
   // Publish the completion receipt last. A partial directory is not a candidate.
   const manifest = {
     schema:1, product:'Lazy Tester', version, sourceCommit:sha, sourceBranch:'Local',
     classification:'DEVELOPMENT_CANDIDATE', releaseReady:false,
     buildCommand:'npm --prefix Development/apps/desktop run build:app',
-    installer:{name, sha256:hash, bytes:bytes.length},
+    installer:{name, sha256:hash, bytes:info.size},
     signing:'NOT_VERIFIED', installedAcceptance:'NOT_EXECUTED',
     minecraftAcceptance:'NOT_EXECUTED', publication:'DISABLED',
   };
@@ -217,8 +217,10 @@ function main() {
   if (sourceRevision(root) !== sha) throw new Error('Source changed during the build; no candidate exported');
   // Tauri's bundler may sign DLL resources after the initial staging check.
   // Both the bundle input and local release copy must still match native admission.
-  verifyNativePayload(resolve(developmentRoot,'apps/desktop/src-tauri/package-resources/lazy-tester'),expected);
+  const bundleInput=resolve(developmentRoot,'apps/desktop/src-tauri/package-resources/lazy-tester');
+  verifyNativePayload(bundleInput,expected);
   verifyNativePayload(resolve(release,'independent-bootstrap'),expected);
+  verifyRoleResources(resolve(bundleInput,'en-US'),true);
   const installer = resolve(release,'bundle/nsis',`Lazy Tester_${version}_x64-setup.exe`);
   requireFreshInstaller(installer,buildStartedAt);
   const result = assembleCandidate(root,installer,sha,version,stamp);
