@@ -1,6 +1,11 @@
 # Lazy Tester Desktop — Current Product
 
 This is the current Tauri 2 / Svelte 5 / TypeScript / Rust application.
+Capture source candidates are capability-gated: selected-instance WebP
+screenshot and independent-slot AV1/MKV recording. Neither reviewed worker
+binary is approved or shipped; controls remain unavailable until review.
+See [recording contract](../../../docs/system/recording.md) and
+[GPU capture worker](../../tooling/agent/native-gpu-capture/README.md).
 The mounted UI is `src/LazyTesterApp.svelte`, not the historical
 `UnifiedManagerApp.svelte`. Play keeps the selected game in the workspace; manual window separation is not offered.
 Native recovery remains available through the original controller. Healthy running

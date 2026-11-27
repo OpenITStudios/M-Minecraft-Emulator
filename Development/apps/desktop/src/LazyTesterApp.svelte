@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport, profileSlots, recordingActive, type RecordingReceipt} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazytester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -77,6 +77,52 @@
   }
   let busy = false, refreshing = false, resizing = false, available = false;
   let screenshotAvailable=false, screenshotBusy=false;
+  let recordingAvailable=false, recordingStatusKnown=false, recordingStatusPending=false, recordingWatch=false;
+  let recordingSlot:ProfileSlot=1;
+  let recordings:RecordingReceipt[]=[];
+  let recordingNotice:{slot:ProfileSlot;message:string}|null=null;
+  $: activeRecordingSlots=new Set(recordings.filter(recordingActive).map(r=>r.slot));
+  $: selectedRecording=recordings.find(r=>r.slot===recordingSlot);
+  $: recordingTarget=profiles.find(p=>p.slot===recordingSlot&&p.state==='RUNNING')?.process;
+  $: canStopRecording=recordingActive(selectedRecording)&&selectedRecording?.state!=='Stopping';
+  $: canStartRecording=recordingStatusKnown&&!recordingActive(selectedRecording)&&page==='workspace'&&
+    available&&!!binding?.configured&&recordingTarget?.responding===true;
+  async function refreshRecordingStatus(){
+    if(!recordingAvailable||recordingStatusPending||disposed)return;
+    recordingStatusPending=true;
+    try{
+      const result=await lazyTester.recordingStatus();
+      if(disposed)return;
+      recordings=result;recordingStatusKnown=true;recordingWatch=result.some(recordingActive);
+    }catch{
+      if(!disposed){recordingStatusKnown=false;recordingWatch=true;}
+    }finally{recordingStatusPending=false;}
+  }
+  async function recordingAction(){
+    if(!recordingAvailable||busy||refreshing||resizing||recordingStatusPending||
+      closeReviewPending||navigationReviewOpen||!recordingStatusKnown)return;
+    const slot=recordingSlot;
+    const receipt=recordings.find(r=>r.slot===slot);
+    const target=profiles.find(p=>p.slot===slot&&p.state==='RUNNING')?.process;
+    if(receipt?.state==='Stopping')return;
+    const stop=recordingActive(receipt);
+    if(!stop&&(!target?.responding||page!=='workspace'||!available||!binding?.configured))return;
+    busy=true;recordingNotice=null;recordingWatch=true;
+    try{
+      if(stop)await lazyTester.stopRecording(slot);
+      else if(target)await lazyTester.startRecording(slot,target);
+    }catch{
+      if(!disposed)recordingNotice={slot,message:stop?'Stop request failed':'Recording start failed'};
+    }finally{
+      await refreshRecordingStatus();
+      busy=false;
+    }
+  }
+  function recordingLabel(slot:ProfileSlot,receipts:RecordingReceipt[],known:boolean,notice:typeof recordingNotice){
+    const state=known?(receipts.find(r=>r.slot===slot)?.state??'Idle'):'Status unavailable';
+    const detail=notice?.slot===slot?' · '+notice.message:'';
+    return 'MC0'+slot+' · '+state+detail;
+  }
   let screenshotNotice:{slot:ProfileSlot;message:string}|null=null;
   async function saveScreenshot(){
     const slot=active;
@@ -577,7 +623,7 @@
   }
   function requestCloseOne(slot: ProfileSlot, trigger: HTMLButtonElement) {
     if (closeInProgress || nativeExitReview || busy || closingOneSlot !== null ||
-        closeOneSlot !== null) return;
+        closeOneSlot !== null || activeRecordingSlots.has(slot)) return;
     const profile=profiles.find(item=>item.slot===slot);
     if (!profile || !['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)) return;
     // Keep the user's confirmation available while an old Inspect finishes,
@@ -614,7 +660,7 @@
   async function confirmCloseOne() {
     const slot=closeOneSlot;
     if (slot===null || closeInProgress || nativeExitReview || busy ||
-        refreshing || resizing || closingOneSlot!==null) return;
+        refreshing || resizing || closingOneSlot!==null || activeRecordingSlots.has(slot)) return;
     // A committed CloseOne review disappears immediately. Before its focused
     // button is removed, anchor keyboard context to the SAME stable MC slot
     // group, not to body, another Minecraft process or a new Tab stop.
@@ -959,9 +1005,15 @@
     catch { layoutPersistenceIssue = 'Saved layout unavailable. Using Bottom.'; }
     mounted = true; void initializeLaunchers();
     void lazyTester.screenshotAvailable().then(value=>{if(!disposed)screenshotAvailable=value;}).catch(()=>{});
+    void lazyTester.recordingAvailable().then(value=>{
+      if(!disposed&&value){recordingAvailable=true;void refreshRecordingStatus();}
+    }).catch(()=>{});
     // Keep a review stable while the user decides; the backend rechecks admission on action.
     // Reuse this observer rather than adding another interval or process watcher.
     const interval = setInterval(() => {
+      // Capture status is a bounded local read, only while a recording may
+      // be active or its terminal receipt is unknown. No second interval.
+      if(recordingWatch&&!busy&&!closeInProgress&&!nativeExitReview&&!document.hidden)void refreshRecordingStatus();
       // Unsupported, hidden and closing views never schedule Minecraft IPC.
       if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
           !selectiveOpen && clearSlot===null && recovery===null && fullReview===null &&
@@ -1069,6 +1121,23 @@
       <div class="lazytester-brand" aria-label="LazyTester"><span class="lazytester-brand-mark" aria-hidden="true"></span><span class="lazytester-brand-name">LazyTester</span></div>
     {/if}
     <nav aria-label="Main navigation">
+      {#if recordingAvailable}
+        <div class="lazytester-recording-controls" role="group" aria-label="Minecraft recording">
+          <select aria-label="Recording Minecraft profile" bind:value={recordingSlot}
+            disabled={busy||closeReviewPending} on:change={()=>recordingNotice=null}>
+            {#each profileSlots as slot}
+              <option value={slot}>{recordingLabel(slot,recordings,recordingStatusKnown,recordingNotice)}</option>
+            {/each}
+          </select>
+          <button class="lazytester-secondary" type="button"
+            aria-label={(canStopRecording?'Stop recording Minecraft - ':'Start recording Minecraft - ')+recordingSlot}
+            title={recordingNotice?.slot===recordingSlot?recordingNotice.message:recordingLabel(recordingSlot,recordings,recordingStatusKnown,null)}
+            disabled={busy||refreshing||resizing||recordingStatusPending||!recordingStatusKnown||closeReviewPending||navigationReviewOpen||
+              (!canStopRecording&&!canStartRecording)}
+            on:click={()=>void recordingAction()}>{selectedRecording?.state==='Stopping'?'Stopping…':canStopRecording?'Stop':'Record'}</button>
+          <span class="lazytester-visually-hidden" role="status">{recordingLabel(recordingSlot,recordings,recordingStatusKnown,recordingNotice)}</span>
+        </div>
+      {/if}
       {#if page==='workspace'}
         <button class="lazytester-secondary lazytester-settings-button" disabled={navigationReviewOpen||nativeBackend!=='WindowsNative'} on:click={()=>navigate('settings')}>Settings</button>
       {:else}
@@ -1196,7 +1265,7 @@
         <LauncherRail {profiles} {labels} {healthIssues} {active} {primary} {detached}
           unresolvedRecovery={uncertainWindowSlots} {launchFailures}
           {available} bindingConfigured={!!binding?.configured} {busy}
-          {closeInProgress} {nativeExitReview} {guidedRecoveryBlocked}
+          {closeInProgress} {nativeExitReview} {guidedRecoveryBlocked} {activeRecordingSlots}
           reviewPending={closeReviewPending}
           observePreview={image} onSelect={select} onLaunch={launch}
           onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}/>

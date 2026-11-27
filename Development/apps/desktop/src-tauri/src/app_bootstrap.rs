@@ -110,7 +110,8 @@ pub fn run() {
             #[cfg(windows)]
             {
                 if let tauri::WindowEvent::CloseRequested{api,..}=event {
-                if cfg!(feature="lazy-tester-package") || crate::engine::workspace_surface::is_active() {
+                if cfg!(feature="lazy-tester-package") || crate::engine::workspace_surface::is_active() ||
+                    crate::engine::capture::require_recording_idle(None).is_err() {
                     use std::sync::atomic::{AtomicBool,Ordering};
                     static CONFIRMING:AtomicBool=AtomicBool::new(false);
                     api.prevent_close();

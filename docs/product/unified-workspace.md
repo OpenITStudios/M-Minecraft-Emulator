@@ -245,7 +245,7 @@ not a claimed RAM/gameplay optimization.
 Four native DWM preview destinations are implemented as nonactivating top-level
 windows owned by Lazy Tester. They render only controller-attributed game surfaces;
 clicks enter the existing selection path, and input goes directly to the selected
-game. No screenshot/video encoder or game input forwarding is introduced.
+game. This presentation transport introduces no screenshot/video encoder or game input forwarding. The separately scoped [capture/recording workstream](../../planning/development.md#capture-and-recording--separately-authorized-source-workstream) adds gated product capture source; it does not change this DWM transport.
 
 Background presentation uses the existing checkpoint/helper owner. Live-preview
 mode parks ordinary game windows beyond the virtual desktop, keeping them visible

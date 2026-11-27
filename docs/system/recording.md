@@ -1,6 +1,6 @@
 # Product recording — source candidate
 
-CAP-03/04 only; CAP-05 UI pending. The retained game controller owns process
+CAP-03/04/05 initial source checkpoint; both binary admission gates remain closed. The retained game controller owns process
 and profile lifetimes. DWM thumbnails and LTG1 AI observation stay unchanged.
 
 ## Backend decision
@@ -56,7 +56,15 @@ file, which is not marked Saved or auto-deleted by storage maintenance.
 Immediate job assignment has a small spawn-to-assignment race; binary
 approval requires review of this boundary. No game process is in the job.
 Desktop close commands refuse active recordings before game/workspace
-mutation; external game exit invalidates the worker. No change to account,
+mutation; external game exit invalidates the worker. The gated topbar
+slot selector projects only bounded native status receipts and Record/Stop
+commands. Stop is independent of workspace selection and available from
+Settings; start is limited to Play with a responding profile. The existing
+2 s observer reads recording status only while active or uncertain. Close
+controls for a known active slot are disabled; native CloseOne/CloseAll
+still enforce admission. A switch or layout that changes target client
+dimensions can invalidate recording; this is not proof of uninterrupted
+recording across selection changes. No change to account,
 world, cache or diagnostic data.
 
 ## Acceptance — NOT_EXECUTED
@@ -65,6 +73,6 @@ D3D11 frames reach NVENC without CPU readback, decode the completed MKV,
 test stop/start, immediate stop, target exit/resize, no-clobber, disk full,
 GPU exhaustion, failure cleanup, crash recovery, job containment, mixed DPI,
 background/occluded games, and one-to-five workloads. Measure CPU/GPU/RAM,
-game FPS, actual video FPS, bitrate, small text and texture detail. CAP-05
-must connect typed UI status and explicit controls before package review.
+game FPS, actual video FPS, bitrate, small text and texture detail. Review CAP-05 typed UI controls at supported widths/DPI, independently
+stop any slot, verify close refusal and failure/terminal status.
 All native/build/fixture execution and release remain held.

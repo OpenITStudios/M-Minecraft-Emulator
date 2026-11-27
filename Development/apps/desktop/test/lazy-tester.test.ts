@@ -1,7 +1,7 @@
 import {sameWorkspaceGeometry, type WorkspaceGeometry} from '../src/app/workspaceGeometry.js';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -867,5 +867,22 @@ describe('Workspace geometry identity',()=>{
     expect(sameWorkspaceGeometry(baseline,{...baseline,tiles:[{slot:2,rect:rect(20,401,160,90)}]})).toBe(false);
     expect(sameWorkspaceGeometry(baseline,{...baseline,pixelRatio:1.25})).toBe(false);
     expect(sameWorkspaceGeometry(baseline,{...baseline,tiles:[]})).toBe(false);
+  });
+});
+
+describe('Recording receipt contract',()=>{
+  it('accepts independent slots without interpreting a launch as a recording',()=>{
+    const receipts=parseRecordingStatus([{slot:1,state:'Starting',frames:0},{slot:3,state:'Recording',frames:7},{slot:5,state:'Saved',frames:120}]);
+    expect(receipts.filter(recordingActive).map(r=>r.slot)).toEqual([1,3]);
+    expect(recordingActive(undefined)).toBe(false);
+    expect(recordingActive({slot:2,state:'Stopping',frames:0})).toBe(true);
+  });
+  it('refuses duplicate, invalid or unconfirmed recording receipts',()=>{
+    const good={slot:1,state:'Recording',frames:1};
+    for(const value of [[good,good],[{...good,slot:6}],[{...good,frames:0}],
+      [{...good,state:'Saved',frames:0}],[{...good,state:'Starting'}],
+      [{...good,frames:-1}],[{...good,state:'Success'}],[{...good,path:'private.mkv'}],null]){
+      expect(()=>parseRecordingStatus(value)).toThrow();
+    }
   });
 });

@@ -21,6 +21,7 @@
   export let closeInProgress: boolean;
   export let nativeExitReview: boolean;
   export let guidedRecoveryBlocked: boolean;
+  export let activeRecordingSlots: ReadonlySet<ProfileSlot> = new Set();
   export let observePreview: (node: HTMLElement, slot: ProfileSlot) => {destroy(): void};
   export let onSelect: (slot: ProfileSlot) => void;
   export let onLaunch: (slot: ProfileSlot) => void;
@@ -106,8 +107,8 @@
       {#if hasClose}
         <button class="lazytester-secondary lazytester-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}
-          title={'Close Minecraft - '+profile.slot+' normally'}
-          disabled={busy||reviewPending||closeInProgress||nativeExitReview||!available||!bindingConfigured}
+          title={activeRecordingSlots.has(profile.slot)?'Stop recording before closing Minecraft - '+profile.slot:'Close Minecraft - '+profile.slot+' normally'}
+          disabled={busy||reviewPending||closeInProgress||nativeExitReview||!available||!bindingConfigured||activeRecordingSlots.has(profile.slot)}
           on:click={event=>onRequestClose(profile.slot,event.currentTarget)}><span aria-hidden="true">×</span></button>
       {/if}
     </div>

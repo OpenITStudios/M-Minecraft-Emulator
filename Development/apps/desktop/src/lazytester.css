@@ -1053,3 +1053,9 @@ body{
 .lazytester-storage-maintenance{margin-top:12px}
 .lazytester-storage-maintenance>summary{cursor:pointer;color:var(--lazytester-muted);padding:8px 0}
 .lazytester-storage-maintenance>.lazytester-settings-panel{margin-top:8px}
+
+/* Fixed-height recording controls; state changes must not resize the Play viewport. */
+.lazytester-recording-controls{display:flex;align-items:center;gap:6px;min-width:0}
+.lazytester-recording-controls select{width:150px;max-width:150px;min-height:32px;padding:4px 6px;border:1px solid var(--lazytester-line);border-radius:6px;background:var(--lazytester-panel);color:var(--lazytester-text);font:inherit;font-size:12px}
+.lazytester-recording-controls button{width:86px;white-space:nowrap}
+@media(max-width:650px){.lazytester-recording-controls select{width:112px;max-width:112px}.lazytester-recording-controls button{width:74px;padding-inline:4px}}

@@ -435,7 +435,35 @@ export function parseScreenshotReceipt(value:unknown,slot:ProfileSlot):Screensho
     throw new TypeError('Invalid screenshot receipt');
   return value as unknown as ScreenshotReceipt;
 }
+export type RecordingState='Starting'|'Recording'|'Stopping'|'Saved'|'Failed';
+export interface RecordingReceipt {slot:ProfileSlot; state:RecordingState; frames:number}
+export function recordingActive(receipt:RecordingReceipt|undefined):boolean {
+  return receipt!==undefined&&['Starting','Recording','Stopping'].includes(receipt.state);
+}
+export function parseRecordingStatus(value:unknown):RecordingReceipt[] {
+  if(!Array.isArray(value)||value.length>5)throw new TypeError('Invalid recording status');
+  const seen=new Set<number>();
+  return value.map((item:unknown)=>{
+    if(!record(item)||!exact(item,['slot','state','frames'])||
+      !profileSlots.includes(item.slot as ProfileSlot)||seen.has(item.slot as number)||
+      !['Starting','Recording','Stopping','Saved','Failed'].includes(String(item.state))||
+      typeof item.frames!=='number'||!Number.isSafeInteger(item.frames)||item.frames<0||
+      ((item.state==='Recording'||item.state==='Saved')&&item.frames===0)||
+      (item.state==='Starting'&&item.frames!==0))
+      throw new TypeError('Invalid recording status');
+    seen.add(item.slot as number);
+    return item as unknown as RecordingReceipt;
+  });
+}
 export const lazyTester = {
+  recordingAvailable:async()=>await invokeRuntime<unknown>('lazy_tester_recording_available')===true,
+  recordingStatus:async()=>parseRecordingStatus(await invokeRuntime<unknown>('lazy_tester_recording_status')),
+  startRecording:async(slot:ProfileSlot,expected:OwnedProcess)=>{
+    const result=await invokeRuntime<unknown>('lazy_tester_start_recording',{slot,expected});
+    if(typeof result!=='boolean')throw new TypeError('Invalid recording start receipt');
+    return result;
+  },
+  stopRecording:async(slot:ProfileSlot)=>{await invokeRuntime<void>('lazy_tester_stop_recording',{slot});},
   screenshotAvailable:async()=>await invokeRuntime<unknown>('lazy_tester_screenshot_available')===true,
   screenshot:async(slot:ProfileSlot,expected:OwnedProcess)=>parseScreenshotReceipt(
     await invokeRuntime<unknown>('lazy_tester_screenshot',{slot,expected}),slot),
