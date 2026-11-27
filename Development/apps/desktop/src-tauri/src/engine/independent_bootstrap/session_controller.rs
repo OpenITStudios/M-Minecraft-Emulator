@@ -1498,18 +1498,22 @@ fn audio_maintenance_needed(
 fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
     mode:crate::engine::manager_settings::BackgroundAudio, foreground:Option<u32>)->io::Result<()> {
     use crate::engine::manager_settings::BackgroundAudio;
-    let targets = if mode == BackgroundAudio::Keep {
-        Vec::new()
-    } else {
-        sessions.running.iter().flatten().filter_map(|s| s.children[0].identity().ok()).collect::<Vec<_>>()
-    };
+    let mut targets=[(0u32,0u64);5];
+    let mut count=0;
+    if mode!=BackgroundAudio::Keep {
+        for identity in sessions.running.iter().flatten().filter_map(|s|s.children[0].identity().ok()) {
+            targets[count]=identity;
+            count+=1;
+        }
+    }
+    let targets=&targets[..count];
     if targets.is_empty() {
         if let Some(current) = audio.as_mut() { current.restore()?; }
         *audio = None;
         return Ok(());
     }
     if audio.is_none(){*audio=Some(super::session_audio::Audio::new()?);}
-    audio.as_mut().unwrap().sync(&targets, foreground, |pid, born| {
+    audio.as_mut().unwrap().sync(targets, foreground, |pid, born| {
         // Cheap retained metadata only narrows the candidate set; the
         // matching child still needs fresh native identity/liveness proof.
         sessions.running.iter().flatten().any(|started| {

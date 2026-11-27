@@ -457,7 +457,7 @@ impl Server {
         let stopped = Arc::new(AtomicBool::new(false));
         let stop = Arc::clone(&stopped);
         let (sender, requests) = mpsc::sync_channel(1);
-        let worker = thread::spawn(move || {
+        let worker = thread::Builder::new().name("lazytester-session-pipe".into()).spawn(move || {
             while !stop.load(Ordering::Acquire) {
                 let connected =
                     unsafe { ConnectNamedPipe(file.as_raw_handle() as _, ptr::null_mut()) } != 0
@@ -477,7 +477,7 @@ impl Server {
                     DisconnectNamedPipe(file.as_raw_handle() as _);
                 }
             }
-        });
+        })?;
         Ok(Self {
             requests,
             stopped,

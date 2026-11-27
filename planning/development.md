@@ -21,7 +21,8 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 04 Desktop/workspace | UI-03 launcher; UI-04 storage UI | Close reservation now follows actual control; observed selection only; cache acknowledgement invalidation and selection isolation integrated; visual acceptance held |
 | 04 Desktop/workspace | UI-05 consumers; UI-06 DPI | Explicit DPR observation and teardown, native edge rounding, layout invalidation and storage preference refresh integrated; browser/native visual acceptance held |
 | 05 Optimization | OPT-03 polling | Inactive native controller uses 1s interruptible maintenance timeout; active games, queued cleanup and audio leases retain 250ms; source integrated, measured benefit unknown |
-| 05 Optimization remaining | OPT-01 workers; OPT-02 memory; OPT-04 dependencies; OPT-05 startup/shutdown | Open; evidence-driven, no speculative rewrite |
+| 05 Optimization | OPT-01 workers; OPT-02 memory | Coalesced presentation-only focus wake hints, unchanged HUD event writes skipped, fixed five-slot audio target array; actual overhead not measured |
+| 05 Optimization remaining | OPT-04 dependencies; OPT-05 startup/shutdown | Named fallible pipe worker startup integrated; remaining dependency and lifecycle review open |
 | 06 Integration | INT-01 naming; INT-02 ABI; INT-03 build; INT-04 fixtures; INT-05 docs/Unreleased; INT-06 readiness | Open |
 | 07 Native validation | VAL-01 compile/link; VAL-02 DLL/payload; VAL-03 five sessions; VAL-04 storage safety; VAL-05 performance; VAL-06 installer | Held for separately authorized PC-local phase |
 

@@ -70,6 +70,17 @@ mod windows {
     static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
     static EVENTS: AtomicU64 = AtomicU64::new(0);
     const REFRESH_POLICY: u32 = WM_APP + 0x324;
+    const REFRESH_PRESENTATION: u32 = WM_APP + 0x325;
+    static PRESENTATION_PENDING: AtomicBool = AtomicBool::new(false);
+
+    fn queue_presentation_refresh(pending:&AtomicBool, post:impl FnOnce()->io::Result<()>) -> io::Result<()> {
+        if pending.swap(true,Ordering::AcqRel) {return Ok(());}
+        if let Err(error)=post() {
+            pending.store(false,Ordering::Release);
+            return Err(error);
+        }
+        Ok(())
+    }
     static POLICIES: Mutex<Vec<Arc<Binding>>> = Mutex::new(Vec::new());
     static PRIVATE_START: AtomicBool = AtomicBool::new(false);
 
@@ -113,6 +124,7 @@ mod windows {
         stop: OwnedHandle,
         hud_selected: OwnedHandle,
         active: AtomicBool,
+        hud_visible: AtomicBool,
         stopped: AtomicBool,
     }
     impl Binding {
@@ -145,6 +157,7 @@ mod windows {
                 stop: event(true)?,
                 hud_selected: event(true)?,
                 active: AtomicBool::new(false),
+                hud_visible: AtomicBool::new(false),
                 stopped: AtomicBool::new(false),
             })
         }
@@ -161,6 +174,7 @@ mod windows {
                 SetEvent(self.changed.as_raw_handle() as _);
             }
             self.active.store(false, Ordering::Release);
+            self.hud_visible.store(false, Ordering::Release);
         }
         fn publish(&self, active: bool) -> io::Result<()> {
             if self.stopped.load(Ordering::Acquire) {
@@ -186,16 +200,19 @@ mod windows {
                 return Err(error);
             }
             self.active.store(active, Ordering::Release);
+            if self.stopped.load(Ordering::Acquire) {self.finish();}
             Ok(())
         }
         fn publish_hud_selection(&self, selected: bool) -> io::Result<()> {
             if self.stopped.load(Ordering::Acquire) { return Ok(()); }
             if !self.live() { self.finish(); return Ok(()); }
+            if self.hud_visible.load(Ordering::Acquire)==selected {return Ok(());}
             let ok = unsafe {
                 if selected { SetEvent(self.hud_selected.as_raw_handle() as _) }
                 else { ResetEvent(self.hud_selected.as_raw_handle() as _) }
             };
             if ok == 0 { let error = io::Error::last_os_error(); self.finish(); return Err(error); }
+            self.hud_visible.store(selected,Ordering::Release);
             if self.stopped.load(Ordering::Acquire) { self.finish(); }
             Ok(())
         }
@@ -304,10 +321,11 @@ mod windows {
             return Err(io::Error::new(io::ErrorKind::WouldBlock,
                 "FPS focus worker is not accepting presentation notifications"));
         }
-        if unsafe { PostThreadMessageW(worker.thread_id, REFRESH_POLICY, 0, 0) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
-        Ok(())
+        queue_presentation_refresh(&PRESENTATION_PENDING,|| {
+            if unsafe { PostThreadMessageW(worker.thread_id, REFRESH_PRESENTATION, 0, 0) } == 0 {
+                Err(io::Error::last_os_error())
+            } else {Ok(())}
+        })
     }
     fn finish_policies() {
         let list = POLICIES
@@ -496,6 +514,13 @@ mod windows {
                     dispatch_error = Some(io::Error::last_os_error());
                     break;
                 }
+                if msg.message == REFRESH_PRESENTATION {
+                    // Release admission before sampling: an arriving change can
+                    // queue a new wake while this refresh is in progress.
+                    PRESENTATION_PENDING.store(false,Ordering::Release);
+                    refresh();
+                    continue;
+                }
                 if msg.message == REFRESH_POLICY {
                     let list = POLICIES.lock().unwrap_or_else(|p| p.into_inner());
                     if list.is_empty() && PRIVATE_START.swap(false, Ordering::AcqRel) {
@@ -598,6 +623,7 @@ mod windows {
             })??;
         }
         EVENTS.store(0, Ordering::Relaxed);
+        PRESENTATION_PENDING.store(false,Ordering::Release);
         // Zero-capacity handshake: the hook thread's send succeeds only
         // when this caller actually receives the thread ID. After a timeout
         // a late send must fail and the hook is uninstalled on its own thread.
@@ -985,6 +1011,20 @@ pub fn shutdown() {
 
 #[cfg(test)]
 mod tests {
+        #[test]
+        fn presentation_hints_coalesce_and_failed_post_reopens_admission() {
+            let pending=std::sync::atomic::AtomicBool::new(false);
+            let mut posts=0;
+            super::queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
+            super::queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
+            assert_eq!(posts,1);
+            pending.store(false,std::sync::atomic::Ordering::Release);
+            assert!(super::queue_presentation_refresh(&pending,||Err(std::io::Error::other("post failed"))).is_err());
+            assert!(!pending.load(std::sync::atomic::Ordering::Acquire));
+            super::queue_presentation_refresh(&pending,||{posts+=1;Ok(())}).unwrap();
+            assert_eq!(posts,2);
+        }
+
     use super::*;
     #[test]
     fn observer_contract_is_count_only_without_window_identity_or_fps() {
