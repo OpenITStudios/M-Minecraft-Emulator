@@ -6,7 +6,7 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -124,14 +124,37 @@ describe('Passive idle observation boundary',()=>{
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
     const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
     const commands=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
-    expect(app).toContain("void refresh(page==='workspace' && available && workspaceSettledIdle && !sessionObservationHint)");
+    expect(app).toContain('void refresh(passiveIdleAllowed(page, available, workspaceSettledIdle,');
+    expect(app).toContain('sessionObservationHint, settings, now - lastSettingsObservedAt)');
+    expect(app).toContain('lastSettingsObservedAt = performance.now();');
+    expect(bridge).toContain("request:{operation:'InspectSettings'},passiveIdle:true");
+    expect(bridge).toContain('return value===null ? null : settingsSession(value);');
     expect(app).toContain('if (!isCurrentObservation(issued) || snapshot===null) return;');
     expect(bridge).toContain("inspect: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Inspect'}}))");
     expect(bridge).toContain('return value===null ? null : parseSession(value);');
     expect(()=>parseSession(null)).toThrow();
-    expect(commands).toContain('Passive idle hint is restricted to Inspect');
+    expect(commands).toContain('Passive idle hint is restricted to Inspect or InspectSettings');
+    expect(commands).toContain('SessionRequest::Inspect | crate::engine::native_clients_session::SessionRequest::InspectSettings');
     expect(commands).toContain('!crate::engine::native_clients_session::passive_idle_needs_inspect()?');
     expect(commands).toContain('crate::engine::native_clients_session::request(request).map(Some)');
+  });
+});
+describe('Passive settings refresh policy',()=>{
+  it('skips only healthy idle background reads with a recent complete settings report',()=>{
+    const settings={activeFps:60,backgroundFps:15,renderDistanceChunks:12,canApplyPreset:true,
+      changedProfiles:null,backgroundAudio:'Keep' as const,storagePreferences:{autoClearWebCache:false}};
+    for(const page of ['settings','storage'] as const){
+      expect(passiveIdleAllowed(page,true,true,false,settings,10_000)).toBe(true);
+      expect(passiveIdleAllowed(page,true,true,false,settings,60_000)).toBe(false);
+      expect(passiveIdleAllowed(page,true,true,true,settings,10_000)).toBe(false);
+      expect(passiveIdleAllowed(page,false,true,false,settings,10_000)).toBe(false);
+      expect(passiveIdleAllowed(page,true,false,false,settings,10_000)).toBe(false);
+      expect(passiveIdleAllowed(page,true,true,false,null,10_000)).toBe(false);
+      expect(passiveIdleAllowed(page,true,true,false,{...settings,storagePreferences:undefined},10_000)).toBe(false);
+      expect(passiveIdleAllowed(page,true,true,false,{...settings,audioIssue:'unknown'},10_000)).toBe(false);
+      expect(passiveIdleAllowed(page,true,true,false,{...settings,canApplyPreset:false},10_000)).toBe(false);
+    }
+    expect(passiveIdleAllowed('workspace',true,true,false,null,Infinity)).toBe(true);
   });
 });
 describe('Storage on-demand boundary', () => {
@@ -140,7 +163,7 @@ describe('Storage on-demand boundary', () => {
     const refresh=app.split('async function refresh(passiveIdle = false)')[1]!.split('async function launch(')[0]!;
     const selection=app.split('function chooseSlot(')[1]!.split('let queuedPerformance:')[0]!;
     expect(refresh).toContain("page === 'settings' || page === 'storage'");
-    expect(refresh).toContain('? await lazyTester.settings()');
+    expect(refresh).toContain('? (passiveIdle ? await lazyTester.settingsIdle() : await lazyTester.settings())');
     expect(refresh).toContain('passiveIdle ? await lazyTester.inspectIdle() : await lazyTester.inspect()');
     expect(refresh).not.toContain('inspectSelectedStorage(');
     expect(selection).toContain('await inspectSelectedStorage(issued)');

@@ -106,7 +106,7 @@ One deadline-driven UI timer observes eligible sessions every 2 seconds
 during launch/recovery/unsettled or live non-Play, every 5 seconds in
 settled healthy Play (current selected binding and registered running
 background previews), or every 10 seconds when healthy idle. The existing
-identity-matched DWM invalidation, WebView focus return during Play,
+identity-matched DWM invalidation, WebView focus return,
 and visibility resume coalesce a read hint against the existing 2-second
 last-start floor. Hints arriving during a read remain pending; blocked
 lanes retain their admission and the original read owns native verification.
@@ -120,15 +120,22 @@ deadline, hidden views pause scheduled reads, and disposal cancels the
 timer. These are source scheduling targets, not measured latency.
 Explicit Refresh and native mutation admission remain independent.
 Healthy stopped Play's ordinary 10s background tick uses the existing
-desktop command with an optional passive-idle hint. Under the same manager
-and controller admission, pending/uncertain transport, an existing controller
-or any Minecraft.Windows.exe candidate requires a complete Inspect. A
-successful negative native process-name scan with absent controller gates
-before/after returns null (no new observation), not a fabricated stopped
-snapshot or proof of installation. Startup, explicit refresh, focus/visibility
-hints and mutations retain full verification. Installation changes without a
-candidate or a UI hint can remain unobserved until full inspection; native
-launch/settings/storage mutation admission is not weakened.
+desktop command with an optional passive-idle hint. Healthy stopped Settings
+and Storage can use the same hint only with a recent complete settings
+receipt; the first eligible tick after its age reaches 60 seconds performs
+full Settings observation. Under the same manager and controller admission,
+pending/uncertain transport, an existing controller or any
+Minecraft.Windows.exe candidate requires the complete requested observation
+(only full Inspect reconciles uncertain transport). A successful negative
+native process-name scan with absent controller gates before/after returns
+null (no new observation), not a fabricated stopped snapshot or proof of
+installation. Startup, explicit refresh, focus/visibility hints and mutations
+retain their existing verification routes. Settings navigation and manual
+Settings Refresh stay full; selected Storage Refresh stays on demand.
+Unhinted external preference or installation changes can remain unobserved
+until the next full inspection. The settings age is not a hard deadline
+when the UI is blocked or hidden. Native launch/settings/storage mutation
+admission is not weakened.
 Without a retained controller, read-only Settings shares the fresh verified
 empty inventory already used for its stopped roster; saves still reobserve
 after the save attempt. A Settings report resolves its checked directory

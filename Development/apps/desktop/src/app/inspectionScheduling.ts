@@ -130,6 +130,23 @@ export function periodicInspectionInterval(
     runningCount > 0 ? 2000 : 10_000;
 }
 
+// The same idle hint can skip an unchanged Settings/Storage observation.
+// Periodic full settings receipts still discover external edits and errors.
+export function passiveIdleAllowed(
+  page: 'workspace' | 'settings' | 'storage',
+  available: boolean,
+  settledIdle: boolean,
+  hinted: boolean,
+  settings: SettingsReport | null,
+  settingsAgeMs: number,
+): boolean {
+  if (!available || !settledIdle || hinted) return false;
+  if (page === 'workspace') return true;
+  return settings !== null && settings.canApplyPreset &&
+    settings.backgroundAudio !== undefined && !settings.audioIssue &&
+    settings.storagePreferences !== undefined && settingsAgeMs >= 0 && settingsAgeMs < 60_000;
+}
+
 // A hint accelerates the next read, never resets its last-start clock or
 // bypasses the existing admission lane. Bursts coalesce at the 2s floor.
 export function sessionInspectionDeadline(lastStartedAt: number, interval: number, hinted: boolean): number {

@@ -51,8 +51,8 @@ pub async fn lazy_tester_session(
     passive_idle: Option<bool>,
 ) -> Result<Option<crate::engine::native_clients_session::SessionSnapshot>, String> {
     let passive_idle=passive_idle.unwrap_or(false);
-    if passive_idle && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {
-        return Err("Passive idle hint is restricted to Inspect".into());
+    if passive_idle && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect | crate::engine::native_clients_session::SessionRequest::InspectSettings) {
+        return Err("Passive idle hint is restricted to Inspect or InspectSettings".into());
     }
     if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {return Err("Startup diagnostic cannot launch or modify games".into());}
     // Retired individual graphics controls cannot bypass the global desktop policy.

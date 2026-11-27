@@ -15,7 +15,7 @@
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
   import type {StorageReview, StorageReviewKind, StorageSettingsAction} from './app/storageReview.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -163,6 +163,7 @@
   let manualRefreshRequested=false, manualRefreshing=false;
   // Each observation uses its own last-start deadline; both share one timer.
   let lastInspectionStartedAt = Number.NEGATIVE_INFINITY;
+  let lastSettingsObservedAt = Number.NEGATIVE_INFINITY;
   // One coalesced hint for the existing read lane, not a native receipt.
   let sessionObservationHint = false;
   let lastRecordingInspectionStartedAt = Number.NEGATIVE_INFINITY;
@@ -407,7 +408,7 @@
     sessionObservationHint = false;
     try {
       const snapshot = page === 'settings' || page === 'storage'
-        ? await lazyTester.settings()
+        ? (passiveIdle ? await lazyTester.settingsIdle() : await lazyTester.settings())
         : passiveIdle ? await lazyTester.inspectIdle() : await lazyTester.inspect();
       // Null is a cheap negative hint, not a new status or readiness receipt.
       // A close review starting mid-request invalidates this old snapshot.
@@ -896,6 +897,7 @@
     if (!sameProfileObservation(profiles, incoming)) profiles = incoming;
   }
   function publishSettings(incoming: SettingsReport) {
+    lastSettingsObservedAt = performance.now();
     if (!sameSettingsObservation(settings, incoming)) settings = incoming;
   }
   function observeSettings(incoming: SettingsReport) {
@@ -1136,7 +1138,8 @@
         void refreshRecordingStatus();
       if (sessionDue !== null && sessionDue <= now && sessionObservationEnabled &&
           !closeReviewActive(reviewState()) && binding?.configured && !selectiveOpen && storageReview===null)
-        void refresh(page==='workspace' && available && workspaceSettledIdle && !sessionObservationHint);
+        void refresh(passiveIdleAllowed(page, available, workspaceSettledIdle,
+          sessionObservationHint, settings, now - lastSettingsObservedAt));
     }, Math.max(0, Math.ceil(due - performance.now())));
     observationTimer = timer;
   }
@@ -1169,7 +1172,7 @@
     };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
     const returnedFocus = () => {
-      if (page==='workspace' && available && managerVisible)
+      if (available && managerVisible)
         sessionObservationHint=true;
     };
     window.addEventListener('focus', returnedFocus);

@@ -500,6 +500,10 @@ export const lazyTester = {
   reportStartup:(report:{connection:string;issue:string;cards:number;enabled:number})=>invokeRuntime<void>('startup_diagnostic_result',report),
   startupCapabilities:async()=>parseStartupCapabilities(await invokeRuntime<unknown>('lazy_tester_startup_capabilities')),
   settings:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'}})),
+  settingsIdle:async()=>{
+    const value=await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'},passiveIdle:true});
+    return value===null ? null : settingsSession(value);
+  },
   savePerformance:async(activeFps:number,backgroundFps:number)=>{
     if(!validFpsLimits(activeFps,backgroundFps))throw new TypeError('Use whole FPS limits from 5 to 1000. Background FPS must not exceed active FPS.');
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SavePerformance',activeFps,backgroundFps}}));
