@@ -2,6 +2,9 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Launcher UI consumer checkpoint: Bottom rail horizontal gap reduced to 8px; compact header uses 27px Close reservation, 2px inter-label gap, inherited product font and consistent 24px status line height. Existing high-zoom fallback and 24px Close target retained. Reconciled stale named-container and Close-review Refresh source fixtures; browser longest-label acceptance additionally checks actual Close bounds where present. Tests NOT_EXECUTED; actual text fit and native geometry remain unverified. No new UI state or native operations.
+
+
 Selective Cleanup consumer checkpoint: refresh preserves selections only when identity, root and name all match; rejected review invalidates all cached categories and selections so stale cross-category data cannot be silently retried. Browser fixture now exercises read-only inventory, cross-category review, dependency warning, replaced identity, rejected review and delayed receipt after Close through existing bridge; NOT_EXECUTED. No public deletion or new settings writes. FPS HUD currently measures accepted Present rate and visibility follows owner HWND, not manager-selected identity; do not substitute pacing ceiling or foreground policy for exact selection. Selected-only native FPS presentation remains unresolved; capture and storage mutation gates held.
 
 

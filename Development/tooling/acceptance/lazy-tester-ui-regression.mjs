@@ -722,8 +722,10 @@ try {
           status.textContent=label;
           const a=name.getBoundingClientRect(),b=status.getBoundingClientRect(),h=header.getBoundingClientRect();
           const reserved=parseFloat(getComputedStyle(header).paddingRight);
+          const close=header.closest('.lazytester-launcher-entry').querySelector('.lazytester-close-launcher');
+          const closeLeft=close?close.getBoundingClientRect().left:h.right-reserved;
           return Math.abs((a.top+a.bottom)-(b.top+b.bottom))<=2 &&
-            b.left>=a.right && b.right<=h.right-reserved+1 &&
+            b.left>=a.right && b.right<=Math.min(h.right-reserved,closeLeft)+1 &&
             name.scrollWidth<=name.clientWidth+1 && status.scrollWidth<=status.clientWidth+1;
         });
       } finally {status.textContent=original;}

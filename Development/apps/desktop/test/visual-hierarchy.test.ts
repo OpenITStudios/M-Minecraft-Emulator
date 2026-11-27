@@ -119,7 +119,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(app).not.toContain('lazytester-workspace-monitoring');
     expect(settings).toContain('id="workspace-layout"');
     expect(settings).toContain('onChooseWorkspaceLayout');
-    expect(css).toContain('@container (min-width:960px) and (min-height:840px)');
+    expect(css).toContain('@container lazytester-workspace (min-width:960px) and (min-height:840px)');
     expect(css).not.toContain('lazytester-workspace-monitoring');
     expect(css).not.toContain('clamp(96px,15vh,136px)');
     expect(css).not.toContain('clamp(80px,16vh,180px)');
@@ -129,7 +129,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     const css=source('lazytester.css');
     const refresh=app.indexOf('bind:this={headerRefreshButton}');
     expect(app).toContain('{#if showHeaderRefresh}');
-    expect(app).toContain("page!=='workspace' || manualRefreshing || manualRefreshRequested");
+    expect(app).toContain("page!=='workspace' || closeOneSlot!==null || closingOneSlot!==null || manualRefreshing || manualRefreshRequested");
     const separate=app.indexOf('on:click={release}>Separate window</button>');
     expect(refresh).toBeGreaterThan(-1);
     expect(separate).toBe(-1);

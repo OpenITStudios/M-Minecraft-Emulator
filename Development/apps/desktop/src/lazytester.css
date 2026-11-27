@@ -870,6 +870,7 @@ body{
 .lazytester-play-main .lazytester-play-header .lazytester-header-actions{gap:6px}
 .lazytester-play-main .lazytester-play-header .lazytester-header-actions > button{white-space:nowrap}
 .lazytester-play-main .lazytester-games-heading{margin:6px auto 5px}
+.lazytester-play-main .lazytester-filmstrip{column-gap:8px}
 .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card{padding:7px;gap:5px}
 .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card strong{
   flex:none;font-size:12px;line-height:24px;
@@ -881,7 +882,7 @@ body{
 .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card small{font-size:12px}
 .lazytester-launcher-header{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:5px;width:100%;box-sizing:border-box;min-height:26px;padding-right:29px;position:relative}
 .lazytester-launcher-header::after{content:"";position:absolute;right:25px;top:5px;bottom:5px;border-left:1px solid var(--lazytester-line)}
-.lazytester-filmstrip .lazytester-launcher-header small{white-space:nowrap;overflow:visible;text-overflow:clip;flex:none;max-width:none}
+.lazytester-filmstrip .lazytester-launcher-header small{white-space:nowrap;overflow:visible;text-overflow:clip;flex:none;max-width:none;line-height:24px}
 .lazytester-launcher-header small::before{content:"";display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:50%;background:currentColor;vertical-align:2px}
 .lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-routine{color:var(--lazytester-success)}
 .lazytester-filmstrip .lazytester-launcher-card.selected small.lazytester-status-routine{color:var(--lazytester-accent)}
@@ -892,9 +893,10 @@ body{
 .lazytester-launcher-entry{container:lazytester-launcher / inline-size}
 @container lazytester-launcher (max-width:221px){
   .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card{padding-inline:4px}
-  .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card :is(strong,small){font-size:11px}
-  .lazytester-launcher-header{gap:3px;justify-content:flex-start}
-  .lazytester-launcher-header small::before{width:5px;height:5px;margin-right:3px}
+  .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card :is(strong,small){font-size:11px;font-family:inherit}
+  .lazytester-launcher-header{gap:2px;justify-content:flex-start;padding-right:27px}
+  .lazytester-launcher-header small::before{width:5px;height:5px;margin-right:2px}
+  .lazytester-launcher-header::after{right:24px}
   .lazytester-app .lazytester-close-launcher{right:4px}
 }
 @container lazytester-launcher (max-width:159px){
