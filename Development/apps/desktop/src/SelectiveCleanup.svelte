@@ -10,9 +10,13 @@
   export let confirmWorlds: (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => Promise<void>;
   // Source-only until native disposition acceptance; never imply deletion is available.
   export let worldDeletionAvailable = false;
+  export let packDeletionAvailable = false;
   let acknowledged = false;
   let deleting = false;
-  $: eligible = !!receipt?.confirmationToken && receipt.warnings.length===0 && receipt.items.length>0 && receipt.items.every(item=>item.category==='Worlds');
+  $: worldsOnly=!!receipt?.items.length&&receipt.items.every(item=>item.category==='Worlds');
+  $: packsOnly=!!receipt?.items.length&&receipt.items.every(item=>item.category!=='Worlds');
+  $: eligible = !!receipt?.confirmationToken && receipt.warnings.length===0 && (worldsOnly||packsOnly);
+  $: deletionAvailable=worldsOnly?worldDeletionAvailable:packsOnly&&packDeletionAvailable;
   $: if (!receipt) acknowledged=false;
 
   const categories: {value: SelectiveCategory; label: string}[] = [
@@ -94,7 +98,7 @@
     issue='';
   }
   async function deleteWorlds(): Promise<void> {
-    if(closed||loading||deleting||!worldDeletionAvailable||!eligible||!acknowledged||!receipt)return;
+    if(closed||loading||deleting||!deletionAvailable||!eligible||!acknowledged||!receipt)return;
     const confirmed=receipt;
     const request=++generation;
     deleting=true;loading=true;receipt=null;acknowledged=false;issue='';
@@ -103,8 +107,8 @@
       if(request!==generation)return;
       inventories={};selected=[];
       loading=false;
-      await load('Worlds',true);
-      if(!closed && !issue)issue='Selected worlds deleted.';
+      await load(category,true);
+      if(!closed && !issue)issue='Selected data deleted.';
     } catch {
       if(request===generation){
         inventories={};selected=[];
@@ -150,7 +154,7 @@
     <button class="lazytester-secondary" disabled={loading} on:click={()=>load(category,true)}>Refresh</button>
   </div>
   <div class="lazytester-selective-items" aria-busy={loading}>
-    {#if loading}<p role="status">{deleting?'Deleting selected worlds…':'Inspecting data…'}</p>{/if}
+    {#if loading}<p role="status">{deleting?'Deleting selected data…':'Inspecting data…'}</p>{/if}
     {#if !loading && inventories[category] && !items.length}<p>No items found.</p>{/if}
     {#if !loading && !inventories[category]}<p>Inventory not available. Select Refresh to inspect this category.</p>{/if}
     {#each items as item (item.identity)}
@@ -172,13 +176,13 @@
       </details>
       {#each receipt.warnings as warning}<p class="lazytester-help">{warning}</p>{/each}
       {#if eligible}
-        <p>Selected worlds will be permanently deleted. Other profile data is not targeted.</p>
-        <label><input type="checkbox" bind:checked={acknowledged} disabled={!worldDeletionAvailable||loading}/> I understand this action cannot be undone.</label>
-        <button class="lazytester-danger" disabled={!worldDeletionAvailable||!acknowledged||loading} on:click={deleteWorlds}>Delete Selected Worlds</button>
+        <p>Selected {worldsOnly?'worlds':'packs'} will be permanently deleted. Other profile data is not targeted.</p>
+        <label><input type="checkbox" bind:checked={acknowledged} disabled={!deletionAvailable||loading}/> I understand this action cannot be undone.</label>
+        <button class="lazytester-danger" disabled={!deletionAvailable||!acknowledged||loading} on:click={deleteWorlds}>Delete Selected {worldsOnly?'Worlds':'Packs'}</button>
       {/if}
-      {#if receipt.items.some(item=>item.category!=='Worlds')}
+      {#if receipt.items.some(item=>item.category!=='Worlds') && !deletionAvailable}
         <p role="status">Pack cleanup is review-only until native dependency and global activation coverage are verified. No data has been changed by this review.</p>
-      {:else if !worldDeletionAvailable || !eligible}
+      {:else if !deletionAvailable || !eligible}
         <p role="status">Deletion is unavailable until native validation is complete. No data has been changed by this review.</p>
       {/if}
     </section>

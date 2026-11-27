@@ -32,13 +32,15 @@ fn expired_log(last_write: u64, now: u64) -> bool {
         .is_some_and(|age| age > LOG_RETENTION_TICKS)
 }
 
-// Internal read-only candidate policy. The root and file class must come
+// Internal candidate policy. The root and file class must come
 // from a native-reviewed producer contract, never a UI path or extension
 // search. A .log suffix is NOT sufficient to identify a producer's logs.
 #[allow(dead_code)]
-fn inspect_expired_logs(root: &File, now: u64, budget: InspectionBudget,
-    is_owned_log: impl Fn(&std::ffi::OsStr) -> bool) -> io::Result<Vec<File>> {
+fn plan_expired_logs(root: &File, now: u64, budget: InspectionBudget, deleting: bool,
+    is_owned_log: impl Fn(&std::ffi::OsStr) -> bool) -> io::Result<ExpiredLogPlan> {
+    super::directory_id(root)?;
     let path = directory_path(root)?;
+    let root = root.try_clone()?;
     let mut candidates = Vec::new();
     for (index, entry) in fs::read_dir(&path)?.enumerate() {
         if index >= MAX_FILES || budget.exhausted() {
@@ -50,9 +52,12 @@ fn inspect_expired_logs(root: &File, now: u64, budget: InspectionBudget,
         if !meta.is_file() || meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
             return Err(invalid("Unsupported log candidate"));
         }
-        // Exclusive metadata handle: refuse active files. No DELETE access
-        // during inventory; this plan is not permission to dispose.
-        let file = OpenOptions::new().access_mode(FILE_READ_ATTRIBUTES)
+        // A fresh file need not be opened for retention. Never rely on this
+        // path metadata to admit an old candidate; check its handle below.
+        if !expired_log(meta.last_write_time(), now) { continue; }
+        // FILE_READ_DATA participates in Windows sharing checks; attributes
+        // alone do not. Mutation adds DELETE and keeps exclusive ownership.
+        let file = OpenOptions::new().access_mode(FILE_READ_ATTRIBUTES | FILE_READ_DATA | if deleting { DELETE } else { 0 })
             .share_mode(0).custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(entry.path())?;
         image_id(&file)?;
@@ -72,7 +77,30 @@ fn inspect_expired_logs(root: &File, now: u64, budget: InspectionBudget,
         }
     }
     if budget.exhausted() { return Err(invalid("Log retention deadline exceeded")); }
-    Ok(candidates)
+    Ok(ExpiredLogPlan { _root: root, candidates, budget, deleting })
+}
+
+#[allow(dead_code)]
+struct ExpiredLogPlan {
+    _root: File,
+    candidates: Vec<File>,
+    budget: InspectionBudget,
+    deleting: bool,
+}
+#[allow(dead_code)]
+impl ExpiredLogPlan {
+    // Only a complete mutating plan is disposable. The caller must first
+    // verify producer identity, root and native idle admission. No public
+    // path, new file open or retry is accepted here.
+    fn dispose(self) -> io::Result<()> {
+        if !self.deleting || self.budget.exhausted() {
+            return Err(invalid("Log disposition plan is not admitted"));
+        }
+        for file in self.candidates {
+            mark_for_delete(&file).map_err(|_|io::Error::other("Log cleanup stopped; selected old logs may be partially removed. Refresh before retrying."))?;
+        }
+        Ok(())
+    }
 }
 
 
@@ -408,8 +436,18 @@ pub(super) fn preflight_selected_worlds(private: &File,
     preflight_selected_trees(private, review, budget)
 }
 
+pub(super) fn preflight_selected_packs(private: &File,
+    review: &super::resource_pack_inventory::SelectiveReview,
+    budget: InspectionBudget) -> io::Result<SelectedTreePlan> {
+    use super::resource_pack_inventory::InventoryCategory;
+    if review.items.iter().any(|item| item.category == InventoryCategory::Worlds) {
+        return Err(invalid("Pack cleanup cannot target worlds"));
+    }
+    preflight_selected_trees(private, review, budget)
+}
+
 // Shared root-bound planner. Not an admission API: pack review remains blocked
-// by unverified reference coverage; only the world-specific caller can dispose.
+// by unverified reference coverage; callers must also enforce native gates.
 fn preflight_selected_trees(private: &File,
     review: &super::resource_pack_inventory::SelectiveReview,
     budget: InspectionBudget) -> io::Result<SelectedTreePlan> {

@@ -66,3 +66,11 @@ describe('World cleanup source admission',()=>{
 it('keeps pack cleanup explicitly review-only while native coverage is unverified',()=>{
   expect(source('SelectiveCleanup.svelte')).toContain('Pack cleanup is review-only until native dependency and global activation coverage are verified.');
 });
+
+
+it('keeps both selective disposition categories held and uses distinct IPC operations',()=>{
+  const dialog=source('SelectiveCleanup.svelte');
+  expect(dialog).toContain('packDeletionAvailable = false');
+  expect(dialog).toContain('worldsOnly||packsOnly');
+  expect(source('app/bridge/lazyTester.ts')).toContain("operation:'ConfirmSelectedPacks'");
+});

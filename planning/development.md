@@ -13,10 +13,10 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 02 Native compatibility | NAT-01 inventory; NAT-04 DXGI/COM boundary; NAT-05 Detours bridge; NAT-06 replaced presentation source | Presentation source checkpoint; retained typed bridge and other native owners documented; broader bootstrap migration deferred |
 | 03 Storage | STG-01 review; STG-02 bounds; STG-03 dependency metadata | Source available; not deletion authorization |
 | 03 Storage | STG-04 world | Controller request, IPC, bridge, explicit UI confirmation and refresh integrated; destructive admission held pending native evidence |
-| 03 Storage | STG-05 resource pack; STG-06 behavior pack | Shared root-bound tree planner; duplicate UUID, world/pack/global reference blockers; deletion held pending native coverage and exclusive reference stability |
-| 03 Storage | STG-07 download cache | Existing HTTP cache is separate; download producer/root not established, no destructive route |
+| 03 Storage | STG-05 resource pack; STG-06 behavior pack | Separate pack IPC admission and shared root-bound planner, bridge and confirmation UI integrated; unconditional dependency coverage warning and native disposition gate retained pending coverage/reference stability |
+| 03 Storage | STG-07 download cache | Existing HTTP cache separate; application Data/Cache/Temp and WebView are not Minecraft download cache (app_bootstrap.rs); actual download producer/root not established, no destructive route |
 | 03 Storage | STG-09 global integration | Web cache preference persistence, IPC, settings UI and original idle maintenance connected; download/log controls remain held |
-| 03 Storage | STG-08 logs (7 days) | Bounded internal Rust retention candidate inspection and age fixtures authored; verified producer/root, settings and disposition remain open |
+| 03 Storage | STG-08 logs (7 days) | Bounded Rust exclusive log preflight and handle-only disposition authored; verified producer/root and maintenance admission remain open |
 | 04 Desktop/workspace | UI-01 layouts; UI-02 selected HUD; UI-03 launcher; UI-04 storage UI; UI-05 consumers; UI-06 DPI | 01/02 source available; remaining open |
 | 05 Optimization | OPT-01 workers; OPT-02 memory; OPT-03 polling; OPT-04 dependencies; OPT-05 startup/shutdown | Open; evidence-driven, no speculative rewrite |
 | 06 Integration | INT-01 naming; INT-02 ABI; INT-03 build; INT-04 fixtures; INT-05 docs/Unreleased; INT-06 readiness | Open |

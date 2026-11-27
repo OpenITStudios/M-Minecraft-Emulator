@@ -454,6 +454,10 @@ export const lazyTester = {
       throw new TypeError('Review receipt does not match request');
     return review;
   },
+  confirmSelectedPacks: async (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => {
+    if (!profileSlots.includes(slot)||receipt.slot!==slot||receipt.warnings.length||!receipt.confirmationToken||!/^[0-9a-f]{64}$/.test(receipt.confirmationToken)||!receipt.items.length||receipt.items.some(item=>item.category==='Worlds')) throw new TypeError('Invalid pack cleanup confirmation');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ConfirmSelectedPacks',slot,selections:receipt.items,confirmationToken:receipt.confirmationToken}}));
+  },
   confirmSelectedWorlds: async (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => {
     if (!profileSlots.includes(slot)||receipt.slot!==slot||receipt.warnings.length||!receipt.confirmationToken||!/^[0-9a-f]{64}$/.test(receipt.confirmationToken)||!receipt.items.length||receipt.items.some(item=>item.category!=='Worlds')) throw new TypeError('Invalid world cleanup confirmation');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ConfirmSelectedWorlds',slot,selections:receipt.items,confirmationToken:receipt.confirmationToken}}));

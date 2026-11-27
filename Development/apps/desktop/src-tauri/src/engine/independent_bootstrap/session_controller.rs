@@ -945,11 +945,16 @@ impl Sessions {
     // selection identity review and exclusive preflight before disposition.
     fn confirm_selected_worlds(&mut self, slot: u32, selections: &[SelectiveSelection],
         confirmation_token: &str) -> io::Result<()> {
+        self.confirm_selected_data(slot,selections,confirmation_token,false)
+    }
+
+    fn confirm_selected_data(&mut self, slot: u32, selections: &[SelectiveSelection],
+        confirmation_token: &str, packs: bool) -> io::Result<()> {
         if selections.is_empty() || selections.len() > 128 ||
-            selections.iter().any(|s| s.category != SelectiveCategory::Worlds) ||
+            selections.iter().any(|s| (s.category != SelectiveCategory::Worlds) != packs) ||
             confirmation_token.len() != 64 ||
             !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
-            return Err(invalid("Invalid selected-world confirmation"));
+            return Err(invalid("Invalid selected-data confirmation"));
         }
         let budget = InspectionBudget::new(Duration::from_secs(2));
         let review = self.resolve_selective_review(slot, selections, budget)?;
@@ -962,12 +967,13 @@ impl Sessions {
         if product_profiles::clear::pending(store)? {
             return Err(invalid("Finish pending profile cleanup first"));
         }
-        let plan = profile_storage::preflight_selected_worlds(&store.private, &review, budget)?;
+        let plan = if packs { profile_storage::preflight_selected_packs(&store.private,&review,budget)? }
+            else { profile_storage::preflight_selected_worlds(&store.private,&review,budget)? };
         // Keep every deletion candidate pinned while checking native
         // ownership once more; never call a path-based fallback.
         let observed = super::super::inspect_native_workspace()?.processes;
         self.data_admission(slot, &observed)?;
-        if budget.exhausted() { return Err(invalid("Selected world confirmation deadline exceeded")); }
+        if budget.exhausted() { return Err(invalid("Selected data confirmation deadline exceeded")); }
         plan.dispose()
     }
 
@@ -1783,6 +1789,15 @@ fn run() -> io::Result<()> {
                 SessionRequest::ReviewSelectiveInventory { slot, selections } => {
                     selective_review = Some(sessions.review_selective_inventory(slot, selections).map_err(|error| error.to_string())?);
                 }
+                SessionRequest::ConfirmSelectedPacks { slot, selections, confirmation_token } => {
+                    // Dependency/activation evidence and reference stability must
+                    // be independently accepted before enabling this route.
+                    if !SELECTED_PACK_DISPOSITION_REVIEWED {
+                        return Err("Pack deletion is held for native dependency and filesystem validation".into());
+                    }
+                    sessions.confirm_selected_data(slot,&selections,&confirmation_token,true).map_err(|error|error.to_string())?;
+                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
+                }
                 SessionRequest::ConfirmSelectedWorlds { slot, selections, confirmation_token } => {
                     // Source integration only: the existing native disposition hold remains.
                     if !SELECTED_WORLD_DISPOSITION_REVIEWED {
@@ -2427,3 +2442,4 @@ mod tests {
 
 // Enable only after matching native directory sharing/disposition acceptance and explicit approval.
 const SELECTED_WORLD_DISPOSITION_REVIEWED: bool = false;
+const SELECTED_PACK_DISPOSITION_REVIEWED: bool = false;

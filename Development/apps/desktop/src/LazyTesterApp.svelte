@@ -850,9 +850,10 @@
     if(busy||refreshing||resizing||!available||!selectiveOpen||slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending)throw new Error('World cleanup is unavailable');
     busy=true;storageNotice='';
     try {
-      const snapshot=await lazyTester.confirmSelectedWorlds(slot,receipt);
+      const snapshot=receipt.items.every(item=>item.category==='Worlds')
+        ?await lazyTester.confirmSelectedWorlds(slot,receipt):await lazyTester.confirmSelectedPacks(slot,receipt);
       applyStorageSnapshot(snapshot);
-      storageNotice='Selected worlds deleted.';
+      storageNotice='Selected data deleted.';
     } catch(error) {
       storage=null;
       storageNotice='Cleanup was refused or its result is uncertain. Refresh session and storage.';
