@@ -24,6 +24,58 @@ const CACHE_PARTS: [&str; 6] = [
 const MAX_FILES: usize = 2048;
 const MAX_DIRECTORIES: usize = 256;
 
+// STG-08: Windows FILETIME uses 100 ns ticks. Retain at least seven full
+// days; future, missing and exactly-at-cutoff timestamps are not eligible.
+const LOG_RETENTION_TICKS: u64 = 7 * 24 * 60 * 60 * 10_000_000;
+fn expired_log(last_write: u64, now: u64) -> bool {
+    last_write != 0 && now.checked_sub(last_write)
+        .is_some_and(|age| age > LOG_RETENTION_TICKS)
+}
+
+// Internal read-only candidate policy. The root and file class must come
+// from a native-reviewed producer contract, never a UI path or extension
+// search. A .log suffix is NOT sufficient to identify a producer's logs.
+#[allow(dead_code)]
+fn inspect_expired_logs(root: &File, now: u64, budget: InspectionBudget,
+    is_owned_log: impl Fn(&std::ffi::OsStr) -> bool) -> io::Result<Vec<File>> {
+    let path = directory_path(root)?;
+    let mut candidates = Vec::new();
+    for (index, entry) in fs::read_dir(&path)?.enumerate() {
+        if index >= MAX_FILES || budget.exhausted() {
+            return Err(invalid("Log retention inspection limit reached"));
+        }
+        let entry = entry?;
+        if !is_owned_log(&entry.file_name()) { continue; }
+        let meta = fs::symlink_metadata(entry.path())?;
+        if !meta.is_file() || meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(invalid("Unsupported log candidate"));
+        }
+        // Exclusive metadata handle: refuse active files. No DELETE access
+        // during inventory; this plan is not permission to dispose.
+        let file = OpenOptions::new().access_mode(FILE_READ_ATTRIBUTES)
+            .share_mode(0).custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(entry.path())?;
+        image_id(&file)?;
+        let mut standard: FILE_STANDARD_INFO = unsafe { mem::zeroed() };
+        if unsafe { GetFileInformationByHandleEx(file.as_raw_handle() as _,
+            FileStandardInfo, &mut standard as *mut _ as _,
+            mem::size_of_val(&standard) as u32) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let metadata = file.metadata()?;
+        if standard.NumberOfLinks != 1 || standard.Directory || standard.DeletePending ||
+            !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(invalid("Unsupported or linked log candidate"));
+        }
+        if expired_log(metadata.last_write_time(), now) {
+            candidates.push(file);
+        }
+    }
+    if budget.exhausted() { return Err(invalid("Log retention deadline exceeded")); }
+    Ok(candidates)
+}
+
+
 pub(super) fn scan_profile_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget) {
     scan_size(path, result, budget, 0);
 }
@@ -485,6 +537,16 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    #[test]
+    fn retention_keeps_recent_boundary_future_and_unknown_timestamps() {
+        let now = LOG_RETENTION_TICKS + 100;
+        assert!(expired_log(99, now));
+        assert!(!expired_log(100, now));
+        assert!(!expired_log(101, now));
+        assert!(!expired_log(0, now));
+        assert!(!expired_log(now + 1, now));
+        assert!(!expired_log(1, 0));
+    }
     fn inspect_fixture(private: &File, inactive: bool) -> CacheStorage {
         inspect(private, inactive, InspectionBudget::new(Duration::from_secs(2)))
     }

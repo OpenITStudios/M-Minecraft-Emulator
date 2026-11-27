@@ -165,11 +165,11 @@
             </div>
             <div class="lazytester-settings-panel">
               <div class="lazytester-setting">
-                <div><h3>Auto-clear Download Cache</h3><p>Unavailable until the download cache location is verified.</p></div>
+                <div><h3>Auto-clear Download Cache</h3><p>Download cache is separate from web cache. Cleanup remains unavailable until its location is verified.</p></div>
                 <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Download Cache" checked={false} disabled/></label>
               </div>
               <div class="lazytester-setting">
-                <div><h3>Auto-clear Old Logs</h3><p>Keep logs for 7 days. Unavailable until log locations are verified.</p></div>
+                <div><h3>Auto-clear Old Logs</h3><p>Keep logs for 7 days. Only inactive, verified log files older than seven days are eligible; cleanup remains unavailable until log locations are verified.</p></div>
                 <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Old Logs" checked={false} disabled/></label>
               </div>
               <div class="lazytester-actions lazytester-settings-panel-footer lazytester-global-storage-footer">

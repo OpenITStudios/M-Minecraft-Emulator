@@ -14,13 +14,14 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 03 Storage | STG-01 review; STG-02 bounds; STG-03 dependency metadata | Source available; not deletion authorization |
 | 03 Storage | STG-04 world | Controller request, IPC, bridge, explicit UI confirmation and refresh integrated; destructive admission held pending native evidence |
 | 03 Storage | STG-05 resource pack; STG-06 behavior pack | Shared root-bound tree planner; duplicate UUID, world/pack/global reference blockers; deletion held pending native coverage and exclusive reference stability |
-| 03 Storage remaining | STG-07 cache; STG-08 logs (7 days) | Open; fail closed on unverified targets/activation |
+| 03 Storage | STG-07 download cache | Existing HTTP cache is separate; download producer/root not established, no destructive route |
+| 03 Storage | STG-08 logs (7 days) | Bounded internal Rust retention candidate inspection and age fixtures authored; verified producer/root, settings and disposition remain open |
 | 04 Desktop/workspace | UI-01 layouts; UI-02 selected HUD; UI-03 launcher; UI-04 storage UI; UI-05 consumers; UI-06 DPI | 01/02 source available; remaining open |
 | 05 Optimization | OPT-01 workers; OPT-02 memory; OPT-03 polling; OPT-04 dependencies; OPT-05 startup/shutdown | Open; evidence-driven, no speculative rewrite |
 | 06 Integration | INT-01 naming; INT-02 ABI; INT-03 build; INT-04 fixtures; INT-05 docs/Unreleased; INT-06 readiness | Open |
 | 07 Native validation | VAL-01 compile/link; VAL-02 DLL/payload; VAL-03 five sessions; VAL-04 storage safety; VAL-05 performance; VAL-06 installer | Held for separately authorized PC-local phase |
 
-Phase 01 source checkpoint complete. Phase 02 presentation source checkpoint: Rust owns policy, image, transport and candidate classification; replaced C++ validation removed. Native C++ inventory and retained boundary documented in bootstrap-ordering README. Typed COM identity/reference transfer and pinned Detours transaction retained rather than replacing with unverified vtables/hook engine; non-presentation bootstrap/experimental owners remain deferred, not claimed migrated. Explicit standard includes restored for DXGI adapter. Native build/link/tests and payload review held. Next active: Phase 03 STG-04 world cleanup, then pack/cache/log safety.
+Phase 01 source checkpoint complete. Phase 02 presentation source checkpoint: Rust owns policy, image, transport and candidate classification; replaced C++ validation removed. Native C++ inventory and retained boundary documented in bootstrap-ordering README. Typed COM identity/reference transfer and pinned Detours transaction retained rather than replacing with unverified vtables/hook engine; non-presentation bootstrap/experimental owners remain deferred, not claimed migrated. Explicit standard includes restored for DXGI adapter. Native build/link/tests and payload review held. Phase 03 active: STG-07 download producer/root evidence, STG-08 log producer/root evidence and maintenance/settings integration; world disposition and pack mutation held. Do not alias HTTP cache or repository artifact retention to Minecraft download/log cleanup.
 
 ## Desktop UI refinement — 27 November 2026
 
