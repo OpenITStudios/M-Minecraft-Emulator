@@ -175,8 +175,10 @@ where
         .stderr
         .take()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing stderr pipe"))?;
-    let (stdout_sender, stdout_reader) = mpsc::sync_channel(1);
-    let (stderr_sender, stderr_reader) = mpsc::sync_channel(1);
+    // Either stream can finish or overflow first; one bounded receiver
+    // observes both receipts without polling a different stream for EOF.
+    let (stdout_sender, output_reader) = mpsc::sync_channel(2);
+    let stderr_sender = stdout_sender.clone();
     // An overflowing helper is already invalid evidence. Stop reading it
     // rather than retaining a worker until an arbitrary descendant closes EOF.
     let oversized_output = Arc::new(AtomicBool::new(false));
@@ -187,13 +189,13 @@ where
     spawn_worker_or_reap(&mut child, program, || {
         thread::Builder::new().spawn(move || {
             let _slot = stdout_slot;
-            let _ = stdout_sender.send(drain_output_with_limit(stdout, &stdout_overflow, stdout_limit));
+            let _ = stdout_sender.send(OutputReceipt::Stdout(drain_output_with_limit(stdout, &stdout_overflow, stdout_limit)));
         })
     })?;
     spawn_worker_or_reap(&mut child, program, || {
         thread::Builder::new().spawn(move || {
             let _slot = stderr_slot;
-            let _ = stderr_sender.send(drain_output(stderr, &stderr_overflow));
+            let _ = stderr_sender.send(OutputReceipt::Stderr(drain_output(stderr, &stderr_overflow)));
         })
     })?;
 
@@ -225,9 +227,7 @@ where
             // A descendant may inherit a pipe even after vmrun exits. Do not
             // block indefinitely waiting for EOF from an unrelated process.
             let remaining = timeout.saturating_sub(started.elapsed());
-            let stdout = receive_output(&stdout_reader, remaining, &oversized_output)?;
-            let remaining = timeout.saturating_sub(started.elapsed());
-            let stderr = receive_output(&stderr_reader, remaining, &oversized_output)?;
+            let (stdout, stderr) = receive_outputs(&output_reader, remaining, &oversized_output)?;
             if oversized_output.load(Ordering::Acquire)
                 || stdout.len() > stdout_limit
                 || stderr.len() > OUTPUT_LIMIT
@@ -236,7 +236,8 @@ where
             }
             return Ok((status.success(), stdout, stderr));
         }
-        if started.elapsed() >= timeout {
+        let remaining = timeout.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
             terminate_direct_child(&mut child, program, "timeout")?;
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
@@ -247,7 +248,7 @@ where
                 ),
             ));
         }
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(remaining.min(Duration::from_millis(100)));
     }
 }
 
@@ -354,25 +355,39 @@ fn drain_output_with_limit(mut pipe: impl Read, oversized: &AtomicBool, limit:us
     Ok(output)
 }
 
-fn receive_output(
-    reader: &mpsc::Receiver<io::Result<Vec<u8>>>,
+enum OutputReceipt {
+    Stdout(io::Result<Vec<u8>>),
+    Stderr(io::Result<Vec<u8>>),
+}
+
+fn receive_outputs(
+    reader: &mpsc::Receiver<OutputReceipt>,
     timeout: Duration,
     oversized: &AtomicBool,
-) -> io::Result<Vec<u8>> {
+) -> io::Result<(Vec<u8>, Vec<u8>)> {
     let started = Instant::now();
-    loop {
-        // A second stream may exceed the cap while the first still has an
-        // inherited open handle. Do not wait out the whole deadline in that case.
-        if oversized.load(Ordering::Acquire) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "output exceeded provider limit; refusing truncated provider evidence",
-            ));
-        }
-        let remaining = timeout.saturating_sub(started.elapsed());
-        match reader.recv_timeout(remaining.min(Duration::from_millis(100))) {
-            Ok(result) => return result,
-            Err(mpsc::RecvTimeoutError::Timeout) if started.elapsed() >= timeout => {
+    let mut stdout = None;
+    let mut stderr = None;
+    for _ in 0..2 {
+        let check_overflow = || {
+            if oversized.load(Ordering::Acquire) {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "output exceeded provider limit; refusing truncated provider evidence",
+                ))
+            } else {
+                Ok(())
+            }
+        };
+        check_overflow()?;
+        let receipt = reader.recv_timeout(timeout.saturating_sub(started.elapsed()));
+        // A worker sets the overflow flag before sending its receipt.
+        check_overflow()?;
+        match receipt {
+            Ok(OutputReceipt::Stdout(result)) if stdout.is_none() => stdout = Some(result?),
+            Ok(OutputReceipt::Stderr(result)) if stderr.is_none() => stderr = Some(result?),
+            Ok(_) => return Err(io::Error::new(io::ErrorKind::InvalidData, "duplicate output receipt")),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     "command exited but an output pipe remained open beyond the deadline",
@@ -384,9 +399,9 @@ fn receive_output(
                     "command output reader exited without a result",
                 ));
             }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
         }
     }
+    Ok((stdout.expect("one stdout receipt"), stderr.expect("one stderr receipt")))
 }
 
 fn require_success(
@@ -557,13 +572,60 @@ mod tests {
     #[test]
     fn output_reader_has_bounded_wait_without_eof() {
         let (_sender, receiver) = std::sync::mpsc::sync_channel(1);
-        let error = super::receive_output(
+        let error = super::receive_outputs(
             &receiver,
             Duration::from_millis(1),
             &std::sync::atomic::AtomicBool::new(false),
         )
         .unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::TimedOut);
+    }
+
+    #[test]
+    fn output_receipts_preserve_stream_identity_in_either_order() {
+        use super::OutputReceipt;
+        use std::sync::{atomic::AtomicBool, mpsc};
+        for reverse in [false, true] {
+            let (sender, receiver) = mpsc::sync_channel(2);
+            let stdout = OutputReceipt::Stdout(Ok(vec![0, 255, 10]));
+            let stderr = OutputReceipt::Stderr(Ok(b"diagnostic".to_vec()));
+            let receipts = if reverse { [stderr, stdout] } else { [stdout, stderr] };
+            for receipt in receipts { sender.send(receipt).unwrap_or_else(|_| panic!("receiver exists")); }
+            let result = super::receive_outputs(&receiver, Duration::ZERO, &AtomicBool::new(false)).unwrap();
+            assert_eq!(result, (vec![0, 255, 10], b"diagnostic".to_vec()));
+        }
+    }
+
+    #[test]
+    fn missing_or_duplicate_stream_receipts_cannot_report_success() {
+        use super::OutputReceipt;
+        use std::sync::{atomic::AtomicBool, mpsc};
+        let (sender, receiver) = mpsc::sync_channel(2);
+        sender.send(OutputReceipt::Stdout(Ok(vec![]))).unwrap_or_else(|_| panic!("receiver exists"));
+        assert_eq!(super::receive_outputs(&receiver, Duration::ZERO, &AtomicBool::new(false)).unwrap_err().kind(), io::ErrorKind::TimedOut);
+        sender.send(OutputReceipt::Stderr(Ok(vec![]))).unwrap_or_else(|_| panic!("receiver exists"));
+        sender.send(OutputReceipt::Stderr(Ok(vec![]))).unwrap_or_else(|_| panic!("receiver exists"));
+        assert_eq!(super::receive_outputs(&receiver, Duration::ZERO, &AtomicBool::new(false)).unwrap_err().kind(), io::ErrorKind::InvalidData);
+        drop(sender);
+        assert_eq!(super::receive_outputs(&receiver, Duration::ZERO, &AtomicBool::new(false)).unwrap_err().kind(), io::ErrorKind::Other);
+    }
+
+    #[test]
+    fn overflow_receipt_wakes_output_wait_even_with_peer_still_open() {
+        use super::OutputReceipt;
+        use std::sync::{atomic::{AtomicBool, Ordering}, mpsc, Arc};
+        let (peer, receiver) = mpsc::sync_channel(2);
+        let sender = peer.clone();
+        let flag = Arc::new(AtomicBool::new(false));
+        let worker_flag = Arc::clone(&flag);
+        let worker = std::thread::spawn(move || {
+            worker_flag.store(true, Ordering::Release);
+            let _ = sender.send(OutputReceipt::Stderr(Ok(vec![1])));
+        });
+        let result = super::receive_outputs(&receiver, Duration::from_secs(2), &flag);
+        worker.join().unwrap();
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::InvalidData);
+        drop(peer);
     }
 
     #[test]
@@ -642,7 +704,7 @@ mod tests {
         let (_sender, receiver) = std::sync::mpsc::sync_channel(1);
         let overflowing = std::sync::atomic::AtomicBool::new(true);
         let started = std::time::Instant::now();
-        let error = super::receive_output(&receiver, Duration::from_secs(5), &overflowing)
+        let error = super::receive_outputs(&receiver, Duration::from_secs(5), &overflowing)
             .expect_err("an oversized parallel stream must stop waiting for EOF");
         assert_eq!(error.kind(), io::ErrorKind::InvalidData);
         assert!(started.elapsed() < Duration::from_secs(1));
