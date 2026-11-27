@@ -48,7 +48,7 @@ fn backup_bytes(path: &std::path::Path) -> io::Result<Option<Vec<u8>>> {
     if settings_hash(&bytes) != backup.sha256 {
         return Err(invalid("Settings backup verification failed; no settings changed"));
     }
-    render(&bytes)?;
+    validate_options(&bytes)?;
     Ok(Some(bytes))
 }
 
@@ -90,7 +90,7 @@ pub(super) fn inspect_settings(private: &File, admission: io::Result<()>) -> cra
         };
         match read_bounded(&path,LIMIT) {
             Ok(bytes) => {
-                render(&bytes)?;
+                validate_options(&bytes)?;
                 // A historical Education leak report makes this one optional
                 // video key worth observing; inspection never changes it.
                 input_response = observed_input_response(&bytes);
@@ -225,6 +225,18 @@ const PRESET: [(&str, &str); 8] = [
 ];
 
 fn render(original: &[u8]) -> io::Result<Vec<u8>> {
+    let mut output = String::new();
+    render_parts(original, |part| output.push_str(part))?;
+    Ok(output.into_bytes())
+}
+
+// Use the exact same format and projected output-size rules without
+// materializing a preset when only inspecting or verifying a backup.
+fn validate_options(original: &[u8]) -> io::Result<()> {
+    render_parts(original, |_| {})
+}
+
+fn render_parts(original: &[u8], mut write: impl FnMut(&str)) -> io::Result<()> {
     if original.len() > LIMIT || original.contains(&0) {
         return Err(invalid("Unsupported Minecraft options file"));
     }
@@ -232,11 +244,13 @@ fn render(original: &[u8]) -> io::Result<Vec<u8>> {
     let text = std::str::from_utf8(&original[if bom { 3 } else { 0 }..])
         .map_err(|_| invalid("Minecraft options must be UTF-8"))?;
     let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
-    let mut output = if bom {
-        "\u{feff}".to_owned()
-    } else {
-        String::new()
+    let mut size = 0;
+    let mut emit = |part: &str| {
+        size += part.len();
+        write(part);
     };
+    if bom { emit("\u{feff}"); }
+    let mut needs_newline = false;
     let mut seen = [false; PRESET.len()];
     for line in text.split_inclusive('\n') {
         let ending = if line.ends_with("\r\n") {
@@ -255,29 +269,31 @@ fn render(original: &[u8]) -> io::Result<Vec<u8>> {
             .and_then(|(key, _)| PRESET.iter().position(|(name, _)| *name == key));
         if let Some(index) = entry {
             seen[index] = true;
-            output.push_str(PRESET[index].0);
-            output.push(':');
-            output.push_str(PRESET[index].1);
-            output.push_str(ending);
+            emit(PRESET[index].0);
+            emit(":");
+            emit(PRESET[index].1);
+            emit(ending);
         } else {
-            output.push_str(line); // Preserve all other settings byte-for-byte, including duplicates.
+            emit(line); // Preserve all other settings byte-for-byte, including duplicates.
         }
+        needs_newline = ending.is_empty();
     }
     for (index, (key, value)) in PRESET.iter().enumerate() {
         if !seen[index] {
-            if !output.is_empty() && output != "\u{feff}" && !output.ends_with('\n') {
-                output.push_str(newline);
+            if needs_newline {
+                emit(newline);
+                needs_newline = false;
             }
-            output.push_str(key);
-            output.push(':');
-            output.push_str(value);
-            output.push_str(newline);
+            emit(key);
+            emit(":");
+            emit(value);
+            emit(newline);
         }
     }
-    if output.len() > LIMIT {
+    if size > LIMIT {
         return Err(invalid("Preset would exceed Minecraft options size limit"));
     }
-    Ok(output.into_bytes())
+    Ok(())
 }
 
 struct Prepared {
@@ -772,6 +788,30 @@ mod tests {
             render(&without_final_newline).unwrap(),
             without_final_newline
         );
+    }
+
+    #[test]
+    fn validation_and_render_share_format_and_projected_size_rules() {
+        for original in [
+            &b""[..], &b"\xef\xbb\xbf"[..], &b"\xef\xbb\xbf\xef\xbb\xbf"[..],
+            &b"unknown:kept"[..], &b"graphics_mode:1\r\nunknown:yes\n"[..],
+            &b"graphics_mode:1\ngraphics_mode:2"[..],
+            &b"\xff"[..], &b"x:\0"[..], &b"x:y\rz"[..],
+        ] {
+            assert_eq!(validate_options(original).is_ok(), render(original).is_ok());
+        }
+        let suffix = render(b"").unwrap();
+        let bom = render(b"\xef\xbb\xbf").unwrap();
+        assert_eq!(&bom[..3], b"\xef\xbb\xbf");
+        assert_eq!(&bom[3..], suffix.as_slice());
+        let mut exact = vec![b'x'; LIMIT - suffix.len() - 1];
+        exact.push(b'\n');
+        assert!(validate_options(&exact).is_ok());
+        assert_eq!(render(&exact).unwrap().len(), LIMIT);
+        exact.insert(0, b'x');
+        assert_eq!(validate_options(&exact).unwrap_err().to_string(),
+            "Preset would exceed Minecraft options size limit");
+        assert!(render(&exact).is_err());
     }
 
     #[test]
