@@ -122,9 +122,11 @@
     }
   }
   function recordingLabel(slot:ProfileSlot,receipts:RecordingReceipt[],known:boolean,notice:typeof recordingNotice){
-    const state=known?(receipts.find(r=>r.slot===slot)?.state??'Idle'):'Status unavailable';
+    const receipt=receipts.find(r=>r.slot===slot);
+    const state=known?(receipt?.state??'Idle'):'Status unavailable';
+    const codec=known&&receipt?.codec?' · '+(receipt.codec==='H264'?'H.264':receipt.codec):'';
     const detail=notice?.slot===slot?' · '+notice.message:'';
-    return 'MC0'+slot+' · '+state+detail;
+    return 'MC0'+slot+' · '+state+codec+detail;
   }
   let screenshotNotice:{slot:ProfileSlot;message:string}|null=null;
   async function saveScreenshot(){

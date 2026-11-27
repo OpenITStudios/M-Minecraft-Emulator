@@ -436,7 +436,7 @@ export function parseScreenshotReceipt(value:unknown,slot:ProfileSlot):Screensho
   return value as unknown as ScreenshotReceipt;
 }
 export type RecordingState='Starting'|'Recording'|'Stopping'|'Saved'|'Failed';
-export interface RecordingReceipt {slot:ProfileSlot; state:RecordingState; frames:number}
+export interface RecordingReceipt {slot:ProfileSlot; state:RecordingState; frames:number; codec:'AV1'|'H264'|null}
 export function recordingActive(receipt:RecordingReceipt|undefined):boolean {
   return receipt!==undefined&&['Starting','Recording','Stopping'].includes(receipt.state);
 }
@@ -444,12 +444,13 @@ export function parseRecordingStatus(value:unknown):RecordingReceipt[] {
   if(!Array.isArray(value)||value.length>5)throw new TypeError('Invalid recording status');
   const seen=new Set<number>();
   return value.map((item:unknown)=>{
-    if(!record(item)||!exact(item,['slot','state','frames'])||
+    if(!record(item)||!exact(item,['slot','state','frames','codec'])||
       !profileSlots.includes(item.slot as ProfileSlot)||seen.has(item.slot as number)||
       typeof item.state!=='string'||!['Starting','Recording','Stopping','Saved','Failed'].includes(item.state)||
       typeof item.frames!=='number'||!Number.isSafeInteger(item.frames)||item.frames<0||
       ((item.state==='Recording'||item.state==='Saved')&&item.frames===0)||
-      (item.state==='Starting'&&item.frames!==0))
+      (item.state==='Starting'&&item.frames!==0)||
+      (item.frames===0?item.codec!==null:(item.codec!=='AV1'&&item.codec!=='H264')))
       throw new TypeError('Invalid recording status');
     seen.add(item.slot as number);
     return item as unknown as RecordingReceipt;

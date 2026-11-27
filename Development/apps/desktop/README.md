@@ -2,7 +2,7 @@
 
 This is the current Tauri 2 / Svelte 5 / TypeScript / Rust application.
 Capture source candidates are capability-gated: selected-instance WebP
-screenshot and independent-slot AV1/MKV recording. Neither reviewed worker
+screenshot and independent-slot AV1/H.264 hardware MKV recording. Neither reviewed worker
 binary is approved or shipped; controls remain unavailable until review.
 See [recording contract](../../../docs/system/recording.md) and
 [GPU capture worker](../../tooling/agent/native-gpu-capture/README.md).

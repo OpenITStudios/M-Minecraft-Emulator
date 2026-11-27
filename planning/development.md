@@ -77,7 +77,7 @@ roadmap; this new capture workstream does not release any validation holds.
 |---|---|
 | CAP-01 | Explicit WGC one-shot screenshot source in the existing optional worker; original client-area RGBA8 → WebP VP8L, bounded geometry/bytes, separate from LTG1 PNG AI observation. Fixture source authored, NOT_EXECUTED; native build and installation held. |
 | CAP-02 | Source integrated: existing controller/manager gate, exact expected-target comparison, bounded binary runner, approved pinned helper digest gate (None), strict VP8L receipt, native Save dialog, exclusive no-clobber publisher, minimal selected-instance UI. Authored fixtures NOT_EXECUTED; approved binary/dependency lock/package/native proof remain held. |
-| CAP-03 | Hardware-only FFmpeg 8.1 candidate source: explicit WGC HWND → D3D11 → AV1 NVENC CQ 23/P4 → Matroska, seekable inherited output file, no automatic format conversion or software fallback. VFR capped at 30, even original dimensions only. Binary digest None, no distribution; fallback/non-NVIDIA capability review and exact native validation remain open. |
+| CAP-03 | Hardware-only FFmpeg 8.1 candidate source: WGC HWND → D3D11 → AV1 NVENC preferred, H.264 NVENC/AMF/QSV fallback on confirmed empty startup exit only. QSV explicit GPU NV12/direct map. Matroska, seekable inherited file, no software fallback. VFR cap 30, even original dimensions. Codec receipt and source fixtures added; exact build/driver/native support and binary digest None held. |
 | CAP-04 | Source integrated: five slot leases with aggregate 4096×2160×30 pixel/s initial admission, one direct job-owned child per active slot, no idle polling, pinned original process/HWND/size checks, explicit save dialog, stop/trailer receipt and no-clobber publication. CloseOne/CloseAll desktop paths refuse active recording; target loss/resize or invalid receipt fails closed. 1h/4GiB candidate ceilings, native capacity and cleanup proof held. |
 | CAP-05 | Source integrated: capability-gated slot selector/Record/Stop, typed independent status receipts, reuse existing 2s observer only while active/unknown, selected Close disabled while recording, manager Exit gate and native refusal. UI/source fixtures authored NOT_EXECUTED. Exact Windows acceptance remains held (one-to-five, background/resize, quality, GPU/CPU/RAM, recovery/target isolation). Audio off. |
 
@@ -85,11 +85,14 @@ Source reference: [native GPU capture worker](../Development/tooling/agent/nativ
 Recording uses a separate reviewed FFmpeg 8.1 executable rather than a raw
 frame pipe or custom codec/muxer. [Recording contract](../docs/system/recording.md)
 owns the source boundary and acceptance. No binary shipped, automatic
-software fallback or new game lifecycle owner. CAP-01–05 initial source
-checkpoint is integrated for NVIDIA AV1 only; H.264/other GPU fallback,
-reviewed binary and native validation are open. Receipt review also
+software fallback or new game lifecycle owner. CAP-01–05 source checkpoint
+includes NVIDIA AV1 and H.264 NVENC/AMF/QSV hardware fallback candidates;
+reviewed binary and native validation remain held. Receipt review also
 normalizes the frame/state promotion race and retains explicit Stop on
-status-read failure. Source only, no CI, no test execution, no release.
+status-read failure. Hardware candidate compatibility, original target
+stability across workspace changes, and actual file recovery remain native
+acceptance items; no implicit claim of uninterrupted recording. Source only,
+no CI, no test execution, no release.
 
 ## Desktop UI refinement — 27 November 2026
 
