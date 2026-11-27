@@ -60,3 +60,8 @@ describe('World cleanup source admission',()=>{
     expect(source('app/bridge/lazyTester.ts')).toContain("operation:'ConfirmSelectedWorlds'");
   });
 });
+
+
+it('keeps pack cleanup explicitly review-only while native coverage is unverified',()=>{
+  expect(source('SelectiveCleanup.svelte')).toContain('Pack cleanup is review-only until native dependency and global activation coverage are verified.');
+});

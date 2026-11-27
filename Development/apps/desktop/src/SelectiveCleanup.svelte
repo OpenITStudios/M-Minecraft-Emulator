@@ -176,7 +176,11 @@
         <label><input type="checkbox" bind:checked={acknowledged} disabled={!worldDeletionAvailable||loading}/> I understand this action cannot be undone.</label>
         <button class="lazytester-danger" disabled={!worldDeletionAvailable||!acknowledged||loading} on:click={deleteWorlds}>Delete Selected Worlds</button>
       {/if}
-      {#if !worldDeletionAvailable || !eligible}<p role="status">Deletion is unavailable until native validation is complete. No data has been changed by this review.</p>{/if}
+      {#if receipt.items.some(item=>item.category!=='Worlds')}
+        <p role="status">Pack cleanup is review-only until native dependency and global activation coverage are verified. No data has been changed by this review.</p>
+      {:else if !worldDeletionAvailable || !eligible}
+        <p role="status">Deletion is unavailable until native validation is complete. No data has been changed by this review.</p>
+      {/if}
     </section>
   {/if}
   <footer class="lazytester-selective-footer">

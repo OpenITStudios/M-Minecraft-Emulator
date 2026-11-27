@@ -290,7 +290,7 @@ pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
         directories: plan.directories.len(), entries: plan.entries }, digest))
 }
 
-// Exclusive selected-world preflight only. Retain category and profile
+// Exclusive selected-tree preflight. Retain category and profile
 // ancestor pins separately from deletion candidates. No disposition occurs
 // here, including when this plan is dropped after an error.
 pub(super) struct SelectedTreePlan {
@@ -315,7 +315,7 @@ impl SelectedTreePlan {
         // before attempting any directory, then consume directories in
         // reverse preorder so children close before parents.
         // Any failure after the first disposition may leave a partial result.
-        let partial = || io::Error::other("Selected world cleanup stopped; selected data may be partially removed. Refresh inventory before retrying.");
+        let partial = || io::Error::other("Selected data cleanup stopped; selected data may be partially removed. Refresh inventory before retrying.");
         for file in plan.files.drain(..) {
             mark_for_delete(&file).map_err(|_| partial())?;
             drop(file);
@@ -350,8 +350,24 @@ pub(super) fn preflight_selected_worlds(private: &File,
     review: &super::resource_pack_inventory::SelectiveReview,
     budget: InspectionBudget) -> io::Result<SelectedTreePlan> {
     use super::resource_pack_inventory::InventoryCategory;
+    if review.items.iter().any(|item| item.category != InventoryCategory::Worlds) {
+        return Err(invalid("World cleanup cannot target packs"));
+    }
+    preflight_selected_trees(private, review, budget)
+}
+
+// Shared root-bound planner. Not an admission API: pack review remains blocked
+// by unverified reference coverage; only the world-specific caller can dispose.
+fn preflight_selected_trees(private: &File,
+    review: &super::resource_pack_inventory::SelectiveReview,
+    budget: InspectionBudget) -> io::Result<SelectedTreePlan> {
+    use super::resource_pack_inventory::InventoryCategory;
     if review.items.is_empty() || !review.warnings.is_empty() ||
-        review.items.iter().any(|item| item.category != InventoryCategory::Worlds || item.root != "minecraftWorlds") ||
+        review.items.iter().any(|item| !match item.category {
+            InventoryCategory::Worlds => item.root == "minecraftWorlds",
+            InventoryCategory::ResourcePacks => matches!(item.root,"resource_packs"|"development_resource_packs"),
+            InventoryCategory::BehaviorPacks => matches!(item.root,"behavior_packs"|"development_behavior_packs"),
+        }) ||
         !super::same_image(&review.profile_identity, &super::directory_id(private)?) {
         return Err(invalid("Selected world review is no longer eligible"));
     }
@@ -360,34 +376,39 @@ pub(super) fn preflight_selected_worlds(private: &File,
     plan.bounded(0)?;
     let mut path = directory_path(private)?;
     let mut ancestors = vec![private.try_clone()?];
-    for part in ["Roaming", "Minecraft Education Edition", "games", "com.mojang", "minecraftWorlds"] {
+    for part in ["Roaming", "Minecraft Education Edition", "games", "com.mojang"] {
         plan.bounded(0)?;
         path.push(part);
         ancestors.push(open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?);
     }
     if review.tree_digests.len() != review.items.len() { return Err(invalid("Incomplete selected tree review")); }
+    let mut roots = std::collections::HashSet::new();
     for (item, expected_digest) in review.items.iter().zip(&review.tree_digests) {
         plan.bounded(0)?;
+        let root = path.join(item.root);
+        if roots.insert(item.root) {
+            ancestors.push(open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?);
+        }
         // Names came from the reviewed inventory; refuse non-single components
         // defensively rather than allowing any caller to expand the scope.
         let mut components = Path::new(&item.name).components();
         if !matches!(components.next(), Some(std::path::Component::Normal(_))) ||
             components.next().is_some() || item.name.contains(':') {
-            return Err(invalid("Unsupported selected world name"));
+            return Err(invalid("Unsupported selected item name"));
         }
         let before = plan.directories.len();
         let record_start = plan.tree_records.len();
-        plan.visit(&path.join(&item.name), 0)?;
+        plan.visit(&root.join(&item.name), 0)?;
         if !super::same_image(&item.identity, &super::directory_id(&plan.directories[before])?) {
-            return Err(invalid("Selected world changed before preflight"));
+            return Err(invalid("Selected item changed before preflight"));
         }
         if plan.tree_digest(record_start) != *expected_digest {
-            return Err(invalid("Selected world tree changed; review again"));
+            return Err(invalid("Selected item tree changed; review again"));
         }
     }
     plan.bounded(0)?;
     if (plan.bytes, plan.files.len() as u32) != (review.bytes, review.files) {
-        return Err(invalid("Selected world totals changed; review again"));
+        return Err(invalid("Selected item totals changed; review again"));
     }
     Ok(SelectedTreePlan { _ancestors: ancestors, plan })
 }

@@ -841,6 +841,7 @@
       applyStorageSnapshot(snapshot);
       storageNotice='Selected worlds deleted.';
     } catch(error) {
+      storage=null;
       storageNotice='Cleanup was refused or its result is uncertain. Refresh session and storage.';
       throw error;
     } finally {busy=false;}

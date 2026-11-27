@@ -13,7 +13,8 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 02 Native compatibility | NAT-01 inventory; NAT-04 DXGI/COM boundary; NAT-05 Detours bridge; NAT-06 replaced presentation source | Presentation source checkpoint; retained typed bridge and other native owners documented; broader bootstrap migration deferred |
 | 03 Storage | STG-01 review; STG-02 bounds; STG-03 dependency metadata | Source available; not deletion authorization |
 | 03 Storage | STG-04 world | Controller request, IPC, bridge, explicit UI confirmation and refresh integrated; destructive admission held pending native evidence |
-| 03 Storage remaining | STG-05 resource pack; STG-06 behavior pack; STG-07 cache; STG-08 logs (7 days) | Open; fail closed on unverified targets/activation |
+| 03 Storage | STG-05 resource pack; STG-06 behavior pack | Shared root-bound tree planner; duplicate UUID, world/pack/global reference blockers; deletion held pending native coverage and exclusive reference stability |
+| 03 Storage remaining | STG-07 cache; STG-08 logs (7 days) | Open; fail closed on unverified targets/activation |
 | 04 Desktop/workspace | UI-01 layouts; UI-02 selected HUD; UI-03 launcher; UI-04 storage UI; UI-05 consumers; UI-06 DPI | 01/02 source available; remaining open |
 | 05 Optimization | OPT-01 workers; OPT-02 memory; OPT-03 polling; OPT-04 dependencies; OPT-05 startup/shutdown | Open; evidence-driven, no speculative rewrite |
 | 06 Integration | INT-01 naming; INT-02 ABI; INT-03 build; INT-04 fixtures; INT-05 docs/Unreleased; INT-06 readiness | Open |

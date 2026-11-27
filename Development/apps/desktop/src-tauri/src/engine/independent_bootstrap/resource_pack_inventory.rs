@@ -486,6 +486,9 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
         for item in items.iter().filter(|item| item.category != InventoryCategory::Worlds) {
             let pack = packs.iter().find(|pack| super::same_image(&item.identity, &pack.item.identity))
                 .ok_or_else(|| io::Error::other("Selected pack identity changed during review"))?;
+            if packs.iter().filter(|other| other.uuid == pack.uuid).count() != 1 {
+                warnings.push(format!("{} / {}: duplicate installed pack UUID", item.root, item.name));
+            }
             // Compare UUID regardless of declared version: a mismatch is
             // not evidence that the selected installed pack is dispensable.
             if worlds.iter().any(|reference| reference.uuid == pack.uuid) {
