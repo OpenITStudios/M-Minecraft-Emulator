@@ -251,6 +251,117 @@ pub(super) fn world_pack_references(private: &File, budget: InspectionBudget)
     Ok(references)
 }
 
+// Bounded evidence for installed pack headers and UUID dependencies.
+// Unsupported manifest versions or dependency shapes block review rather
+// than silently treating the pack as independent.
+#[derive(serde::Deserialize)]
+struct PackHeader {
+    uuid: String,
+    version: [u32; 3],
+}
+#[derive(serde::Deserialize)]
+struct PackManifest {
+    header: PackHeader,
+    #[serde(default)]
+    dependencies: Vec<serde_json::Value>,
+}
+
+pub(super) struct PackDependencyEvidence {
+    pub(super) item: InventoryItem,
+    pub(super) uuid: String,
+    pub(super) version: [u32; 3],
+    pub(super) dependencies: Vec<String>,
+}
+
+fn read_manifest(path: &Path) -> io::Result<PackManifest> {
+    let file = OpenOptions::new().read(true).share_mode(FILE_SHARE_READ)
+        .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT).open(path)?;
+    image_id(&file)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+        || metadata.len() > MAX_DECLARATIONS_BYTES as u64 {
+        return Err(io::Error::other("Unsupported pack manifest"));
+    }
+    let mut bytes = Vec::new();
+    file.take((MAX_DECLARATIONS_BYTES + 1) as u64).read_to_end(&mut bytes)?;
+    if bytes.len() > MAX_DECLARATIONS_BYTES {
+        return Err(io::Error::other("Pack manifest exceeded its size limit"));
+    }
+    let manifest: PackManifest = serde_json::from_slice(&bytes)
+        .map_err(|_| io::Error::other("Unsupported pack manifest"))?;
+    if !valid_uuid(&manifest.header.uuid) ||
+        manifest.header.version.iter().any(|v| *v > 65535) ||
+        manifest.dependencies.len() > MAX_WORLD_PACK_REFS as usize {
+        return Err(io::Error::other("Invalid pack identity or dependencies"));
+    }
+    Ok(manifest)
+}
+
+fn dependency_uuids(manifest: &PackManifest) -> io::Result<Vec<String>> {
+    let mut result = Vec::new();
+    for entry in &manifest.dependencies {
+        let object = entry.as_object().ok_or_else(|| io::Error::other("Invalid pack dependency"))?;
+        if let Some(uuid) = object.get("uuid") {
+            let uuid = uuid.as_str().filter(|uuid| valid_uuid(uuid))
+                .ok_or_else(|| io::Error::other("Invalid dependency UUID"))?;
+            result.push(uuid.to_ascii_lowercase());
+        } else if object.get("module_name").and_then(|name| name.as_str())
+            .is_some_and(|name| !name.is_empty() && name.starts_with("@minecraft/")) {
+            // Built-in script API module, not an installed pack UUID.
+        } else {
+            return Err(io::Error::other("Unknown pack dependency shape"));
+        }
+    }
+    Ok(result)
+}
+
+pub(super) fn pack_dependency_evidence(private: &File, budget: InspectionBudget)
+    -> io::Result<Vec<PackDependencyEvidence>> {
+    let Some((base, _pins)) = base_path(private, budget)? else {
+        if budget.exhausted() { return Err(io::Error::other("Dependency review deadline exceeded")); }
+        return Ok(Vec::new());
+    };
+    let mut evidence = Vec::new();
+    let mut total_dependencies = 0;
+    for category in [InventoryCategory::ResourcePacks, InventoryCategory::BehaviorPacks] {
+        for item in individual_inventory(private, category, budget)? {
+            if budget.exhausted() { return Err(io::Error::other("Dependency review deadline exceeded")); }
+            let root = base.join(item.root);
+            let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+            let path = root.join(&item.name);
+            let pin = open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+            if !super::same_image(&item.identity, &directory_id(&pin)?) {
+                return Err(io::Error::other("Pack directory changed during review"));
+            }
+            let manifest = read_manifest(&path.join("manifest.json"))?;
+            let dependencies = dependency_uuids(&manifest)?;
+            total_dependencies += dependencies.len();
+            if total_dependencies > MAX_WORLD_PACK_REFS as usize {
+                return Err(io::Error::other("Too many pack dependencies"));
+            }
+            evidence.push(PackDependencyEvidence {
+                item, uuid: manifest.header.uuid.to_ascii_lowercase(),
+                version: manifest.header.version, dependencies,
+            });
+        }
+    }
+    if budget.exhausted() { return Err(io::Error::other("Dependency review deadline exceeded")); }
+    Ok(evidence)
+}
+
+// This conventional metadata path is a candidate only: absence is not
+// proof that no global pack activation exists on the target installation.
+pub(super) fn global_pack_references(private: &File, budget: InspectionBudget)
+    -> io::Result<Option<Vec<String>>> {
+    let Some((base, _pins)) = base_path(private, budget)? else {
+        return Ok(None);
+    };
+    if budget.exhausted() { return Err(io::Error::other("Global reference deadline exceeded")); }
+    let refs = read_pack_references(&base.join("global_resource_packs.json"))?;
+    if budget.exhausted() { return Err(io::Error::other("Global reference deadline exceeded")); }
+    Ok(refs.map(|refs| refs.into_iter().map(|r| r.pack_id.to_ascii_lowercase()).collect()))
+}
+
 fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
     Ok(read_pack_references(path)?.map(|refs| refs.len() as u32))
 }
@@ -364,6 +475,14 @@ pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackS
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn manifest_dependency_review_distinguishes_pack_uuid_and_builtin_module() {
+        let manifest: PackManifest = serde_json::from_str(r#"{"header":{"uuid":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]},"dependencies":[{"uuid":"BBBBBBBB-2222-3333-4444-555555555555","version":[1,0,0]},{"module_name":"@minecraft/server","version":"1.0.0"}]}"#).unwrap();
+        assert_eq!(dependency_uuids(&manifest).unwrap(), vec!["bbbbbbbb-2222-3333-4444-555555555555".to_string()]);
+        let unknown: PackManifest = serde_json::from_str(r#"{"header":{"uuid":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]},"dependencies":[{"unknown":true}]}"#).unwrap();
+        assert!(dependency_uuids(&unknown).is_err());
+    }
 
     #[test]
     fn individual_inventory_classifies_only_marked_directories_and_retains_identity() {
