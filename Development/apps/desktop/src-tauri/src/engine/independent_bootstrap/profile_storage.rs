@@ -275,6 +275,49 @@ impl SelectedTreePlan {
     pub(super) fn totals(&self) -> (u64, u32) {
         (self.plan.bytes, self.plan.files.len() as u32)
     }
+
+    // Consume only handles admitted by the complete preflight. No reopening
+    // paths, recursive removal, attribute overrides or fallback on failure.
+    // Kept internal until the controller's confirmation admission is wired.
+    pub(super) fn dispose(self) -> io::Result<()> {
+        let Self { _ancestors, mut plan } = self;
+        plan.bounded(0)?;
+        if !plan.deleting || !plan.selected_tree || plan.directories.is_empty() {
+            return Err(invalid("Invalid selected-world deletion plan"));
+        }
+        // FILE_DISPOSITION_INFO removes on handle close. Close each leaf
+        // before attempting any directory, then consume directories in
+        // reverse preorder so children close before parents.
+        // Any failure after the first disposition may leave a partial result.
+        let partial = || io::Error::other("Selected world cleanup stopped; selected data may be partially removed. Refresh inventory before retrying.");
+        for file in plan.files.drain(..) {
+            mark_for_delete(&file).map_err(|_| partial())?;
+            drop(file);
+        }
+        while let Some(directory) = plan.directories.pop() {
+            mark_for_delete(&directory).map_err(|_| partial())?;
+            drop(directory);
+        }
+        // Keep non-target ancestors alive until every disposition finishes.
+        drop(_ancestors);
+        Ok(())
+    }
+}
+
+// Shared Win32 disposition primitive. It cannot grant DELETE access or
+// traverse a path. The caller owns scope, preflight and error reporting.
+fn mark_for_delete(file: &File) -> io::Result<()> {
+    let info = FILE_DISPOSITION_INFO { DeleteFile: true };
+    // SAFETY: fixed-size disposition structure and a live retained handle.
+    if unsafe {
+        SetFileInformationByHandle(
+            file.as_raw_handle() as _, FileDispositionInfo,
+            &info as *const _ as _, mem::size_of_val(&info) as u32,
+        )
+    } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
 }
 
 pub(super) fn preflight_selected_worlds(private: &File,
@@ -383,16 +426,7 @@ pub(super) fn clear(private: &File, inactive: bool) -> io::Result<()> {
     // No path-based delete or recursive directory removal. Retain ancestor pins
     // and exclusive file handles until all dispositions have been attempted.
     for file in &plan.files {
-        let info = FILE_DISPOSITION_INFO { DeleteFile: true };
-        if unsafe {
-            SetFileInformationByHandle(
-                file.as_raw_handle() as _,
-                FileDispositionInfo,
-                &info as *const _ as _,
-                mem::size_of_val(&info) as u32,
-            )
-        } == 0
-        {
+        if mark_for_delete(file).is_err() {
             return Err(io::Error::other("Cache cleanup stopped; some cache files may have been removed. Account and world data were not targeted."));
         }
     }

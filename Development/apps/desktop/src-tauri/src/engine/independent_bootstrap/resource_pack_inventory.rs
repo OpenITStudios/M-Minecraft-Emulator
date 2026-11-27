@@ -669,6 +669,39 @@ mod tests {
     }
 
     #[test]
+    fn selected_world_disposition_preserves_other_worlds_profiles_and_settings() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let other = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let relative = "Roaming/Minecraft Education Edition/games/com.mojang";
+        let base = parent.join(relative);
+        let selected = base.join("minecraftWorlds/one");
+        let sibling = base.join("minecraftWorlds/two");
+        let foreign = other.join(relative).join("minecraftWorlds/one");
+        for world in [&selected, &sibling, &foreign] {
+            fs::create_dir_all(world.join("db")).unwrap();
+            fs::write(world.join("level.dat"), b"fixture").unwrap();
+            fs::write(world.join("db/data"), b"payload").unwrap();
+        }
+        fs::create_dir_all(base.join("minecraftpe")).unwrap();
+        fs::write(base.join("minecraftpe/options.txt"), b"preserve").unwrap();
+        let selection = ReviewSelection {
+            category: InventoryCategory::Worlds, root: "minecraftWorlds".into(), name: "one".into(),
+        };
+        let budget = || InspectionBudget::new(Duration::from_secs(2));
+        let review = review_selection(&private, &[selection], budget()).unwrap();
+        let plan = super::super::profile_storage::preflight_selected_worlds(&private, &review, budget()).unwrap();
+        plan.dispose().unwrap();
+        assert!(!selected.exists());
+        assert_eq!(fs::read(sibling.join("db/data")).unwrap(), b"payload");
+        assert_eq!(fs::read(foreign.join("db/data")).unwrap(), b"payload");
+        assert_eq!(fs::read(base.join("minecraftpe/options.txt")).unwrap(), b"preserve");
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+        fs::remove_dir_all(other).unwrap();
+    }
+
+    #[test]
     fn exclusive_world_preflight_never_deletes_on_drop_or_changed_totals() {
         let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
         let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
