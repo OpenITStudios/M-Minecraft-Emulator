@@ -3,17 +3,18 @@
 #include <dxgi.h>
 #include <memory>
 #include <vector>
+#include "fps-meter-ffi.h"
 
 namespace fps_hud {
 struct Reading { unsigned long long accepted = 0; unsigned milliFps = 0; bool valid = false; };
 // Accepted native Present/Present1 rate, not scanout/display or a configured ceiling.
 class Meter {
     SRWLOCK gate_ = SRWLOCK_INIT;
-    LONGLONG frequency_, first_ = 0, last_ = 0;
-    unsigned long long intervals_ = 0;
-    Reading reading_{};
+    LazyTesterFpsMeterState state_{};
 public:
-    explicit Meter(LONGLONG frequency) : frequency_(frequency > 0 && frequency <= 1000000000000LL ? frequency : 0) {}
+    explicit Meter(LONGLONG frequency) noexcept { lazytester_fps_meter_init(&state_, frequency); }
+    Meter(const Meter&) = delete;
+    Meter& operator=(const Meter&) = delete;
     void reset() noexcept;
     void record(LONGLONG now, HRESULT result, UINT flags) noexcept;
     Reading read(LONGLONG now = 0) noexcept; // Default samples QPC under the read lock.

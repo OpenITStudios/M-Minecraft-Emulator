@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Rust-first FPS Meter migration: one Rust implementation owns accepted-Present arithmetic and freshness; native C++ adapter retains QPC/HRESULT/SRWLOCK and unchanged HUD snapshot ABI. Fixed-width inline state, no allocation or new worker; all four CMake consumers link one Rust static library. No game changes. Rust/C++ tests and Windows build/link NOT_EXECUTED; v4 payload review remains held. Next: source review build consumers, then assess frame pacing migration independently.
+
 Pack dependency review: typed dependency records refuse duplicate UUID fields, mixed UUID/module declarations, unsupported fields and missing/invalid versions; UUID comparison still ignores version for conservative reference detection. Positive/negative parser fixtures authored NOT_EXECUTED. No pack deletion authorization; native global activation/path coverage remains unknown.
 
 Selective tree aggregate bounds: read-only review and exclusive preflight now share the same file, directory and entry limits; a cross-category selection cannot receive a successful review solely because each individual tree fits separately. Existing two-second deadline, logical bytes and identity fingerprint retained. Boundary fixture authored, NOT_EXECUTED. No mutation enabled; native path and disposition evidence still held.

@@ -7,36 +7,25 @@
 #include <thread>
 
 namespace fps_hud {
+// Native filter, clock and synchronization stay at the Windows boundary.
 void Meter::reset() noexcept {
-    AcquireSRWLockExclusive(&gate_); first_ = last_ = 0; intervals_ = 0; reading_ = {};
+    AcquireSRWLockExclusive(&gate_);
+    lazytester_fps_meter_reset(&state_);
     ReleaseSRWLockExclusive(&gate_);
 }
 void Meter::record(LONGLONG now, HRESULT result, UINT flags) noexcept {
-    if (result != S_OK || (flags & DXGI_PRESENT_TEST) || frequency_ <= 0 || now <= 0) return;
+    if (result != S_OK || (flags & DXGI_PRESENT_TEST) || now <= 0) return;
     AcquireSRWLockExclusive(&gate_);
-    ++reading_.accepted;
-    // Native completions on separate threads can acquire this lock out of order.
-    now = (std::max)(now, last_);
-    if (!first_ || now - last_ > frequency_ * 2) {
-        first_ = now; intervals_ = 0; reading_.valid = false;
-    } else {
-        ++intervals_;
-        const LONGLONG elapsed = now - first_;
-        if (elapsed >= (frequency_ + 1) / 2) {
-            const double rate = 1000.0 * static_cast<double>(intervals_) * static_cast<double>(frequency_)
-                / static_cast<double>(elapsed);
-            reading_.milliFps = static_cast<unsigned>((std::min)(rate, 9999999.0));
-            reading_.valid = true; first_ = now; intervals_ = 0;
-        }
-    }
-    last_ = now; ReleaseSRWLockExclusive(&gate_);
+    lazytester_fps_meter_record(&state_, now);
+    ReleaseSRWLockExclusive(&gate_);
 }
 Reading Meter::read(LONGLONG now) noexcept {
     AcquireSRWLockShared(&gate_);
     if (!now) { LARGE_INTEGER value{}; if (QueryPerformanceCounter(&value)) now = value.QuadPart; }
-    auto value = reading_;
-    value.valid = value.valid && now >= last_ && now - last_ <= frequency_ * 2;
-    ReleaseSRWLockShared(&gate_); return value;
+    LazyTesterFpsMeterReading value{};
+    lazytester_fps_meter_read(&state_, now, &value);
+    ReleaseSRWLockShared(&gate_);
+    return {value.accepted, value.milliFps, value.valid != 0};
 }
 RECT placement(RECT client, UINT dpi) noexcept {
     if (dpi < 48 || dpi > 480) return {};

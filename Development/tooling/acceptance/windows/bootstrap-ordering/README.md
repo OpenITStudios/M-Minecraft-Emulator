@@ -203,6 +203,16 @@ retain empty reviewed game/replay policies even with ignored tests included.
 Canonical exact hashes, executed evidence and the integrated Education
 Host World/focus/resource acceptance next action stay in planning/development.md.
 
+## Rust FPS measurement core
+
+`fps-meter.rs` is the sole accepted-Present rate implementation. The existing
+C++ Meter retains its inline state, SRWLOCK, HRESULT filtering and QPC sampling;
+`fps-meter-ffi.h` defines the fixed-width C ABI. All four existing HUD consumers
+link the same dependency-free Rust static library built by the existing CMake
+project using installed MSVC-target rustc. No game source, worker, allocator
+ownership or pacing behavior changes. Rust and existing C++ fixtures are
+AUTHORED_NOT_EXECUTED; Windows build/link and payload review remain held.
+
 ## Selected-only HUD capability (v4)
 
 The Rust launcher prepares a 128-byte v4 presentation section. A fifth
