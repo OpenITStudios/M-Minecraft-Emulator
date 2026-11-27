@@ -15,6 +15,8 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
     expect(rail).toContain('class="lazytester-launcher-header"');
     expect(css).toContain('padding-right:29px');
+    expect(css).toContain('grid-template-rows:24px 18px');
+    expect(css).toContain('.lazytester-workspace-right .lazytester-launcher-header{display:flex;flex-wrap:nowrap;min-height:26px;gap:5px}');
   });
 
   it('limits global Play warnings without obscuring their text or shrinking the native game owner',()=>{
