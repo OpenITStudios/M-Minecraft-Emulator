@@ -2096,6 +2096,53 @@ void nativeStorageMutationChecks(const std::wstring& base, bool mediated = false
             static_cast<ULONG>(actual), static_cast<ULONG>(expected));
         require(actual == expected && GetLastError() == sentinel);
     };
+    // Exercise the handle-local classes on exactly the same disposable
+    // fixture in unmediated Windows and the two mediated profile slots.
+    const auto metadataPath = base + L"\\mutation-metadata.bin";
+    {
+        Handle file(CreateFileW(metadataPath.c_str(), GENERIC_READ | GENERIC_WRITE, sharing,
+            nullptr, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, nullptr));
+        require(file.value != INVALID_HANDLE_VALUE);
+        writeBytes(file.value, "ABCDE");
+        const auto update = [&](HANDLE handle, ULONG kind, void* value, ULONG size, NTSTATUS expected = 0) {
+            IO_STATUS_BLOCK io{};
+            SetLastError(sentinel);
+            check(set(handle, &io, value, size, static_cast<FILE_INFORMATION_CLASS>(kind)), expected);
+        };
+        FILE_BASIC_INFO basic{};
+        basic.FileAttributes = FILE_ATTRIBUTE_HIDDEN;
+        update(file.value, 4, &basic, sizeof(basic));
+        FILE_BASIC_INFO actual{};
+        require(GetFileInformationByHandleEx(file.value, FileBasicInfo, &actual, sizeof(actual))
+            && (actual.FileAttributes & FILE_ATTRIBUTE_HIDDEN));
+        basic.FileAttributes = FILE_ATTRIBUTE_NORMAL;
+        update(file.value, 4, &basic, sizeof(basic));
+
+        LARGE_INTEGER position{};
+        position.QuadPart = 2;
+        update(file.value, 14, &position, sizeof(position));
+        char next = 0;
+        DWORD count = 0;
+        require(ReadFile(file.value, &next, 1, &count, nullptr) && count == 1 && next == 'C');
+
+        LARGE_INTEGER allocation{}, size{};
+        allocation.QuadPart = 4096;
+        update(file.value, 19, &allocation, sizeof(allocation));
+        require(GetFileSizeEx(file.value, &size) && size.QuadPart == 5);
+        LARGE_INTEGER end{};
+        end.QuadPart = 3;
+        {
+            Handle readOnly(CreateFileW(metadataPath.c_str(), GENERIC_READ, sharing,
+                nullptr, OPEN_EXISTING, 0, nullptr));
+            require(readOnly.value != INVALID_HANDLE_VALUE);
+            update(readOnly.value, 20, &end, sizeof(end), static_cast<NTSTATUS>(0xc0000022));
+            require(GetFileSizeEx(file.value, &size) && size.QuadPart == 5);
+        }
+        update(file.value, 20, &end, sizeof(end));
+        require(GetFileSizeEx(file.value, &size) && size.QuadPart == 3);
+        expectBytes(file.value, "ABC");
+    }
+    require(DeleteFileW(metadataPath.c_str()));
     for (ULONG kind : {10UL, 65UL}) for (unsigned form = 0; form < 3; ++form) {
         const auto sourcePath = base + L"\\mutation-source.bin";
         const auto targetPath = base + L"\\mutation-target.bin";

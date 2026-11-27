@@ -617,6 +617,18 @@ NTSTATUS NTAPI translatedSetInformation(HANDLE file, PIO_STATUS_BLOCK io, PVOID 
     unsigned heldCount = 0;
     bool handled = false;
     __try {
+        const ULONG kind = static_cast<ULONG>(informationClass);
+        // These documented handle-local classes never enter the existing
+        // namespace policy below. Forward them without a file-type/path
+        // query; the original API still enforces handle access and arguments.
+        // Keep every other (including unknown) class on the existing path.
+        if (kind == 4 /* FileBasicInformation */ || kind == 14 /* FilePositionInformation */
+            || kind == 19 /* FileAllocationInformation */ || kind == 20 /* FileEndOfFileInformation */) {
+            SetLastError(saved);
+            status = originalSetFileInformation(file, io, information, bytes, informationClass);
+            SetLastError(saved);
+            return status;
+        }
         wchar_t source[CanonicalPrivatePathCharacters]{};
         const DWORD size = GetFileType(file) == FILE_TYPE_DISK
             ? GetFinalPathNameByHandleW(file, source, CanonicalPrivatePathCharacters, VOLUME_NAME_NT) : 0;
@@ -624,7 +636,6 @@ NTSTATUS NTAPI translatedSetInformation(HANDLE file, PIO_STATUS_BLOCK io, PVOID 
             static_cast<USHORT>(size < CanonicalPrivatePathCharacters ? size * 2 : 0), source};
         unsigned sourceLeaf = 0;
         const bool own = size && size < CanonicalPrivatePathCharacters && pathPrefix(sourceName, ownDevice, sourceLeaf);
-        const ULONG kind = static_cast<ULONG>(informationClass);
         if (own && (kind == 10 || kind == 65)) {
             handled = true;
             if (sourceLeaf < size && information && bytes >= MinimumRenameBytes) {

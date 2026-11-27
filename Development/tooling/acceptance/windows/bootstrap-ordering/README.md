@@ -1,5 +1,23 @@
 # Self-owned early-import ordering experiment
 
+## Selective native file-information processing — NGE-02
+
+The existing NtSetInformationFile hook skips file-type and canonical-path
+queries only for the documented handle-local Basic (4), Position (14),
+Allocation (19) and EndOfFile (20) information classes. These operations
+were already forwarded unchanged by the previous routing policy.
+The original NT API retains access/argument validation, status, and the
+hook's LastError and exception handling. All other classes, including
+unknown classes, retain the existing namespace checks. Rename, link,
+profile-root disposition and ancestor pins are unchanged. No handle cache,
+new hook, dependency or game option change. See the
+[Microsoft native API contract](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/nf-ntifs-ntsetinformationfile).
+
+The existing configured-storage control extends its unmediated/private
+mutation fixture with actual attribute, position, allocation, EOF and
+read-only refusal checks on disposable canaries. SOURCE_REVIEWED;
+TEST_AUTHORED_NOT_RUN. Native build and performance NOT_EXECUTED.
+
 ## Automatic approved game preset — 25 October 2026
 
 The pair/five private startup route applies the existing approved Simple preset
