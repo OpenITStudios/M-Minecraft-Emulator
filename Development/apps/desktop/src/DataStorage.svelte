@@ -172,7 +172,7 @@
               </div>
               {#if autoClearWebCache===undefined}<p class="lazytester-help">Web cache preference unavailable. Refresh settings before changing it.</p>{/if}
               <div class="lazytester-setting">
-                <div><h3>Auto-clear Download Cache</h3><p>Download cache is separate from web cache. Cleanup remains unavailable until its location is verified.</p></div>
+                <div><h3>Auto-clear Download Cache</h3><p>Download cache is separate from web cache. Cleanup remains unavailable until its location is verified.</p>{#if selectedStorage?.downloadCache?.issue}<p class="lazytester-help">{selectedStorage.downloadCache.issue}</p>{/if}</div>
                 <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Download Cache" checked={false} disabled/></label>
               </div>
               <div class="lazytester-setting">

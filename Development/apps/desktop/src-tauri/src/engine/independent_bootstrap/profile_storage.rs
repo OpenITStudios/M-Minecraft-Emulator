@@ -503,13 +503,42 @@ fn preflight_selected_trees(private: &File,
     Ok(SelectedTreePlan { _ancestors: ancestors, plan })
 }
 
+#[derive(Clone, Copy)]
+pub(super) enum CacheTarget { Web, Download }
+
+impl CacheTarget {
+    fn parts(self) -> io::Result<&'static [&'static str]> {
+        match self {
+            Self::Web => Ok(&CACHE_PARTS),
+            // No native-reviewed download producer/root in the current source.
+            // Do not substitute app Data/Cache, the HTTP cache, or pack roots.
+            Self::Download => Err(io::Error::new(io::ErrorKind::Unsupported,
+                "Minecraft download cache location is not verified")),
+        }
+    }
+}
+
 fn plan(private: &File, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {
+    plan_cache(private, CacheTarget::Web, deleting, budget)
+}
+
+fn plan_cache(private: &File, target: CacheTarget, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {
+    // Resolve the compiled allowlist before touching the filesystem.
+    let parts = target.parts()?;
+    if parts.is_empty() { return Err(invalid("Cache root is empty")); }
+    for part in parts {
+        let mut components = Path::new(part).components();
+        if !matches!(components.next(), Some(std::path::Component::Normal(_))) ||
+            components.next().is_some() || part.contains(':') {
+            return Err(invalid("Unsupported cache root component"));
+        }
+    }
     let mut plan = CachePlan::new(deleting, budget);
     // Both observation and deletion preflight must finish within their budget.
     plan.bounded(0)?;
     let mut path = directory_path(private)?;
     plan.directories.push(private.try_clone()?);
-    for part in CACHE_PARTS {
+    for part in parts {
         plan.bounded(0)?;
         path.push(part);
         match open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
@@ -529,7 +558,14 @@ fn plan(private: &File, deleting: bool, budget: InspectionBudget) -> io::Result<
 }
 
 pub(super) fn inspect(private: &File, inactive: bool, budget: InspectionBudget) -> CacheStorage {
-    match plan(private, false, budget) {
+    inspect_cache(private, CacheTarget::Web, inactive, budget)
+}
+
+pub(super) fn inspect_cache(private: &File, target: CacheTarget, inactive: bool, budget: InspectionBudget) -> CacheStorage {
+    if let Err(error) = target.parts() {
+        return CacheStorage { bytes: 0, files: 0, partial: true, can_clear: false, issue: Some(error.to_string()) };
+    }
+    match plan_cache(private, target, false, budget) {
         Ok(plan) => CacheStorage {
             bytes: plan.bytes,
             files: plan.files.len() as u32,
@@ -554,12 +590,17 @@ pub(super) fn inspect(private: &File, inactive: bool, budget: InspectionBudget) 
 }
 
 pub(super) fn clear(private: &File, inactive: bool) -> io::Result<()> {
+    clear_cache_target(private, CacheTarget::Web, inactive)
+}
+
+pub(super) fn clear_cache_target(private: &File, target: CacheTarget, inactive: bool) -> io::Result<()> {
+    target.parts()?;
     if !inactive {
         return Err(invalid(
             "Close this Minecraft session normally before clearing its cache",
         ));
     }
-    let plan = plan(private, true, InspectionBudget::new(Duration::from_secs(2)))?;
+    let plan = plan_cache(private, target, true, InspectionBudget::new(Duration::from_secs(2)))?;
     // No path-based delete or recursive directory removal. Retain ancestor pins
     // and exclusive file handles until all dispositions have been attempted.
     for file in &plan.files {
@@ -617,6 +658,18 @@ mod tests {
             assert_eq!(self.0.parent(), Some(std::env::temp_dir().as_path()));
             fs::remove_dir_all(&self.0).unwrap();
         }
+    }
+    #[test]
+    fn unresolved_download_cache_never_reuses_web_cache_or_touches_profile() {
+        let fixture = Fixture::new();
+        let cache = fixture.cache();
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join("keep"), b"preserve").unwrap();
+        let pin = fixture.pin();
+        let report = inspect_cache(&pin, CacheTarget::Download, true, InspectionBudget::new(Duration::from_secs(2)));
+        assert!(report.partial && !report.can_clear && report.issue.is_some());
+        assert_eq!(clear_cache_target(&pin, CacheTarget::Download, true).unwrap_err().kind(), io::ErrorKind::Unsupported);
+        assert_eq!(fs::read(cache.join("keep")).unwrap(), b"preserve");
     }
     #[test]
     fn clears_only_http_cache_preserving_auth_world_settings_and_other_temp() {
@@ -778,6 +831,7 @@ mod size_tests {
             partial: false,
             disk: None,
             cache: Default::default(),
+            download_cache: None,
             game_settings: None,
             full_clear: None,
             resource_packs: None,

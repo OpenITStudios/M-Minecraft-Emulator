@@ -810,6 +810,7 @@ impl Sessions {
                         }
                         cache
                     },
+                    download_cache: Some(profile_storage::inspect_cache(&store.private, profile_storage::CacheTarget::Download, admission.is_ok(), budget)),
                     // The inventory reads saved world *pack declaration metadata*.
                     // Do not inspect a selected profile while its own Minecraft
                     // session is active or the admission result is uncertain.
@@ -1805,6 +1806,16 @@ fn run() -> io::Result<()> {
                     }
                     sessions.confirm_selected_worlds(slot, &selections, &confirmation_token).map_err(|error| error.to_string())?;
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?);
+                }
+                SessionRequest::ClearProfileDownloadCache { slot } => {
+                    sessions.admit_profile_mutation(slot).map_err(|error|error.to_string())?;
+                    let store=sessions.store(slot).map_err(|error|error.to_string())?;
+                    #[cfg(feature="lazy-tester-package")]
+                    if product_profiles::clear::pending(store).map_err(|error|error.to_string())? {
+                        return Err("Finish pending profile cleanup first".into());
+                    }
+                    profile_storage::clear_cache_target(&store.private,profile_storage::CacheTarget::Download,true).map_err(|error|error.to_string())?;
+                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
                 }
                 SessionRequest::ClearProfileCache { slot } => {
                     sessions

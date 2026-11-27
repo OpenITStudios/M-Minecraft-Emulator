@@ -532,6 +532,8 @@ pub struct ProfileStorage {
     pub partial: bool,
     pub disk: Option<DiskSpace>,
     pub cache: CacheStorage,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub download_cache: Option<CacheStorage>,
     // Read-only on-disk pack directory census; NOT world activation or resident RAM.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resource_packs: Option<ResourcePackStorage>,
@@ -688,6 +690,7 @@ pub enum SessionRequest {
     ConfirmSelectedPacks { slot: u32, selections: Vec<SelectiveSelection>, #[serde(rename="confirmationToken")] confirmation_token: String },
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
+    ClearProfileDownloadCache { slot: u32 },
     ResetGameSettings { slot: u32 },
     RestoreGameSettings { slot: u32 },
     DisableImprovedInputResponse { slot: u32 },
@@ -1291,7 +1294,7 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

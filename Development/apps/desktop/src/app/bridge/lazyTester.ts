@@ -14,6 +14,7 @@ export interface ProfileStorage {
   slot: ProfileSlot; bytes: number; files: number; partial: boolean;
   disk: {availableBytes: number; totalBytes: number} | null;
   cache: {bytes: number; files: number; partial: boolean; canClear: boolean; issue: string | null};
+  downloadCache?: ProfileStorage['cache'];
   resourcePacks?: {
     manifested:number; partial:boolean; issue:string|null;
     worldDeclarations?: {
@@ -233,7 +234,7 @@ export function parseSession(value: unknown): SessionSnapshot {
   if (value.storage !== null) {
     if (!Array.isArray(value.storage) || value.storage.length !== 5) throw new TypeError('Invalid storage response');
     value.storage.forEach((storage: unknown, index: number) => {
-      if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'resourcePacks')?['resourcePacks']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== index + 1 ||
+      if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'downloadCache')?['downloadCache']:[]),...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'resourcePacks')?['resourcePacks']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== index + 1 ||
           !Number.isSafeInteger(storage.bytes) || Number(storage.bytes) < 0 || !Number.isInteger(storage.files) ||
           Number(storage.files) < 0 || Number(storage.files) > 100000 || typeof storage.partial !== 'boolean') throw new TypeError('Invalid storage metadata');
       const {disk, cache} = storage;
@@ -247,6 +248,17 @@ export function parseSession(value: unknown): SessionSnapshot {
           typeof cache.canClear !== 'boolean' || !(cache.issue === null || typeof cache.issue === 'string' && cache.issue.length <= 8192) ||
           cache.canClear && (cache.partial || cache.files === 0 || cache.issue !== null ||
             (value.profiles as ProfileSession[]).some(profile => profile.slot === storage.slot && ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
+      if(Object.hasOwn(storage,'downloadCache')) {
+        const download=storage.downloadCache;
+        if(!record(download)||!exact(download,['bytes','files','partial','canClear','issue'])||
+          !Number.isSafeInteger(download.bytes)||Number(download.bytes)<0||
+          !Number.isInteger(download.files)||Number(download.files)<0||Number(download.files)>2048||
+          typeof download.partial!=='boolean'||typeof download.canClear!=='boolean'||
+          !(download.issue===null||typeof download.issue==='string'&&download.issue.length<=8192)||
+          download.canClear&&(download.partial||download.files===0||download.issue!==null||
+            (value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state))))
+          throw new TypeError('Invalid download cache metadata');
+      }
       // Pack folders are a read-only inventory, never evidence that a world
       // has activated any of them or that game RAM can be reclaimed.
       if(Object.hasOwn(storage,'resourcePacks')) {
@@ -463,6 +475,7 @@ export const lazyTester = {
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ConfirmSelectedWorlds',slot,selections:receipt.items,confirmationToken:receipt.confirmationToken}}));
   },
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
+  clearDownloadCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileDownloadCache',slot}})),
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
   recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {
     if(!profileSlots.includes(slot)||!['Reset','Restore'].includes(action))throw new TypeError('Invalid settings recovery request');
