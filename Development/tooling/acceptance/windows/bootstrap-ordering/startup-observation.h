@@ -2,6 +2,7 @@
 #include "education-config.h"
 #include <winternl.h>
 #include <intrin.h>
+#include <atomic>
 
 // Private, local-only diagnostic bytes. Never provider readiness or authenticated evidence.
 namespace startup_observation {
@@ -62,6 +63,12 @@ static_assert(sizeof(Record) == 496);
 static_assert(offsetof(Journal, records) == 64);
 static_assert(sizeof(Journal) == 31968);
 inline Journal* active = nullptr;
+// Process-local latch only; never retire the shared journal or its lifetime
+// storage diagnostics. The original attach publishes the journal once.
+inline std::atomic<bool> traceExpired{false};
+inline bool traceEnabled() {
+    return active && !traceExpired.load(std::memory_order_relaxed);
+}
 inline thread_local bool logging = false;
 // Unlike the 30-second startup trace, these fixed counters cover the game lifetime.
 inline void storageResult(unsigned reason, DWORD operation, ACCESS_MASK access, ULONG options,
@@ -151,13 +158,19 @@ inline bool within(const Journal& journal, LONGLONG now) {
             <= static_cast<ULONGLONG>(journal.frequency) * 30;
 }
 inline bool begin(Record& record, Kind kind, void* caller) {
-    if (!active) return false;
+    if (!traceEnabled()) return false;
     if (logging) { InterlockedOr(&active->losses, ReentrantLogger); return false; }
     logging = true;
     LARGE_INTEGER now{};
     const bool clock = QueryPerformanceCounter(&now) != FALSE;
     if (!clock) InterlockedOr(&active->losses, ClockOrLateReturn);
     const bool enabled = clock && within(*active, now.QuadPart);
+    // Only a successful, valid forward clock sample can prove expiry.
+    // A failed clock or a sample before start must not latch it.
+    if (clock && !enabled && active->frequency > 0
+        && active->frequency <= MAXLONGLONG / 31 && now.QuadPart >= active->started) {
+        traceExpired.store(true, std::memory_order_relaxed);
+    }
     if (enabled) {
         record.kind = kind;
         record.thread = GetCurrentThreadId();

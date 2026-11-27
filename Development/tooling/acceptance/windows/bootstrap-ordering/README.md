@@ -1175,7 +1175,14 @@ The DLL validates that binding, clears further inheritance and starts a fixed
 30-second QPC window at attach. Capacity is finite; overflow, recursive-logger
 loss and clock/late returns have explicit loss flags. Hooks remain installed
 for the process lifetime when recording ends; there is no live detach or
-observation-triggered game/helper termination.
+observation-triggered game/helper termination. NGE-03 latches confirmed
+expiry in process-local state: later trace admission does not sample QPC,
+and diagnostic-only Win32 mutex name copying is skipped. Existing
+functional singleton binding, in-flight finish/late-return reporting and
+lifetime storage counters retain their original paths. Clock failure or
+a sample before start is not proof of expiry. No new thread or timer,
+journal layout change or standard-launch admission. The latch is exercised
+on the next eligible call, not by an independent wake.
 
 Only three selected calls are observed in Education mode:
 
@@ -1207,6 +1214,9 @@ each slot over two relaunches. It checks original errors and returned child
 PID/TID/birth, truncation, saturated capacity/loss flags and after-exit copy.
 Expiry is exercised by moving only the own fixture's clock into the past after
 checking the 30-second boundary; this is not a 30-second Minecraft capture.
+The existing fixture also uses its executable-local header instance to check
+sticky expiry, late in-flight finish, and continuing storage counters.
+NGE-03 fixtures are AUTHORED_NOT_RUN; native execution is NOT_EXECUTED.
 The sole new internal child argument exits only our own fixture immediately;
 it supplies a process-creation control and accepts no target path.
 

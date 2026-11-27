@@ -976,7 +976,7 @@ void finishWin32Mutex(startup_observation::Record& record, HANDLE result, DWORD 
 HANDLE WINAPI observedMutexW(LPSECURITY_ATTRIBUTES security, BOOL owner, LPCWSTR name) {
     const DWORD before = GetLastError();
     startup_observation::Record record{};
-    const bool observe = copyGuidName(record, name, owner != FALSE)
+    const bool observe = startup_observation::traceEnabled() && copyGuidName(record, name, owner != FALSE)
         && startup_observation::begin(record, startup_observation::Win32MutexW, _ReturnAddress());
     record.argument = MUTEX_ALL_ACCESS;
     SetLastError(before);
@@ -989,7 +989,9 @@ HANDLE WINAPI observedMutexW(LPSECURITY_ATTRIBUTES security, BOOL owner, LPCWSTR
 HANDLE WINAPI observedMutexA(LPSECURITY_ATTRIBUTES security, BOOL owner, LPCSTR name) {
     const DWORD before = GetLastError();
     startup_observation::Record record{};
-    const bool candidate = copyGuidName(record, name, owner != FALSE);
+    // ANSI binding also owns the selected singleton, independently of trace.
+    const bool candidate = (singletonCallerRva || startup_observation::traceEnabled())
+        && copyGuidName(record, name, owner != FALSE);
     const bool observe = candidate
         && startup_observation::begin(record, startup_observation::Win32MutexA, _ReturnAddress());
     if (candidate && singletonCallerRva) {
@@ -1008,7 +1010,7 @@ HANDLE WINAPI observedMutexA(LPSECURITY_ATTRIBUTES security, BOOL owner, LPCSTR 
 HANDLE WINAPI observedMutexExW(LPSECURITY_ATTRIBUTES security, LPCWSTR name, DWORD flags, DWORD access) {
     const DWORD before = GetLastError();
     startup_observation::Record record{};
-    const bool observe = copyGuidName(record, name, (flags & CREATE_MUTEX_INITIAL_OWNER) != 0)
+    const bool observe = startup_observation::traceEnabled() && copyGuidName(record, name, (flags & CREATE_MUTEX_INITIAL_OWNER) != 0)
         && startup_observation::begin(record, startup_observation::Win32MutexExW, _ReturnAddress());
     record.argument = access; record.attributes = flags;
     SetLastError(before);
@@ -1021,7 +1023,7 @@ HANDLE WINAPI observedMutexExW(LPSECURITY_ATTRIBUTES security, LPCWSTR name, DWO
 HANDLE WINAPI observedMutexExA(LPSECURITY_ATTRIBUTES security, LPCSTR name, DWORD flags, DWORD access) {
     const DWORD before = GetLastError();
     startup_observation::Record record{};
-    const bool observe = copyGuidName(record, name, (flags & CREATE_MUTEX_INITIAL_OWNER) != 0)
+    const bool observe = startup_observation::traceEnabled() && copyGuidName(record, name, (flags & CREATE_MUTEX_INITIAL_OWNER) != 0)
         && startup_observation::begin(record, startup_observation::Win32MutexExA, _ReturnAddress());
     record.argument = access; record.attributes = flags;
     SetLastError(before);

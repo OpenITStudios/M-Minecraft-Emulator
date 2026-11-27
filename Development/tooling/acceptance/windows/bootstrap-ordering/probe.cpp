@@ -3146,6 +3146,43 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
 
 
 
+// Local header instance in the fixture executable, independent of the DLL's
+// actual shared journal below. No game or timer; use disposable clock samples.
+void checkStartupTraceLifetime() {
+    using namespace startup_observation;
+    require(!active && !traceExpired.load());
+    Journal journal{};
+    LARGE_INTEGER frequency{}, now{};
+    require(QueryPerformanceFrequency(&frequency) && frequency.QuadPart > 0
+        && frequency.QuadPart <= MAXLONGLONG / 31 && QueryPerformanceCounter(&now));
+    journal.frequency = frequency.QuadPart;
+    journal.started = now.QuadPart;
+    active = &journal;
+    Record first{};
+    require(begin(first, CreateMutant, nullptr));
+    finish(first, 17);
+    require(journal.claimed == 1 && journal.records[0].committed == 1
+        && journal.records[0].lastError == 17 && !traceExpired.load());
+    Record inFlight{};
+    require(begin(inFlight, OpenMutant, nullptr));
+    const auto started = journal.started;
+    journal.started = started - journal.frequency * 31;
+    Record expired{};
+    require(!begin(expired, startup_observation::CreateProcess, nullptr) && traceExpired.load());
+    finish(inFlight, 23);
+    require(journal.claimed == 1 && journal.losses == ClockOrLateReturn);
+    // A restored test clock cannot rearm a completed observation.
+    journal.started = started;
+    require(!traceEnabled() && !begin(expired, startup_observation::CreateProcess, nullptr) && journal.claimed == 1);
+    storageResult(0, 1, 0, 0, 0, 0, 0);
+    storageResult(2, 2, 0, 0, 0, 0, static_cast<NTSTATUS>(0xc00000bbUL));
+    require(journal.storage.counts[0] == 1 && journal.storage.counts[2] == 1
+        && journal.storage.first[1].committed == 1);
+    // Reset only this disposable executable's header state, not the DLL.
+    active = nullptr;
+    traceExpired.store(false);
+}
+
 void checkStartupObservation(const education_bootstrap::Config& config, const probe::Receipt& receipt) {
     SetLastError(ERROR_SUCCESS);
     if (!GetEnvironmentVariableW(startup_observation::Variable, nullptr, 0)
@@ -3154,6 +3191,7 @@ void checkStartupObservation(const education_bootstrap::Config& config, const pr
     require(view.open(config));
     auto& journal = *view.value;
     require(journal.clockReady == 1);
+    checkStartupTraceLifetime();
     // Exercise actual mediated routing with generated names, never game paths.
     const auto fileCreate = reinterpret_cast<probe::NativeFileCreate>(
         GetProcAddress(GetModuleHandleW(L"ntdll.dll"), "NtCreateFile"));
