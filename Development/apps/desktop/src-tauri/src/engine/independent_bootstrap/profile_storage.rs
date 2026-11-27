@@ -60,12 +60,7 @@ fn plan_expired_logs(root: &File, now: u64, budget: InspectionBudget, deleting: 
             .share_mode(0).custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(entry.path())?;
         image_id(&file)?;
-        let mut standard: FILE_STANDARD_INFO = unsafe { mem::zeroed() };
-        if unsafe { GetFileInformationByHandleEx(file.as_raw_handle() as _,
-            FileStandardInfo, &mut standard as *mut _ as _,
-            mem::size_of_val(&standard) as u32) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
+        let standard = crate::engine::windows_file_identity::standard(&file)?;
         let metadata = file.metadata()?;
         if standard.NumberOfLinks != 1 || standard.Directory || standard.DeletePending ||
             !metadata.is_file() || metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
@@ -325,18 +320,7 @@ impl CachePlan {
                     .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
                     .open(&path)?;
                 image_id(&file)?;
-                let mut standard: FILE_STANDARD_INFO = unsafe { mem::zeroed() };
-                if unsafe {
-                    GetFileInformationByHandleEx(
-                        file.as_raw_handle() as _,
-                        FileStandardInfo,
-                        &mut standard as *mut _ as _,
-                        mem::size_of_val(&standard) as u32,
-                    )
-                } == 0
-                {
-                    return Err(io::Error::last_os_error());
-                }
+                let standard = crate::engine::windows_file_identity::standard(&file)?;
                 if standard.NumberOfLinks != 1
                     || standard.Directory
                     || standard.DeletePending
@@ -558,10 +542,6 @@ impl CacheTarget {
                 "Minecraft download cache location is not verified")),
         }
     }
-}
-
-fn plan(private: &File, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {
-    plan_cache(private, CacheTarget::Web, deleting, budget)
 }
 
 fn plan_cache(private: &File, target: CacheTarget, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {
@@ -822,7 +802,7 @@ mod tests {
         fs::create_dir_all(&cache).unwrap();
         let leaf = cache.join("retained");
         fs::write(&leaf, b"must survive").unwrap();
-        assert!(plan(&fixture.pin(), true, InspectionBudget::new(Duration::ZERO)).is_err());
+        assert!(plan_cache(&fixture.pin(), CacheTarget::Web, true, InspectionBudget::new(Duration::ZERO)).is_err());
         assert_eq!(fs::read(&leaf).unwrap(), b"must survive");
     }
 

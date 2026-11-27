@@ -14,6 +14,8 @@ fn registered_image_with(observe: bool, mut resolve: impl FnMut() -> io::Result<
     Ok((target,image,singleton_caller_rva))
 }
 
+// Retained-image comparison is used only by the opt-in timing fixture.
+#[cfg(test)]
 fn validate_registered_image(target:&str,image:&File,observe:bool)->io::Result<u32> {
     validate_registered_image_with(target,image,observe,||crate::engine::native_clients::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly"))
 }

@@ -251,18 +251,7 @@ impl DeletionPlan {
                     .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
                     .open(&path)?;
                 image_id(&file)?;
-                let mut info: FILE_STANDARD_INFO = unsafe { mem::zeroed() };
-                if unsafe {
-                    GetFileInformationByHandleEx(
-                        file.as_raw_handle() as _,
-                        FileStandardInfo,
-                        &mut info as *mut _ as _,
-                        mem::size_of_val(&info) as u32,
-                    )
-                } == 0
-                {
-                    return Err(io::Error::last_os_error());
-                }
+                let info = crate::engine::windows_file_identity::standard(&file)?;
                 if info.NumberOfLinks != 1 || info.Directory || info.DeletePending {
                     return Err(invalid(
                         "Linked or unavailable launcher file; nothing was removed",

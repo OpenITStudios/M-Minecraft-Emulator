@@ -22,8 +22,8 @@ use std::{
 use windows_sys::Win32::{
     Foundation::{FILETIME, HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Storage::FileSystem::{
-        FileAttributeTagInfo, FileIdInfo, GetFileInformationByHandleEx, FILE_ATTRIBUTE_DIRECTORY,
-        FILE_ATTRIBUTE_REPARSE_POINT, FILE_ATTRIBUTE_TAG_INFO, FILE_ID_INFO, FILE_SHARE_READ,
+        GetFileInformationByHandleEx, FILE_ATTRIBUTE_DIRECTORY,
+        FILE_ATTRIBUTE_REPARSE_POINT, FILE_ID_INFO, FILE_SHARE_READ,
     },
     System::RemoteDesktop::ProcessIdToSessionId,
     System::Threading::{
@@ -1222,40 +1222,21 @@ struct SlotStorage {
 }
 
 fn directory_id(file: &File) -> io::Result<FILE_ID_INFO> {
-    let raw = file.as_raw_handle() as HANDLE;
-    let mut tag: FILE_ATTRIBUTE_TAG_INFO = unsafe { mem::zeroed() };
-    let mut id: FILE_ID_INFO = unsafe { mem::zeroed() };
+    // Reuse the existing raw metadata owner; keep the bootstrap-specific
+    // case-sensitivity and ordinary-directory policy here.
+    let attributes = crate::engine::windows_file_identity::attributes(file)?;
+    let id = crate::engine::windows_file_identity::file_id(file)?;
     let mut case: FILE_CASE_SENSITIVE_INFO = unsafe { mem::zeroed() };
-    // SAFETY: Query fixed-size metadata on the retained directory handle.
     if unsafe {
         GetFileInformationByHandleEx(
-            raw,
-            FileAttributeTagInfo,
-            &mut tag as *mut _ as _,
-            mem::size_of_val(&tag) as u32,
+            file.as_raw_handle() as _, FileCaseSensitiveInfo,
+            &mut case as *mut _ as _, mem::size_of_val(&case) as u32,
         )
-    } == 0
-        || unsafe {
-            GetFileInformationByHandleEx(
-                raw,
-                FileIdInfo,
-                &mut id as *mut _ as _,
-                mem::size_of_val(&id) as u32,
-            )
-        } == 0
-        || unsafe {
-            GetFileInformationByHandleEx(
-                raw,
-                FileCaseSensitiveInfo,
-                &mut case as *mut _ as _,
-                mem::size_of_val(&case) as u32,
-            )
-        } == 0
-    {
+    } == 0 {
         return Err(io::Error::last_os_error());
     }
-    if tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY == 0
-        || tag.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    if attributes & FILE_ATTRIBUTE_DIRECTORY == 0
+        || attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
         || case.Flags != 0
     {
         return Err(invalid("Unsupported bootstrap directory"));

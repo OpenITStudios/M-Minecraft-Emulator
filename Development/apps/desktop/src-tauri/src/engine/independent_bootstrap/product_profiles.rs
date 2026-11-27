@@ -579,18 +579,7 @@ fn portable_cache_junction(base: &Path, path: &Path) -> io::Result<bool> {
         .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
         .open(path)?;
-    let mut tag: FILE_ATTRIBUTE_TAG_INFO = unsafe { mem::zeroed() };
-    if unsafe {
-        GetFileInformationByHandleEx(
-            file.as_raw_handle() as _,
-            FileAttributeTagInfo,
-            &mut tag as *mut _ as _,
-            mem::size_of_val(&tag) as u32,
-        )
-    } == 0
-    {
-        return Err(io::Error::last_os_error());
-    }
+    let tag = crate::engine::windows_file_identity::attribute_tag(&file)?;
     Ok(tag.ReparseTag == 0xa0000003 && tag.FileAttributes & FILE_ATTRIBUTE_DIRECTORY != 0)
 }
 fn check_copy_tree(path: &Path) -> io::Result<()> {
