@@ -306,29 +306,46 @@ mod native_workspace_windows {
 
 
     struct GameWindow {
-        pid: u32,
         selected: windows_sys::Win32::Foundation::HWND,
         ambiguous: bool,
+    }
+
+    impl GameWindow {
+        fn record(&mut self, hwnd: windows_sys::Win32::Foundation::HWND) {
+            if !self.selected.is_null() && self.selected != hwnd {
+                self.ambiguous = true;
+            } else {
+                self.selected = hwnd;
+            }
+        }
+    }
+
+    struct PinnedGame {
+        pid: u32,
+        process: OwnedHandle,
+        created: u64,
+        window: GameWindow,
     }
 
     unsafe extern "system" fn enum_game_windows(
         hwnd: windows_sys::Win32::Foundation::HWND,
         data: isize,
     ) -> i32 {
-        let state = &mut *(data as *mut GameWindow);
+        // EnumWindows invokes this callback synchronously. The roster is
+        // bounded, fully pinned and never resized during enumeration.
+        let games = &mut *(data as *mut Vec<PinnedGame>);
         let mut window_pid = 0;
-        GetWindowThreadProcessId(hwnd, &mut window_pid);
-        if window_pid != state.pid
-            || IsWindowVisible(hwnd) == 0
-            || GetAncestor(hwnd, GA_ROOT) != hwnd
-            || !GetWindow(hwnd, GW_OWNER).is_null()
-        {
+        if GetWindowThreadProcessId(hwnd, &mut window_pid) == 0 {
             return 1;
         }
-        if !state.selected.is_null() && state.selected != hwnd {
-            state.ambiguous = true;
-        } else {
-            state.selected = hwnd;
+        let Some(game) = games.iter_mut().find(|game| game.pid == window_pid) else {
+            return 1;
+        };
+        if IsWindowVisible(hwnd) != 0
+            && GetAncestor(hwnd, GA_ROOT) == hwnd
+            && GetWindow(hwnd, GW_OWNER).is_null()
+        {
+            game.window.record(hwnd);
         }
         1
     }
@@ -350,11 +367,11 @@ mod native_workspace_windows {
         Ok(&entry.szExeFile[..end])
     }
 
-    fn observe_one(
+    fn pin_candidate(
         pid: u32,
         target_image: &[u16],
         current_session: u32,
-    ) -> io::Result<Option<super::super::process_identity::OwnedProcess>> {
+    ) -> io::Result<Option<PinnedGame>> {
         // Scope Windows enumeration to this interactive session *before*
         // opening any other user's same-name game process. Fail closed if
         // session attribution itself cannot be obtained.
@@ -389,14 +406,18 @@ mod native_workspace_windows {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Missing Minecraft process creation time"));
         }
 
-        let mut window = GameWindow {
+        Ok(Some(PinnedGame {
             pid,
-            selected: ptr::null_mut(),
-            ambiguous: false,
-        };
-        if unsafe { EnumWindows(Some(enum_game_windows), &mut window as *mut GameWindow as isize) } == 0 {
-            return Err(io::Error::last_os_error());
-        }
+            process,
+            created: original_created,
+            window: GameWindow { selected: ptr::null_mut(), ambiguous: false },
+        }))
+    }
+
+    fn finish_observation(game: &PinnedGame, current_session: u32)
+        -> io::Result<super::super::process_identity::OwnedProcess> {
+        let PinnedGame { pid, process, created, window } = game;
+        let pid = *pid;
         if window.ambiguous {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Multiple visible Minecraft root windows attributed to one process"));
         }
@@ -407,27 +428,28 @@ mod native_workspace_windows {
         if unsafe { ProcessIdToSessionId(pid, &mut again_session) } == 0 {
             return Err(io::Error::last_os_error());
         }
-        if again_session != current_session || current_created != original_created
+        if again_session != current_session || current_created != *created
             || unsafe { WaitForSingleObject(process.as_raw_handle() as _, 0) } != WAIT_TIMEOUT
         {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Minecraft process identity changed during native observation"));
         }
         if !window.selected.is_null() {
-            let mut window_pid = 0;
-            unsafe { GetWindowThreadProcessId(window.selected, &mut window_pid); }
-            if window_pid != pid {
-                return Err(io::Error::new(io::ErrorKind::InvalidData, "Minecraft HWND owner changed during observation"));
-            }
+            // The shared enumeration can precede this game's final receipt.
+            // Reuse the existing exact visible/unowned root-window check.
+            super::verify_live_client_02_window(window.selected, pid)?;
         }
         let responding = !window.selected.is_null()
             && unsafe { IsHungAppWindow(window.selected) } == 0;
-        Ok(Some(super::super::process_identity::OwnedProcess {
+        if unsafe { WaitForSingleObject(process.as_raw_handle() as _, 0) } != WAIT_TIMEOUT {
+            return Err(invalid_evidence("Minecraft process exited during window observation"));
+        }
+        Ok(super::super::process_identity::OwnedProcess {
             pid,
-            created_file_time: original_created.to_string(),
+            created_file_time: created.to_string(),
             session_id: current_session,
             window_handle: format!("0x{:x}", window.selected as usize),
             responding,
-        }))
+        })
     }
 
     // One native candidate traversal. A true visitor result terminates the
@@ -476,16 +498,25 @@ mod native_workspace_windows {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Interactive Windows session required"));
         }
 
-        let mut processes = Vec::new();
+        let mut games = Vec::new();
         visit_game_candidates(|pid| {
-            if let Some(process) = observe_one(pid, &target_wide, current_session)? {
-                processes.push(process);
-                if processes.len() > MAX_NATIVE_WORKSPACE_PROCESSES {
+            if let Some(game) = pin_candidate(pid, &target_wide, current_session)? {
+                if games.len() == MAX_NATIVE_WORKSPACE_PROCESSES {
                     return Err(io::Error::new(io::ErrorKind::InvalidData, "More than five registered Minecraft processes"));
                 }
+                games.push(game);
             }
             Ok(false)
         })?;
+        // No candidates means no window enumeration. With one to five
+        // candidates, scan the desktop once while every process stays pinned.
+        if !games.is_empty()
+            && unsafe { EnumWindows(Some(enum_game_windows), &mut games as *mut Vec<PinnedGame> as isize) } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        let mut processes = games.iter().map(|game| finish_observation(game, current_session))
+            .collect::<io::Result<Vec<_>>>()?;
         processes.sort_by_key(|process| process.pid);
         let observation = NativeWorkspaceObservation {
             schema: 1,
@@ -502,6 +533,31 @@ mod native_workspace_windows {
         inspect_for_registered_target(&target)
     }
 
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn window_selection_preserves_missing_and_ambiguous_results() {
+            // Synthetic HWND values only; never passed to a Windows API.
+            let first = 1usize as windows_sys::Win32::Foundation::HWND;
+            let second = 2usize as windows_sys::Win32::Foundation::HWND;
+            let mut a = GameWindow { selected: ptr::null_mut(), ambiguous: false };
+            let mut b = GameWindow { selected: ptr::null_mut(), ambiguous: false };
+            a.record(first);
+            a.record(first);
+            assert_eq!(a.selected, first);
+            assert!(!a.ambiguous);
+            assert!(b.selected.is_null());
+            assert!(!b.ambiguous);
+            b.record(second);
+            a.record(second);
+            a.record(first);
+            assert!(a.ambiguous);
+            assert_eq!(b.selected, second);
+            assert!(!b.ambiguous);
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]
