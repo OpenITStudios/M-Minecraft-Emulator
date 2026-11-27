@@ -60,6 +60,9 @@ test('native HUD guard follows Rust ownership and rejects inverted hidden admiss
   const worker=read('fps_hud.rs'), renderer=read('hud_window.rs'), canvas=read('hud_canvas.rs');
   assert.doesNotThrow(()=>verifyNativeHudCompositionBoundary(worker,renderer,canvas));
   assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer.replace('if !visible {','if visible {'),canvas),/Hidden HUD/);
+  assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer.replace(
+    'out.window=window;out.bounds=bounds;out.dpi=dpi;\n        return 1;',
+    'out.window=window;out.bounds=bounds;out.dpi=dpi;'),canvas),/Hidden HUD/);
   assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer,canvas.replace('self.size==size && self.dpi==dpi { return true; }','self.size==size && self.dpi==dpi { return false; }')),/canvas must reuse/);
 });
 

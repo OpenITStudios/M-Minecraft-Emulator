@@ -195,7 +195,8 @@ int run() {
         check(SetEvent(selected.value));
         until([&] { auto s=hud.snapshot(); check(!s.failures); return s.visible && s.draws>0; });
         auto shown=hud.snapshot();
-        RECT actual{}; check(GetWindowRect(shown.window,&actual) && memcmp(&actual,&shown.bounds,sizeof(actual))==0);
+        RECT actual{}; check(IsWindowVisible(shown.window) && GetWindowRect(shown.window,&actual)
+            && memcmp(&actual,&shown.bounds,sizeof(actual))==0);
         check(ResetEvent(selected.value));
         until([&] { return !hud.snapshot().visible; });
         const auto hiddenDraws=hud.snapshot().draws;
@@ -211,14 +212,26 @@ int run() {
         check(SetEvent(selected.value));
         until([&] { auto s=hud.snapshot(); check(!s.failures); return s.visible && s.draws>hiddenDraws; });
         auto restored=hud.snapshot();
-        check(restored.window==shown.window && GetWindowRect(restored.window,&actual)
-            && memcmp(&actual,&restored.bounds,sizeof(actual))==0);
-        draws+=restored.draws;
+        check(restored.window==shown.window && IsWindowVisible(restored.window)
+            && GetWindowRect(restored.window,&actual) && memcmp(&actual,&restored.bounds,sizeof(actual))==0);
         ShowWindow(owner,SW_HIDE);
         until([&] { return !hud.snapshot().visible; });
         const auto ownerHiddenDraws=hud.snapshot().draws;
         for (unsigned i=0;i<6;++i) { hud.present(S_OK,0); pump(); Sleep(100); }
-        check(!hud.snapshot().visible && hud.snapshot().draws==ownerHiddenDraws);
+        check(!hud.snapshot().visible && !IsWindowVisible(shown.window)
+            && hud.snapshot().draws==ownerHiddenDraws);
+        ShowWindow(owner,SW_SHOWNOACTIVATE);
+        until([&] { auto s=hud.snapshot(); check(!s.failures); return s.visible && s.draws>ownerHiddenDraws; });
+        check(IsWindowVisible(shown.window));
+        check(SetEvent(stopped.value));
+        until([&] { auto s=hud.snapshot(); check(!s.failures); return !s.visible; });
+        const auto stoppedDraws=hud.snapshot().draws;
+        for (unsigned i=0;i<6;++i) { hud.present(S_OK,0); pump(); Sleep(100); }
+        check(!IsWindowVisible(shown.window) && hud.snapshot().draws==stoppedDraws);
+        // Preserve the historical aggregate field; it now also includes
+        // this synthetic visible transition, not a game-render measurement.
+        draws+=stoppedDraws;
+        ShowWindow(owner,SW_HIDE);
         hud.unbind();
         until([&] { return hud.snapshot().window==nullptr; });
     }

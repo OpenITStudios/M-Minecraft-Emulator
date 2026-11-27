@@ -162,19 +162,24 @@ Build the existing explicit test-only CMake project and run
 NOACTIVATE visibility-transition fixture), writes only
 an ignored local bitmap preview, checks deterministic rates/invalid/stale
 samples, synthetic DPI geometry, actual hidden/visible bounds,
-zero hidden draws, fresh visible redraw, transparent hit-test/no-activation
-responses, same-worker rebinding and balanced GDI handles. Existing D3D11/D3D12
+zero hidden draws, fresh visible redraw, owner hide/show and stop admission,
+actual HWND visibility, transparent hit-test/no-activation responses,
+same-worker rebinding and balanced GDI handles. Existing D3D11/D3D12
 controls verify native-result sampling and TEST exclusion. A private sized
 BootstrapHudSnapshot export lets the C++ receivers check the hidden host and
 zero draws under the full compatibility DLL. No counter is opened on a live
-game by these commands. EFF-02 fixtures are authored, NOT_EXECUTED.
+game by these commands. EFF-02/EFF-05 fixtures are authored, NOT_EXECUTED.
+The legacy OWN_HIDDEN_FPS_HUD receipt name is unchanged for compatibility;
+its aggregate draws now includes synthetic visible transitions. Do not compare
+that aggregate or whole-fixture CPU time directly with old hidden-only controls.
 
-The HUD worker now paints directly into the DIB supplied to UpdateLayeredWindow.
-The preview raster helper shares the same painter, but the live worker no longer
-materializes its returned vector or creates a second upload bitmap. No drawing
-surface or font is retained between updates. This removes one bitmap creation,
-one vector allocation and two pixel copies per redraw; it is a bounded HUD
-optimization, not a claim about game-content memory. At 96 DPI the largest
+Historical 25 October optimization: the HUD worker moved to painting directly
+into the DIB supplied to UpdateLayeredWindow, avoiding a returned vector and a
+second upload bitmap. The initial implementation did not retain a drawing
+surface or font between updates; the current Rust canvas now retains one
+matching bitmap/font/DC for reuse. The historical change removed one bitmap
+creation, one vector allocation and two pixel copies per redraw; this is not
+a claim about game-content memory or measurements of the current revision. At 96 DPI the largest
 simultaneously owned pixel storage falls from two 16 KiB planes to one; at the
 supported maximum 480 DPI the corresponding arithmetic is 800 to 400 KiB.
 GDI/DWM, allocator and thread costs are additional and are not bounded by that
