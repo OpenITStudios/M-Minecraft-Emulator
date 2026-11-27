@@ -29,10 +29,7 @@ constexpr SIZE_T LegacyPolicyBytes = 120;
 static_assert(offsetof(PolicyConfig, hudSelected) == LegacyPolicyBytes);
 static_assert(sizeof(PolicyConfig) == 128);
 inline bool pacingLimits(const PolicyConfig& config, unsigned& active, unsigned& background) noexcept {
-    if (config.creation.version == 2 && config.reserved == 0) { active=144; background=10; return true; }
-    if (config.creation.version != 3 && config.creation.version != 4) return false;
-    active=config.reserved & 0xffff; background=config.reserved >> 16;
-    return presentation_pacing::validCeilings(active,background);
+    return lazytester_presentation_limits(config.creation.version, config.reserved, &active, &background) != 0;
 }
 // Metadata only: never create a factory/device while the loader lock is held.
 inline bool imageMetadata(CreationConfig& result, HMODULE& module) noexcept {

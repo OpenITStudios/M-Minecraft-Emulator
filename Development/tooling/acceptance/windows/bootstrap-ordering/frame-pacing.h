@@ -1,6 +1,6 @@
 #pragma once
+#include "native_fps_ffi.h"
 #include <windows.h>
-#include "frame-pacing-ffi.h"
 #include <stdexcept>
 
 // One rendering consumer, policy changes from another thread; join before destruction.

@@ -1,6 +1,6 @@
 //! One Rust-owned HUD session, one worker, one generation gate.
 use std::{ffi::c_void,ptr,sync::{Arc,Mutex,MutexGuard},thread::{self,JoinHandle}};
-use super::{fps_meter::{FpsMeterState,FpsMeterReading},hud_canvas::Rect,hud_window::*};
+use super::{fps_meter::FpsMeterState,hud_canvas::Rect,hud_window::*};
 type Handle=*mut c_void;
 const TIMEOUT:u32=258;
 const SYNC:u32=0x00100000;
@@ -150,7 +150,11 @@ impl Hud {
     unsafe fn new(selected:Handle,stop:Handle,controller:Handle)->Option<Self> {
         let mut frequency=0;
         if QueryPerformanceFrequency(&mut frequency)==0 || !(1..=1_000_000_000_000).contains(&frequency){return None;}
+        // Legacy v2/v3 has stop/controller but no selection event: HUD stays hidden.
         let policy=if selected.is_null()&&stop.is_null()&&controller.is_null(){None}
+            else if selected.is_null() && !stop.is_null() && !controller.is_null() {
+                Some([Owned::event(true)?,Owned::duplicate(stop)?,Owned::duplicate(controller)?])
+            }
             else {Some([Owned::duplicate(selected)?,Owned::duplicate(stop)?,Owned::duplicate(controller)?])};
         Some(Self{shared:Arc::new(Shared{state:Mutex::new(Binding{owner:0,thread:0,life:None,idle:0,generation:0,
             finished:false,display:HudSnapshot::default(),meter:FpsMeterState::new(frequency)}),

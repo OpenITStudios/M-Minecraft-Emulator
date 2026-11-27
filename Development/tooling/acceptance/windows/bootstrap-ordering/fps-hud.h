@@ -1,10 +1,9 @@
 #pragma once
+#include "native_fps_ffi.h"
 #include <windows.h>
 #include <dxgi.h>
 #include <memory>
 #include <vector>
-#include "fps-meter-ffi.h"
-#include "hud-window-ffi.h"
 
 namespace fps_hud {
 struct Reading { unsigned long long accepted = 0; unsigned milliFps = 0; bool valid = false; };

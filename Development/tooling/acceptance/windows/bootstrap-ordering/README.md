@@ -211,7 +211,7 @@ Host World/focus/resource acceptance next action stay in planning/development.md
 
 `hud_canvas.rs` owns DPI geometry, physical client conversion and GDI canvas resources (DIB, font, DC). The existing C++ HUD worker borrows the raster view on its own thread; no pixel copy on the live path. Native controls remain NOT_EXECUTED.
 
-`native-fps.rs` is the single static-library entrypoint. `frame-pacing.rs`
+`native_fps.rs` is the single static-library entrypoint. `frame_pacing.rs`
 owns FPS limit and clock validation, rounded intervals and relative timer
 deadlines; `frame-pacing-ffi.h` is its fixed-width native interface. Rust now also owns Windows event/timer lifetime, QPC sampling, foreground state,
 sticky stop and the native wait loop. C++ `Pacer` is a thin opaque ABI adapter. Enrollment and all
@@ -220,7 +220,7 @@ across configurations; native build/link remain NOT_EXECUTED.
 
 ### Rust FPS measurement core
 
-`fps-meter.rs` is the sole accepted-Present rate implementation. The existing
+`fps_meter.rs` is the sole accepted-Present rate implementation. The existing
 C++ Meter retains its inline state, SRWLOCK, HRESULT filtering and QPC sampling;
 `fps-meter-ffi.h` defines the fixed-width C ABI. All four existing HUD consumers
 link the same dependency-free Rust static library built by the existing CMake

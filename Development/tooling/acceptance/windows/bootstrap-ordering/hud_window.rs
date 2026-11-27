@@ -74,21 +74,17 @@ impl WindowHost {
         self.window=ptr::null_mut();
     }
 }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_window_host_create(context:*mut c_void,notify:Notify)->*mut WindowHost {
+pub(crate) unsafe fn lazytester_hud_window_host_create(context:*mut c_void,notify:Notify)->*mut WindowHost {
     WindowHost::new(context,notify).map_or(ptr::null_mut(),|h|Box::into_raw(Box::new(h)))
 }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_window_host_destroy(host:*mut WindowHost) {
+pub(crate) unsafe fn lazytester_hud_window_host_destroy(host:*mut WindowHost) {
     if !host.is_null() { drop(Box::from_raw(host)); }
 }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_window_clear(host:*mut WindowHost) {
+pub(crate) unsafe fn lazytester_hud_window_clear(host:*mut WindowHost) {
     if let Some(h)=host.as_mut() { h.clear(); }
 }
 // 0 = continue, 1 = stop/quit, 2 = failure. Keep 250ms wake and 64-message bound.
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_window_wait(stop:Handle,changed:Handle)->u32 {
+pub(crate) unsafe fn lazytester_hud_window_wait(stop:Handle,changed:Handle)->u32 {
     let handles=[stop,changed];
     match MsgWaitForMultipleObjectsEx(2,handles.as_ptr(),250,0x04ff,4) {
         0=>return 1,u32::MAX=>return 2,_=>{}
@@ -123,22 +119,18 @@ extern "system" {
 pub struct Composition { pub window:Handle,pub bounds:Rect,pub dpi:u32,pub visible:u32,pub drawn:u32 }
 pub struct Renderer { canvas:*mut Canvas, previous_dpi:u32, previous_rate:u32, previous_valid:bool, previous_bounds:Rect }
 impl Drop for Renderer { fn drop(&mut self) { unsafe { lazytester_hud_canvas_destroy(self.canvas); } } }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_renderer_create()->*mut Renderer {
+pub(crate) unsafe fn lazytester_hud_renderer_create()->*mut Renderer {
     let canvas=lazytester_hud_canvas_create();
     if canvas.is_null() { return ptr::null_mut(); }
     Box::into_raw(Box::new(Renderer {canvas,previous_dpi:0,previous_rate:u32::MAX,previous_valid:false,previous_bounds:Rect::default()}))
 }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_renderer_destroy(renderer:*mut Renderer) {
+pub(crate) unsafe fn lazytester_hud_renderer_destroy(renderer:*mut Renderer) {
     if !renderer.is_null() { drop(Box::from_raw(renderer)); }
 }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_renderer_reset(renderer:*mut Renderer) {
+pub(crate) unsafe fn lazytester_hud_renderer_reset(renderer:*mut Renderer) {
     if let Some(r)=renderer.as_mut() { r.previous_dpi=0; }
 }
-#[no_mangle]
-pub unsafe extern "C" fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:*mut WindowHost,
+pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:*mut WindowHost,
     target:Handle,bound:u32,admitted:u32,milli:u32,valid:u32,out:*mut Composition)->u32 {
     let (Some(r),Some(h),Some(out))=(renderer.as_mut(),host.as_mut(),out.as_mut()) else { return 0; };
     *out=Composition {window:ptr::null_mut(),bounds:Rect::default(),dpi:0,visible:0,drawn:0};

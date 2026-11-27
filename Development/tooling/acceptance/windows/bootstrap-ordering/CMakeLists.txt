@@ -74,12 +74,13 @@ add_custom_command(OUTPUT "${native_fps_lib}"
   COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
   COMMAND "${LAZYTESTER_RUSTC}" --edition=2021 --crate-name lazytester_native_fps
     --crate-type staticlib --target x86_64-pc-windows-msvc -C panic=abort -C opt-level=3
-    -C target-feature=+crt-static "${CMAKE_CURRENT_SOURCE_DIR}/native-fps.rs" -o "${native_fps_lib}"
-  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/native-fps.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/fps-meter.rs" "${CMAKE_CURRENT_SOURCE_DIR}/frame-pacing.rs"
+    -C target-feature=+crt-static "${CMAKE_CURRENT_SOURCE_DIR}/native_fps.rs" -o "${native_fps_lib}"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/native_fps.rs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fps_meter.rs" "${CMAKE_CURRENT_SOURCE_DIR}/frame_pacing.rs"
     "${CMAKE_CURRENT_SOURCE_DIR}/hud_canvas.rs"
     "${CMAKE_CURRENT_SOURCE_DIR}/hud_window.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/fps_hud.rs" VERBATIM)
+    "${CMAKE_CURRENT_SOURCE_DIR}/fps_hud.rs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/presentation_policy.rs" VERBATIM)
 add_custom_target(lazytester-native-fps-build DEPENDS "${native_fps_lib}")
 
 add_library(bootstrap-dependency SHARED dependency.cpp)

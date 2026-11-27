@@ -1,6 +1,4 @@
 #include "fps-hud.h"
-#include "hud-canvas-ffi.h"
-#include "hud-window-ffi.h"
 #include <stdexcept>
 
 namespace fps_hud {
