@@ -214,11 +214,11 @@ struct Thumbnail {
     // Only successful native property writes are cached. Exact game HWND
     // and worker-owned DWM destination are still checked on every wake.
     last_applied: Option<(DwmAppliedState, Instant)>,
-    _process: std::os::windows::io::OwnedHandle,
+    process: std::os::windows::io::OwnedHandle,
 }
 impl Thumbnail {
     fn create(manager: u64, tile: &PreviewTile, target: OwnedProcess) -> io::Result<Self> {
-        let (process, source) = native::hwnd(&target)?;
+        let (process, source) = native::pin_preview_source(&target)?;
         let rect = native::rectangle(manager, tile.viewport)?;
         let title: Vec<u16> = format!("Minecraft - {} preview", tile.slot)
             .encode_utf16()
@@ -265,7 +265,7 @@ impl Thumbnail {
             thumbnail,
             invalidation_notified: false,
             last_applied: None,
-            _process: process,
+            process,
         })
     }
     fn destination_owned(&self) -> bool {
@@ -283,7 +283,7 @@ impl Thumbnail {
         }
     }
     fn source_and_destination_valid(&self) -> bool {
-        self.destination_owned() && native::hwnd(&self.target).is_ok()
+        self.destination_owned() && native::retained_preview_hwnd(&self.target,&self.process).is_ok()
     }
     fn matches(&self, slot: u32, target: &OwnedProcess) -> bool {
         self.slot == slot
@@ -291,7 +291,10 @@ impl Thumbnail {
             && self.destination_owned()
     }
     fn refresh_verified(&mut self, visible: bool) -> io::Result<()> {
-        let result = self.update(visible);
+        self.refresh_with_geometry(visible,None)
+    }
+    fn refresh_with_geometry(&mut self, visible:bool, geometry:Option<&native::ManagerGeometry>) -> io::Result<()> {
+        let result = self.update_with_geometry(visible,geometry);
         if result.is_err() {
             // An error invalidates cached success even if the prior
             // frame's dimensions are unchanged. Next success MUST write
@@ -300,7 +303,11 @@ impl Thumbnail {
         }
         hide_on_failed_update(result, || self.hide())
     }
+    #[cfg(test)]
     fn update(&mut self, visible: bool) -> io::Result<()> {
+        self.update_with_geometry(visible,None)
+    }
+    fn update_with_geometry(&mut self, visible: bool, geometry:Option<&native::ManagerGeometry>) -> io::Result<()> {
         if !self.destination_owned() {
             return Err(io::Error::new(io::ErrorKind::NotFound,
                 "Native DWM preview destination is no longer owned by this worker"));
@@ -327,8 +334,14 @@ impl Thumbnail {
         }
         // Do not cache native game identity. Every visible refresh must
         // reverify original PID, process birth, session, HWND and owner.
-        let (_pin, source) = native::hwnd(&self.target)?;
-        let rect = native::rectangle(self.manager, self.viewport)?;
+        let source = native::retained_preview_hwnd(&self.target,&self.process)?;
+        // Only the duplicate/no-write decision may use the scene sample.
+        // A failed projection falls back to fresh manager geometry.
+        let sampled=geometry.and_then(|g|g.rectangle(self.manager,self.viewport).ok());
+        let rect=match sampled {
+            Some(rect)=>rect,
+            None=>native::rectangle(self.manager,self.viewport)?,
+        };
         let mut client: RECT = unsafe { mem::zeroed() };
         if unsafe { GetClientRect(source, &mut client) } == 0 {
             return Err(io::Error::last_os_error());
@@ -354,6 +367,15 @@ impl Thumbnail {
                 return Ok(());
             }
         }
+        // A move/DPI change may race a scene-wide sample. Reobserve
+        // before actual placement; layout and rollback never use a sample.
+        let (rect,fit,requested)=if sampled.is_some() {
+            let rect=native::rectangle(self.manager,self.viewport)?;
+            let fit=super::fit_rectangle(rect.width,rect.height,source_width,source_height)?;
+            (rect,fit,DwmAppliedState::Visible(DwmGeometry {
+                destination:rect,fitted:fit,source_width,source_height,
+            }))
+        } else {(rect,fit,requested)};
         let props = DWM_THUMBNAIL_PROPERTIES {
             dwFlags: DWM_TNP_RECTDESTINATION
                 | DWM_TNP_VISIBLE
@@ -577,7 +599,7 @@ impl Scene {
                 ) {
                     old.viewport = saved.viewport;
                     let native_visible = native::native_surface_visible_at(
-                        &old.target, old.manager, saved.viewport);
+                        &old.target, &old.process, old.manager, saved.viewport);
                     // The previous observer can return only through its
                     // original exact source/HWND/DWM verification path.
                     let show = saved.previously_visible(self.visibility()) && !native_visible;
@@ -612,7 +634,7 @@ impl Scene {
                 primary.viewport = previous.viewport;
                 if changed {
                     let native_visible = native::native_surface_visible_at(
-                        &primary.target, primary.manager, previous.viewport);
+                        &primary.target, &primary.process, primary.manager, previous.viewport);
                     let show = previous.previously_visible(visible) && !native_visible;
                     if let Err(error) = primary.refresh_verified(show) {
                         eprintln!("Minecraft - {} primary DWM rollback unverified: {error}",
@@ -766,6 +788,11 @@ impl Scene {
             return;
         }
         let visible = self.visibility();
+        // Share only this passive wake's read-only manager observation.
+        // Hidden or invalidated-only scenes need no geometry sample.
+        let geometry = if visible && self.thumbnails.iter().any(|t| !t.invalidation_notified) {
+            native::capture_manager_geometry(self.manager).ok()
+        } else {None};
         // The DWM worker alone observes asynchronous refresh failures.
         // Do not re-run layout or inspect Minecraft. Send a single
         // source-pinned invalidation on the EXISTING error event when a
@@ -777,7 +804,7 @@ impl Scene {
             let show = display_with_current_preview_receipt(
                 visible, thumbnail.invalidation_notified,
             );
-            if let Err(error) = thumbnail.refresh_verified(show) {
+            if let Err(error) = thumbnail.refresh_with_geometry(show,geometry.as_ref()) {
                 if take_invalidation_notice(&mut thumbnail.invalidation_notified) {
                     invalidated.push((
                         thumbnail.slot, thumbnail.target.clone(),
@@ -799,9 +826,9 @@ impl Scene {
             }
         }
         let discard_primary = if let Some(primary) = &mut self.primary {
-            let native_visible = native::native_surface_visible_at(
-                &primary.target, primary.manager, primary.viewport);
-            primary.refresh_verified(visible && !native_visible).is_err()
+            let native_visible = visible && native::native_surface_visible_at(
+                &primary.target, &primary.process, primary.manager, primary.viewport);
+            primary.refresh_with_geometry(visible && !native_visible,geometry.as_ref()).is_err()
                 && !primary.source_and_destination_valid()
         } else { false };
         if discard_primary { self.primary = None; }
@@ -823,7 +850,7 @@ impl Scene {
             // both steps succeed, do not mutate the previous primary.
             let mut candidate = Thumbnail::create(manager, tile, target.clone())?;
             candidate.refresh_verified(visible &&
-                !native::native_surface_visible_at(&target, manager, tile.viewport))?;
+                !native::native_surface_visible_at(&target, &candidate.process, manager, tile.viewport))?;
             if let Some(old) = self.primary.take() {
                 let proof = PreviousImage::capture(&old);
                 old.hide();
@@ -839,7 +866,7 @@ impl Scene {
         // Reused thumbnails keep their old snapshot even if this update
         // fails partway through and hides the image.
         image.refresh_verified(visible &&
-            !native::native_surface_visible_at(&target, manager, tile.viewport))
+            !native::native_surface_visible_at(&target, &image.process, manager, tile.viewport))
     }
     fn layout(
         &mut self,

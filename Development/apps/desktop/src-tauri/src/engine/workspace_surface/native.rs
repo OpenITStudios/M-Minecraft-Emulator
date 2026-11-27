@@ -77,26 +77,22 @@ fn helper_caller_is_own_image_or_exact_developer_harness_directory() {
         current
     ));
 }
-pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(OwnedHandle, HWND)> {
-    let key = super::super::instance_identity::parse_window_identity(
-        target.pid,
-        Some(&target.created_file_time),
-        Some(&target.window_handle),
-    )
-    .ok_or_else(|| io::Error::other("Invalid surface identity"))?;
+fn surface_key(target: &OwnedProcess) -> io::Result<super::super::instance_identity::WindowIdentity> {
+    super::super::instance_identity::parse_window_identity(
+        target.pid, Some(&target.created_file_time), Some(&target.window_handle),
+    ).ok_or_else(|| io::Error::other("Invalid surface identity"))
+}
+fn verify_surface_hwnd(target: &OwnedProcess, key: super::super::instance_identity::WindowIdentity,
+    process: HANDLE) -> io::Result<HWND> {
     let window = key.hwnd as usize as HWND;
     unsafe {
         let mut pid = 0;
-        GetWindowThreadProcessId(window, &mut pid);
-        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, key.pid);
-        if process.is_null() {
-            return Err(io::Error::last_os_error());
-        }
-        let pin = OwnedHandle::from_raw_handle(process as _);
+        let thread = GetWindowThreadProcessId(window, &mut pid);
         let birth = crate::engine::windows_process_time::creation_filetime(process);
         let mut session = 0;
         let mut own_session = 0;
-        if birth.is_err()
+        if thread == 0 || GetProcessId(process) != key.pid
+            || birth.is_err()
             || ProcessIdToSessionId(pid, &mut session) == 0
             || session != target.session_id
             || ProcessIdToSessionId(std::process::id(), &mut own_session) == 0
@@ -109,8 +105,44 @@ pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(OwnedHandle, HWND)> {
         {
             return Err(io::Error::other("Surface process/window identity changed"));
         }
-        Ok((pin, window))
+        let mut confirmed_pid=0;
+        if GetWindowThreadProcessId(window, &mut confirmed_pid)!=thread || confirmed_pid!=pid {
+            return Err(io::Error::other("Surface HWND owner changed during observation"));
+        }
+        Ok(window)
     }
+}
+pub(super) fn hwnd(target: &OwnedProcess) -> io::Result<(OwnedHandle, HWND)> {
+    let key=surface_key(target)?;
+    let process=unsafe {OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, key.pid)};
+    if process.is_null() {return Err(io::Error::last_os_error());}
+    let pin=unsafe {OwnedHandle::from_raw_handle(process as _)};
+    let window=verify_surface_hwnd(target,key,process)?;
+    Ok((pin,window))
+}
+
+// DWM owns this read/query-only process pin until its registration is
+// retired. Reuse it rather than reopen a PID on every preview event.
+pub(super) fn pin_preview_source(target: &OwnedProcess) -> io::Result<(OwnedHandle, HWND)> {
+    let key=surface_key(target)?;
+    let process=unsafe {OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZATION_SYNCHRONIZE,0,key.pid)};
+    if process.is_null() {return Err(io::Error::last_os_error());}
+    let pin=unsafe {OwnedHandle::from_raw_handle(process as _)};
+    let window=retained_preview_hwnd(target,&pin)?;
+    Ok((pin,window))
+}
+pub(super) fn retained_preview_hwnd(target: &OwnedProcess, pin: &OwnedHandle) -> io::Result<HWND> {
+    let process=pin.as_raw_handle() as HANDLE;
+    // A retained handle alone is not liveness or window authority. Reject
+    // exit/failure, wrong birth/session, recycled HWND and owner changes.
+    if unsafe {WaitForSingleObject(process,0)}!=WAIT_TIMEOUT {
+        return Err(io::Error::other("Original preview process is not verified live"));
+    }
+    let window=verify_surface_hwnd(target,surface_key(target)?,process)?;
+    if unsafe {WaitForSingleObject(process,0)}!=WAIT_TIMEOUT {
+        return Err(io::Error::other("Original preview process exited during observation"));
+    }
+    Ok(window)
 }
 fn style(window: HWND, value: i64) -> io::Result<()> {
     unsafe {
@@ -319,7 +351,8 @@ pub(super) fn workspace_has_foreground(target: &OwnedProcess, manager: u64) -> b
 }
 // Shared live stacking check for preview visibility and the stricter FPS
 // lease proof. The caller must first verify the game identity and geometry.
-fn manager_foreground_exposes_game(target: &OwnedProcess, window: HWND, manager: u64, expected: Rectangle) -> bool {
+fn manager_foreground_exposes_game(window: HWND, manager: u64, expected: Rectangle,
+    recheck: impl FnOnce() -> bool) -> bool {
     unsafe {
         let manager = manager as usize as HWND;
         if GetForegroundWindow() != manager { return false; }
@@ -332,11 +365,11 @@ fn manager_foreground_exposes_game(target: &OwnedProcess, window: HWND, manager:
             GetForegroundWindow() as usize as u64, manager as usize as u64,
             window as usize as u64, root as usize as u64,
             GetWindowLongPtrW(window, GWL_STYLE) & WS_DISABLED as isize == 0,
-        ) && hwnd(target).is_ok_and(|(_pin,current)| current == window)
+        ) && recheck()
     }
 }
-pub(super) fn native_surface_visible_at(target: &OwnedProcess, manager: u64, viewport: Viewport) -> bool {
-    let Ok((_pin, window)) = hwnd(target) else { return false; };
+pub(super) fn native_surface_visible_at(target: &OwnedProcess, pin: &OwnedHandle, manager: u64, viewport: Viewport) -> bool {
+    let Ok(window) = retained_preview_hwnd(target,pin) else { return false; };
     let Ok(expected) = rectangle(manager, viewport) else { return false; };
     unsafe {
         let mut rect: RECT = std::mem::zeroed();
@@ -345,7 +378,8 @@ pub(super) fn native_surface_visible_at(target: &OwnedProcess, manager: u64, vie
         let actual = Rectangle { x: rect.left, y: rect.top, width: rect.right - rect.left, height: rect.bottom - rect.top };
         if !super::interactive_surface(true, visible, actual, expected) { return false; }
         GetForegroundWindow() == window ||
-            manager_foreground_exposes_game(target,window,manager,expected)
+            manager_foreground_exposes_game(window,manager,expected,
+                || retained_preview_hwnd(target,pin).is_ok_and(|current|current==window))
     }
 }
 pub(super) fn clear_aperture(manager: u64) -> io::Result<()> {
@@ -524,13 +558,15 @@ pub(super) fn placed_at(saved: &Saved, expected: Rectangle) -> bool {
 pub(super) fn presented_under_manager(saved: &Saved, expected: Rectangle, manager: u64) -> bool {
     if !placed_at(saved, expected) { return false; }
     let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
-    manager_foreground_exposes_game(&saved.target,window,manager,expected)
+    manager_foreground_exposes_game(window,manager,expected,
+        || hwnd(&saved.target).is_ok_and(|(_pin,current)|current==window))
 }
 pub(super) fn presented_for_hud(saved: &Saved, expected: Rectangle, manager: u64) -> bool {
     if !placed_at(saved, expected) { return false; }
     let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
     (unsafe { GetForegroundWindow() == window }) ||
-        manager_foreground_exposes_game(&saved.target,window,manager,expected)
+        manager_foreground_exposes_game(window,manager,expected,
+        || hwnd(&saved.target).is_ok_and(|(_pin,current)|current==window))
 }
 pub(super) fn parked_at(saved: &Saved, rect: Rectangle) -> bool {
     let Ok(expected) = parking_rectangle(rect) else { return false; };
@@ -864,7 +900,12 @@ fn fractional_viewport_rounds_shared_edges_without_gap_or_overlap() {
     assert_eq!(scaled_client_rectangle(integral, 1.0), Rectangle { x: 10, y: 20, width: 160, height: 120 });
 }
 
-pub(super) fn rectangle(manager: u64, viewport: Viewport) -> io::Result<Rectangle> {
+// A short-lived read-only sample, never stored across a DWM refresh.
+// Actual placement still captures fresh native geometry.
+pub(super) struct ManagerGeometry {
+    manager:u64, scale:f64, width:i32, height:i32, x:i32, y:i32,
+}
+pub(super) fn capture_manager_geometry(manager:u64) -> io::Result<ManagerGeometry> {
     unsafe {
         use windows_sys::Win32::Graphics::Gdi::ClientToScreen;
         use windows_sys::Win32::UI::HiDpi::GetDpiForWindow;
@@ -878,29 +919,27 @@ pub(super) fn rectangle(manager: u64, viewport: Viewport) -> io::Result<Rectangl
         if scale <= 0.0 {
             return Err(io::Error::other("Workspace DPI unavailable"));
         }
-        if (scale - viewport.pixel_ratio).abs() > 0.05 {
-            return Err(io::Error::new(
-                io::ErrorKind::WouldBlock,
-                "Workspace DPI changed. Wait for the layout, then try again.",
-            ));
-        }
         let mut client: RECT = std::mem::zeroed();
         let mut origin: POINT = std::mem::zeroed();
         if GetClientRect(window, &mut client) == 0 || ClientToScreen(window, &mut origin) == 0 {
             return Err(io::Error::last_os_error());
         }
-        let Rectangle { x, y, width, height } = scaled_client_rectangle(viewport, scale);
-        if x < 0 || y < 0 || x + width > client.right + 1 || y + height > client.bottom + 1 {
-            return Err(io::Error::new(
-                io::ErrorKind::WouldBlock,
-                "Workspace layout changed; try again",
-            ));
-        }
-        Ok(Rectangle {
-            x: origin.x + x,
-            y: origin.y + y,
-            width,
-            height,
-        })
+        Ok(ManagerGeometry {manager,scale,width:client.right,height:client.bottom,x:origin.x,y:origin.y})
     }
+}
+impl ManagerGeometry {
+    pub(super) fn rectangle(&self, manager:u64, viewport:Viewport) -> io::Result<Rectangle> {
+        if manager!=self.manager || (self.scale - viewport.pixel_ratio).abs() > 0.05 {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Workspace DPI or identity changed. Wait for the layout, then try again."));
+        }
+        let Rectangle { x, y, width, height } = scaled_client_rectangle(viewport,self.scale);
+        if x < 0 || y < 0 || x + width > self.width + 1 || y + height > self.height + 1 {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,"Workspace layout changed; try again"));
+        }
+        Ok(Rectangle {x:self.x+x,y:self.y+y,width,height})
+    }
+}
+pub(super) fn rectangle(manager: u64, viewport: Viewport) -> io::Result<Rectangle> {
+    capture_manager_geometry(manager)?.rectangle(manager,viewport)
 }

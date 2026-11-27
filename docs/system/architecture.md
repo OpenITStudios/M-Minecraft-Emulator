@@ -144,7 +144,14 @@ requests. The complete five-slot wire contract remains unchanged.
 A selected workspace presentation uses one verified path and retains
 original recovery checkpoints where possible. Passive placement skips
 only positively empty retained workspace state; DWM and native process
-liveness/recovery remain independent. The native controller waits directly
+liveness/recovery remain independent. DWM registrations retain one
+query/synchronize process pin. Visible refresh, selection and rollback
+revalidate the original live process, PID/birth/session and HWND/root
+rather than reopen its PID; destination ownership checks are unchanged.
+A passive scene wake may share manager DPI/client/origin for the duplicate
+no-write decision only. Actual DWM placement, layout and rollback use fresh
+geometry; hidden primary skips redundant stacking checks. No geometry or
+mutation authority is cached across wakes. The native controller waits directly
 on original retained game process handles, an unnamed request-ready event
 and its existing pipe worker. A live game alone no longer schedules 250ms
 exit scans; ordinary bounded 1s waits do not reap. Pending storage and

@@ -395,6 +395,13 @@ fn hidden_own_windows_register_update_and_release_dwm_without_desktop_capture() 
         let mut thumbnail =
             Thumbnail::create(manager as usize as u64, &tile, target.clone()).unwrap();
         assert!(thumbnail.destination_owned());
+        assert_eq!(native::retained_preview_hwnd(&target,&thumbnail.process).unwrap(),source);
+        let wrong_birth=OwnedProcess {created_file_time:"1".into(),..target.clone()};
+        let wrong_pid=OwnedProcess {pid:target.pid.wrapping_add(1),..target.clone()};
+        let wrong_session=OwnedProcess {session_id:target.session_id.wrapping_add(1),..target.clone()};
+        for wrong in [&wrong_birth,&wrong_pid,&wrong_session] {
+            assert!(native::retained_preview_hwnd(wrong,&thumbnail.process).is_err());
+        }
         thumbnail.refresh_verified(false).unwrap();
         let mut size: SIZE = mem::zeroed();
         assert!(DwmQueryThumbnailSourceSize(thumbnail.thumbnail, &mut size) >= 0);
@@ -468,6 +475,25 @@ fn hidden_own_windows_register_update_and_release_dwm_without_desktop_capture() 
             "A current owner/source must permit native thumbnail select");
         thumbnail.refresh_verified(scene.visibility()).unwrap();
         assert_ne!(IsWindowVisible(thumbnail.window),0);
+        // A stale scene sample is not placement authority. Force a changed
+        // tile after moving the synthetic manager and check fresh geometry.
+        let sample=native::capture_manager_geometry(manager as usize as u64).unwrap();
+        let original=thumbnail.viewport;
+        assert_eq!(sample.rectangle(manager as usize as u64,original).unwrap(),
+            native::rectangle(manager as usize as u64,original).unwrap());
+        assert!(sample.rectangle(0,original).is_err());
+        assert!(sample.rectangle(manager as usize as u64,Viewport {pixel_ratio:original.pixel_ratio+0.5,..original}).is_err());
+        assert_ne!(SetWindowPos(manager,ptr::null_mut(),-31000,-31500,0,0,
+            SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE),0);
+        thumbnail.viewport=Viewport {x:original.x+20.0,..original};
+        thumbnail.refresh_with_geometry(true,Some(&sample)).unwrap();
+        let expected=native::rectangle(manager as usize as u64,thumbnail.viewport).unwrap();
+        let mut actual:RECT=mem::zeroed();
+        assert_ne!(GetWindowRect(thumbnail.window,&mut actual),0);
+        assert_eq!((actual.left,actual.top,actual.right-actual.left,actual.bottom-actual.top),
+            (expected.x,expected.y,expected.width,expected.height));
+        thumbnail.viewport=original;
+        thumbnail.refresh_verified(true).unwrap();
         // An abandoned layout changed an ALREADY REGISTERED tile.
         // Rewind to its original live manager-relative geometry
         // and previously reported native visibility, leaving the
@@ -633,7 +659,11 @@ fn hidden_own_windows_register_update_and_release_dwm_without_desktop_capture() 
         scene.discard_unacknowledged_new(&mut LayoutCreated::default());
         assert!(scene.window.is_none());
         drop(scene);
-        DestroyWindow(source);
+        let retired=Thumbnail::create(manager as usize as u64,&tile,owned_target).unwrap();
+        assert_ne!(DestroyWindow(source),0);
+        assert!(!retired.source_and_destination_valid(),
+            "A retained process handle cannot authorize a destroyed source HWND");
+        drop(retired);
         DestroyWindow(manager);
     }
 }
