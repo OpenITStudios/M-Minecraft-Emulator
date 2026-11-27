@@ -2,10 +2,10 @@ import {describe,expect,it} from 'vitest';
 import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync,existsSync,symlinkSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync,existsSync,symlinkSync,utimesSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
-import {assembleCandidate,sourceRevision,stageLocalApp,verifyDesktopStartup,packageBuildEnvironment} from '../scripts/package-lazy-tester.mjs';
+import {assembleCandidate,sourceRevision,stageLocalApp,verifyDesktopStartup,packageBuildEnvironment,requireFreshInstaller} from '../scripts/package-lazy-tester.mjs';
 import {processRoles,roleMuiNames,roleResource} from '../scripts/prepare-process-roles.mjs';
 
 describe('Development source and distribution candidates',()=>{
@@ -141,6 +141,18 @@ describe('Development source and distribution candidates',()=>{
       expect(dirname(resolve(root))).toBe(resolve(tmpdir()));
       rmSync(root,{recursive:true});
     }
+  });
+  it('rejects a stale installer without deleting or modifying it',()=>{
+    const root=mkdtempSync(join(tmpdir(),'lazy-fresh-installer-'));
+    try {
+      const file=join(root,'setup.exe');writeFileSync(file,'MZfixture');
+      const before=new Date('2026-10-26T07:00:00Z');
+      utimesSync(file,before,before);
+      expect(()=>requireFreshInstaller(file,before.getTime()+1000)).toThrow(/fresh ordinary output/);
+      expect(readFileSync(file,'utf8')).toBe('MZfixture');
+      expect(()=>requireFreshInstaller(file,before.getTime()-1000)).not.toThrow();
+      expect(()=>requireFreshInstaller(file,NaN)).toThrow(/fresh ordinary output/);
+    }finally{rmSync(root,{recursive:true});}
   });
   it('exports only the installer and receipts, refuses reuse and never copies adjacent private data',()=>{
     const root=mkdtempSync(join(tmpdir(),'lazy-candidate-'));

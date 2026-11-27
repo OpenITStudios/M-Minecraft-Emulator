@@ -70,9 +70,14 @@ export function verifyInstallerLayout(hooks) {
      !layout.includes('GetFullPathName $0 "$0"'))
     throw new Error('LAZY_TESTER_PACKAGE_REFUSED: Registered install location must be preserved before new layout selection');
 }
+export function verifyCandidateReleasePolicy(release) {
+  if(release?.publicationEnabled!==false||release.requiresAuthenticodeBeforePublication!==true)
+    throw new Error('LAZY_TESTER_PACKAGE_REFUSED: Candidate-only publication hold and Authenticode requirement must remain enabled');
+}
 export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.lazy-tester.conf.json'))) {
   const base=JSON.parse(read('src-tauri/tauri.conf.json'));
   const policy=JSON.parse(read('../../engine/distribution/lazy-tester-package.json'));
+  verifyCandidateReleasePolicy(policy.release);
   const config=mergePatch(base,patch);
   const fail=(ok,reason)=>{if(!ok)throw new Error('LAZY_TESTER_PACKAGE_REFUSED: '+reason);};
   fail(config.productName===policy.productName&&config.identifier===policy.identifier&&config.mainBinaryName===policy.mainBinaryName,'Identity mismatch');

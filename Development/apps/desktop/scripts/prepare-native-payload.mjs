@@ -19,9 +19,11 @@ export function reviewedDigests(source) {
 }
 function ordinaryAncestors(path) {
   for (let current = resolve(path);;) {
-    if (existsSync(current)) {
+    try {
       const info = lstatSync(current);
       if (info.isSymbolicLink() || !info.isDirectory()) throw new Error('Payload directory must not traverse a link');
+    } catch(error) {
+      if(error?.code!=='ENOENT')throw error;
     }
     const parent = dirname(current);
     if (parent === current) break;
@@ -29,8 +31,8 @@ function ordinaryAncestors(path) {
   }
 }
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-export function stageNativePayload(source, destination, expected) {
-  ordinaryAncestors(source); ordinaryAncestors(destination);
+function readReviewedPayload(source, expected) {
+  ordinaryAncestors(source);
   const files = Object.entries(expected).map(([name, hash]) => {
     if (!['bootstrap-compat.dll','bootstrap-enroll.dll'].includes(name) || !/^[0-9a-f]{64}$/.test(hash)) throw new Error('Unexpected payload policy');
     const path = resolve(source, name), info = lstatSync(path);
@@ -40,6 +42,18 @@ export function stageNativePayload(source, destination, expected) {
     return {name, hash, bytes};
   });
   if (files.length !== 2) throw new Error('Both reviewed DLLs are required');
+  return files;
+}
+
+// Read-only post-bundle admission of the exact runtime-approved bytes.
+// Signing may change the staged DLL; never re-admit it automatically.
+export function verifyNativePayload(source, expected) {
+  return readReviewedPayload(source,expected).map(({name,hash,bytes})=>({name,sha256:hash,bytes:bytes.length}));
+}
+
+export function stageNativePayload(source, destination, expected) {
+  ordinaryAncestors(destination);
+  const files=readReviewedPayload(source,expected);
   // Complete all byte checks before creating output. Existing different outputs
   // are refused rather than overwritten or recursively removed.
   for (const file of files) {

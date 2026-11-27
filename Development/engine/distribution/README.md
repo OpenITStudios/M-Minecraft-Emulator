@@ -66,6 +66,36 @@ PDBs, MAP files and other private symbols are not admitted to distribution.
 This is not an anti-reverse-engineering guarantee or a measured size gain. Direct Cargo or altered build tooling
 is not a certified release route; final extracted-payload verification remains held.
 
+## Integrity and signing boundary
+
+The existing package command requires the native digest review before building
+and rechecks both staged DLL inputs and local release DLL copies after
+bundling, before the candidate receipt or App refresh. A changed byte,
+including a signature added after digest approval, blocks export. The
+installer must be an ordinary fresh build output (mtime not older than the
+attempt); this timestamp check is not proof of its internal payload.
+The existing final SHA-256 and immutable three-file receipt remain the
+candidate identity. Export-only skips the unrelated checkout root-launcher build.
+
+For a separately approved signed distribution, use the existing Tauri
+Windows signing mechanism and Windows SDK SignTool, not a new signing service.
+Sign native DLLs first, verify the final signatures and independently review
+the exact final DLL digests in the native owner before admitting them. After
+role-resource generation and binary modifications, sign the application and
+installer using the authorized publisher certificate and timestamping. Verify
+actual extracted payload hashes, Authenticode chain/publisher/timestamp,
+and install/upgrade/uninstall evidence for that exact final installer.
+Do not sign reviewed DLLs in place, accept newly computed digests automatically,
+or rewrite a previous candidate receipt after signing. Keep signing keys
+outside source and packages. Signing authenticates publisher/integrity;
+it does not prevent copying or reverse engineering.
+
+The source policy explicitly refuses publication-enabled candidates or removal
+of the Authenticode-before-publication requirement. No certificate, signing
+command, key storage or release authorization is configured by this work.
+Actual signing and release validation remain deferred; the candidate manifest
+continues to report signing NOT_VERIFIED and publication DISABLED.
+
 The native bundler consumes
 `Development/apps/desktop/src-tauri/tauri.lazy-tester.conf.json`, the
 `lazy-tester-package` Cargo feature and staged, reviewed native DLLs. The

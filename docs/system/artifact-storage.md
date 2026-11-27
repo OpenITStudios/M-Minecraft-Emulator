@@ -209,8 +209,10 @@ Root `npm --prefix Development run package:windows` is owned by
 `Development/apps/desktop/scripts/package-lazy-tester.mjs`. It requires clean committed Local
 source (a detached worktree must match Local exactly), declared Node/npm versions,
 and the reviewed native payload. It runs the existing desktop build:app, then
-rechecks the source revision/cleanliness before exporting. A build failure or
-source change produces no completed export. Both DEV.cmd and direct
+rechecks the source revision/cleanliness, both reviewed native DLL copies
+and fresh installer output before exporting. See the
+[distribution integrity contract](../../Development/engine/distribution/README.md#integrity-and-signing-boundary).
+A build failure, source change or failed byte admission produces no completed export. Both DEV.cmd and direct
 `package:windows` use the same `workspace/builds/desktop/target` for
 `CARGO_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`;
 any conflicting inherited value (including another in-checkout target)

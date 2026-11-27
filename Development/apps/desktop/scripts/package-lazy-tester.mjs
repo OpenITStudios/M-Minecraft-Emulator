@@ -8,6 +8,7 @@ import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
 import {buildRootLauncher} from './build-root-launcher.mjs';
 import {pruneSupersededCandidates} from '../../../tooling/storage/package-recycle.mjs';
 import {processRoles,roleMuiNames} from './prepare-process-roles.mjs';
+import {reviewedDigests,verifyNativePayload} from './prepare-native-payload.mjs';
 
 const developmentRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const root = resolve(developmentRoot, '..');
@@ -59,6 +60,15 @@ export function packageBuildEnvironment(cwd, env = process.env) {
     CARGO_TARGET_DIR:target, CARGO_BUILD_TARGET_DIR:target, CARGO_BUILD_BUILD_DIR:target,
     NPM_CONFIG_CACHE:cache, NUGET_PACKAGES:nuget, TEMP:temp, TMP:temp,
   };
+}
+
+// A successful command alone cannot make an old installer a new candidate.
+export function requireFreshInstaller(installer, buildStartedAt) {
+  ordinaryDirectories(dirname(installer));
+  const info=lstatSync(installer);
+  if(!Number.isFinite(buildStartedAt)||!info.isFile()||info.isSymbolicLink()||
+     info.nlink!==1||info.mtimeMs<buildStartedAt)
+    throw new Error('Installer is not a fresh ordinary output of this build attempt');
 }
 
 export function assembleCandidate(cwd, installer, sha, version, stamp) {
@@ -179,8 +189,8 @@ function main() {
   if (process.argv.slice(2).some(arg => arg !== '--export-only') || process.argv.slice(2).length > 1) throw new Error('Only --export-only is supported');
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 packaging is required');
   const sha = sourceRevision(root);
-  const {policy} = verifyLazyTesterPackage();
-  if (policy.release.publicationEnabled !== false) throw new Error('This command builds candidates only; publication must remain disabled');
+  verifyLazyTesterPackage();
+  const expected=reviewedDigests(readFileSync(resolve(developmentRoot,'apps/desktop/src-tauri/src/engine/independent_bootstrap.rs'),'utf8'));
   const toolchain = JSON.parse(readFileSync(resolve(developmentRoot,'toolchain.json'),'utf8'));
   if (process.versions.node !== toolchain.node.version) throw new Error('Use the declared workspace Node version');
   const npm = process.env.npm_execpath;
@@ -197,14 +207,23 @@ function main() {
   if (npmVersion !== toolchain.npm.version) throw new Error('Use the declared workspace npm version');
   const target = locations.CARGO_TARGET_DIR;
   const version = readFileSync(resolve(developmentRoot,'VERSION'),'utf8').trim();
-  const stamp = new Date().toISOString().replace(/[-:.]/g,'');
+  const buildStartedAt=Date.now();
+  const stamp = new Date(buildStartedAt).toISOString().replace(/[-:.]/g,'');
   execFileSync(process.execPath,[npm,'--prefix',resolve(developmentRoot,'apps/desktop'),'run','build:app'], {cwd:developmentRoot, stdio:'inherit'});
-  buildRootLauncher(root,resolve(target,'x86_64-pc-windows-msvc/release'));
+  const release=resolve(target,'x86_64-pc-windows-msvc/release');
+  const exportOnly=process.argv.includes('--export-only');
+  // The root launcher is a checkout convenience, not an installer resource.
+  if(!exportOnly)buildRootLauncher(root,release);
   if (sourceRevision(root) !== sha) throw new Error('Source changed during the build; no candidate exported');
-  const installer = resolve(target,'x86_64-pc-windows-msvc/release/bundle/nsis',`Lazy Tester_${version}_x64-setup.exe`);
+  // Tauri's bundler may sign DLL resources after the initial staging check.
+  // Both the bundle input and local release copy must still match native admission.
+  verifyNativePayload(resolve(developmentRoot,'apps/desktop/src-tauri/package-resources/lazy-tester'),expected);
+  verifyNativePayload(resolve(release,'independent-bootstrap'),expected);
+  const installer = resolve(release,'bundle/nsis',`Lazy Tester_${version}_x64-setup.exe`);
+  requireFreshInstaller(installer,buildStartedAt);
   const result = assembleCandidate(root,installer,sha,version,stamp);
-  if (!process.argv.includes('--export-only')) {
-    const local = stageLocalApp(root,resolve(target,'x86_64-pc-windows-msvc/release'),sha);
+  if (!exportOnly) {
+    const local = stageLocalApp(root,release,sha);
     const shortcuts=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',resolve(developmentRoot,'tooling/windows-toolchain/create-app-shortcuts.ps1'),'-Root',root],{encoding:'utf8',windowsHide:true});
     const startup=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-File',resolve(developmentRoot,'tooling/windows-toolchain/verify-desktop-startup.ps1'),'-Root',root],{encoding:'utf8',windowsHide:true,timeout:60000,maxBuffer:32768});
     verifyDesktopStartup(startup,sha);

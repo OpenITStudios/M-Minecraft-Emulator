@@ -3,8 +3,8 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
-import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload,verifyInstallerLayout} from '../scripts/check-lazy-tester-package.mjs';
-import {reviewedDigests,stageNativePayload} from '../scripts/prepare-native-payload.mjs';
+import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload,verifyInstallerLayout,verifyCandidateReleasePolicy} from '../scripts/check-lazy-tester-package.mjs';
+import {reviewedDigests,stageNativePayload,verifyNativePayload} from '../scripts/prepare-native-payload.mjs';
 import {processRoles,roleMuiNames,verifyRoleResources} from '../scripts/prepare-process-roles.mjs';
 
 describe('Lazy Tester native package',()=>{
@@ -123,6 +123,12 @@ describe('Lazy Tester native package',()=>{
       expect(()=>verifyNativeProfileLayout(changed)).toThrow(/profile owner differs/);
     }
   });
+  it('keeps candidate publication disabled and requires Authenticode before publication',()=>{
+    expect(()=>verifyCandidateReleasePolicy({publicationEnabled:false,requiresAuthenticodeBeforePublication:true})).not.toThrow();
+    for(const release of [{publicationEnabled:true,requiresAuthenticodeBeforePublication:true},
+      {publicationEnabled:false,requiresAuthenticodeBeforePublication:false},{publicationEnabled:false},{}])
+      expect(()=>verifyCandidateReleasePolicy(release)).toThrow(/publication hold/);
+  });
   it('derives hashes from the exact runtime policy and refuses absent or malformed review',()=>{
     const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap.rs',import.meta.url),'utf8');
     expect(()=>reviewedDigests(source)).toThrow(/unavailable/); // v4 payload is not reviewed yet.
@@ -144,7 +150,9 @@ describe('Lazy Tester native package',()=>{
         expected[name]=createHash('sha256').update(bytes).digest('hex');
       }
       writeFileSync(join(source,'replay-profile-five.bin'),'private fixture');
-      expect(stageNativePayload(source,destination,expected)).toHaveLength(2);
+      const receipts=stageNativePayload(source,destination,expected);
+      expect(receipts).toHaveLength(2);
+      expect(verifyNativePayload(destination,expected)).toEqual(receipts);
       expect(existsSync(join(destination,'replay-profile-five.bin'))).toBe(false);
       expect(stageNativePayload(source,destination,expected)).toHaveLength(2);
       writeFileSync(join(source,'bootstrap-compat.dll'),Buffer.alloc(128,0));
@@ -154,6 +162,9 @@ describe('Lazy Tester native package',()=>{
       writeFileSync(join(source,'bootstrap-compat.dll'),Buffer.alloc(128,'bootstrap-compat.dll'.length));
       writeFileSync(join(destination,'bootstrap-enroll.dll'),Buffer.alloc(128,0));
       expect(()=>stageNativePayload(source,destination,expected)).toThrow(/Stale/);
+      // A mutation after staging (including signing) must block candidate export.
+      expect(()=>verifyNativePayload(destination,expected)).toThrow(/reviewed/);
+      expect(readFileSync(join(destination,'bootstrap-enroll.dll'))).toEqual(Buffer.alloc(128,0));
     }finally{
       expect(dirname(resolve(root))).toBe(resolve(tmpdir()));
       rmSync(root,{recursive:true,force:false});
