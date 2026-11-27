@@ -35,7 +35,9 @@ export function parseNativeBackendSupport(value: unknown): NativeBackendSupport 
 export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
 export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
-export interface SessionSnapshot {schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport; agentActivity?:AgentActivityReport}
+export type SelectiveCategory = 'Worlds' | 'ResourcePacks' | 'BehaviorPacks';
+export interface SelectiveInventory {slot: ProfileSlot; category: SelectiveCategory; items: {root: string; name: string}[]}
+export interface SessionSnapshot {selectiveInventory?: SelectiveInventory; schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport; agentActivity?:AgentActivityReport}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
@@ -209,6 +211,7 @@ export function parseProfileBinding(value: unknown): ProfileBinding {
 export function parseSession(value: unknown): SessionSnapshot {
   if (!record(value) || !exact(value, ['schema','profiles','storage',
      ...(Object.hasOwn(value,'settings')?['settings']:[]),
+     ...(Object.hasOwn(value,'selectiveInventory')?['selectiveInventory']:[]),
      ...(Object.hasOwn(value,'agentActivity')?['agentActivity']:[])]) || value.schema !== 1 ||
       !Array.isArray(value.profiles) || value.profiles.length !== 5) throw new TypeError('Invalid session response');
   const pids = new Set<number>();
@@ -305,6 +308,26 @@ export function parseSession(value: unknown): SessionSnapshot {
       settings.canApplyPreset&&(value.profiles as ProfileSession[]).some(p=>['STARTING','RUNNING','NOT_RESPONDING'].includes(p.state))||
       settings.changedProfiles!==null&&!settings.canApplyPreset)throw new TypeError('Invalid settings response');
   }
+  if(Object.hasOwn(value,'selectiveInventory')) {
+    const inventory=value.selectiveInventory;
+    if(!record(inventory)||!exact(inventory,['slot','category','items'])||
+      !profileSlots.includes(inventory.slot as ProfileSlot)||!Array.isArray(inventory.items)||inventory.items.length>128||
+      (value.profiles as ProfileSession[]).some(p=>p.slot===inventory.slot&&p.state!=='STOPPED'))
+      throw new TypeError('Invalid selective inventory');
+    const roots=inventory.category==='Worlds'?['minecraftWorlds']:
+      inventory.category==='ResourcePacks'?['resource_packs','development_resource_packs']:
+      inventory.category==='BehaviorPacks'?['behavior_packs','development_behavior_packs']:[];
+    if(!roots.length)throw new TypeError('Invalid inventory category');
+    const keys=new Set<string>();
+    for(const item of inventory.items) {
+      if(!record(item)||!exact(item,['root','name'])||typeof item.root!=='string'||!roots.includes(item.root)||
+        typeof item.name!=='string'||!item.name.length||item.name.length>255||item.name==='.'||item.name==='..'||
+        /[\\/\x00-\x1f:]/.test(item.name))throw new TypeError('Invalid inventory item');
+      const key=item.root+'/'+item.name.toLowerCase();
+      if(keys.has(key))throw new TypeError('Duplicate inventory item');
+      keys.add(key);
+    }
+  }
   if(Object.hasOwn(value,'agentActivity'))parseAgentActivity(value.agentActivity);
   return value as unknown as SessionSnapshot;
 }
@@ -377,6 +400,12 @@ export const lazyTester = {
     return parseSelectedClose(await invokeRuntime<unknown>('lazy_tester_close_one', {slot}));
   },
   storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),
+  selectiveInventory: async (slot: ProfileSlot, category: SelectiveCategory): Promise<SelectiveInventory> => {
+    const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSelectiveInventory',slot,category}}));
+    const inventory=snapshot.selectiveInventory;
+    if(!inventory||inventory.slot!==slot||inventory.category!==category)throw new TypeError('Inventory receipt does not match request');
+    return inventory;
+  },
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
   recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {

@@ -4,6 +4,7 @@ use crate::engine::{
     native_clients_session::{
         pipe::{Endpoint, Peer, Server},
         ProfileSession, ProfileStorage, SessionRequest, SessionSnapshot, SettingsReport,
+        SelectiveCategory, SelectiveInventory, SelectiveInventoryEntry,
     },
     process_identity::OwnedProcess,
 };
@@ -621,6 +622,7 @@ impl Sessions {
             schema: 1,
             profiles,
             storage: None,
+            selective_inventory: None,
             settings: None,
             agent_activity: None,
             testing_run: None,
@@ -874,6 +876,27 @@ impl Sessions {
         // Best effort: a locked file, incomplete preflight, or lost admission
         // is not a game exit failure and never triggers a retry loop.
         let _ = profile_storage::clear(&store.private, true);
+    }
+
+    fn selective_inventory(&mut self, slot: u32, category: SelectiveCategory) -> io::Result<SelectiveInventory> {
+        self.admit_profile_mutation(slot)?;
+        let store = self.store(slot)?;
+        #[cfg(feature="lazy-tester-package")]
+        if product_profiles::clear::pending(store)? {
+            return Err(invalid("Finish pending profile cleanup first"));
+        }
+        use resource_pack_inventory::InventoryCategory;
+        let native_category = match category {
+            SelectiveCategory::Worlds => InventoryCategory::Worlds,
+            SelectiveCategory::ResourcePacks => InventoryCategory::ResourcePacks,
+            SelectiveCategory::BehaviorPacks => InventoryCategory::BehaviorPacks,
+        };
+        let items = resource_pack_inventory::individual_inventory(&store.private, native_category,
+            InspectionBudget::new(Duration::from_secs(2)))?
+            .into_iter().map(|item| SelectiveInventoryEntry {
+                root: item.root.into(), name: item.name,
+            }).collect();
+        Ok(SelectiveInventory { slot, category, items })
     }
 
     fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
@@ -1560,6 +1583,7 @@ fn run() -> io::Result<()> {
         manager = Some(envelope.peer);
         let reply = (|| {
             let mut storage = None;
+            let mut selective_inventory = None;
             let mut settings = None;
             let reply_snapshot = ReplySnapshot::for_request(&envelope.request);
             let mut testing_reply=None;
@@ -1675,6 +1699,9 @@ fn run() -> io::Result<()> {
                 SessionRequest::InspectStorage => {
                     storage = Some(sessions.storage().map_err(|error| error.to_string())?)
                 }
+                SessionRequest::InspectSelectiveInventory { slot, category } => {
+                    selective_inventory = Some(sessions.selective_inventory(slot, category).map_err(|error| error.to_string())?);
+                }
                 SessionRequest::ClearProfileCache { slot } => {
                     sessions
                         .clear_cache(slot)
@@ -1703,6 +1730,7 @@ fn run() -> io::Result<()> {
             let mut snapshot = reply_snapshot.collect(&mut sessions);
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
+            snapshot.selective_inventory = selective_inventory;
             snapshot.settings = settings;
             snapshot.testing_run=testing_reply;
             snapshot.testing_inspection=inspection_reply;

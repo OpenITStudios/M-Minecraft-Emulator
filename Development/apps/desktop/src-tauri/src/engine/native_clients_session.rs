@@ -483,6 +483,8 @@ pub struct SessionSnapshot {
     pub profiles: Vec<ProfileSession>,
     pub storage: Option<Vec<ProfileStorage>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selective_inventory: Option<SelectiveInventory>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<SettingsReport>,
     #[serde(default,skip_serializing_if="Option::is_none")]
     pub agent_activity:Option<AgentActivityReport>,
@@ -534,6 +536,24 @@ pub struct ProfileStorage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_clear: Option<FullClearStorage>,
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub enum SelectiveCategory { Worlds, ResourcePacks, BehaviorPacks }
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SelectiveInventoryEntry {
+    pub root: String,
+    pub name: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SelectiveInventory {
+    pub slot: u32,
+    pub category: SelectiveCategory,
+    pub items: Vec<SelectiveInventoryEntry>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourcePackStorage {
@@ -599,6 +619,7 @@ impl SessionSnapshot {
         Self {
             schema: 1,
             storage: None,
+            selective_inventory: None,
             settings: None,
             agent_activity: None,
             testing_run: None,
@@ -634,6 +655,7 @@ pub enum SessionRequest {
     SavePerformance { #[serde(rename="activeFps")] active_fps:u32, #[serde(rename="backgroundFps")] background_fps:u32 },
     SaveAudio {mode:super::manager_settings::BackgroundAudio},
     InspectStorage,
+    InspectSelectiveInventory { slot: u32, category: SelectiveCategory },
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
     ResetGameSettings { slot: u32 },
@@ -1205,7 +1227,7 @@ fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
