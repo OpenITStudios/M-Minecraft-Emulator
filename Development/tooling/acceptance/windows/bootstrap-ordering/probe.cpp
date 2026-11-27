@@ -1942,7 +1942,7 @@ struct ConfiguredChild {
         if (presentationControl) inherited.push_back(presentationRead.value);
         if (paced) {
             auto& policy = *presentation.value;
-            policy.creation.version = 2; policy.creation.bytes = sizeof(policy);
+            policy.creation.version = 2; policy.creation.bytes = presentation_enrollment::LegacyPolicyBytes;
             HANDLE controllerSource = current;
             if (round == 7) {
                 STARTUPINFOW startup{sizeof(startup)};

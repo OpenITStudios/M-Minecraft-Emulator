@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <cwchar>
+#include <cstddef>
 #include "education-config.h"
 #include "frame-pacing.h"
 
@@ -22,11 +23,14 @@ struct PolicyConfig {
     HANDLE level, changed, stop, controller;
     DWORD controllerPid, reserved; // v2: zero; v3: active FPS low 16 bits, background high 16 bits.
     FILETIME controllerCreated;
+    HANDLE hudSelected; // v4 only: independent manual-reset HUD selection.
 };
-static_assert(sizeof(PolicyConfig) == 120);
+constexpr SIZE_T LegacyPolicyBytes = 120;
+static_assert(offsetof(PolicyConfig, hudSelected) == LegacyPolicyBytes);
+static_assert(sizeof(PolicyConfig) == 128);
 inline bool pacingLimits(const PolicyConfig& config, unsigned& active, unsigned& background) noexcept {
     if (config.creation.version == 2 && config.reserved == 0) { active=144; background=10; return true; }
-    if (config.creation.version != 3) return false;
+    if (config.creation.version != 3 && config.creation.version != 4) return false;
     active=config.reserved & 0xffff; background=config.reserved >> 16;
     return presentation_pacing::validCeilings(active,background);
 }

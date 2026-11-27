@@ -271,7 +271,7 @@ fn create_suspended_process(
         .map(|_| Configuration::create())
         .transpose()?;
     let presentation = presentation_library
-        .map(|_| Configuration::create_sized(120))
+        .map(|_| Configuration::create_sized(128))
         .transpose()?;
     let observation = if observe {
         Some(StartupObservation::create()?)
@@ -840,7 +840,7 @@ impl BootstrapLibrary {
         let symbol = unsafe {
             GetProcAddress(
                 self.module,
-                c"PrepareEducationPresentationV3".as_ptr().cast(),
+                c"PrepareEducationPresentationV4".as_ptr().cast(),
             )
         }
         .ok_or_else(|| invalid("Pinned payload lacks presentation capability preparation"))?;

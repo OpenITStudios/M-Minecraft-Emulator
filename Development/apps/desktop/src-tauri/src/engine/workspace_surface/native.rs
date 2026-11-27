@@ -526,6 +526,12 @@ pub(super) fn presented_under_manager(saved: &Saved, expected: Rectangle, manage
     let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
     manager_foreground_exposes_game(&saved.target,window,manager,expected)
 }
+pub(super) fn presented_for_hud(saved: &Saved, expected: Rectangle, manager: u64) -> bool {
+    if !placed_at(saved, expected) { return false; }
+    let Ok((_pin, window)) = hwnd(&saved.target) else { return false; };
+    (unsafe { GetForegroundWindow() == window }) ||
+        manager_foreground_exposes_game(&saved.target,window,manager,expected)
+}
 pub(super) fn parked_at(saved: &Saved, rect: Rectangle) -> bool {
     let Ok(expected) = parking_rectangle(rect) else { return false; };
     placed_at(saved, expected)

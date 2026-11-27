@@ -13,7 +13,7 @@ using Microsoft::WRL::ComPtr;
 struct Policy {
     presentation_pacing::Pacer pacer;
     fps_hud::Hud hud;
-    explicit Policy(const presentation_pacing::Input& input = {}) : pacer(input) {}
+    explicit Policy(const presentation_pacing::Input& input = {}) : pacer(input), hud(input.hudSelected, input.stop, input.controller) {}
     SRWLOCK rendering = SRWLOCK_INIT;
     std::atomic<unsigned long long> present{0}, present1{0}, bypassed{0}, faults{0};
     std::atomic<unsigned long long> created{0}, destroyed{0}, unsupported{0};

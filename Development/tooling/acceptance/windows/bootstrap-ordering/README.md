@@ -203,6 +203,16 @@ retain empty reviewed game/replay policies even with ignored tests included.
 Canonical exact hashes, executed evidence and the integrated Education
 Host World/focus/resource acceptance next action stay in planning/development.md.
 
+## Selected-only HUD capability (v4)
+
+The Rust launcher prepares a 128-byte v4 presentation section. A fifth
+read-only manual-reset event represents verified workspace HUD selection,
+independent of foreground pacing. The existing HUD worker checks selection,
+sticky stop and controller lifetime on its normal cycle. Legacy v2/v3 records
+retain 120 bytes; managed legacy HUDs remain hidden. Standalone HUD controls
+remain usable. No new worker or UI command. Native transition timing and
+payload validation remain NOT_EXECUTED.
+
 ## Private creation-to-pacing capability — 25 October 2026
 
 The opt-in own-child command `--run-presentation-pacing-self-test` extends

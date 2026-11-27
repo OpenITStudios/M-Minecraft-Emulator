@@ -23,6 +23,7 @@ inline bool validCeilings(unsigned active, unsigned background) noexcept {
 struct Input {
     HANDLE level = nullptr, changed = nullptr, stop = nullptr, controller = nullptr;
     unsigned activeFps = 144, backgroundFps = 10;
+    HANDLE hudSelected = nullptr; // HUD only; never consumed by Pacer.
 };
 class Pacer {
     enum class Mode { Background, Foreground, Stopped };

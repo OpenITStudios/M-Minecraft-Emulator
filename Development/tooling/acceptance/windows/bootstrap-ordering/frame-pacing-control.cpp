@@ -557,6 +557,8 @@ int wmain(int argc, wchar_t** argv) {
             check(presentation_enrollment::pacingLimits(config,active,background) && active==60 && background==5);
             config.reserved=60|(61<<16); check(!presentation_enrollment::pacingLimits(config,active,background));
             config.creation.version=4; check(!presentation_enrollment::pacingLimits(config,active,background));
+            config.reserved=60|(5<<16); check(presentation_enrollment::pacingLimits(config,active,background) && active==60 && background==5);
+            config.creation.version=5; check(!presentation_enrollment::pacingLimits(config,active,background));
             for (const auto invalid : {std::pair<unsigned,unsigned>{0,1}, {1001,10}, {60,0}, {60,61}}) {
                 presentation_pacing::Input input{}; input.activeFps=invalid.first; input.backgroundFps=invalid.second;
                 bool refused=false; try { presentation_pacing::Pacer pacer(input); } catch (...) { refused=true; }

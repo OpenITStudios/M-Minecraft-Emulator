@@ -24,7 +24,7 @@ INIT_ONCE initialized = INIT_ONCE_STATIC_INIT;
 bool policyReady = false;
 BOOL CALLBACK initializePolicy(PINIT_ONCE, PVOID, PVOID*) {
     policyReady = dxgi_pacing::initialize(input);
-    for (HANDLE handle : {input.level, input.changed, input.stop, input.controller}) CloseHandle(handle);
+    for (HANDLE handle : {input.level, input.changed, input.stop, input.controller, input.hudSelected}) if (handle) CloseHandle(handle);
     input = {};
     return TRUE; // A failed initialization is sticky; preserve native presentation.
 }
@@ -39,8 +39,9 @@ bool validPolicy(const PolicyConfig& config, const education_bootstrap::Config& 
     unsigned active=0, background=0;
     const bool limits = pacingLimits(config,active,background);
     if (!object || !event || !compare || !limits || config.controllerPid == child.pid) return false;
-    const HANDLE handles[]{config.level, config.changed, config.stop, config.controller};
-    for (unsigned i = 0; i < 4; ++i) {
+    const HANDLE handles[]{config.level, config.changed, config.stop, config.controller, config.hudSelected};
+    const unsigned count = config.creation.version == 4 ? 5U : 4U;
+    for (unsigned i = 0; i < count; ++i) {
         const HANDLE handle = handles[i];
         if (reinterpret_cast<INT_PTR>(handle) <= 0) return false;
         for (unsigned j = 0; j < i; ++j) if (handle == handles[j] || compare(handle, handles[j])) return false;
@@ -48,7 +49,7 @@ bool validPolicy(const PolicyConfig& config, const education_bootstrap::Config& 
         const ACCESS_MASK expected = SYNCHRONIZE | (i == 3 ? PROCESS_QUERY_LIMITED_INFORMATION : 1UL);
         if (object(handle, 0, &basic, sizeof(basic), &returned) != 0 || returned != sizeof(basic)
             || basic.GrantedAccess != expected) return false;
-        if (i < 3) {
+        if (i != 3) {
             struct EventInfo { LONG type, state; } info{};
             if (event(handle, 0, &info, sizeof(info), &returned) != 0 || returned != sizeof(info)
                 || info.type != (i == 1 ? 1 : 0) || (i == 2 && info.state != 0)) return false;
@@ -60,7 +61,7 @@ bool validPolicy(const PolicyConfig& config, const education_bootstrap::Config& 
         || memcmp(&birth, &config.controllerCreated, sizeof(birth))
         || !ProcessIdToSessionId(config.controllerPid, &session) || session != child.session
         || WaitForSingleObject(config.controller, 0) != WAIT_TIMEOUT) return false;
-    for (HANDLE handle : handles) if (!SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0)) return false;
+    for (unsigned i = 0; i < count; ++i) if (!SetHandleInformation(handles[i], HANDLE_FLAG_INHERIT, 0)) return false;
     return true;
 }
 thread_local bool insideFactory = false;
@@ -168,7 +169,7 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
     }
     pacing = size == 4 && wcscmp(setting, L"pace") == 0;
     if (!pacing && (size != 7 || wcscmp(setting, L"observe"))) return false;
-    const SIZE_T bytes = pacing ? sizeof(PolicyConfig) : sizeof(CreationConfig);
+    SIZE_T bytes = sizeof(CreationConfig);
     const DWORD length = GetEnvironmentVariableW(SectionVariable, setting, 32);
     if (!length || length >= 32) return false;
     ULONG_PTR raw = 0;
@@ -181,6 +182,12 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
     if (!raw) return false;
     const HANDLE section = reinterpret_cast<HANDLE>(raw);
     if (!SetHandleInformation(section, HANDLE_FLAG_INHERIT, 0)) return false;
+    if (pacing) {
+        const void* prefix = MapViewOfFile(section, FILE_MAP_READ, 0, 0, sizeof(CreationConfig));
+        if (!prefix) { CloseHandle(section); return false; }
+        CreationConfig header{}; memcpy(&header, prefix, sizeof(header)); UnmapViewOfFile(prefix);
+        bytes = header.version == 4 ? sizeof(PolicyConfig) : LegacyPolicyBytes;
+    }
     void* writable = MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, bytes);
     if (writable) { UnmapViewOfFile(writable); CloseHandle(section); return false; }
     const void* view = MapViewOfFile(section, FILE_MAP_READ, 0, 0, bytes);
@@ -190,7 +197,7 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
     const auto& config = capability.creation;
     UnmapViewOfFile(view); CloseHandle(section);
     CreationConfig actual{}; HMODULE module = nullptr;
-    if (config.magic != CreationMagic || (pacing ? config.version != 2 && config.version != 3 : config.version != 1) || config.bytes != bytes
+    if (config.magic != CreationMagic || (pacing ? config.version != 2 && config.version != 3 && config.version != 4 : config.version != 1) || config.bytes != bytes || (pacing && bytes != (config.version == 4 ? sizeof(PolicyConfig) : LegacyPolicyBytes))
         || config.pid != process.pid || config.session != process.session
         || memcmp(&config.created, &process.created, sizeof(FILETIME))
         || !imageMetadata(actual, module) || config.imageBytes != actual.imageBytes
@@ -210,7 +217,8 @@ bool prepare(const education_bootstrap::Config& process) noexcept {
     if (pacing) {
         if (!validPolicy(capability, process)) return false;
         input = {capability.level, capability.changed, capability.stop, capability.controller};
-        if (config.version == 3) {
+        if (config.version == 4) input.hudSelected = capability.hudSelected;
+        if (config.version == 3 || config.version == 4) {
             input.activeFps = capability.reserved & 0xffff;
             input.backgroundFps = capability.reserved >> 16;
         }

@@ -111,6 +111,7 @@ mod windows {
         level: OwnedHandle,
         changed: OwnedHandle,
         stop: OwnedHandle,
+        hud_selected: OwnedHandle,
         active: AtomicBool,
         stopped: AtomicBool,
     }
@@ -142,6 +143,7 @@ mod windows {
                 level: event(true)?,
                 changed: event(false)?,
                 stop: event(true)?,
+                hud_selected: event(true)?,
                 active: AtomicBool::new(false),
                 stopped: AtomicBool::new(false),
             })
@@ -154,6 +156,7 @@ mod windows {
             self.stopped.store(true, Ordering::Release);
             unsafe {
                 ResetEvent(self.level.as_raw_handle() as _);
+                ResetEvent(self.hud_selected.as_raw_handle() as _);
                 SetEvent(self.stop.as_raw_handle() as _);
                 SetEvent(self.changed.as_raw_handle() as _);
             }
@@ -185,7 +188,18 @@ mod windows {
             self.active.store(active, Ordering::Release);
             Ok(())
         }
-        fn readers(&self) -> io::Result<[OwnedHandle; 4]> {
+        fn publish_hud_selection(&self, selected: bool) -> io::Result<()> {
+            if self.stopped.load(Ordering::Acquire) { return Ok(()); }
+            if !self.live() { self.finish(); return Ok(()); }
+            let ok = unsafe {
+                if selected { SetEvent(self.hud_selected.as_raw_handle() as _) }
+                else { ResetEvent(self.hud_selected.as_raw_handle() as _) }
+            };
+            if ok == 0 { let error = io::Error::last_os_error(); self.finish(); return Err(error); }
+            if self.stopped.load(Ordering::Acquire) { self.finish(); }
+            Ok(())
+        }
+        fn readers(&self) -> io::Result<[OwnedHandle; 5]> {
             // Read-only native decoder queries reset modes before retaining wait-only copies.
             const EVENT_QUERY_STATE: u32 = 1;
             let process = unsafe { BorrowedHandle::borrow_raw(GetCurrentProcess() as _) };
@@ -194,6 +208,7 @@ mod windows {
                 duplicate(self.changed.as_handle(), SYNCHRONIZE | EVENT_QUERY_STATE)?,
                 duplicate(self.stop.as_handle(), SYNCHRONIZE | EVENT_QUERY_STATE)?,
                 duplicate(process, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)?,
+                duplicate(self.hud_selected.as_handle(), SYNCHRONIZE | EVENT_QUERY_STATE)?,
             ])
         }
     }
@@ -224,6 +239,15 @@ mod windows {
                 for p in bindings {
                     p.finish();
                 }
+                return;
+            }
+        }
+    }
+    fn publish_hud_selection(bindings: &[Arc<Binding>], selected: Option<u32>) {
+        for binding in bindings.iter().filter(|p| Some(p.pid) != selected)
+            .chain(bindings.iter().filter(|p| Some(p.pid) == selected)) {
+            if binding.publish_hud_selection(Some(binding.pid) == selected).is_err() {
+                for p in bindings { p.finish(); }
                 return;
             }
         }
@@ -264,6 +288,7 @@ mod windows {
             crate::engine::workspace_surface::presented_policy_target()
         } else { None };
         publish(&bindings, policy_target(selected, unsafe { GetCurrentProcessId() }, presented));
+        publish_hud_selection(&bindings, crate::engine::workspace_surface::selected_hud_target());
     }
     pub(crate) fn request_policy_refresh() -> io::Result<()> {
         // No extra hook, timer or worker. Notify only the existing private
@@ -318,8 +343,8 @@ mod windows {
             }
         }
 
-        // Order: foreground level, change notification, sticky stop, manager process.
-        pub(crate) fn reader_handles(&self) -> io::Result<[OwnedHandle; 4]> {
+        // Order: foreground level, change notification, sticky stop, manager process, HUD selection.
+        pub(crate) fn reader_handles(&self) -> io::Result<[OwnedHandle; 5]> {
             if self.binding.stopped.load(Ordering::Acquire) || !self.binding.live() {
                 return Err(io::Error::new(
                     io::ErrorKind::WouldBlock,
@@ -746,7 +771,7 @@ mod windows {
             .is_err());
             let readers: Vec<_> = bindings.iter().map(|p| p.readers().unwrap()).collect();
             for endpoint in &readers {
-                for handle in &endpoint[..3] {
+                for handle in endpoint[..3].iter().chain(std::iter::once(&endpoint[4])) {
                     assert_eq!(unsafe { SetEvent(handle.as_raw_handle() as _) }, 0);
                     assert_eq!(unsafe { GetLastError() }, ERROR_ACCESS_DENIED);
                 }
@@ -758,6 +783,11 @@ mod windows {
                     assert!(!state(&endpoint[2]));
                 }
             }
+            publish_hud_selection(&bindings, Some(children[1].pid));
+            assert!(state(&readers[1][4]) && !state(&readers[4][4]));
+            assert!(state(&readers[4][0]) && !state(&readers[1][0]));
+            publish_hud_selection(&bindings, None);
+            assert!(readers.iter().all(|r| !state(&r[4])));
             publish(&bindings, None); // Includes focus on the manager or an unrelated application.
             assert!(readers.iter().all(|r| !state(&r[0])));
             bindings[0].finish();

@@ -342,6 +342,8 @@ pub use controller::{
 pub(crate) fn presented_policy_target() -> Option<u32> {
     controller::presented_policy_target()
 }
+#[cfg(windows)]
+pub(crate) fn selected_hud_target() -> Option<u32> { controller::selected_hud_target() }
 // The original foreground worker owns all policy levels. These wrappers
 // only notify it AFTER the native workspace lock has been released;
 // a failed/partial native operation is re-observed, never called a success.

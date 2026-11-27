@@ -438,7 +438,7 @@ fn same(lease: &Lease, target: &OwnedProcess) -> bool {
 }
 // Read-only, bounded priority hint for the ONE existing FPS event worker.
 // An in-progress native switch cannot publish an unacknowledged target.
-pub(crate) fn presented_policy_target() -> Option<u32> {
+fn presented_target(manager_only: bool) -> Option<u32> {
     let state = SURFACE.try_lock().ok()?;
     if state.suspended || state.closing { return None; }
     let lease = state.active.as_ref()?;
@@ -451,8 +451,12 @@ pub(crate) fn presented_policy_target() -> Option<u32> {
     let saved = lease.saved.as_ref()?;
     if native::minimized(lease.manager).ok()? { return None; }
     let rect = native::rectangle(lease.manager, lease.viewport).ok()?;
-    native::presented_under_manager(saved,rect,lease.manager).then_some(saved.target.pid)
+    let visible = if manager_only { native::presented_under_manager(saved,rect,lease.manager) }
+        else { native::presented_for_hud(saved,rect,lease.manager) };
+    visible.then_some(saved.target.pid)
 }
+pub(crate) fn presented_policy_target() -> Option<u32> { presented_target(true) }
+pub(crate) fn selected_hud_target() -> Option<u32> { presented_target(false) }
 fn parked_cleanup_due(lease: &mut Lease) -> io::Result<bool> {
     Ok(lease.child.try_wait()?.is_some()
         || lease.saved.as_ref().is_some_and(|saved| native::retired(&saved.target)))

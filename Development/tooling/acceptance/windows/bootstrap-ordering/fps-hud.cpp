@@ -166,6 +166,14 @@ struct Hud::State {
     HWND owner = nullptr;
     DWORD ownerThread = 0;
     HANDLE ownerLife = nullptr;
+    HANDLE hudSelected = nullptr, policyStop = nullptr, controller = nullptr;
+    bool managed = false;
+    bool selectionAdmitted() const noexcept {
+        return !managed || (hudSelected && policyStop && controller
+            && WaitForSingleObject(hudSelected, 0) == WAIT_OBJECT_0
+            && WaitForSingleObject(policyStop, 0) == WAIT_TIMEOUT
+            && WaitForSingleObject(controller, 0) == WAIT_TIMEOUT);
+    }
     std::atomic<bool> workerFinished{false};
     std::atomic<bool> workerActive{false};
     // The process-global policy outlives all swap chains. Once the last
@@ -183,8 +191,13 @@ struct Hud::State {
             throw std::runtime_error("HUD clock unavailable");
         return value.QuadPart;
     }
-    State() : meter(frequency()) {
-        if (!stop || !changed) {
+    State(HANDLE selected, HANDLE stopped, HANDLE producer) : meter(frequency()), managed(selected || stopped || producer) {
+        const auto copy = [](HANDLE source, HANDLE& destination) {
+            return source && DuplicateHandle(GetCurrentProcess(), source, GetCurrentProcess(), &destination, SYNCHRONIZE, FALSE, 0);
+        };
+        const bool valid = !selected || (copy(selected, hudSelected) && copy(stopped, policyStop) && copy(producer, controller));
+        if (!stop || !changed || !valid) {
+            for (HANDLE h : {hudSelected, policyStop, controller}) if (h) CloseHandle(h);
             if (stop) CloseHandle(stop); if (changed) CloseHandle(changed);
             throw std::runtime_error("HUD events unavailable");
         }
@@ -192,6 +205,7 @@ struct Hud::State {
     ~State() {
         SetEvent(stop); if (worker.joinable()) worker.join();
         if (ownerLife) CloseHandle(ownerLife);
+        for (HANDLE h : {hudSelected, policyStop, controller}) if (h) CloseHandle(h);
         CloseHandle(changed); CloseHandle(stop);
     }
     void fail() noexcept { AcquireSRWLockExclusive(&gate); ++display.failures; ReleaseSRWLockExclusive(&gate); }
@@ -268,7 +282,7 @@ struct Hud::State {
                     const RECT bounds = placement(client, dpi);
                     const auto value = meter.read();
                     const bool fits = bounds.right > bounds.left;
-                    const bool visible = fits && IsWindowVisible(target) && !IsIconic(target);
+                    const bool visible = fits && selectionAdmitted() && IsWindowVisible(target) && !IsIconic(target);
                     if (fits) {
                         const unsigned shownRate = (value.milliFps + 50) / 100;
                         const bool redraw = dpi != previousDpi || value.valid != previousValid || shownRate != previousRate;
@@ -329,7 +343,7 @@ struct Hud::State {
     }
 };
 thread_local Hud::State* Hud::State::callbackOwner = nullptr;
-Hud::Hud() : state_(std::make_unique<State>()) {}
+Hud::Hud(HANDLE hudSelected, HANDLE policyStop, HANDLE controller) : state_(std::make_unique<State>(hudSelected, policyStop, controller)) {}
 Hud::~Hud() = default;
 bool Hud::bind(HWND owner, DWORD thread) noexcept {
     DWORD pid = 0;

@@ -222,7 +222,7 @@ static DWORD preparePresentation(
         require(creation.oldRva != creation.hwndRva);
         creation.magic = presentation_enrollment::CreationMagic; creation.version = version;
         policy.reserved = ceilings;
-        creation.bytes = sizeof(policy); creation.pid = storage.pid;
+        creation.bytes = version == 4 ? sizeof(policy) : presentation_enrollment::LegacyPolicyBytes; creation.pid = storage.pid;
         creation.created = storage.created; creation.session = storage.session;
         policy.controllerPid = GetProcessId(inputs[3]);
         require(policy.controllerPid == GetCurrentProcessId());
@@ -230,19 +230,19 @@ static DWORD preparePresentation(
         require(GetProcessTimes(inputs[3], &policy.controllerCreated, &exit, &kernel, &user)
             && WaitForSingleObject(inputs[3], 0) == WAIT_TIMEOUT);
         View view;
-        view.value = MapViewOfFile(writablePresentation, FILE_MAP_WRITE, 0, 0, sizeof(policy));
+        view.value = MapViewOfFile(writablePresentation, FILE_MAP_WRITE, 0, 0, creation.bytes);
         require(view.value != nullptr);
         const presentation_enrollment::PolicyConfig empty{};
-        require(memcmp(view.value, &empty, sizeof(empty)) == 0);
-        HANDLE* output[]{&policy.level, &policy.changed, &policy.stop, &policy.controller};
-        for (unsigned i = 0; i < 4; ++i) {
+        require(memcmp(view.value, &empty, creation.bytes) == 0);
+        HANDLE* output[]{&policy.level, &policy.changed, &policy.stop, &policy.controller, &policy.hudSelected};
+        for (unsigned i = 0; i < (version == 4 ? 5U : 4U); ++i) {
             // Original unstarted child cancellation owns any partial-transfer cleanup.
             require(DuplicateHandle(GetCurrentProcess(), inputs[i], process, output[i],
                 SYNCHRONIZE | (i == 3 ? PROCESS_QUERY_LIMITED_INFORMATION : 1UL), FALSE, 0));
         }
         // Recheck the exact retained child before a single full-record publication.
         validate(process, thread, pid, birth, configuration, expectedImage);
-        memcpy(view.value, &policy, sizeof(policy));
+        memcpy(view.value, &policy, creation.bytes);
         return ERROR_SUCCESS;
     } catch (...) { return ERROR_INVALID_DATA; }
 }
@@ -256,6 +256,13 @@ extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV3(
     HANDLE expectedImage, HANDLE writablePresentation, const HANDLE* inputs, DWORD activeFps, DWORD backgroundFps) {
     if (!presentation_pacing::validCeilings(activeFps, backgroundFps)) return ERROR_INVALID_DATA;
     return preparePresentation(process, thread, pid, birth, configuration, expectedImage, writablePresentation, inputs, 3,
+        activeFps | (backgroundFps << 16));
+}
+extern "C" __declspec(dllexport) DWORD WINAPI PrepareEducationPresentationV4(
+    HANDLE process, HANDLE thread, DWORD pid, ULONGLONG birth, HANDLE configuration,
+    HANDLE expectedImage, HANDLE writablePresentation, const HANDLE* inputs, DWORD activeFps, DWORD backgroundFps) {
+    if (!presentation_pacing::validCeilings(activeFps, backgroundFps)) return ERROR_INVALID_DATA;
+    return preparePresentation(process, thread, pid, birth, configuration, expectedImage, writablePresentation, inputs, 4,
         activeFps | (backgroundFps << 16));
 }
 BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {

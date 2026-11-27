@@ -38,7 +38,7 @@ class Hud {
     struct State;
     std::unique_ptr<State> state_;
 public:
-    Hud();
+    explicit Hud(HANDLE hudSelected = nullptr, HANDLE policyStop = nullptr, HANDLE controller = nullptr);
     ~Hud();
     bool bind(HWND owner, DWORD thread) noexcept;
     void unbind() noexcept;
