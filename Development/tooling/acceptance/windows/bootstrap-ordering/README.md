@@ -192,6 +192,11 @@ surface or font between updates; the current Rust canvas now retains one
 matching bitmap/font/DC for reuse within an unchanged binding after visible
 paint. OPT-05 defers that allocation until needed and releases it on reset;
 native resource fixture and source guard are AUTHORED_NOT_RUN.
+OPT-06 extends the standalone synthetic visibility control to inspect
+process GDI-object counts before selection, after visible paint, during
+same-binding deselection and after the unbind receipt before HUD destruction.
+These checks are authored, not executed; process counts are not a
+whole-game memory benchmark.
 The historical change removed one bitmap
 creation, one vector allocation and two pixel copies per redraw; this is not
 a claim about game-content memory or measurements of the current revision. At 96 DPI the largest

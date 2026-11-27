@@ -186,15 +186,20 @@ int run() {
         check(selected.value && stopped.value && controller.value);
         fps_hud::Hud hud(selected.value, stopped.value, controller.value);
         ShowWindow(owner, SW_SHOWNOACTIVATE);
+        const auto beforeBindGdi = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
         check(IsWindowVisible(owner) && hud.bind(owner, GetCurrentThreadId()));
         until([&] { auto s=hud.snapshot(); check(!s.failures); return s.window && !s.visible; });
         check(hud.snapshot().draws == 0);
         for (unsigned i=0; i<6; ++i) { hud.present(S_OK,0); pump(); Sleep(100); }
         until([&] { return hud.snapshot().reading.valid; });
         check(!hud.snapshot().visible && hud.snapshot().draws == 0);
+        // The unselected host is live, but must not own a GDI canvas yet.
+        check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) == beforeBindGdi);
         check(SetEvent(selected.value));
         until([&] { auto s=hud.snapshot(); check(!s.failures); return s.visible && s.draws>0; });
         auto shown=hud.snapshot();
+        const auto visibleGdi = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);
+        check(visibleGdi > beforeBindGdi);
         RECT actual{}; check(IsWindowVisible(shown.window) && GetWindowRect(shown.window,&actual)
             && memcmp(&actual,&shown.bounds,sizeof(actual))==0);
         check(ResetEvent(selected.value));
@@ -209,6 +214,8 @@ int run() {
         auto hidden=hud.snapshot();
         check(!IsWindowVisible(shown.window) && hidden.draws==hiddenDraws
             && GetWindowRect(hidden.window,&actual) && memcmp(&actual,&hidden.bounds,sizeof(actual))==0);
+        // Stable binding retains its existing canvas through short deselection.
+        check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) == visibleGdi);
         check(SetEvent(selected.value));
         until([&] { auto s=hud.snapshot(); check(!s.failures); return s.visible && s.draws>hiddenDraws; });
         auto restored=hud.snapshot();
@@ -231,9 +238,12 @@ int run() {
         // Preserve the historical aggregate field; it now also includes
         // this synthetic visible transition, not a game-render measurement.
         draws+=stoppedDraws;
-        ShowWindow(owner,SW_HIDE);
         hud.unbind();
-        until([&] { return hud.snapshot().window==nullptr; });
+        until([&] { auto s=hud.snapshot(); check(!s.failures); return s.window==nullptr; });
+        // Check immediately after the reset receipt, before Hud destruction.
+        // The worker may still be in its existing grace period.
+        check(GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS) == beforeBindGdi);
+        ShowWindow(owner,SW_HIDE);
     }
     // Dropping/recreating the window without unbinding is a realistic
     // Minecraft shutdown sequence: the GUI thread itself may remain alive.
