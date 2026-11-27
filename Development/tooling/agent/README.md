@@ -50,19 +50,24 @@ has been installed or tested on a user PC.
 
 | Task | Public playtest tool |
 | --- | --- |
-| Discover configured sources and available operations | agent_capabilities |
+| Discover sources and inspect profiles in one optional preflight | agent_capabilities (inspectProfiles=true) |
 | Inspect / explicitly launch an AI-owned profile | inspect_profiles, launch_profile |
 | Observe on demand / semantic UI | observe_client, inspect_client_ui |
 | Optional bounded monitoring | start_visual_observation, get_multi_client_visual_state, read_visual_observation, stop_visual_observation |
 | Prepare/review original Probe, explicit restart or read historical result | probe_qa |
-| Read bounded analytics / game results | summarize_test_evidence, read_game_evidence |
+| Read bounded analytics / game results for one or several slots | summarize_test_evidence |
 | Query imported issue evidence when needed | get_diagnostics_overview, list_issue_candidates, get_issue_details, query_diagnostic_evidence |
 
-All 16 names are existing operations with existing native admission.
+All 15 names are existing operations with existing native admission.
+`read_game_evidence` is no longer advertised or admitted in playtest: use
+`summarize_test_evidence({slots:[slot]})` for the same bounded evidence source.
+Legacy and restricted Code Mode retain the old single-slot method.
 The same descriptor catalog and projection serve both standard MCP and
 Codex Code Mode on this connection. The independent trusted Node SDK
 below stays read/plan-only; it does not transport images or grant writes.
-The old 13-tool restricted profile is retained unchanged. No public
+The old 13-tool restricted profile is retained unchanged. Legacy also accepts
+optional inspectProfiles=true; publication and combined inspection cannot
+both be requested in the same call. No public
 planning, duplicate context, old Probe aliases, low-level HWND targeting,
 screen-text review, native reservation, status publication or input
 experiment in playtest. Experimental core attachment is refused.
@@ -71,10 +76,16 @@ of autonomous play.
 
 ### Minimal playtest / report workflow
 
-1. Read capabilities once and inspect profiles when needed. Launch only
-   explicitly selected AI slots with the existing launch operation, reuse
-   the returned roster, and wait for observed readiness without tight
-   polling. A launch receipt is not a game/world/login receipt.
+1. For a new playtest, call `agent_capabilities({inspectProfiles:true})` once.
+   This combines capabilities/configuration and the existing fresh Inspect
+   receipt without a second MCP request, extra native query, log read or
+   launch. If native Inspect refuses, the combined request fails; use the
+   no-argument capability read for offline review. Use `inspect_profiles`
+   alone for later status refreshes. Launch only explicitly selected AI slots
+   with the existing launch operation; reuse its returned roster. Code Mode
+   may compose multiple explicit single-slot launches serially, stopping on
+   refusal or uncertain outcome; no server-side launch batch or retries.
+   A launch receipt is not a game/world/login receipt.
 2. Prefer one on-demand CUA screenshot for a concrete observation.
    If WGC is explicitly selected, start its bounded sampler before reading
    frames; stop it when done. Fetch metadata first for repeated monitoring

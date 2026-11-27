@@ -5184,11 +5184,11 @@ test('playtest uses the same native launch, bounded image and evidence operation
   });
   try {
     const listed=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
-    assert.equal(listed.length,16);
+    assert.equal(listed.length,15);
     assert.deepEqual(listed.map(t=>t.name),[
       'start_visual_observation','get_multi_client_visual_state','read_visual_observation',
       'stop_visual_observation','inspect_client_ui','observe_client','agent_capabilities',
-      'inspect_profiles','launch_profile','summarize_test_evidence','read_game_evidence',
+      'inspect_profiles','launch_profile','summarize_test_evidence',
       'probe_qa','get_diagnostics_overview','list_issue_candidates','get_issue_details',
       'query_diagnostic_evidence']);
     assert.ok(!Object.hasOwn(listed.find(t=>t.name==='read_visual_observation').inputSchema.properties,'screenReview'));
@@ -5201,6 +5201,7 @@ test('playtest uses the same native launch, bounded image and evidence operation
       ['launch_profile',{slot:1}],['observe_client',{slot:1}],
       ['close_profile',{slot:2}],['plan_player_actions',{actions:[]}],
       ['assess_input_route',{actions:[]}],['get_test_context',{}],
+      ['read_game_evidence',{slot:2}],
       ['prepare_probe_qa',{slot:2}],['get_computer_use_target',{slot:2}],
       ['run_experimental_multi_client_actions',{actions:[]}],
       ['probe_qa',{slot:2,coordinateNative:true}],
@@ -5347,4 +5348,54 @@ test('appended evidence uses the original anchor and bounded byte window',async(
     assert.equal(gap.status,'CAPTURE_FILE_UNSTABLE');
     assert.equal(gap.reason,'EVIDENCE_CAPTURE_TAIL_GAP');
   }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('playtest capability preflight reuses one fresh native inspect, no launch or log read',async()=>{
+  const calls=[];
+  const h=createHandler({...config(),surface:'playtest'},{
+    native:async(_exe,operation,slot)=>{
+      calls.push([operation,slot]);
+      return {...snapshot(operation),privatePath:'never-return'};
+    },
+    evidence:async()=>{throw Error('Preflight must not read logs');},
+  });
+  try {
+    const listing=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    assert.deepEqual(Object.keys(listing.find(t=>t.name==='agent_capabilities').inputSchema.properties),
+      ['inspectProfiles']);
+    const before=await h.callTool('agent_capabilities',{});
+    assert.equal(Object.hasOwn(before,'profileInspection'),false);
+    assert.equal(calls.length,0);
+    const result=await h.handle({jsonrpc:'2.0',id:2,method:'tools/call',params:{
+      name:'agent_capabilities',arguments:{inspectProfiles:true}}});
+    assert.equal(result.result.isError,false);
+    const data=JSON.parse(result.result.content[0].text);
+    assert.equal(data.profileInspection.operation,'inspect');
+    assert.equal(data.profileInspection.profiles.length,5);
+    assert.equal(data.playtest.autonomousGameplay,'BLOCKED_NO_VERIFIED_INPUT_BACKEND');
+    assert.equal(JSON.stringify(data).includes('never-return'),false);
+    assert.deepEqual(calls,[['inspect',undefined]]);
+    await assert.rejects(h.callTool('agent_capabilities',{inspectProfiles:'yes'}),/Invalid tool arguments/);
+    await assert.rejects(h.callTool('agent_capabilities',{publishToDesktop:true,inspectProfiles:true}),/Invalid tool arguments/);
+    assert.equal(calls.length,1);
+  }finally{h.shutdown();}
+});
+
+test('combined preflight preserves refusal and restricted compatibility',async()=>{
+  const h=createHandler({...config(),surface:'playtest'},{
+    native:async()=>{throw Error('Native controller unavailable or operation refused');},
+  });
+  const restricted=createHandler({...config(),surface:'code-mode'},{
+    native:async()=>{throw Error('Restricted capability must not invoke native');},
+  });
+  try {
+    const response=await h.handle({jsonrpc:'2.0',id:1,method:'tools/call',
+      params:{name:'agent_capabilities',arguments:{inspectProfiles:true}}});
+    assert.equal(response.result.isError,true);
+    assert.equal(response.result.content[0].text,'Native controller unavailable or operation refused');
+    assert.equal(Object.hasOwn(await h.callTool('agent_capabilities',{}),'profileInspection'),false);
+    const listing=(await restricted.handle({jsonrpc:'2.0',id:2,method:'tools/list'})).result.tools;
+    assert.deepEqual(listing.find(t=>t.name==='agent_capabilities').inputSchema.properties,{});
+    await assert.rejects(restricted.callTool('agent_capabilities',{inspectProfiles:true}),/Invalid tool arguments/);
+  }finally{h.shutdown();restricted.shutdown();}
 });

@@ -26,7 +26,7 @@ const METHODS=Object.freeze(ROUTES.map(([method])=>method));
 
 // Product playtesting adds existing real operations, not another execution core.
 // Keep the prior SDK and read/plan wire profile unchanged for existing clients.
-const PLAYTEST_EXCLUDE=new Set(['get_test_context','plan_player_actions','assess_input_route']);
+const PLAYTEST_EXCLUDE=new Set(['get_test_context','plan_player_actions','assess_input_route','read_game_evidence']);
 const PLAYTEST_EXTRA=[
   ['launch_profile',['slot']],
   ['observe_client',['slot']],
@@ -52,10 +52,13 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
     // Explicit new Probe attempt, not native reservation or command dispatch.
     allowedByTool.get('probe_qa').add('restart');
     allowedByTool.get('summarize_test_evidence').add('window');
+    allowedByTool.get('agent_capabilities').add('inspectProfiles');
   }
   const tools=descriptors.filter(tool=>allowedByTool.has(tool.name)).map(tool=>{
     const allowed=allowedByTool.get(tool.name);
-    const {dependentRequired,...schema}=tool.inputSchema;
+    // The canonical capability schema's mutually exclusive flags cannot
+    // coexist in either projected surface; omit the inapplicable constraint.
+    const {dependentRequired,not,...schema}=tool.inputSchema;
     const dependencies=Object.entries(dependentRequired??{}).filter(([key])=>allowed.has(key));
     const properties=Object.fromEntries(Object.entries(schema.properties??{})
       .filter(([key])=>allowed.has(key)));
@@ -71,8 +74,11 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
       ...(tool.name==='probe_qa'?{description:playtest?
         'Canonical source-only Probe preparation/status, explicit restart, inspectRun=true or explicit archivedRunId. No publication, reservation or game command dispatch.':
         'Canonical source-only Probe preparation/status, inspectRun=true or explicit archivedRunId. No restart, publication, reservation or game command dispatch.'}:{}),
-      ...(tool.name==='agent_capabilities'?{description:'Read bounded local AI/QA capabilities and activity. No desktop publication or gameplay proof.'}:{}),
+      ...(tool.name==='agent_capabilities'?{description:playtest?
+        'Read capabilities and configured sources; inspectProfiles=true adds one fresh native profile roster in the same call. No desktop publication or gameplay proof.':
+        'Read bounded local AI/QA capabilities and activity. No desktop publication or gameplay proof.'}:{}),
       inputSchema:{...schema,properties,
+        ...(not&&tool.name!=='agent_capabilities'?{not}:{}),
         ...(schema.required?{required:schema.required.filter(key=>allowed.has(key))}:{}),
         ...(dependencies.length?{dependentRequired:Object.fromEntries(dependencies
             .map(([key,required])=>[key,required.filter(member=>allowed.has(member))]))}:{}),

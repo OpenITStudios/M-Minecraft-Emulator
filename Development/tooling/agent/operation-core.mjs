@@ -1993,10 +1993,17 @@ export function createOperationCore(config,{
       } finally {inFlight=false;}
     }
     if (name==='agent_capabilities') {
-      keysExactly(args,['publishToDesktop']);
-      if(args.publishToDesktop!==undefined &&
-         typeof args.publishToDesktop!=='boolean')
+      keysExactly(args,['publishToDesktop','inspectProfiles']);
+      if((args.publishToDesktop!==undefined && typeof args.publishToDesktop!=='boolean')||
+         (args.inspectProfiles!==undefined && typeof args.inspectProfiles!=='boolean')||
+         (args.inspectProfiles===true&&args.publishToDesktop===true)) {
         throw new Error('Invalid tool arguments');
+      }
+      // Reuse the existing Inspect admission, fresh native receipt and
+      // public projection. No native call for the ordinary capability read.
+      const profileInspection=args.inspectProfiles===true?
+        await callTool('inspect_profiles',{}):null;
+      requireOpen();
       // One bounded read of already-owned MCP memory. It cannot attest
       // external desktop control, successful input, an authenticated QA world,
       // or whether a separately run Skills Probe command was actually sent.
@@ -2018,6 +2025,7 @@ export function createOperationCore(config,{
           visualObserver.activity():[],
       });
       const result={...capabilities(config.mode,mc02Enabled,multiEnabled),activity,
+        ...(profileInspection!==null?{profileInspection}:{}),
         // Configuration is not provider liveness, runtime proof, or approval.
         configuredSources:{
           native:!!config.executable,
