@@ -24,6 +24,19 @@ payload verification require separate native evidence and approval. No runtime
 packer, decryption service or activation/DRM is introduced. Repository visibility
 is the operator's responsibility.
 
+The supported frontend build runs the existing package checker in
+`--frontend` mode immediately after Vite and before Tauri embeds dist.
+Vite does not copy a public directory. The generated layout is limited to
+index.html, hashed JavaScript/CSS and the optional hashed application icon;
+unexpected files, links, nested asset directories, source-map directives and
+missing JS/CSS refuse the build. This is a bounded build-output check, not
+proof that permitted compiled assets contain no sensitive content. Intentional
+new asset classes and required legal notices must be reviewed explicitly.
+The NSIS overlay maps each MUI file individually (no recursive locale-folder
+resource), and the existing JS/Rust package checks agree with that mapping.
+Native DLL hash admission is unchanged. Direct Cargo or altered build tooling
+is not a certified release route; final extracted-payload verification remains held.
+
 The native bundler consumes
 `Development/apps/desktop/src-tauri/tauri.lazy-tester.conf.json`, the
 `lazy-tester-package` Cargo feature and staged, reviewed native DLLs. The

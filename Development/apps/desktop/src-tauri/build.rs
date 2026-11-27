@@ -78,12 +78,24 @@ fn main() {
                 ("package-resources/lazy-tester/bootstrap-compat.dll", "independent-bootstrap/bootstrap-compat.dll"),
                 ("package-resources/lazy-tester/bootstrap-enroll.dll", "independent-bootstrap/bootstrap-enroll.dll"),
                 ("../../../engine/distribution/lazy-tester-package.json", "distribution/lazy-tester-package.json"),
-                ("package-resources/lazy-tester/en-US/", "en-US/"),
+                ("package-resources/lazy-tester/en-US/lazy-tester.exe.mui", "en-US/lazy-tester.exe.mui"),
+                ("package-resources/lazy-tester/en-US/Lazy Tester - Sessions.exe.mui", "en-US/Lazy Tester - Sessions.exe.mui"),
+                ("package-resources/lazy-tester/en-US/Lazy Tester - Window Recovery.exe.mui", "en-US/Lazy Tester - Window Recovery.exe.mui"),
             ] {
                 assert_eq!(resources.get(source).and_then(serde_json::Value::as_str), Some(target));
             }
         }
-        assert_eq!(resources.len(), if lazy { 4 } else { 0 }, "Unexpected native package resources");
+        assert_eq!(resources.len(), if lazy { 6 } else { 0 }, "Unexpected native package resources");
+        if lazy {
+            // The supported Tauri frontend hook checks dist before embedding.
+            // Reject an alternate frontend path or replacement build hook.
+            if let Some(dist) = patch.pointer("/build/frontendDist") {
+                assert_eq!(dist.as_str(), Some("../dist"), "Only compiled frontend is admitted");
+            }
+            if let Some(hook) = patch.pointer("/build/beforeBuildCommand") {
+                assert_eq!(hook.as_str(), Some("npm run build:frontend"), "Checked frontend build required");
+            }
+        }
         assert_eq!(
             patch.pointer("/bundle/externalBin").and_then(serde_json::Value::as_array)
                 .map(Vec::len),

@@ -1,9 +1,45 @@
-import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {lstatSync,readdirSync,readFileSync} from 'node:fs';
+import {dirname,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {mergePatch} from './check-native-preview-package.mjs';
+import {processRoles,roleMuiNames} from './prepare-process-roles.mjs';
 const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
 const read=path=>readFileSync(resolve(root,path),'utf8');
+// The compiled UI is not confidential, but original source and debugging
+// artifacts must not be embedded by Tauri. Inspect only the generated dist.
+export function verifyFrontendPayload(directory=resolve(root,'dist')) {
+  const fail=reason=>{throw new Error('LAZY_TESTER_FRONTEND_REFUSED: '+reason);};
+  for(let path=resolve(directory);;path=dirname(path)){
+    const info=lstatSync(path);
+    if(!info.isDirectory()||info.isSymbolicLink())fail('Expected ordinary output directories');
+    if(dirname(path)===path)break;
+  }
+  const entries=readdirSync(directory).sort();
+  if(entries.join(',')!=='assets,index.html')fail('Expected only index.html and assets');
+  const assets=resolve(directory,'assets');
+  const assetInfo=lstatSync(assets);
+  if(!assetInfo.isDirectory()||assetInfo.isSymbolicLink())fail('Expected ordinary assets directory');
+  const names=readdirSync(assets);
+  if(!names.length||names.length>64)fail('Unexpected asset count');
+  let js=false,css=false;
+  const inspect=(file)=>{
+    const info=lstatSync(file);
+    if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1||info.size<1||info.size>16*1024*1024)
+      fail('Expected bounded ordinary generated file');
+    const body=readFileSync(file,'utf8');
+    if(/(?:\/\/[#@]|\/\*[#@])\s*sourceMappingURL\s*=/.test(body))
+      fail('Source map directive is not allowed');
+  };
+  inspect(resolve(directory,'index.html'));
+  for(const name of names){
+    if(!/^[A-Za-z0-9_-]+-[A-Za-z0-9_-]{8,}\.(?:js|css)$/.test(name)&&
+       !/^app-icon-[A-Za-z0-9_-]{8,}\.svg$/.test(name))fail('Unexpected generated asset');
+    inspect(resolve(assets,name));
+    js ||= name.endsWith('.js'); css ||= name.endsWith('.css');
+  }
+  if(!js||!css)fail('Compiled UI JavaScript and CSS are required');
+}
+
 // Source-layout witness only. The native resolver and its Windows fixtures
 // remain the authorities for actual catalog, identity and data admission.
 export function verifyNativeProfileLayout(profiles) {
@@ -36,10 +72,12 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
     'package-resources/lazy-tester/bootstrap-compat.dll':'independent-bootstrap/bootstrap-compat.dll',
     'package-resources/lazy-tester/bootstrap-enroll.dll':'independent-bootstrap/bootstrap-enroll.dll',
     '../../../engine/distribution/lazy-tester-package.json':'distribution/lazy-tester-package.json',
-    'package-resources/lazy-tester/en-US/':'en-US/',
+    ...Object.fromEntries(roleMuiNames.map(name=>['package-resources/lazy-tester/'+name,name])),
   };
   fail(JSON.stringify(Object.entries(config.bundle.resources).sort())===JSON.stringify(Object.entries(allowed).sort()),'Unexpected or missing native payload');
   fail(config.build.beforeBundleCommand==='node scripts/prepare-process-roles.mjs','Process role metadata hook required');
+  fail(config.build.frontendDist==='../dist'&&config.build.beforeBuildCommand==='npm run build:frontend',
+    'Only the checked compiled frontend may be embedded');
   fail(Object.keys(base.bundle.resources).length===0&&Object.values(patch.bundle.resources).every(value=>value!==null),'Shared bundle must remain payload-free; overlay may contain only native assets');
   fail(Array.isArray(config.bundle.externalBin)&&config.bundle.externalBin.length===0,'Legacy sidecars forbidden');
   fail(JSON.stringify(config.app.security)===JSON.stringify(base.app.security)&&!Object.hasOwn(config,'plugins'),'Desktop security must remain unchanged');
@@ -60,11 +98,20 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
     'Visible App/Data and historical flat-install preservation hooks required');
   fail(!/^\s*(Exec|ExecWait|RMDir|Delete|DeleteRegKey|DeleteRegValue)\b/im.test(hooks),'Installer may not run tools or delete data');
   const scripts=JSON.parse(read('package.json')).scripts;
+  fail(scripts['build:frontend']==='vite build && node scripts/check-lazy-tester-package.mjs --frontend',
+    'Frontend build must verify generated output before native compilation');
+  fail(JSON.stringify([...Object.values(allowed),'lazy-tester.exe',...processRoles.map(role=>role.file)].sort())===JSON.stringify([...policy.requiredFiles].sort()),
+    'Runtime file allowlist differs from distribution contract');
   fail(scripts['build:app']==='npm run build:lazy-tester'&&scripts['build:lazy-tester'].includes('prepare:lazy-payload')&&scripts['build:lazy-tester'].includes('check:lazy-package')&&scripts['build:lazy-tester'].includes('--features lazy-tester-package')&&scripts['build:lazy-tester'].includes('--config src-tauri/tauri.lazy-tester.conf.json')&&scripts['build:lazy-tester'].includes('-- --locked'),'Native build route required');
   fail(scripts['dev:app']==='npm run dev:lazy-tester'&&scripts['dev:lazy-tester']===scripts['build:lazy-tester'].replace('tauri build --target x86_64-pc-windows-msvc --bundles nsis','tauri dev --target x86_64-pc-windows-msvc'),'Development must use the same reviewed native configuration, feature and payload as the product build');
   return {config,policy};
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
-  verifyLazyTesterPackage();process.stdout.write('Lazy Tester native installer source contract verified; profile bindings excluded\n');
+  if(process.argv.length===3&&process.argv[2]==='--frontend'){
+    verifyFrontendPayload();
+    process.stdout.write('Compiled frontend output admitted; original source files and maps excluded by layout check\n');
+  }else if(process.argv.length===2){
+    verifyLazyTesterPackage();process.stdout.write('Lazy Tester native installer source contract verified; profile bindings excluded\n');
+  }else throw new Error('Unsupported package check arguments');
 }
 

@@ -31,7 +31,9 @@
       "package-resources/lazy-tester/bootstrap-compat.dll": "independent-bootstrap/bootstrap-compat.dll",
       "package-resources/lazy-tester/bootstrap-enroll.dll": "independent-bootstrap/bootstrap-enroll.dll",
       "../../../engine/distribution/lazy-tester-package.json": "distribution/lazy-tester-package.json",
-      "package-resources/lazy-tester/en-US/": "en-US/"
+      "package-resources/lazy-tester/en-US/lazy-tester.exe.mui": "en-US/lazy-tester.exe.mui",
+      "package-resources/lazy-tester/en-US/Lazy Tester - Sessions.exe.mui": "en-US/Lazy Tester - Sessions.exe.mui",
+      "package-resources/lazy-tester/en-US/Lazy Tester - Window Recovery.exe.mui": "en-US/Lazy Tester - Window Recovery.exe.mui"
     },
     "windows": {
       "nsis": {

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
-import {verifyLazyTesterPackage,verifyNativeProfileLayout} from '../scripts/check-lazy-tester-package.mjs';
+import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload} from '../scripts/check-lazy-tester-package.mjs';
 import {reviewedDigests,stageNativePayload} from '../scripts/prepare-native-payload.mjs';
 import {processRoles,roleMuiNames} from '../scripts/prepare-process-roles.mjs';
 
@@ -26,7 +26,8 @@ describe('Lazy Tester native package',()=>{
     expect(config.productName).toBe('Lazy Tester');
     expect(config.identifier).toBe('com.mivubi.lazytester');
     expect(config.bundle.externalBin).toEqual([]);
-    const packaged=Object.values(config.bundle.resources).flatMap(name=>name==='en-US/'?roleMuiNames:[name]);
+    const packaged=Object.values(config.bundle.resources);
+    expect(packaged.filter(name=>name.startsWith('en-US/')).sort()).toEqual([...roleMuiNames].sort());
     expect([...packaged,'lazy-tester.exe',...processRoles.map(r=>r.file)].sort()).toEqual([...policy.requiredFiles].sort());
     expect(policy.migration.installerMayDeleteData).toBe(false);
     expect(policy.runtime.defaultDataRelativePath).toBe('Data');
@@ -44,8 +45,39 @@ describe('Lazy Tester native package',()=>{
     extra.bundle.resources['private/replay-profile-five.bin']='independent-bootstrap/replay-profile-five.bin';
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Unexpected/);
     extra.bundle.resources=structuredClone(config.bundle.resources);
+    extra.bundle.resources['package-resources/lazy-tester/en-US/']='en-US/';
+    expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Unexpected/);
+    extra.bundle.resources=structuredClone(config.bundle.resources);
+    extra.build.frontendDist='../src';
+    expect(()=>verifyLazyTesterPackage(extra)).toThrow(/compiled frontend/);
+    delete extra.build.frontendDist;
     extra.identifier=policy.migration.previousIdentifier;
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Identity/);
+  });
+  it('admits only the generated frontend layout and refuses extra files or embedded source maps',()=>{
+    const dir=mkdtempSync(join(tmpdir(),'lazy-frontend-fixture-'));
+    try{
+      const assets=join(dir,'assets');mkdirSync(assets);
+      writeFileSync(join(dir,'index.html'),'<html></html>');
+      const js=join(assets,'index-Ab12_cd3.js');
+      writeFileSync(js,'console.log("fixture");');
+      writeFileSync(join(assets,'index-Ab12_cd3.css'),'body{}');
+      writeFileSync(join(assets,'app-icon-Ab12_cd3.svg'),'<svg/>');
+      expect(()=>verifyFrontendPayload(dir)).not.toThrow();
+      for(const name of ['source.ts','index-Ab12_cd3.js.map','private.json','debug.pdb']){
+        const extra=join(assets,name);writeFileSync(extra,'preserve');
+        expect(()=>verifyFrontendPayload(dir)).toThrow(/Unexpected generated asset/);
+        expect(readFileSync(extra,'utf8')).toBe('preserve');rmSync(extra);
+      }
+      const extra=join(dir,'Development');mkdirSync(extra);
+      expect(()=>verifyFrontendPayload(dir)).toThrow(/only index.html and assets/);
+      rmSync(extra,{recursive:true});
+      writeFileSync(js,'console.log("fixture");\n//# sourceMappingURL=data:application/json;base64,AAAA');
+      expect(()=>verifyFrontendPayload(dir)).toThrow(/Source map directive/);
+      writeFileSync(js,'console.log("fixture");');
+      rmSync(join(assets,'index-Ab12_cd3.css'));
+      expect(()=>verifyFrontendPayload(dir)).toThrow(/JavaScript and CSS/);
+    }finally{rmSync(dir,{recursive:true});}
   });
   it('recognizes the current canonical-first profile owner and refuses conflicting layout witnesses',()=>{
     const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap/product_profiles.rs',import.meta.url),'utf8');
