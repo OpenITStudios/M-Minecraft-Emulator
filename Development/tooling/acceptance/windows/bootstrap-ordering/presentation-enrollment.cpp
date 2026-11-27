@@ -122,70 +122,16 @@ HRESULT WINAPI createFactory2(UINT flags, REFIID id, void** result) {
     SetLastError(error); return status;
 }
 }
-// Mapping may be malformed or concurrently invalidated. Keep SEH at the native boundary.
-static bool copyCapability(void* destination, const void* source, SIZE_T bytes) noexcept {
-    __try { memcpy(destination,source,bytes); return true; }
-    __except(EXCEPTION_EXECUTE_HANDLER) { return false; }
-}
 bool prepare(const education_bootstrap::Config& process) noexcept {
-    wchar_t setting[32]{};
-    SetLastError(ERROR_SUCCESS);
-    const DWORD size = GetEnvironmentVariableW(Variable, setting, 32);
-    if (!size && GetLastError() == ERROR_ENVVAR_NOT_FOUND) {
-        SetLastError(ERROR_SUCCESS);
-        return !GetEnvironmentVariableW(SectionVariable, setting, 32) && GetLastError() == ERROR_ENVVAR_NOT_FOUND;
-    }
-    pacing = size == 4 && wcscmp(setting, L"pace") == 0;
-    if (!pacing && (size != 7 || wcscmp(setting, L"observe"))) return false;
-    SIZE_T bytes = sizeof(CreationConfig);
-    const DWORD length = GetEnvironmentVariableW(SectionVariable, setting, 32);
-    if (!length || length >= 32) return false;
-    ULONG_PTR raw = 0;
-    for (DWORD i = 0; i < length; ++i) {
-        if (setting[i] < L'0' || setting[i] > L'9') return false;
-        const ULONG_PTR digit = setting[i] - L'0';
-        if (raw > (~static_cast<ULONG_PTR>(0) - digit) / 10) return false;
-        raw = raw * 10 + digit;
-    }
-    if (!raw || raw > static_cast<ULONG_PTR>(INTPTR_MAX)) return false;
-    const HANDLE section = reinterpret_cast<HANDLE>(raw);
-    if (!SetHandleInformation(section, HANDLE_FLAG_INHERIT, 0)) return false;
-    if (pacing) {
-        const void* prefix = MapViewOfFile(section, FILE_MAP_READ, 0, 0, sizeof(CreationConfig));
-        if (!prefix) { CloseHandle(section); return false; }
-        CreationConfig header{}; const bool copied=copyCapability(&header,prefix,sizeof(header)); UnmapViewOfFile(prefix);
-        bytes = copied ? lazytester_presentation_bytes(1,header.version) : 0;
-        if (!bytes) { CloseHandle(section); return false; }
-    }
-    void* writable = MapViewOfFile(section, FILE_MAP_WRITE, 0, 0, bytes);
-    if (writable) { UnmapViewOfFile(writable); CloseHandle(section); return false; }
-    const void* view = MapViewOfFile(section, FILE_MAP_READ, 0, 0, bytes);
-    if (!view) { CloseHandle(section); return false; }
-    PolicyConfig capability{};
-    const bool copied=copyCapability(&capability,view,bytes);
-    UnmapViewOfFile(view); CloseHandle(section);
-    if (!copied) return false;
-    const auto& config = capability.creation;
-    CreationConfig actual{}; HMODULE module = nullptr;
-    if (config.magic != CreationMagic || config.bytes != bytes || lazytester_presentation_bytes(pacing ? 1U : 0U,config.version) != bytes
-        || config.pid != process.pid || config.session != process.session
-        || memcmp(&config.created, &process.created, sizeof(FILETIME))
-        || !imageMetadata(actual, module) || config.imageBytes != actual.imageBytes
-        || config.imageTimestamp != actual.imageTimestamp || memcmp(&config.imageId, &actual.imageId, sizeof(FILE_ID_INFO))) return false;
-    const auto oldEntry = lazytester_presentation_entry(module,actual.imageBytes,config.oldRva);
-    const auto hwndEntry = lazytester_presentation_entry(module,actual.imageBytes,config.hwndRva);
-    if (!oldEntry || !hwndEntry || oldEntry == hwndEntry) return false;
-    if (pacing) {
-        unsigned active=0, background=0;
-        if (!lazytester_presentation_validate(config.version, capability.reserved,
-            capability.level, capability.changed, capability.stop, capability.controller, capability.hudSelected,
-            capability.controllerPid, capability.controllerCreated.dwLowDateTime, capability.controllerCreated.dwHighDateTime,
-            process.pid, process.session, &active, &background)) return false;
-        input = {capability.level, capability.changed, capability.stop, capability.controller, active, background};
-        if (config.version == 4) input.hudSelected = capability.hudSelected;
-    }
-    originalOld = reinterpret_cast<CreateOld>(oldEntry);
-    originalHwnd = reinterpret_cast<CreateHwnd>(hwndEntry);
+    LazyTesterPresentationAdmission admitted{};
+    if (!lazytester_presentation_admit(process.pid,process.session,
+        process.created.dwLowDateTime,process.created.dwHighDateTime,&admitted)) return false;
+    if (!admitted.mode) return true;
+    pacing = admitted.mode == 2;
+    if (pacing) input = {admitted.level,admitted.changed,admitted.stop,admitted.controller,
+        admitted.active,admitted.background,admitted.selected};
+    originalOld = reinterpret_cast<CreateOld>(admitted.oldEntry);
+    originalHwnd = reinterpret_cast<CreateHwnd>(admitted.hwndEntry);
     armed = true;
     return true;
 }

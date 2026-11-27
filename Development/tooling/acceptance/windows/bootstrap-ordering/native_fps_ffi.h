@@ -81,3 +81,11 @@ std::uint32_t lazytester_presentation_image(LazyTesterPresentationImage*,HMODULE
 std::uint32_t lazytester_presentation_bytes(std::uint32_t pacing,std::uint32_t version);
 void* lazytester_presentation_entry(HMODULE,std::uint32_t imageBytes,std::uint32_t rva);
 }
+
+struct LazyTesterPresentationAdmission {
+    std::uint32_t mode,active,background,reserved;
+    void* oldEntry; void* hwndEntry; HANDLE level,changed,stop,controller,selected;
+};
+static_assert(sizeof(LazyTesterPresentationAdmission)==72 && offsetof(LazyTesterPresentationAdmission,oldEntry)==16);
+extern "C" std::uint32_t lazytester_presentation_admit(std::uint32_t pid,std::uint32_t session,
+    std::uint32_t birthLow,std::uint32_t birthHigh,LazyTesterPresentationAdmission*);

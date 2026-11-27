@@ -5,9 +5,10 @@ type Handle=*mut c_void;
 #[repr(C)]
 #[derive(Clone,Copy,Default,PartialEq,Eq)]
 pub struct FileId { volume:u64, id:[u8;16] }
+impl FileId { pub(crate) fn as_bytes(&self)->[u8;24] { let mut b=[0;24];b[..8].copy_from_slice(&self.volume.to_le_bytes());b[8..].copy_from_slice(&self.id);b } }
 #[repr(C)]
 #[derive(Clone,Copy,Default)]
-pub struct ImageMetadata { timestamp:u32, bytes:u32, id:FileId }
+pub struct ImageMetadata { pub timestamp:u32, pub bytes:u32, pub id:FileId }
 const _:()=assert!(mem::size_of::<ImageMetadata>()==32);
 #[repr(C)]
 struct MemoryInfo {

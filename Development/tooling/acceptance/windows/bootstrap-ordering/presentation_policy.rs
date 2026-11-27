@@ -30,7 +30,7 @@ mod tests {
 }
 
 #[cfg(windows)]
-mod native {
+pub(crate) mod native {
     use super::decode;
     use std::{ffi::{c_void,c_char},mem,ptr};
     type Handle = *mut c_void;
