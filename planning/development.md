@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective dependency review checkpoint: bounded on-demand world reference traversal reads both resource and behavior declarations, retaining world name, category, normalized UUID and version. Includes unclassified world directories, refuses links, malformed declarations and exhausted limits. This is read-only review evidence, not proof of unused packs; global activation and cross-pack manifest dependencies, integration and confirmation remain pending. Fixture authored NOT_EXECUTED. No deletion enabled; capture held.
+
 Selective inventory controller checkpoint: explicit slot/category read-only request uses original fresh native data admission and pending-full-clear guard. Optional response field emitted only for inventory requests; bridge validates category roots, bounded rows, stopped slot, duplicate names and receipt matching. No raw directory IDs or mutation tokens exposed; individual identity remains internal and must be revalidated in a future review. No UI dialog or deletion yet; tests NOT_EXECUTED. Capture held.
 
 Selective inventory: added separate Behavior Packs classification for conventional installed/development roots, with the same bounded read-only marker and identity checks. Shared declaration parser now retains UUID/version instead of discarding them at parse time; existing summary still projects counts unchanged. Roots are source candidates, not native-verified deletion targets. Cross-pack manifest dependencies, world reference traversal, IPC and deletion remain pending. Fixture authored NOT_EXECUTED; capture held.

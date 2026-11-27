@@ -184,6 +184,73 @@ fn read_pack_references(path: &Path) -> io::Result<Option<Vec<DeclaredPack>>> {
     Ok(Some(refs))
 }
 
+// Review evidence only: a known reference blocks pack removal; an incomplete
+// observation must never be treated as proof that a pack is unused.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct WorldPackReference {
+    pub(super) world: String,
+    pub(super) category: InventoryCategory,
+    pub(super) uuid: String,
+    pub(super) version: [u32; 3],
+}
+
+pub(super) fn world_pack_references(private: &File, budget: InspectionBudget)
+    -> io::Result<Vec<WorldPackReference>> {
+    let Some((base, _pins)) = base_path(private, budget)? else {
+        if budget.exhausted() { return Err(io::Error::other("Reference review deadline exceeded")); }
+        return Ok(Vec::new());
+    };
+    let root = base.join("minecraftWorlds");
+    if budget.exhausted() { return Err(io::Error::other("Reference review deadline exceeded")); }
+    let _root_pin = match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
+        Ok(pin) => pin,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if budget.exhausted() { return Err(io::Error::other("Reference review deadline exceeded")); }
+            return Ok(Vec::new());
+        }
+        Err(error) => return Err(error),
+    };
+    let mut references = Vec::new();
+    let mut visited = 0;
+    for entry in fs::read_dir(&root)? {
+        visited += 1;
+        if visited > MAX_WORLD_ENTRIES || budget.exhausted() {
+            return Err(io::Error::other("World reference review exceeded its limit"));
+        }
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(io::Error::other("Linked world in reference review"));
+        }
+        if !metadata.is_dir() { continue; }
+        let _world_pin = open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+        let world = entry.file_name().into_string()
+            .map_err(|_| io::Error::other("Unsupported world name"))?;
+        // Include even unclassified world directories: a missing level.dat
+        // is not evidence that their declared dependencies can be ignored.
+        for (category, filename) in [
+            (InventoryCategory::ResourcePacks, "world_resource_packs.json"),
+            (InventoryCategory::BehaviorPacks, "world_behavior_packs.json"),
+        ] {
+            if budget.exhausted() { return Err(io::Error::other("Reference review deadline exceeded")); }
+            if let Some(declared) = read_pack_references(&path.join(filename))? {
+                for reference in declared {
+                    if references.len() >= MAX_WORLD_PACK_REFS as usize {
+                        return Err(io::Error::other("Too many world pack references"));
+                    }
+                    references.push(WorldPackReference {
+                        world: world.clone(), category,
+                        uuid: reference.pack_id.to_ascii_lowercase(), version: reference.version,
+                    });
+                }
+            }
+        }
+    }
+    if budget.exhausted() { return Err(io::Error::other("Reference review deadline exceeded")); }
+    Ok(references)
+}
+
 fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
     Ok(read_pack_references(path)?.map(|refs| refs.len() as u32))
 }
@@ -321,6 +388,30 @@ mod tests {
         assert!(!super::super::same_image(&worlds[0].identity, &packs[0].identity));
         assert!(individual_inventory(&private, InventoryCategory::Worlds, InspectionBudget::new(Duration::ZERO)).is_err());
         drop(world_pin);
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn reference_review_reads_both_categories_and_refuses_invalid_declarations() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let world = parent.join("Roaming/Minecraft Education Edition/games/com.mojang/minecraftWorlds/one");
+        fs::create_dir_all(&world).unwrap();
+        let resource = world.join("world_resource_packs.json");
+        let behavior = world.join("world_behavior_packs.json");
+        fs::write(&resource, br#"[{"pack_id":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]}]"#).unwrap();
+        fs::write(&behavior, br#"[{"pack_id":"BBBBBBBB-2222-3333-4444-555555555555","version":[2,0,0]}]"#).unwrap();
+        let refs = world_pack_references(&private, InspectionBudget::new(Duration::from_secs(2))).unwrap();
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].category, InventoryCategory::ResourcePacks);
+        assert_eq!(refs[0].uuid, "aaaaaaaa-2222-3333-4444-555555555555");
+        assert_eq!(refs[1].category, InventoryCategory::BehaviorPacks);
+        assert_eq!(refs[1].version, [2,0,0]);
+        assert_eq!(refs[1].world, "one");
+        fs::write(&behavior, b"invalid").unwrap();
+        assert!(world_pack_references(&private, InspectionBudget::new(Duration::from_secs(2))).is_err());
+        assert!(world_pack_references(&private, InspectionBudget::new(Duration::ZERO)).is_err());
         drop(private);
         fs::remove_dir_all(parent).unwrap();
     }
