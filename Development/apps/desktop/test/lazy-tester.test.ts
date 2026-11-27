@@ -881,7 +881,7 @@ describe('Recording receipt contract',()=>{
     const good={slot:1,state:'Recording',frames:1};
     for(const value of [[good,good],[{...good,slot:6}],[{...good,frames:0}],
       [{...good,state:'Saved',frames:0}],[{...good,state:'Starting'}],
-      [{...good,frames:-1}],[{...good,state:'Success'}],[{...good,path:'private.mkv'}],null]){
+      [{...good,frames:-1}],[{...good,state:'Success'}],[{...good,state:['Recording']}],[{...good,path:'private.mkv'}],null]){
       expect(()=>parseRecordingStatus(value)).toThrow();
     }
   });

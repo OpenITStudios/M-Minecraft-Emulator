@@ -446,7 +446,7 @@ export function parseRecordingStatus(value:unknown):RecordingReceipt[] {
   return value.map((item:unknown)=>{
     if(!record(item)||!exact(item,['slot','state','frames'])||
       !profileSlots.includes(item.slot as ProfileSlot)||seen.has(item.slot as number)||
-      !['Starting','Recording','Stopping','Saved','Failed'].includes(String(item.state))||
+      typeof item.state!=='string'||!['Starting','Recording','Stopping','Saved','Failed'].includes(item.state)||
       typeof item.frames!=='number'||!Number.isSafeInteger(item.frames)||item.frames<0||
       ((item.state==='Recording'||item.state==='Saved')&&item.frames===0)||
       (item.state==='Starting'&&item.frames!==0))

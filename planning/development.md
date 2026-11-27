@@ -87,8 +87,9 @@ frame pipe or custom codec/muxer. [Recording contract](../docs/system/recording.
 owns the source boundary and acceptance. No binary shipped, automatic
 software fallback or new game lifecycle owner. CAP-01–05 initial source
 checkpoint is integrated for NVIDIA AV1 only; H.264/other GPU fallback,
-reviewed binary and native validation are open. Source only, no CI, no test
-execution, no release.
+reviewed binary and native validation are open. Receipt review also
+normalizes the frame/state promotion race and retains explicit Stop on
+status-read failure. Source only, no CI, no test execution, no release.
 
 ## Desktop UI refinement — 27 November 2026
 

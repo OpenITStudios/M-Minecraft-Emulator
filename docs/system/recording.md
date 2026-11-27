@@ -60,7 +60,9 @@ mutation; external game exit invalidates the worker. The gated topbar
 slot selector projects only bounded native status receipts and Record/Stop
 commands. Stop is independent of workspace selection and available from
 Settings; start is limited to Play with a responding profile. The existing
-2 s observer reads recording status only while active or uncertain. Close
+2 s observer reads recording status only while active or uncertain. Unknown
+status never authorizes another Start; explicit per-slot Stop remains
+available while a recording may be active. Close
 controls for a known active slot are disabled; native CloseOne/CloseAll
 still enforce admission. A switch or layout that changes target client
 dimensions can invalidate recording; this is not proof of uninterrupted

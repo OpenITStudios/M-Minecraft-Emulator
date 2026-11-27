@@ -29,9 +29,14 @@ struct Run{state:AtomicU8,stop:AtomicBool,frames:AtomicU64,pixel_rate:u64}
 impl Run{
     fn active(&self)->bool{self.state.load(Ordering::Acquire)<SAVED}
     fn receipt(&self,slot:u32)->RecordingReceipt{
-        let state=match self.state.load(Ordering::Acquire){
+        let observed=self.state.load(Ordering::Acquire);
+        let state=match observed{
             STARTING=>"Starting",RECORDING=>"Recording",STOPPING=>"Stopping",SAVED=>"Saved",_=>"Failed"};
-        RecordingReceipt{slot,state,frames:self.frames.load(Ordering::Acquire)}
+        // Progress writes frames before promoting STARTING. A concurrent
+        // status read can observe the old state and new count; keep that
+        // Starting receipt valid rather than reporting conflicting proof.
+        let frames=if observed==STARTING{0}else{self.frames.load(Ordering::Acquire)};
+        RecordingReceipt{slot,state,frames}
     }
 }
 static SLOTS:Mutex<[Option<Arc<Run>>;5]>=Mutex::new([const{None};5]);
@@ -231,6 +236,18 @@ mod tests{
         assert!(admit(&slots,1,100).is_ok());
         slots[0].as_ref().unwrap().state.store(SAVED,Ordering::Release);
         assert!(admit(&slots,0,MAX_ACTIVE_PIXEL_RATE).is_ok());
+    }
+    #[test]
+    fn starting_receipt_does_not_mix_an_unpromoted_frame_with_starting(){
+        let r=run(1);
+        r.frames.store(1,Ordering::Release);
+        let receipt=r.receipt(1);
+        assert_eq!(receipt.state,"Starting");
+        assert_eq!(receipt.frames,0);
+        r.state.store(RECORDING,Ordering::Release);
+        let receipt=r.receipt(1);
+        assert_eq!(receipt.state,"Recording");
+        assert_eq!(receipt.frames,1);
     }
     #[test]
     fn progress_requires_terminal_receipt_and_real_frames(){
