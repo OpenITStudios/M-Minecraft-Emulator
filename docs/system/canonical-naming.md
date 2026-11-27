@@ -73,6 +73,17 @@ history. Their mention is not authorization to reactivate a provider
 or rewrite installed state. Source retirement does not remove old
 applications, accounts, snapshots or user files.
 
+The current Cargo package names `m-bedrock-virtual-clients` and
+`m-bedrock-virtual-clients-core`, desktop npm package name
+`m-bedrock-virtual-clients-desktop`, and dependency alias
+`virtual-clients-core` are retained internal build identities, not the
+active product brand. They are coupled to the committed lockfiles and
+the Rust consumers. The Lazy Tester package overlay already owns the
+installed name, identifier and main binary. The source path
+`independent_bootstrap.rs` also has direct distribution and verification
+consumers. Do not rename these for appearance alone or manually edit
+locks; a meaningful migration must account for those consumers.
+
 ## Version and responsibility
 
 `Development/VERSION` must match the application and relevant

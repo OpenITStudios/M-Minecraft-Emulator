@@ -5,9 +5,9 @@
 Branch `Local`; source-only work, Unreleased. Baseline `9b285c2110b7cdf91eda7e26c315a0b850eab82c`.
 The operator authorized further zero-waste improvements **excluding MCP and AI integration**, including MCP visual observation and shared experimental input interfaces. No UI redesign, new runtime controller, data migration, CI, local test or release. The next source work is limited to independent non-MCP consumers and concrete redundancy; do not reopen closed work without evidence.
 
-Work: `zero-waste-followup` — ZW-01 selected storage. Desktop entry, explicit Refresh and launcher selection use InspectProfileStorage(slot), one deep report through the existing controller storage range. Five lifecycle rows, exact selected slot validation, all cache/cleanup admission and old InspectStorage/full mutation responses remain unchanged. No persistent cache, new controller or MCP changes. UI invalidates prior storage on selection, refuses concurrent review/actions and late close-epoch responses. Native and frontend positive/negative fixtures authored; NOT_RUN. Shared inspectSelectedStorage owns the exact-slot/epoch publication fence for all three callers; semantic inspectProfileStorage/inspect_storage naming. Preserve keyboard focus after picker re-enables, only if no newer focus target. Windows-only validator fixture has matching cfg. Full mutation refreshes are retained for compatibility, not claimed optimized.
+Work: `zero-waste-followup` — scoped source review closed. ZW-01: selected Storage entry/Refresh/launcher selection use one exact-slot report and a single UI publication fence; five lifecycle rows, legacy full report and full mutation receipts preserved. No persistent cache, new controller or MCP/AI route edits. Picker focus regression and Windows fixture guard authored, not executed. ZW-07/08: semantic inspection names and shared ownership, no cosmetic file splitting or package/lock/path rename; current build identities documented in canonical naming. Full mutation report cost remains; visiting all five profiles can require five requests. No measured gain or native/UI execution claim.
 
-Prior ZW-09, narrow ZW-08 and selective identity reuse: [checkpoint at 0977e789](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/0977e7898b76b7621d9629658746eff0689cbc55/planning/development.md). Earlier ZW-02–06 and preserved retry: follow checkpoint links. Dependency removal BLOCKED_LOCK_RESOLUTION; manifests/locks preserved. Remaining ZW review: module boundaries and semantic naming; avoid cosmetic or compatibility-breaking renames. LOCAL_TEST_DEFERRED.
+Current source changes: [selected storage and integration checkpoint](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/b352dee93199cd8c006df8faf02cc237149907b9/planning/development.md). Prior ZW-09, narrow ZW-08 and selective identity reuse: [checkpoint at 0977e789](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/0977e7898b76b7621d9629658746eff0689cbc55/planning/development.md). Earlier ZW-02–06 and retained retry follow checkpoint links. Dependency removal remains BLOCKED_LOCK_RESOLUTION; manifests/locks preserved. SOURCE_READY_FOR_LOCAL for scoped source work / LOCAL_TEST_DEFERRED. No further speculative refactor; STOP.
 
 ## Unreleased — Rust-first integration
 
@@ -40,7 +40,7 @@ CAP-01–05 source integrated: explicit lossless client WebP screenshot; indepen
 
 ## Source-to-local handoff — SOURCE_READY_FOR_LOCAL
 
-Applies to previously closed source scopes; NMS runtime proof remains held. Re-pin exact Local HEAD before any separately authorized verified LOCAL_PC_AGENT phase. No action requested or authorized here.
+Applies to closed source scopes including the ZW follow-up; runtime proof remains held. Re-pin exact Local HEAD before any separately authorized verified LOCAL_PC_AGENT phase. No action requested or authorized here.
 
 | Gate | Existing evidence owner |
 | --- | --- |
