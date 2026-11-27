@@ -626,22 +626,6 @@ fn actual_surface_helper_restores_on_release_pipe_loss_and_helper_crash() {
         )
         .unwrap();
     }
-    assert!(!present_retained(
-        manager as usize as u64,
-        viewport,
-        tabs[0].clone(),
-        "other-session".into(),
-        "01".into()
-    )
-    .unwrap());
-    assert!(!present_retained(
-        manager as usize as u64,
-        viewport,
-        tabs[0].clone(),
-        "test-session".into(),
-        "02".into()
-    )
-    .unwrap());
     let (_sixth_fixture, sixth) = fixture();
     assert!(present(manager as usize as u64, viewport, sixth).is_err(),
         "A sixth surface must not replace an existing five-profile lease");
@@ -649,14 +633,22 @@ fn actual_surface_helper_restores_on_release_pipe_loss_and_helper_crash() {
     for turn in 0..40 {
         let selected = turn % tabs.len();
         let start = Instant::now();
-        assert!(present_retained(
+        present_verified(
             manager as usize as u64,
             viewport,
             tabs[selected].clone(),
             "test-session".into(),
             format!("{:02}", selected + 1)
         )
-        .unwrap());
+        .unwrap();
+        // The product path must reuse the five original helpers, not
+        // prepare a replacement checkpoint on each switch.
+        {
+            let state = SURFACE.lock().unwrap();
+            assert_eq!(state.parked.len(), tabs.len() - 1);
+            assert_eq!(state.active.as_ref().unwrap().authority.as_ref().unwrap().1,
+                format!("{:02}", selected + 1));
+        }
         timings.push(start.elapsed().as_millis());
         for (index, tab) in tabs.iter().enumerate() {
             native::capture(tab.clone()).unwrap();

@@ -353,13 +353,6 @@ fn notify_pacing_refresh() {
         eprintln!("Native FPS policy refresh notification unavailable: {error}");
     }
 }
-pub fn present_retained(manager:u64, viewport:Viewport, target:OwnedProcess,
-    session:String, client:String) -> io::Result<bool> {
-    let result=controller::present_retained(manager,viewport,target,session,client);
-    #[cfg(windows)]
-    notify_pacing_refresh();
-    result
-}
 pub fn present_verified(manager:u64, viewport:Viewport, target:OwnedProcess,
     session:String, client:String) -> io::Result<()> {
     let result=controller::present_verified(manager,viewport,target,session,client);

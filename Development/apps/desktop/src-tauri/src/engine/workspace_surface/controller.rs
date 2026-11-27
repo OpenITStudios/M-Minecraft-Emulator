@@ -900,7 +900,7 @@ pub fn present_verified(
     session: String,
     client: String,
 ) -> io::Result<()> {
-    present_bound(manager, viewport, target, Some((session, client)), false).map(|_| ())
+    present_bound(manager, viewport, target, Some((session, client)))
 }
 pub(super) fn active_preview_slot(manager: u64) -> io::Result<Option<u32>> {
     let state = SURFACE.lock().map_err(|_| io::Error::other("Workspace state unavailable"))?;
@@ -1003,46 +1003,23 @@ pub(super) fn adopt_preview_sources(manager: u64, viewport: Viewport,
     }
     Ok(unavailable)
 }
-pub fn present_retained(
-    manager: u64,
-    viewport: Viewport,
-    target: OwnedProcess,
-    session: String,
-    client: String,
-) -> io::Result<bool> {
-    present_bound(manager, viewport, target, Some((session, client)), true)
-}
 #[cfg(test)]
 fn present(manager: u64, viewport: Viewport, target: OwnedProcess) -> io::Result<()> {
-    present_bound(manager, viewport, target, None, false).map(|_| ())
+    present_bound(manager, viewport, target, None)
 }
 fn present_bound(
     manager: u64,
     viewport: Viewport,
     target: OwnedProcess,
     authority: Option<(String, String)>,
-    retained_only: bool,
-) -> io::Result<bool> {
+) -> io::Result<()> {
     let viewport = viewport.validate()?;
     let rect = native::rectangle(manager, viewport)?;
     let mut state = SURFACE
         .lock()
         .map_err(|_| io::Error::other("Workspace state unavailable"))?;
-    // Only a previously provider-verified lease may skip expensive engine admission.
+    // The caller already verified the target through the session owner.
     if state.closing { return Err(io::Error::other("Lazy Tester is closing")); }
-    if retained_only
-        && !state.active.iter().chain(state.parked.iter()).any(|lease| {
-            lease.manager == manager
-                && lease.authority == authority
-                && same(lease, &target)
-                && lease
-                    .saved
-                    .as_ref()
-                    .is_some_and(|saved| !native::retired(&saved.target))
-        })
-    {
-        return Ok(false);
-    }
     // A finished recovery helper must confirm restoration before its slot is reused.
     if let Some(active) = state.active.as_mut() {
         if active.child.try_wait()?.is_some()
@@ -1092,13 +1069,6 @@ fn present_bound(
         return Err(io::Error::new(io::ErrorKind::WouldBlock,
             "Selected Minecraft native checkpoint is unconfirmed; original helper and recovery gate retained"));
     }
-    if retained_only
-        && !state.active.iter().chain(state.parked.iter()).any(|lease| {
-            lease.manager == manager && lease.authority == authority && same(lease, &target)
-        })
-    {
-        return Ok(false);
-    }
     if let Some(old) = state.active.as_mut() {
         if same(old, &target) {
             if old.manager != manager {
@@ -1117,7 +1087,7 @@ fn present_bound(
                 return Err(error);
             }
             state.suspended = false;
-            return Ok(true);
+            return Ok(());
         }
     }
     let parked = state.parked.iter().position(|lease| same(lease, &target));
@@ -1191,7 +1161,7 @@ fn present_bound(
     }
     state.active = Some(replacement);
     state.suspended = false;
-    Ok(true)
+    Ok(())
 }
 #[cfg(windows)]
 pub fn follow_manager(manager: u64) -> io::Result<bool> {

@@ -28,13 +28,6 @@ pub fn cancel_close() {
     // No native checkpoint or state exists to mutate.
 }
 
-pub fn present_retained(
-    _manager: u64, _viewport: Viewport, _target: OwnedProcess,
-    _session: String, _client: String,
-) -> io::Result<bool> {
-    unavailable() // Do not return Ok(false): that would invite a second capture.
-}
-
 pub fn present_verified(
     _manager: u64, _viewport: Viewport, _target: OwnedProcess,
     _session: String, _client: String,
@@ -103,11 +96,6 @@ mod tests {
     fn unsupported_platform_never_claims_window_or_process_authority() {
         assert!(!is_active());
         cancel_close();
-        assert_eq!(
-            present_retained(0, viewport(), candidate(), "session".into(), "01".into())
-                .unwrap_err().kind(),
-            io::ErrorKind::Unsupported,
-        );
         assert_eq!(
             present_verified(0, viewport(), candidate(), "session".into(), "01".into())
                 .unwrap_err().kind(),

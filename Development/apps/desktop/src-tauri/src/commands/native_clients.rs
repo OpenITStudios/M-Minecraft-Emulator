@@ -215,9 +215,8 @@ pub async fn lazy_tester_present(
         // Slot attribution comes from retained original bootstrap handles, never UI PID/title.
         let authority = "LAZY_TESTER_MANAGED_SESSION".to_string();
         let client = format!("{slot:02}");
-        if crate::engine::workspace_surface::present_retained(manager, viewport, target.clone(), authority.clone(), client.clone())? {
-            return Ok(());
-        }
+        // Fresh session admission already established the target. The native
+        // presentation owner reuses a retained checkpoint or prepares one.
         crate::engine::workspace_surface::present_verified(manager, viewport, target, authority, client)
     })).await.map_err(|_| "Workspace task failed".to_string())?.map_err(|error| error.to_string())
 }
@@ -230,10 +229,17 @@ pub async fn lazy_tester_previews(
 ) -> Result<crate::engine::workspace_surface::PreviewReport, String> {
     let window = window.as_ref().window();
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
-        let snapshot = crate::engine::native_clients_session::request(
-            crate::engine::native_clients_session::SessionRequest::Inspect)?;
-        let profiles = snapshot.profiles.into_iter().filter_map(|profile|
-            profile.process.map(|process|(profile.slot,process))).collect();
+        // No source can be acquired when there are no requested tiles and
+        // no retained workspace lease. Still run the native layout/clear
+        // owner; a contended or retained lease requires fresh observation.
+        let profiles = if tiles.is_empty() && !crate::engine::workspace_surface::is_active() {
+            Vec::new()
+        } else {
+            let snapshot = crate::engine::native_clients_session::request(
+                crate::engine::native_clients_session::SessionRequest::Inspect)?;
+            snapshot.profiles.into_iter().filter_map(|profile|
+                profile.process.map(|process|(profile.slot,process))).collect()
+        };
         crate::engine::workspace_surface::configure_previews(window,viewport,tiles,profiles)
     })).await.map_err(|_| "Preview task failed".to_string())?.map_err(|error|error.to_string())
 }

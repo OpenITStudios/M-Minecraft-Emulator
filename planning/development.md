@@ -1,5 +1,8 @@
 # Current Development Handoff — Lazy Tester
 
+## System simplification — SIM-01
+Work: `system-simplification`. Scope: desktop/runtime only; MCP implementation and wire contract excluded. SIM-01 first source checkpoint: fresh controller Inspect → one verified presentation path, which reuses retained active/parked checkpoints or prepares a new one. Retired the redundant retained-only attempt and boolean mode; existing checkpoint recovery, slot identity, helper limits and rollback remain. Empty preview layout with no retained workspace lease skips controller Inspect under the existing manager gate; the native layout/clear owner still runs. Contended state, retained leases (including recovery) or requested tiles still require fresh Inspect. Keep the UI geometry recheck between viewport update and preview configuration: merging those calls would remove the current stale-layout/review admission boundary. No new cache, worker, command, dependency, fallback or MCP change. Source and fixture review only; native tests and performance NOT_EXECUTED. Next: review remaining desktop layout/inspection work, then SIM-02 UI state, SIM-03 storage, SIM-04 background, SIM-05 startup/exit, SIM-06 native ownership, SIM-07 integration. All existing holds remain.
+
 ## Active implementation roadmap — Rust-first
 
 Status means source availability, not runtime acceptance. Preserve existing contracts and user data; no tests/CI or release during source phase.

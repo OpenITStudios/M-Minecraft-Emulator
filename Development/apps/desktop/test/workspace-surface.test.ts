@@ -39,19 +39,28 @@ it('retained workspace windows require positive OS identity even when native que
   expect(retired).not.toContain('return GetLastError() == ERROR_INVALID_PARAMETER;');
 });
 
-it('Play switch uses original session observation before retained or verified presentation',()=>{
+it('Play switch uses one verified presentation path after original session observation',()=>{
   const source=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
   const start=source.indexOf('pub async fn lazy_tester_present(');
   const end=source.indexOf('pub async fn lazy_tester_previews(',start);
   const handler=source.slice(start,end);
-  expect(handler).toContain('present_retained(');
+  expect(handler).not.toContain('present_retained(');
   expect(handler).toContain('SessionRequest::Inspect');
   expect(handler).toContain('.filter(|p| p.responding)');
-  expect(handler.indexOf('SessionRequest::Inspect')).toBeLessThan(handler.indexOf('present_retained('));
-  expect(handler.indexOf('present_retained(')).toBeLessThan(handler.indexOf('present_verified('));
+  expect(handler.indexOf('SessionRequest::Inspect')).toBeLessThan(handler.indexOf('present_verified('));
+  expect(handler.match(/present_verified\(/g)).toHaveLength(1);
   expect(handler).not.toContain('native_clients::inspect_native_workspace');
 });
 
+
+it('empty unowned layout performs no session inspection but retained or requested sources still do',()=>{
+  const source=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
+  const handler=source.slice(source.indexOf('pub async fn lazy_tester_previews('),source.indexOf('pub async fn lazy_tester_clear_previews('));
+  expect(handler).toMatch(/if tiles\.is_empty\(\) && !crate::engine::workspace_surface::is_active\(\) \{\s*Vec::new\(\)\s*\} else \{[\s\S]*?SessionRequest::Inspect/);
+  expect(handler.indexOf('run_manager_operation')).toBeLessThan(handler.indexOf('tiles.is_empty()'));
+  expect(handler.match(/SessionRequest::Inspect/g)).toHaveLength(1);
+  expect(handler.indexOf('configure_previews(')).toBeGreaterThan(handler.indexOf('SessionRequest::Inspect'));
+});
 
 it('rearms display-scale observation once and removes the current listener on teardown',()=>{
   let ratio=1;
