@@ -796,6 +796,8 @@ try {
   await page.setViewportSize({width:1920,height:1080});
   const railDirection=()=>page.locator('.lazytester-workspace-grid').evaluate(node=>getComputedStyle(node).display);
   assert.equal(await railDirection(),'grid','Right preference uses the side rail when workspace size permits');
+  assert.equal(await page.getByText('Select a launcher to start Minecraft.',{exact:true}).isVisible(),true,
+    'Workspace guidance must remain correct with the side rail');
   const rightFits=await page.locator('.lazytester-launcher-entry').evaluateAll(entries=>entries.every(entry=>{
     const preview=entry.querySelector('.lazytester-launcher-preview').getBoundingClientRect();
     const health=entry.querySelector('.lazytester-launcher-health-slot').getBoundingClientRect();

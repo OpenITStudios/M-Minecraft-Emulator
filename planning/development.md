@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Workspace guidance checkpoint: remove Bottom-only directional instructions from shared workspace empty/recovery copy; Right fixture checks the same launcher guidance. No layout state or native changes. Tests NOT_EXECUTED. FPS policy investigation confirms foreground pacing and manager-selected presentation are distinct; existing policy level cannot safely serve as exact selected-only HUD visibility. Remaining native FPS and storage gates unchanged.
+
 Launcher UI consumer checkpoint: Bottom rail horizontal gap reduced to 8px; compact header uses 27px Close reservation, 2px inter-label gap, inherited product font and consistent 24px status line height. Existing high-zoom fallback and 24px Close target retained. Reconciled stale named-container and Close-review Refresh source fixtures; browser longest-label acceptance additionally checks actual Close bounds where present. Tests NOT_EXECUTED; actual text fit and native geometry remain unverified. No new UI state or native operations.
 
 
