@@ -28,8 +28,16 @@ describe('Selective Cleanup lifecycle source contract',()=>{
     const switchStart=dialog.indexOf('async function load(next: SelectiveCategory');
     const switchEnd=dialog.indexOf('function toggle(',switchStart);
     const load=dialog.slice(switchStart,switchEnd);
-    expect(load).toMatch(/category=next;\\s*\\/\\/[^\\n]*\\n\\s*receipt=null;\\s*issue='';/);
+    expect(load).toContain('category=next;');
+    expect(load.indexOf('category=next;')).toBeLessThan(load.indexOf('receipt=null;'));
     expect(load.indexOf('receipt=null;')).toBeLessThan(load.indexOf('if(inventories[next]&&!refresh)return;'));
+  });
+  it('lists the exact cross-category reviewed items, not just totals',()=>{
+    const dialog=source('SelectiveCleanup.svelte');
+    expect(dialog).toContain('aria-label="Reviewed items"');
+    expect(dialog).toContain('{#each receipt.items as item (item.identity)}');
+    expect(dialog).toContain('{item.name} ({item.root})');
+    expect(dialog).toContain('Inventory not available.');
   });
   it('shares navigation guard and restores focus to a persistent heading if trigger is unavailable',()=>{
     const storage=source('DataStorage.svelte');

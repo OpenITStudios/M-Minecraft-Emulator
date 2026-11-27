@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective Cleanup review usability: show exact cross-category targets in a collapsible reviewed-items list, distinguish missing inventory from verified empty inventory, and correct malformed category-switch fixture. Read-only review remains unchanged at native boundary; no deletion command. Tests NOT_EXECUTED.
+
 FPS v4 payload/fixture reconciliation: retire the incompatible old active DLL hash admission (history 937e7f3); package and new native launch intentionally refuse until matching v4 binaries are reviewed. Existing installed data unchanged. Added wait-only HUD admission fixture and v4 own-child positive/negative capability cases while preserving legacy v2 coverage. NOT_EXECUTED. Native payload review is deferred; no new runtime authority.
 
 Selected-only FPS HUD source checkpoint: independent HUD selection event on existing focus worker, v4 native capability, original FPS meter and pacing retained. HUD requires selected presentation, live controller and no sticky stop. Legacy managed HUD stays hidden. Source fixtures updated, NOT_EXECUTED; payload admission and full native regression review remain pending. Storage mutation gates remain held.

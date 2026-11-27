@@ -126,6 +126,7 @@
   <div class="lazytester-selective-items" aria-busy={loading}>
     {#if loading}<p role="status">Inspecting data…</p>{/if}
     {#if !loading && inventories[category] && !items.length}<p>No items found.</p>{/if}
+    {#if !loading && !inventories[category]}<p>Inventory not available. Select Refresh to inspect this category.</p>{/if}
     {#each items as item (item.identity)}
       <label class="lazytester-selective-item"><input type="checkbox" checked={selected.some(s=>s.identity===item.identity)} disabled={loading||(!selected.some(s=>s.identity===item.identity)&&selected.length>=128)} on:change={event=>toggle(item,event.currentTarget.checked)}/><span><strong>{item.name}</strong><small>{item.root}</small></span></label>
     {/each}
@@ -135,6 +136,14 @@
     <section class="lazytester-cache-confirm" aria-label="Selection review">
       <h3 bind:this={reviewHeading} tabindex="-1">Review selected data</h3>
       <p>{receipt.items.length} items · {receipt.files} files · {formatStorageBytes(receipt.bytes)}</p>
+      <details>
+        <summary>Reviewed items ({receipt.items.length})</summary>
+        <ul aria-label="Reviewed items">
+          {#each receipt.items as item (item.identity)}
+            <li>{categories.find(entry=>entry.value===item.category)?.label}: {item.name} ({item.root})</li>
+          {/each}
+        </ul>
+      </details>
       {#each receipt.warnings as warning}<p class="lazytester-help">{warning}</p>{/each}
       <p role="status">Deletion is unavailable until native validation is complete. No data has been changed.</p>
     </section>
