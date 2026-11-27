@@ -865,6 +865,8 @@ impl Sessions {
         if self.exiting { self.pending_http_cleanup = [false; 5]; return; }
         let Some(index) = self.pending_http_cleanup.iter().position(|pending| *pending) else { return; };
         self.pending_http_cleanup[index] = false;
+        // Missing preferences preserve the established default; corrupt/unreadable preferences fail closed.
+        if !crate::engine::manager_settings::load_storage_preferences().is_ok_and(|p|p.auto_clear_web_cache) {return;}
         let slot = index as u32 + 1;
         let Ok(workspace) = super::super::inspect_native_workspace() else { return; };
         if self.data_admission(slot, &workspace.processes).is_err() { return; }
@@ -1701,6 +1703,11 @@ fn run() -> io::Result<()> {
                     crate::engine::manager_settings::save_performance(crate::engine::manager_settings::PerformanceSettings {active_fps,background_fps})
                         .map_err(|error|error.to_string())?;
                     settings=Some(sessions.fresh_settings_report().map_err(|error|error.to_string())?);
+                }
+                SessionRequest::SaveStoragePreferences {preferences}=>{
+                    crate::engine::manager_settings::save_storage_preferences(preferences).map_err(|e|e.to_string())?;
+                    if !preferences.auto_clear_web_cache {sessions.pending_http_cleanup=[false;5];}
+                    settings=Some(sessions.fresh_settings_report().map_err(|e|e.to_string())?);
                 }
                 SessionRequest::SaveAudio {mode}=>{
                     // Explicit user audio changes remain immediate and are

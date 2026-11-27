@@ -10,7 +10,8 @@ describe('Selective Cleanup lifecycle source contract',()=>{
     expect(storage).toContain('aria-label="Auto-clear Download Cache" checked={false} disabled');
     expect(storage).toContain('aria-label="Auto-clear Old Logs" checked={false} disabled');
     expect(storage).toContain('Keep logs for 7 days');
-    expect(storage).toContain('disabled>Save Changes</button>');
+    expect(storage).toContain('aria-label="Auto-clear Web Cache"');
+    expect(storage).toContain('onSaveWebCachePreference(enabled)');
     expect(storage).toContain('Storage details and maintenance');
   });
   it('invalidates outstanding receipts before closing and on destruction',()=>{

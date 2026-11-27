@@ -53,6 +53,8 @@
       else if(storageOverviewHeading?.isConnected) storageOverviewHeading.focus({preventScroll:true});
     });
   }
+  export let autoClearWebCache: boolean | undefined = undefined;
+  export let onSaveWebCachePreference: (enabled:boolean) => Promise<void>;
   export let onReviewCache: () => void;
   export let onClearCache: (slot: ProfileSlot) => void;
   export let onCancelCacheReview: () => void;
@@ -165,6 +167,11 @@
             </div>
             <div class="lazytester-settings-panel">
               <div class="lazytester-setting">
+                <div><h3>Auto-clear Web Cache</h3><p>Remove verified temporary web cache after a successful game exit. This preference applies to all launchers.</p></div>
+                <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Web Cache" checked={autoClearWebCache===true} disabled={autoClearWebCache===undefined||busy||refreshing||resizing||storageReviewOpen||!available} on:change={event=>{const enabled=event.currentTarget.checked;event.currentTarget.checked=autoClearWebCache===true;void onSaveWebCachePreference(enabled);}}/></label>
+              </div>
+              {#if autoClearWebCache===undefined}<p class="lazytester-help">Web cache preference unavailable. Refresh settings before changing it.</p>{/if}
+              <div class="lazytester-setting">
                 <div><h3>Auto-clear Download Cache</h3><p>Download cache is separate from web cache. Cleanup remains unavailable until its location is verified.</p></div>
                 <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Download Cache" checked={false} disabled/></label>
               </div>
@@ -173,8 +180,7 @@
                 <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Old Logs" checked={false} disabled/></label>
               </div>
               <div class="lazytester-actions lazytester-settings-panel-footer lazytester-global-storage-footer">
-                <p class="lazytester-help">Verified web cache is eligible for automatic cleanup after a successful game exit. Additional cleanup settings are not available yet.</p>
-                <button class="lazytester-secondary" disabled>Save Changes</button>
+                <p class="lazytester-help">Web cache preference is saved when changed. Download cache and log cleanup remain unavailable.</p>
               </div>
             </div>
           </section>

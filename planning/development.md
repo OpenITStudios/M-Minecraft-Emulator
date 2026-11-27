@@ -15,6 +15,7 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 03 Storage | STG-04 world | Controller request, IPC, bridge, explicit UI confirmation and refresh integrated; destructive admission held pending native evidence |
 | 03 Storage | STG-05 resource pack; STG-06 behavior pack | Shared root-bound tree planner; duplicate UUID, world/pack/global reference blockers; deletion held pending native coverage and exclusive reference stability |
 | 03 Storage | STG-07 download cache | Existing HTTP cache is separate; download producer/root not established, no destructive route |
+| 03 Storage | STG-09 global integration | Web cache preference persistence, IPC, settings UI and original idle maintenance connected; download/log controls remain held |
 | 03 Storage | STG-08 logs (7 days) | Bounded internal Rust retention candidate inspection and age fixtures authored; verified producer/root, settings and disposition remain open |
 | 04 Desktop/workspace | UI-01 layouts; UI-02 selected HUD; UI-03 launcher; UI-04 storage UI; UI-05 consumers; UI-06 DPI | 01/02 source available; remaining open |
 | 05 Optimization | OPT-01 workers; OPT-02 memory; OPT-03 polling; OPT-04 dependencies; OPT-05 startup/shutdown | Open; evidence-driven, no speculative rewrite |

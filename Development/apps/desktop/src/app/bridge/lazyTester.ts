@@ -34,7 +34,8 @@ export function parseNativeBackendSupport(value: unknown): NativeBackendSupport 
 }
 export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
-export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
+export interface StoragePreferences {autoClearWebCache:boolean}
+export interface SettingsReport {storagePreferences?:StoragePreferences; backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
 export type SelectiveCategory = 'Worlds' | 'ResourcePacks' | 'BehaviorPacks';
 export interface SelectiveInventory {slot: ProfileSlot; category: SelectiveCategory; items: {root: string; name: string; identity: string}[]}
 export interface SelectiveSelection {category: SelectiveCategory; root: string; name: string; identity: string}
@@ -300,7 +301,8 @@ export function parseSession(value: unknown): SessionSnapshot {
   }
   if(Object.hasOwn(value,'settings')) {
     const settings=value.settings;
-    if(!record(settings)||!exact(settings,['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles',...['graphicsPresets','backgroundAudio','audioIssue'].filter(key=>Object.hasOwn(settings,key))])||
+    if(!record(settings)||!exact(settings,['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles',...['graphicsPresets','backgroundAudio','audioIssue','storagePreferences'].filter(key=>Object.hasOwn(settings,key))])||
+      Object.hasOwn(settings,'storagePreferences')&&(!record(settings.storagePreferences)||!exact(settings.storagePreferences,['autoClearWebCache'])||typeof settings.storagePreferences.autoClearWebCache!=='boolean')||
       Object.hasOwn(settings,'backgroundAudio')&&!['Keep','Mute'].includes(String(settings.backgroundAudio))||
       Object.hasOwn(settings,'audioIssue')&&(!Object.hasOwn(settings,'backgroundAudio')||typeof settings.audioIssue!=='string'||settings.audioIssue.length>8192)||
       Object.hasOwn(settings,'graphicsPresets')&&(!Array.isArray(settings.graphicsPresets)||settings.graphicsPresets.length!==5||settings.graphicsPresets.some(p=>p!=='Preserve'&&p!=='High'&&p!=='Low'))||
@@ -412,6 +414,12 @@ export function parseSelectedClose(value:unknown):SelectedCloseReport {
 }
 
 export const lazyTester = {
+  saveStoragePreferences:async(preferences:StoragePreferences)=>{
+    if(typeof preferences.autoClearWebCache!=='boolean')throw new TypeError('Invalid storage preference');
+    const snapshot=settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveStoragePreferences',preferences}}));
+    if(snapshot.settings.storagePreferences?.autoClearWebCache!==preferences.autoClearWebCache)throw new TypeError('Storage preference could not be confirmed');
+    return snapshot;
+  },
   saveAudio:async(mode:BackgroundAudio)=>{
     if(!['Keep','Mute'].includes(mode))throw new TypeError('Invalid background audio preference');
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveAudio',mode}}));

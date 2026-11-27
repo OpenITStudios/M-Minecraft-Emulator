@@ -101,6 +101,52 @@ pub(crate) fn application_root(executable: &std::path::Path) -> io::Result<PathB
 pub(crate) fn product_settings() -> io::Result<PathBuf> {
     product_directory("Settings")
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StoragePreferences {
+    pub auto_clear_web_cache: bool,
+}
+impl Default for StoragePreferences {
+    fn default() -> Self { Self { auto_clear_web_cache: true } }
+}
+pub fn load_storage_preferences() -> io::Result<StoragePreferences> {
+    read_storage_preferences(&product_settings()?.join("storage.json"))
+}
+pub fn save_storage_preferences(value: StoragePreferences) -> io::Result<()> {
+    let directory=product_settings()?;
+    fs::create_dir_all(&directory)?;
+    write_storage_preferences(&product_settings()?.join("storage.json"),value)
+}
+fn read_storage_preferences(path:&std::path::Path)->io::Result<StoragePreferences> {
+    match fs::symlink_metadata(path) {
+        Err(e) if e.kind()==io::ErrorKind::NotFound=>return Ok(StoragePreferences::default()),
+        Err(e)=>return Err(e),
+        Ok(m)=>{
+            if !m.is_file()||m.file_type().is_symlink(){return Err(io::Error::other("Storage settings must be an ordinary file"));}
+            #[cfg(windows)] { use std::os::windows::fs::MetadataExt; if m.file_attributes()&0x400!=0{return Err(io::Error::other("Linked storage settings"));} }
+        }
+    }
+    let mut bytes=Vec::new();
+    let mut options=fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)] { use std::os::windows::fs::{OpenOptionsExt,MetadataExt}; options.custom_flags(0x00200000); }
+    let file=options.open(path)?;
+    let meta=file.metadata()?;
+    if !meta.is_file(){return Err(io::Error::other("Storage settings must be an ordinary file"));}
+    #[cfg(windows)] {use std::os::windows::fs::MetadataExt; if meta.file_attributes()&0x400!=0{return Err(io::Error::other("Linked storage settings"));}}
+    file.take(4097).read_to_end(&mut bytes)?;
+    if bytes.len()>4096{return Err(io::Error::other("Storage settings are too large"));}
+    serde_json::from_slice(&bytes).map_err(|_|io::Error::other("Storage settings invalid; saved file preserved"))
+}
+fn write_storage_preferences(path:&std::path::Path,value:StoragePreferences)->io::Result<()> {
+    use std::io::Write;
+    read_storage_preferences(path)?;
+    let temp=path.with_extension(format!("{}-{}.tmp",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_nanos()));
+    let mut file=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    let result=(||{file.write_all(&serde_json::to_vec(&value).map_err(io::Error::other)?)?;file.sync_all()?;drop(file);read_storage_preferences(path)?;fs::rename(&temp,path)})();
+    if result.is_err(){let _=fs::remove_file(&temp);}
+    result
+}
 pub(crate) fn product_cache() -> io::Result<PathBuf> {
     product_directory("Cache")
 }
@@ -252,6 +298,22 @@ mod tests {
         assert!(root.starts_with(std::env::temp_dir()));fs::remove_dir_all(root).unwrap();
     }
     use super::*;
+    #[test]
+    fn storage_preferences_default_roundtrip_and_preserve_invalid_file() {
+        let root=std::env::temp_dir().join(format!("lazy-storage-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();let path=root.join("storage.json");
+        assert!(read_storage_preferences(&path).unwrap().auto_clear_web_cache);
+        let disabled=StoragePreferences{auto_clear_web_cache:false};
+        write_storage_preferences(&path,disabled).unwrap();
+        assert_eq!(read_storage_preferences(&path).unwrap(),disabled);
+        write_storage_preferences(&path,StoragePreferences::default()).unwrap();
+        assert!(read_storage_preferences(&path).unwrap().auto_clear_web_cache);
+        let invalid=br#"{"autoClearWebCache":true,"autoClearDownloadCache":true}"#;
+        fs::write(&path,invalid).unwrap();
+        assert!(write_storage_preferences(&path,disabled).is_err());
+        assert_eq!(fs::read(&path).unwrap(),invalid);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn performance_defaults_persist_validate_and_preserve_invalid_files() {
         let root=std::env::temp_dir().join(format!("lazy-performance-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));

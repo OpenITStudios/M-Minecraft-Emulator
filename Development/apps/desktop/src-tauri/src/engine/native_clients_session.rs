@@ -500,6 +500,8 @@ pub struct SessionSnapshot {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SettingsReport {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_preferences: Option<super::manager_settings::StoragePreferences>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_audio: Option<super::manager_settings::BackgroundAudio>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio_issue: Option<String>,
@@ -516,7 +518,7 @@ impl SettingsReport {
     pub fn policy(can_apply_preset: bool, changed_profiles: Option<u32>) -> io::Result<Self> {
         // Configured ceilings of the reviewed payload, never measured frame rates.
         let (limits, audio, graphics)=super::manager_settings::load_report_preferences()?;
-        Ok(Self { background_audio:Some(audio), audio_issue:None, graphics_presets: graphics, active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
+        Ok(Self { storage_preferences:super::manager_settings::load_storage_preferences().ok(), background_audio:Some(audio), audio_issue:None, graphics_presets: graphics, active_fps: limits.active_fps, background_fps: limits.background_fps, render_distance_chunks: 12,
             can_apply_preset, changed_profiles })
     }
 }
@@ -678,6 +680,7 @@ pub enum SessionRequest {
     ApplyGraphicsPreset { slot: u32, preset: super::manager_settings::GraphicsPreset },
     SavePerformance { #[serde(rename="activeFps")] active_fps:u32, #[serde(rename="backgroundFps")] background_fps:u32 },
     SaveAudio {mode:super::manager_settings::BackgroundAudio},
+    SaveStoragePreferences { preferences: super::manager_settings::StoragePreferences },
     InspectStorage,
     InspectSelectiveInventory { slot: u32, category: SelectiveCategory },
     ReviewSelectiveInventory { slot: u32, selections: Vec<SelectiveSelection> },
@@ -1495,7 +1498,7 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         let observation=super::native_clients::inspect_native_workspace()?;
         return Ok(absent_controller_close_reply(&request,observation.processes.len()));
     }
-    if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..}) {
+    if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..} | SessionRequest::SaveStoragePreferences {..}) {
         // The old fallback returned five STOPPED profiles on Inspect without
         // checking whether a game survived the controller. Such a false idle
         // receipt could also clear the caller's pending-request uncertainty.
@@ -1505,6 +1508,7 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         require_absent_controller_idle(observation.processes.len())?;
         let mut snapshot = SessionSnapshot::stopped();
         if let SessionRequest::SaveAudio {mode}=request {super::manager_settings::save_audio(mode)?;}
+        if let SessionRequest::SaveStoragePreferences {preferences}=request {super::manager_settings::save_storage_preferences(preferences)?;}
         if let SessionRequest::SavePerformance { active_fps, background_fps } = request {
             super::manager_settings::save_performance(super::manager_settings::PerformanceSettings {active_fps,background_fps})?;
         }

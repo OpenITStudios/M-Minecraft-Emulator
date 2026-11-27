@@ -307,7 +307,7 @@
       // presentation receipt below may clear the uncertainty warning.
       if(snapshot.settings){
         if(!performanceDirty){activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;}
-        if (!sameSettingsObservation(settings, snapshot.settings)) settings=snapshot.settings;
+        if (!sameSettingsObservation(settings, snapshot.settings) || settings?.storagePreferences?.autoClearWebCache!==snapshot.settings.storagePreferences?.autoClearWebCache) settings=snapshot.settings;
       }
       if (active !== null && selectedIdentity !== identity(profiles.find(profile => profile.slot === active))) {
         const released = {slot: active, identity: selectedIdentity};
@@ -398,7 +398,7 @@
         await lazyTester.present(active, viewport.getBoundingClientRect());
         if (!current()) return;
       }
-      if(next==='settings') {
+      if(next==='settings'||next==='storage') {
         const snapshot=await lazyTester.settings();
         if (!current()) return;
         publishProfiles(snapshot.profiles);settings=snapshot.settings;available=true;
@@ -500,6 +500,19 @@
           headerRefreshButton.focus({preventScroll:true});
       }
     }
+  }
+  async function saveWebCachePreference(enabled:boolean):Promise<void> {
+    if(busy||refreshing||resizing||!available||navigationReviewOpen||settings?.storagePreferences===undefined)return;
+    busy=true;storageNotice='';
+    try {
+      const snapshot=await lazyTester.saveStoragePreferences({autoClearWebCache:enabled});
+      settings=snapshot.settings;publishProfiles(snapshot.profiles);
+      storageNotice='Web cache preference saved.';
+    } catch {
+      // An uncertain save must not be represented as the old or new value.
+      if(settings)settings={...settings,storagePreferences:undefined};
+      storageNotice='Web cache preference could not be confirmed. Refresh settings.';
+    } finally {busy=false;}
   }
   async function saveAudio(mode:'Keep'|'Mute') {
     if(busy||!available||!settings?.backgroundAudio)return;
@@ -1159,6 +1172,7 @@
           {dataLocation} {locationIssue} {runningCount}
           onChooseSlot={chooseSlot}
           bind:selectiveOpen nativeClosePending={closeReviewPending}
+          autoClearWebCache={settings?.storagePreferences?.autoClearWebCache} onSaveWebCachePreference={saveWebCachePreference}
           onInspectSelective={lazyTester.selectiveInventory}
           onReviewSelective={lazyTester.reviewSelectiveInventory}
           onConfirmWorlds={confirmWorlds}
