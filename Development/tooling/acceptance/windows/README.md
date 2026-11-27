@@ -186,9 +186,11 @@ do not close/sign out just to collect evidence. In default/first-startup mode, t
 restarts, injects or stops a game and never changes product admission.
 Installation resolution reuses
 [`Resolve-ManagerEducationTarget -RegisteredOnly`](education-target.ps1);
-the operator's normal first launch belongs to the existing
-[`open_native_minecraft`](../../../apps/desktop/src-tauri/src/engine/native_clients.rs)
-owner. No direct EXE/Explorer activation is implemented here.
+the historical Explorer launch owner was retired from the desktop.
+This collector is a historical/opt-in diagnostic, not the current managed
+startup acceptance route. For managed MC01–MC05 use the
+[current validation guide](../../../../docs/validation/README.md).
+No direct EXE/Explorer activation is implemented in this first-startup mode.
 
 Use **64-bit Windows PowerShell 5.1**:
 
@@ -201,7 +203,8 @@ Only after separate approval for a new recording, and when no existing target
 session needs preserving, run the same command with `-Record` from an explicitly
 elevated Windows PowerShell. There is no automatic UAC/relaunch. Wait for
 `MC01_STARTUP_READY_30_SECONDS`, then manually request **one first MC01 launch**
-through the existing official manager route. Do not request MC02 or repeat
+using the official Windows launcher for this historical diagnostic only. Do not
+interpret that launch as managed Lazy Tester startup acceptance. Do not request MC02 or repeat
 activation. A target appearing before ready, another game lifetime, wrong
 registered image/session or unreadable game identity makes collection incomplete.
 A concurrently launched game is preserved; the collector stops its own trace,
