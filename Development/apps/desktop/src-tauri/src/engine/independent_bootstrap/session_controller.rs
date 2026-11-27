@@ -951,12 +951,17 @@ impl Sessions {
         }).collect();
         let review = resource_pack_inventory::review_selection(&store.private, &native,
             budget)?;
+        // Revalidate the retained profile once after the review, not once per item.
+        // Every item still binds the same verified profile, slot and directory ID.
+        let profile_identity = directory_id(&store.private)?;
+        if !same_image(&profile_identity, &review.profile_identity) {
+            return Err(invalid("Profile identity changed; refresh selection"));
+        }
         for (selection, requested) in native.iter().zip(selections) {
             let item = review.items.iter().find(|i| i.category == selection.category &&
                 i.root == selection.root.as_str() && i.name == selection.name)
                 .ok_or_else(|| invalid("Selection no longer matches inventory"))?;
-            // Keep fresh handle validation on the review/confirmation path.
-            if resource_pack_inventory::inventory_identity(&directory_id(&store.private)?, slot, item) != requested.identity {
+            if resource_pack_inventory::inventory_identity(&profile_identity, slot, item) != requested.identity {
                 return Err(invalid("Inventory changed; refresh selection"));
             }
         }
