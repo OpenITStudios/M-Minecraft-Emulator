@@ -1,7 +1,7 @@
 // For an independently trusted local execution host only. This is NOT a
 // sandbox, generic tool dispatcher, new MCP session, or permission grant.
 // The host creates ONE operation core, and attaches this facade to it.
-import {REQUEST_LIMIT,boundedMcpText,publicToolError} from './operation-core.mjs';
+import {REQUEST_LIMIT,boundedMcpText,publicToolError} from './agent-contract.mjs';
 
 const MAX_CALLS=64;
 const MAX_RESULT_BYTES=1024*1024;
@@ -10,7 +10,7 @@ export function createCodeModeClient(core) {
   let calls=0,resultBytes=0,busy=false,closed=false;
   // The host MUST close the facade at the end of a script. The core is
   // separately owned by the host, and may be shared with its MCP adapter.
-  async function invoke(name,args,allowed,forced={}) {
+  async function invoke(name,args,allowed,forced={},required=[]) {
     if(closed||core.isClosed()) throw new Error('CODE_MODE_CLOSED');
     if(busy) throw new Error('CODE_MODE_CALL_IN_PROGRESS');
     if(calls>=MAX_CALLS||resultBytes>=MAX_RESULT_BYTES) throw new Error('CODE_MODE_BUDGET_EXHAUSTED');
@@ -29,7 +29,8 @@ export function createCodeModeClient(core) {
       }
       const input=JSON.parse(encoded);
       if(!input||typeof input!=='object'||Array.isArray(input)||
-        Object.keys(input).some(key=>!allowed.includes(key))) {
+        Object.keys(input).some(key=>!allowed.includes(key))||
+        required.some(key=>!Object.hasOwn(input,key))) {
         throw new Error('Invalid tool arguments');
       }
       if(closed||core.isClosed())throw new Error('MCP_CONNECTION_CLOSED');
@@ -48,7 +49,7 @@ export function createCodeModeClient(core) {
       busy=false;
     }
   }
-  const method=(name,allowed=[],forced={})=>args=>invoke(name,args,allowed,forced);
+  const method=(name,allowed=[],forced={},required=[])=>args=>invoke(name,args,allowed,forced,required);
   const tester=Object.freeze({
     profiles:Object.freeze({inspect:method('inspect_profiles')}),
     testing:Object.freeze({
@@ -57,13 +58,7 @@ export function createCodeModeClient(core) {
       // publication, native reservation, or dispatch is admitted here.
       probe:method('probe_qa',['slot','scope']),
       inspectRun:method('probe_qa',['slot'],{inspectRun:true}),
-      readArchived:args=>{
-        if(!args||!Object.hasOwn(args,'archivedRunId')||
-          typeof args.archivedRunId!=='string'||!/^[a-f0-9]{32}$/.test(args.archivedRunId)) {
-          return Promise.reject(new Error('Invalid tool arguments'));
-        }
-        return invoke('probe_qa',args,['archivedRunId'],{archivedRunId:args.archivedRunId});
-      },
+      readArchived:method('probe_qa',['archivedRunId'],{},['archivedRunId']),
     }),
     evidence:Object.freeze({
       summarize:method('summarize_test_evidence',['slots']),

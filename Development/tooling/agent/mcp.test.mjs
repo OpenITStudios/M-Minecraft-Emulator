@@ -5074,3 +5074,26 @@ test('legacy MCP does not advertise unsupported stateless protocol through initi
     assert.equal(discover.error.code,-32601);
   } finally {h.shutdown();}
 });
+
+test('Code Mode call budget includes invalid archive selectors and never falls into preparation',async()=>{
+  let calls=0;
+  const core={isClosed:()=>false,callTool:async()=>{calls++;return {ok:true};}};
+  const code=createCodeModeClient(core);
+  try {
+    for(let i=0;i<64;i++) await assert.rejects(code.tester.testing.readArchived({}),/Invalid tool arguments/);
+    assert.equal(calls,0);
+    await assert.rejects(code.tester.capabilities(),/CODE_MODE_BUDGET_EXHAUSTED/);
+    assert.equal(calls,0);
+  } finally {code.close();}
+});
+
+test('Code Mode closure fences pending results without claiming native cancellation',async()=>{
+  let release;
+  const core={isClosed:()=>false,callTool:async()=>{await new Promise(resolve=>{release=resolve;});return {ok:true};}};
+  const code=createCodeModeClient(core);
+  const pending=code.tester.profiles.inspect();
+  code.close();
+  release();
+  await assert.rejects(pending,/MCP_CONNECTION_CLOSED/);
+  await assert.rejects(code.tester.capabilities(),/CODE_MODE_CLOSED/);
+});

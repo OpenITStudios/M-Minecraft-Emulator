@@ -48,6 +48,40 @@ Capability inventory now derives from the same advertised descriptors;
 self-exclusion is retained, ordering follows tools/list. No runtime or
 protocol conformance tests executed.
 
+### Source ownership
+
+- `operation-core.mjs` is the single coordinator for session-bound
+  state, admission, QA checkpoints and recovery.
+- `tool-catalog.mjs` owns the one descriptor inventory.
+- `native-transport.mjs` owns the existing same-image CLI and exact
+  receipt validators; `evidence-reader.mjs` owns the bounded capture
+  file read; `agent-contract.mjs` owns common argument and text bounds.
+- Existing domain modules remain their semantic owners. The host
+  facade and stdio adapter do not create additional domain state.
+
+Trusted host integration (source example, not a runnable guest sandbox):
+
+```js
+import {createOperationCore,parseConfiguration} from './operation-core.mjs';
+import {createCodeModeClient} from './code-mode.mjs';
+
+const core = createOperationCore(parseConfiguration(operatorSelectedArgs));
+const client = createCodeModeClient(core);
+try {
+  // A trusted local host can compose this bounded API without MCP framing.
+  const context = await client.tester.testing.context({slots:[2,3,4,5]});
+  // Keep only the needed bounded evidence; do not log private source paths.
+  returnToAuthorizedCaller(context);
+} finally {
+  client.close();
+  core.shutdown(); // only the owner of the entire core may do this
+}
+```
+
+This example describes the trusted host, not model-authored code.
+The host supplies configuration and any guest isolation; never grant
+arbitrary model code direct Node access. No automatic local execution.
+
 ## Choose the existing owner
 
 | Goal | Canonical route | Hard boundary |
