@@ -7,7 +7,7 @@ use windows_sys::Win32::{
     System::{RemoteDesktop::ProcessIdToSessionId,Threading::*},
     UI::WindowsAndMessaging::*,
 };
-pub(super) struct Target{identity:OwnedProcess,handle:OwnedHandle,hwnd:usize,thread:u32,pub size:VideoSize}
+pub(super) struct Target{pid:u32,handle:OwnedHandle,hwnd:usize,thread:u32,pub size:VideoSize}
 impl Target{
     pub fn pin(identity:OwnedProcess)->io::Result<Self>{
         let hwnd=identity.window_handle.strip_prefix("0x").and_then(|s|usize::from_str_radix(s,16).ok())
@@ -15,24 +15,31 @@ impl Target{
         let raw=unsafe{OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION|SYNCHRONIZATION_SYNCHRONIZE,0,identity.pid)};
         if raw.is_null(){return Err(changed());}
         let handle=unsafe{OwnedHandle::from_raw_handle(raw as _)};
+        // Validate immutable process identity once against the retained OS
+        // handle. The handle cannot adopt a later process with a reused PID.
+        let birth=identity.created_file_time.parse::<u64>().map_err(|_|changed())?;
+        let mut game_session=0;
+        let mut own_session=0;
+        if birth==0||windows_process_time::creation_filetime(raw)?!=birth||
+            unsafe{ProcessIdToSessionId(identity.pid,&mut game_session)}==0||
+            unsafe{ProcessIdToSessionId(std::process::id(),&mut own_session)}==0||
+            game_session!=identity.session_id||game_session!=own_session||
+            unsafe{WaitForSingleObject(raw,0)}!=WAIT_TIMEOUT{return Err(changed());}
         let (thread,size)=window(hwnd as HWND,identity.pid)?;
-        let t=Self{identity,handle,hwnd,thread,size:size.validate()?};
+        let t=Self{pid:identity.pid,handle,hwnd,thread,size:size.validate()?};
         t.verify()?;
         Ok(t)
     }
     pub fn hwnd(&self)->u64{self.hwnd as u64}
     pub fn verify(&self)->io::Result<()>{
         let process=self.handle.as_raw_handle() as _;
-        let birth=self.identity.created_file_time.parse::<u64>().map_err(|_|changed())?;
-        let mut game=0;
-        let mut own=0;
-        if unsafe{WaitForSingleObject(process,0)}!=WAIT_TIMEOUT||
-            windows_process_time::creation_filetime(process)?!=birth||
-            unsafe{ProcessIdToSessionId(self.identity.pid,&mut game)}==0||
-            unsafe{ProcessIdToSessionId(std::process::id(),&mut own)}==0||
-            game!=self.identity.session_id||game!=own{return Err(changed());}
-        let (thread,size)=window(self.hwnd as HWND,self.identity.pid)?;
-        if thread!=self.thread||size!=self.size{return Err(changed());}
+        // Recheck live facts, not immutable birth/session metadata. Check
+        // the original handle on both sides of HWND observation to reject
+        // exit/PID reuse during the window checks.
+        if unsafe{WaitForSingleObject(process,0)}!=WAIT_TIMEOUT{return Err(changed());}
+        let (thread,size)=window(self.hwnd as HWND,self.pid)?;
+        if thread!=self.thread||size!=self.size||
+            unsafe{WaitForSingleObject(process,0)}!=WAIT_TIMEOUT{return Err(changed());}
         Ok(())
     }
 }

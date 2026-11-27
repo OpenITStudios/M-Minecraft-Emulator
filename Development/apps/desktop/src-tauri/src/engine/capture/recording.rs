@@ -1,6 +1,6 @@
 //! Per-slot on-demand recording; no game-process lifecycle owner.
-//! One thread and one owned FFmpeg child only while a recording is active.
-use super::{recording_target::Target,screenshot,video_encoder as video,worker};
+//! One supervisor, one bounded progress reader and one FFmpeg child per active slot.
+use super::{recording_target::Target,verified_target,video_encoder as video,worker};
 use crate::engine::process_identity::OwnedProcess;
 use serde::Serialize;
 use std::{
@@ -76,7 +76,7 @@ pub(super) fn stop(slot:u32)->io::Result<()>{
 pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     let idx=index(slot)?;
     if !video::available(){return Err(io::Error::new(io::ErrorKind::Unsupported,"Recording backend approval pending"));}
-    let target=Target::pin(screenshot::verified(slot,&expected)?)?;
+    let target=Target::pin(verified_target(slot,&expected)?)?;
     let rate=target.size.pixels_per_second();
     admit(&*slots()?,idx,rate)?;
     let Some(path)=rfd::FileDialog::new().set_title("Save Minecraft recording")
@@ -85,7 +85,7 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     if !path.extension().is_some_and(|x|x.eq_ignore_ascii_case("mkv"))||path.exists(){
         return Err(io::Error::other("Choose a new .mkv file; existing files are not replaced"));
     }
-    screenshot::verified(slot,&expected)?;
+    verified_target(slot,&expected)?;
     target.verify()?;
     let image=worker::reviewed_image("ffmpeg.exe",video::REVIEWED_FFMPEG_SHA256)?;
     let parent=path.parent().ok_or_else(||io::Error::other("Recording save folder unavailable"))?;
@@ -153,8 +153,19 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     })?;
     let started=Instant::now();
     let mut stopping=None;
+    let mut progress_complete=false;
     loop{
         target.verify()?; // fail closed; no replacement window/slot
+        if !progress_complete{
+            match rx.try_recv(){
+                Ok(Ok(true))=>progress_complete=true,
+                Ok(Ok(false))=>return Err(io::Error::other("Recording progress ended without a final receipt")),
+                Ok(Err(error))=>return Err(error),
+                Err(std::sync::mpsc::TryRecvError::Disconnected)=>
+                    return Err(io::Error::other("Recording progress reader disconnected")),
+                Err(std::sync::mpsc::TryRecvError::Empty)=>{},
+            }
+        }
         if let Some(status)=rec.child.try_wait()?{
             if !status.success(){return Err(io::Error::other("Hardware recorder failed"));}
             break;
@@ -178,7 +189,7 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
         thread::sleep(POLL);
     }
     drop(rec); // close job, then require final progress receipt
-    let ended=rx.recv_timeout(Duration::from_secs(2))
+    let ended=progress_complete||rx.recv_timeout(Duration::from_secs(2))
         .map_err(|_|io::Error::other("Recording progress completion unavailable"))??;
     if !ended||run.frames.load(Ordering::Acquire)==0{return Err(io::Error::other("Recording has no final frame receipt"));}
     target.verify()?;

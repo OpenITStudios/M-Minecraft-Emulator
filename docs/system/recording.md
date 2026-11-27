@@ -47,9 +47,14 @@ Up to five logical slots; initial aggregate pixel throughput is capped at
 4096×2160×30 pixels/s. This is a policy candidate, not measured hardware
 capacity. One hour and 4 GiB nominal file ceiling per recording (allow up
 to 1 MiB muxer overshoot). No auto-start, no idle recording poll. The
-independent per-recording thread checks original process creation time,
-Windows session, root HWND owner/thread, visibility, responsiveness and
-unchanged client dimensions every 200 ms. Loss/resize fails closed and
+independent per-recording supervisor verifies creation time and Windows
+session once against its retained process handle, then checks handle
+liveness before and after root HWND owner/thread, visibility, responsiveness
+and unchanged client dimensions every 200 ms. Screenshot and recording
+share the original controller slot admission; neither depends on the other.
+The separate bounded pipe reader avoids blocking the supervisor's deadlines.
+Malformed, disconnected or prematurely ended progress now stops the child
+instead of waiting for the normal duration limit. Loss/resize fails closed and
 discards the temporary output instead of publishing ambiguous footage;
 no attempt to reacquire a replacement HWND. This periodic check is not
 per-frame identity proof; exact WGC capture-item lifetime must be verified.

@@ -90,6 +90,12 @@ AV1 NVENC; the four-candidate implementation at dfab84be92844a79a123d736d3e7ac22
 is superseded. Alternate GPU support and H.264 are excluded from scope,
 not future work. CAP-01–05 source checkpoint retains independent slots,
 bounded resources, no-clobber output and explicit Stop on unknown status.
+Efficiency review: shared controller target admission in capture facade,
+one-time immutable recording process identity checks on retained handle,
+live HWND/size/liveness checks retained (including a post-observation
+liveness check), and early failure on invalid progress. Keep the independent
+bounded pipe reader so a blocked synchronous pipe cannot stall supervisor
+deadlines. No added worker/timer/dependency; no measured savings claimed.
 Reviewed binary, exact native capture/resize/cleanup and measured quality
 remain held. Source only, no CI, no test execution, no release.
 
