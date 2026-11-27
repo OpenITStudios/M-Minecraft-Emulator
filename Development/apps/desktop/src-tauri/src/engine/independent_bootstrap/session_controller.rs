@@ -1074,21 +1074,22 @@ impl Sessions {
 
     // A display hint may reuse the previously verified image path; mutations
     // must use fresh native observation. Both retain the same idle predicate.
-    fn settings_report(&mut self, inspect: impl FnOnce(&Self) -> io::Result<bool>) -> io::Result<SettingsReport> {
-        self.reap();
+    // Read the current actor roster; the caller owns lifecycle observation.
+    fn settings_report(&self, inspect: impl FnOnce(&Self) -> io::Result<bool>) -> io::Result<SettingsReport> {
         let idle = self.running.iter().all(Option::is_none)
             && self.stores.iter().all(Option::is_some)
             && inspect(self)?;
         SettingsReport::policy(idle, None)
     }
 
-    fn settings_observation(&mut self) -> io::Result<SettingsReport> {
+    fn settings_observation(&self) -> io::Result<SettingsReport> {
         self.settings_report(|sessions| Ok(
             super::super::inspect_native_workspace_for_pinned_settings(&sessions.path)?
                 .processes.is_empty()))
     }
 
     fn fresh_settings_report(&mut self) -> io::Result<SettingsReport> {
+        self.reap();
         self.settings_report(|_| Ok(super::super::inspect_native_workspace()?.processes.is_empty()))
     }
 
@@ -1807,10 +1808,11 @@ fn run() -> io::Result<()> {
             let mut selective_review = None;
             let mut settings = None;
             let reply_snapshot = ReplySnapshot::for_request(&envelope.request);
+            let inspect_settings = matches!(&envelope.request, SessionRequest::InspectSettings);
             let mut testing_reply=None;
             let mut inspection_reply=None;
             match envelope.request {
-                SessionRequest::Inspect => {}
+                SessionRequest::Inspect | SessionRequest::InspectSettings => {}
                 SessionRequest::TestingInspect {slot,owner_id} => {
                     inspection_reply=Some(testing_runs.inspect(slot,&owner_id)
                         .map_err(|error|error.to_string())?);
@@ -1836,10 +1838,6 @@ fn run() -> io::Result<()> {
                         return Err("Invalid agent activity report".into());
                     }
                     agent_activity=Some((activity,Instant::now()));
-                }
-                SessionRequest::InspectSettings => {
-                    // This is a read-only UI status, not mutation admission.
-                    settings = Some(sessions.settings_observation().map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ApplyPreset => {
                     settings = Some(sessions.apply_preset().map_err(|error| error.to_string())?);
@@ -1990,6 +1988,13 @@ fn run() -> io::Result<()> {
                     .map_err(|error| error.to_string())?,
             }
             let mut snapshot = reply_snapshot.collect(&mut sessions);
+            // Read-only Settings shares the full snapshot's reap. No actor
+            // request can change its roster between these two observations.
+            // External process exit may still race; mutation admission reaps
+            // independently and uses the fresh registered-image inventory.
+            if inspect_settings {
+                settings = Some(sessions.settings_observation().map_err(|error| error.to_string())?);
+            }
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;
             snapshot.selective_inventory = selective_inventory;

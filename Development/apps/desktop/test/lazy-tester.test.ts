@@ -84,6 +84,28 @@ describe('Absent-controller Settings observation',()=>{
     expect(fallback).toContain('snapshot.settings = Some(SettingsReport::policy(idle, None)?);');
   });
 });
+describe('Retained-controller Settings observation',()=>{
+  it('shares one full lifecycle snapshot for read-only Settings but preserves fresh mutation admission',()=>{
+    const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap/session_controller.rs',import.meta.url),'utf8');
+    const report=source.slice(source.indexOf('fn settings_report('),source.indexOf('fn fresh_settings_report('));
+    expect(report).not.toContain('self.reap()');
+    expect(report).toContain('self.running.iter().all(Option::is_none)');
+    expect(report).toContain('self.stores.iter().all(Option::is_some)');
+    expect(report).toContain('inspect(self)?');
+    expect(report).toContain('inspect_native_workspace_for_pinned_settings(&sessions.path)?');
+    const fresh=source.slice(source.indexOf('fn fresh_settings_report('),source.indexOf('fn apply_preset('));
+    expect(fresh).toMatch(/self\.reap\(\);\s*self\.settings_report\(\|_\| Ok\(super::super::inspect_native_workspace\(\)\?/);
+    const preset=source.slice(source.indexOf('fn apply_preset('),source.indexOf('// Reuse one observation for the read-only report'));
+    expect(preset).toMatch(/self\.fresh_settings_report\(\)\?;\s*require_preset_idle\(report\.can_apply_preset\)\?/);
+    const dispatch=source.slice(source.indexOf('let reply_snapshot = ReplySnapshot::for_request'),source.indexOf('let _ = envelope.reply.send(reply)'));
+    expect(dispatch).toContain('matches!(&envelope.request, SessionRequest::InspectSettings)');
+    expect(dispatch).toContain('SessionRequest::Inspect | SessionRequest::InspectSettings => {}');
+    expect(dispatch.match(/sessions\.settings_observation\(\)/g)).toHaveLength(1);
+    expect(dispatch).toMatch(/let mut snapshot = reply_snapshot\.collect\(&mut sessions\);[\s\S]*?if inspect_settings \{\s*settings = Some\(sessions\.settings_observation\(\)/);
+    expect(dispatch.match(/sessions\.fresh_settings_report\(\)/g)).toHaveLength(3);
+    expect(source).toMatch(/fn snapshot\(&mut self\) -> SessionSnapshot \{\s*self\.reap\(\);\s*self\.snapshot_without_reaping\(true\)/);
+  });
+});
 describe('Passive idle observation boundary',()=>{
   it('allows a negative hint only on the healthy idle scheduler, not on a full receipt',()=>{
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
