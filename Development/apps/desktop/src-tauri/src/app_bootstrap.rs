@@ -461,6 +461,13 @@ mod workspace_foreground {
 fn queue_workspace_update(window: tauri::Window) {
     use std::sync::Mutex;
     use tauri::Emitter;
+    // No owned window needs placement when the workspace has no leases.
+    // is_active is conservative on contention (including in-flight adoption).
+    // Callers still wake DWM independently; a new Present owns its placement
+    // and pacing notification even if this event preceded that admission.
+    if !crate::engine::workspace_surface::is_active() {
+        return;
+    }
     // One worker drains the latest event; no stale visibility snapshots or thread per move.
     static PENDING: Mutex<(bool, Option<tauri::Window>)> = Mutex::new((false, None));
     let Ok(mut pending) = PENDING.lock() else {

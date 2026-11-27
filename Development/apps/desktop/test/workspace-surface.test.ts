@@ -71,6 +71,23 @@ it('borrows requested preview sources without a second cloned process roster',()
   expect(adoption).toContain('require_current_admission(&issued_epochs)');
 });
 
+it('skips native placement work for an empty workspace while preserving DWM and contended admission',()=>{
+  const bootstrap=readFileSync(new URL('../src-tauri/src/app_bootstrap.rs',import.meta.url),'utf8');
+  const controller=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/controller.rs',import.meta.url),'utf8');
+  const queue=bootstrap.slice(bootstrap.indexOf('fn queue_workspace_update('),bootstrap.indexOf('fn show_startup_error('));
+  expect(queue).toContain('if !crate::engine::workspace_surface::is_active()');
+  expect(queue.indexOf('if !crate::engine::workspace_surface::is_active()')).toBeLessThan(queue.indexOf('PENDING.lock()'));
+  expect(queue.indexOf('if !crate::engine::workspace_surface::is_active()')).toBeLessThan(queue.indexOf('spawn_blocking('));
+  const active=controller.slice(controller.indexOf('pub fn is_active()'),controller.indexOf('pub fn release_for_close()'));
+  expect(active).toContain('s.active.is_some() || !s.parked.is_empty()');
+  expect(active).toContain('.unwrap_or(true)');
+  const events=bootstrap.slice(bootstrap.indexOf('if matches!(event, tauri::WindowEvent::Moved'),bootstrap.indexOf('.run(context)'));
+  expect(events.match(/workspace_surface::refresh_previews\(\)/g)).toHaveLength(2);
+  const foreground=bootstrap.slice(bootstrap.indexOf('unsafe extern "system" fn changed('),bootstrap.indexOf('pub fn start(window: tauri::Window)'));
+  expect(foreground).toContain('workspace_surface::refresh_previews()');
+  expect(foreground).toContain('super::queue_workspace_update(window.clone())');
+});
+
 it('rearms display-scale observation once and removes the current listener on teardown',()=>{
   let ratio=1;
   let calls=0;
