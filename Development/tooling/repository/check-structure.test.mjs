@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { checkTracked, checkLinks, checkPhysical } from './check-structure.mjs';
+import { checkTracked, checkLinks, checkPhysical, checkHandoff } from './check-structure.mjs';
 
 test('reject outputs and competing root owners while preserving native provenance', () => {
   assert.deepEqual(checkTracked(['README.md', 'workspace/README.md',
@@ -53,4 +53,12 @@ test('check relative document links, including fragments, without fetching exter
     writeFileSync(join(root, 'README.md'), '# start');
     assert.deepEqual(checkLinks(root, ['docs/guide.md']), ['Invalid internal link: docs/guide.md -> missing.md']);
   } finally { rmSync(root, {recursive: true, force: true}); }
+});
+
+test('shared handoff guard retains the existing title and strict length limit', () => {
+  const title = '# Current Development Handoff';
+  assert.deepEqual(checkHandoff(title + '\nCurrent state'), []);
+  assert.deepEqual(checkHandoff(title.padEnd(7999, 'x')), []);
+  assert.deepEqual(checkHandoff(title.padEnd(8000, 'x')), ['Keep one concise handoff']);
+  assert.deepEqual(checkHandoff('# Historical notes'), ['Keep one concise handoff']);
 });

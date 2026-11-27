@@ -497,7 +497,8 @@ function sourceInfo() {
   return {branch,sha};
 }
 function changedPaths(readGit=git) {
-  const changed=readGit(['diff','--name-only','-z','HEAD']).split('\0').filter(Boolean);
+  // Include both paths of moves: a source deletion must not become a docs-only plan.
+  const changed=readGit(['diff','--no-renames','--name-only','-z','HEAD','--']).split('\0').filter(Boolean);
   const untracked=readGit(['ls-files','--others','--exclude-standard','-z']).split('\0').filter(Boolean);
   if(changed.length+untracked.length>4096) throw Error('Too many changes for bounded planning');
   return [...new Set([...changed,...untracked])];
@@ -517,7 +518,7 @@ export function automaticChangeSet(baseSha=null,readGit=git) {
     return {paths,basis:'base-commit',baseSha};
   }
   if(pending.length) return {paths:pending,basis:'working-tree'};
-  const committed=readGit(['diff','--name-only','-z','HEAD^','HEAD','--']).split('\0').filter(Boolean);
+  const committed=readGit(['diff','--no-renames','--name-only','-z','HEAD^','HEAD','--']).split('\0').filter(Boolean);
   if(committed.length>4096) throw Error('Too many committed changes for bounded routing');
   return {paths:[...new Set(committed)],basis:'latest-commit'};
 }

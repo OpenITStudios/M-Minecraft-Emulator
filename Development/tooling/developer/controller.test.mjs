@@ -571,19 +571,37 @@ test('default auto planning stays lightweight on changed files or the most recen
   const readGit=(args)=>{
     calls.push(args);
     const key=JSON.stringify(args);
-    if(key===JSON.stringify(['diff','--name-only','-z','HEAD'])) return '';
+    if(key===JSON.stringify(['diff','--no-renames','--name-only','-z','HEAD','--'])) return '';
     if(key===JSON.stringify(['ls-files','--others','--exclude-standard','-z'])) return '';
-    if(key===JSON.stringify(['diff','--name-only','-z','HEAD^','HEAD','--'])) return 'docs/README.md\0';
+    if(key===JSON.stringify(['diff','--no-renames','--name-only','-z','HEAD^','HEAD','--'])) return 'docs/README.md\0';
     throw Error('Unexpected Git command: '+key);
   };
   assert.deepEqual(automaticChangeSet(null,readGit),{paths:['docs/README.md'],basis:'latest-commit'});
   assert.equal(calls.length,3);
 });
 
+test('working-tree and latest-commit routing retain both sides of a move',()=>{
+  const moved=['Development/apps/desktop/src/App.svelte','docs/retired.md'];
+  for(const pending of [true,false]){
+    const readGit=args=>{
+      const key=JSON.stringify(args);
+      if(key===JSON.stringify(['diff','--no-renames','--name-only','-z','HEAD','--']))
+        return pending?moved.join('\0')+'\0':'';
+      if(key===JSON.stringify(['ls-files','--others','--exclude-standard','-z'])) return '';
+      if(!pending && key===JSON.stringify(['diff','--no-renames','--name-only','-z','HEAD^','HEAD','--']))
+        return moved.join('\0')+'\0';
+      throw Error('Unexpected Git command: '+key);
+    };
+    const selection=automaticChangeSet(null,readGit);
+    assert.deepEqual(selection.paths,moved);
+    assert.deepEqual(planForPaths(selection.paths,SHA).taskIds,['frontend.validate']);
+  }
+});
+
 test('explicit ancestor baseline covers all committed changes plus pending edits',()=>{
   const base='b'.repeat(40);
   const replies=new Map([
-    [JSON.stringify(['diff','--name-only','-z','HEAD']),'Development/apps/desktop/src/LazyTesterApp.svelte\0'],
+    [JSON.stringify(['diff','--no-renames','--name-only','-z','HEAD','--']),'Development/apps/desktop/src/LazyTesterApp.svelte\0'],
     [JSON.stringify(['ls-files','--others','--exclude-standard','-z']),''],
     [JSON.stringify(['merge-base',base,'HEAD']),base+'\n'],
     [JSON.stringify(['diff','--no-renames','--name-only','-z',base,'HEAD','--']),
@@ -610,7 +628,7 @@ test('explicit ancestor baseline covers all committed changes plus pending edits
 test('empty baseline delta never claims a validation command ran',()=>{
   const base='b'.repeat(40);
   const replies=new Map([
-    [JSON.stringify(['diff','--name-only','-z','HEAD']),''],
+    [JSON.stringify(['diff','--no-renames','--name-only','-z','HEAD','--']),''],
     [JSON.stringify(['ls-files','--others','--exclude-standard','-z']),''],
     [JSON.stringify(['merge-base',base,'HEAD']),base+'\n'],
     [JSON.stringify(['diff','--no-renames','--name-only','-z',base,'HEAD','--']),''],

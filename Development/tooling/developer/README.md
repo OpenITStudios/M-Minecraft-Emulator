@@ -141,6 +141,7 @@ Markdown under `docs/`, `planning/`, and `Archive/`, along with agent
 `SKILL.md`, nested `README.md` and `AGENTS.md`, takes the existing
 repository-structure check even when stored near native source. Executable or
 unknown extensions under those folders still escalate to full verification.
+All Git diff routes count both sides of a move as deletion/addition, without rename similarity detection; moving source into documentation does not downgrade validation to docs-only. The repository-structure check also enforces the existing concise handoff contract.
 Build manifests/locks, native source and mixed/unknown changes remain guarded.
 Planning never executes a recommendation. Scoped checks are iteration evidence only;
 final candidate verification must still use the existing full source/Windows

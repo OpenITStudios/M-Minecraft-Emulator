@@ -7,6 +7,8 @@ The operator authorized further zero-waste improvements **excluding MCP and AI i
 
 Work: `non-mcp-simplification` — NMS-01. Condense the active handoff to satisfy the existing repository verifier's <8000-character contract, without weakening the check or discarding prior decisions. The [complete pre-condensation handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/9b285c2110b7cdf91eda7e26c315a0b850eab82c/planning/development.md) remains at its exact Git revision, with original headings, links, evidence and historical Next fields. Earlier Next fields are not active instructions. See [planning history](README.md).
 
+NMS-02: shared the existing handoff guard with structure/quick/full checks; Git change routing now disables rename detection consistently to retain both paths. No weaker validation or new task. Focused fixtures authored, not executed.
+
 Status: SOURCE_IN_PROGRESS / LOCAL_TEST_DEFERRED. SOURCE_REVIEWED for this documentation change; validation NOT_EXECUTED. Continue only with a source-proven independent non-MCP candidate; otherwise record the result and stop at the source proof ceiling.
 
 ## Unreleased — Rust-first integration

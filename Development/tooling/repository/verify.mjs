@@ -4,7 +4,7 @@ import {existsSync,readFileSync,readdirSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve,dirname,posix} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {checkTracked,checkLinks} from './check-structure.mjs';
+import {checkTracked,checkLinks,checkHandoff} from './check-structure.mjs';
 import {checkDependencyLock} from './check-dependency-lock.mjs';
 import {verifyLazyTesterPackage} from '../../apps/desktop/scripts/check-lazy-tester-package.mjs';
 import {verifyNativePreviewPackage} from '../../apps/desktop/scripts/check-native-preview-package.mjs';
@@ -499,7 +499,7 @@ export function verifyRepository(root,g0=false) {
   if(g0)assert.equal(execFileSync('git',['ls-tree','-r','--name-only','HEAD','--','Development/apps/desktop/src-tauri/Cargo.lock'],{cwd:root,encoding:'utf8'}).trim(),'Development/apps/desktop/src-tauri/Cargo.lock');
   assert.deepEqual(checkLinks(root,filesBelow(root,'docs').filter(path=>path.endsWith('.md'))),[]);
   const handoff=read('planning/development.md');
-  assert.ok(handoff.startsWith('# Current Development Handoff')&&handoff.length<8000,'Keep one concise handoff');
+  assert.deepEqual(checkHandoff(handoff),[]);
   console.log('Lazy Tester repository contract: PASS ('+reached.length+' reachable frontend files; source/layout evidence only)');
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))verifyRepository(resolve(dirname(fileURLToPath(import.meta.url)),'../../..'),process.argv.includes('--g0'));

@@ -74,6 +74,11 @@ export function checkLinks(root, paths) {
   }
   return errors;
 }
+// One handoff contract for documentation-only, quick and full verification.
+export function checkHandoff(text) {
+  return text.startsWith('# Current Development Handoff') && text.length < 8000
+    ? [] : ['Keep one concise handoff'];
+}
 export function verifyStructure(root) {
   const paths = execFileSync('git', ['ls-files', '-z'], {cwd: root, encoding: 'utf8'}).split('\0').filter(Boolean);
   const errors = [...checkTracked(paths), ...checkLinks(root, paths), ...checkPhysical(root)];
@@ -83,6 +88,8 @@ export function verifyStructure(root) {
     'Development/tooling/repository', 'Development/tooling/dependencies', 'docs/system', 'planning/development.md']) {
     if (!existsSync(resolve(root, path))) errors.push('Missing canonical owner: ' + path);
   }
+  const handoffPath = resolve(root, 'planning/development.md');
+  if (existsSync(handoffPath)) errors.push(...checkHandoff(readFileSync(handoffPath, 'utf8')));
   const packageJson = JSON.parse(readFileSync(resolve(root, 'Development/package.json'), 'utf8'));
   for (const command of Object.values(packageJson.scripts)) {
     for (const match of command.matchAll(/(?:node (?!-)|--prefix |--manifest-path[ =])([^\s&]+)/g)) {
