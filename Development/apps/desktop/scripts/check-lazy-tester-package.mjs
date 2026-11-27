@@ -58,6 +58,18 @@ export function verifyNativeProfileLayout(profiles) {
     throw new Error('LAZY_TESTER_PACKAGE_REFUSED: Native private profile owner differs from package policy');
   }
 }
+// Static source witness only: actual NSIS execution/upgrade is a separate gate.
+export function verifyInstallerLayout(hooks) {
+  const layout=hooks.slice(hooks.indexOf('!macro LAZY_TESTER_APP_LAYOUT'),hooks.indexOf('!macro LAZY_TESTER_REQUIRE_IDLE'));
+  const registered=layout.indexOf('ReadRegStr $0 HKCU "Software\\MIVUBI-STD\\Lazy Tester" ""');
+  const preserve=layout.indexOf('StrCmp $1 $0 lazy_tester_layout_done');
+  const refuse=layout.indexOf('Abort',preserve);
+  const append=layout.indexOf('StrCpy $INSTDIR "$INSTDIR\\App"');
+  if(registered<0||preserve<=registered||refuse<=preserve||append<=refuse||
+     !layout.includes('GetFullPathName $1 "$INSTDIR"')||
+     !layout.includes('GetFullPathName $0 "$0"'))
+    throw new Error('LAZY_TESTER_PACKAGE_REFUSED: Registered install location must be preserved before new layout selection');
+}
 export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.lazy-tester.conf.json'))) {
   const base=JSON.parse(read('src-tauri/tauri.conf.json'));
   const policy=JSON.parse(read('../../engine/distribution/lazy-tester-package.json'));
@@ -92,6 +104,7 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
     'Canonical and legacy data paths must stay distinct');
   verifyNativeProfileLayout(read('src-tauri/src/engine/independent_bootstrap/product_profiles.rs'));
   const hooks=read('src-tauri/windows/lazy-tester-hooks.nsh');
+  verifyInstallerLayout(hooks);
   fail(hooks.includes('OpenMutexW')&&hooks.includes('Local\\MivubiEducationStartupObservation')&&hooks.includes('NSIS_HOOK_PREINSTALL')&&hooks.includes('NSIS_HOOK_PREUNINSTALL')&&hooks.includes('StrCpy $DeleteAppDataCheckboxState 0'),'Idle/data preservation hooks missing');
   fail(hooks.includes('MUI_CUSTOMFUNCTION_GUIINIT')&&hooks.includes('$PROFILE\\Lazy Tester\\App')&&hooks.includes('!insertmacro LAZY_TESTER_APP_LAYOUT')&&runtime.defaultDataRelativePath==='Data'&&runtime.applicationSubdirectory==='App'&&
     hooks.includes('IfFileExists "$INSTDIR\\data-location.json" lazy_tester_layout_done 0'),

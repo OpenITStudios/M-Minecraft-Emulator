@@ -12,6 +12,24 @@ describe `Data/Profiles/Minecraft-1..5` for schema 1 and
 the old pointer only if the canonical pointer is absent; installer/refresh
 preserve the old file. No field authorizes automatic data migration.
 
+## Install, upgrade and uninstall
+
+Fresh installations keep the standard per-user App/Data layout. An existing
+registered location is authoritative even if the old executable has already
+been removed by the upstream reinstall page; a changed destination is refused
+before the custom hook permits payload replacement. No App suffix is added
+to a registered legacy flat install. Existing unregistered flat executable
+or locator markers still preserve their location. This is not a migration
+mechanism.
+
+The existing controller-idle check, exact same-image role-link handling and
+uninstall data-checkbox override remain. The pinned Tauri NSIS template can
+invoke Restart Manager to close the desktop process after the custom idle
+hook; the hook is a point-in-time check, not a whole-install lock. Native
+installation/upgrade/uninstall and concurrent startup scenarios must be
+verified before distribution. Do not run installation against live game
+sessions or production data to demonstrate the source contract.
+
 ## Binary-only distribution scope
 
 The approved design retains the existing Rust/Tauri/NSIS build, not a new

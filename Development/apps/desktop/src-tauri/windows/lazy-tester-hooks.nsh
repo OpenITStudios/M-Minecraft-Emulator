@@ -133,11 +133,21 @@ FunctionEnd
 
 !macro LAZY_TESTER_APP_LAYOUT
   Push $0
-  ; An upgrade may have removed the old executable before this hook runs.
-  ; A retained location pointer still identifies an existing flat installation.
+  Push $1
+  ; Tauri retains the installation-location registration when app data is
+  ; preserved, even after removing the old executable during upgrade.
+  ; Never append App to an already registered flat installation.
+  ReadRegStr $0 HKCU "Software\MIVUBI-STD\Lazy Tester" ""
+  ${If} $0 != ""
+    GetFullPathName $1 "$INSTDIR"
+    GetFullPathName $0 "$0"
+    StrCmp $1 $0 lazy_tester_layout_done
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Keep the existing Lazy Tester installation location. Moving an installed application is not supported."
+    Abort
+  ${EndIf}
+  ; Unregistered historical flat installations also remain in place.
   IfFileExists "$INSTDIR\lazy-tester.exe" lazy_tester_layout_done 0
   IfFileExists "$INSTDIR\data-location.json" lazy_tester_layout_done 0
-  ReadRegStr $0 HKCU "Software\MIVUBI-STD\Lazy Tester" ""
   ${If} $0 == ""
   ${AndIf} $INSTDIR == "$LOCALAPPDATA\Lazy Tester"
     StrCpy $INSTDIR "$PROFILE\Lazy Tester\App"
@@ -149,6 +159,7 @@ FunctionEnd
   ${EndIf}
   lazy_tester_layout_done:
   SetOutPath $INSTDIR
+  Pop $1
   Pop $0
 !macroend
 

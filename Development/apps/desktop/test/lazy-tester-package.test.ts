@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
-import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload} from '../scripts/check-lazy-tester-package.mjs';
+import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload,verifyInstallerLayout} from '../scripts/check-lazy-tester-package.mjs';
 import {reviewedDigests,stageNativePayload} from '../scripts/prepare-native-payload.mjs';
 import {processRoles,roleMuiNames,verifyRoleResources} from '../scripts/prepare-process-roles.mjs';
 
@@ -52,6 +52,13 @@ describe('Lazy Tester native package',()=>{
     delete extra.build.frontendDist;
     extra.identifier=policy.migration.previousIdentifier;
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Identity/);
+  });
+  it('preserves registered flat installs even after their executable is removed',()=>{
+    const hooks=readFileSync(new URL('../src-tauri/windows/lazy-tester-hooks.nsh',import.meta.url),'utf8');
+    expect(()=>verifyInstallerLayout(hooks)).not.toThrow();
+    const changed=hooks.replace('StrCmp $1 $0 lazy_tester_layout_done','StrCmp $1 $0 0');
+    expect(changed).not.toBe(hooks);
+    expect(()=>verifyInstallerLayout(changed)).toThrow(/Registered install location/);
   });
   it('admits an empty locale before compilation and requires the exact complete set before bundling',()=>{
     const dir=mkdtempSync(join(tmpdir(),'lazy-role-fixture-'));

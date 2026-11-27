@@ -72,7 +72,10 @@ reset it automatically.
 **Installed layout is separate by design.** A new approved per-user NSIS
 install defaults to `%USERPROFILE%\Lazy Tester\App\` with
 `%USERPROFILE%\Lazy Tester\Data\` as its sibling; existing install
-locations remain authoritative and are never silently migrated.
+locations remain authoritative and are never silently migrated. The NSIS
+layout hook preserves a registered installation path even if the old
+executable was removed during upgrade and refuses a different destination;
+it does not append App to a registered legacy flat root.
 Windows-owned Microsoft sign-in/DPAPI components, licensed Minecraft,
 shortcuts and OS toolchains stay in Windows-managed locations. Do not run
 a new installer against production accounts merely to consolidate roots.
