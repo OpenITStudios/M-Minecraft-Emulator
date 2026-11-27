@@ -16,6 +16,50 @@ one next action; old archived "Next" entries are not authorization.
 
 ## Code Mode-first composition (Unreleased, source-only)
 
+### Codex local host: one MCP connection, compact Code Mode surface
+
+The preferred Codex integration is the existing local stdio MCP entry with
+`--surface code-mode`. Codex's own Code Mode host composes calls through its
+connected MCP tools; Lazy Tester does not run arbitrary JavaScript, spawn a
+second server, install a sandbox or require an extra runtime dependency.
+The operator selects this surface explicitly. The standard `legacy` surface
+remains the default for compatibility and full explicit observation/control.
+
+Example for a separately authorized PC-local Codex configuration (replace
+all illustrative paths with reviewed absolute local paths):
+
+```toml
+[mcp_servers.lazy_tester]
+command = 'C:\Tools\node.exe'
+args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'code-mode', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe']
+default_tools_approval_mode = 'prompt'
+```
+
+Add only the explicitly selected evidence/diagnostic/Probe/archive options
+as required. Do not register another legacy server for the same workflow.
+Use the installed Codex host's supported Code Mode setting, if actually
+available; do not force remote execution, global feature flags or permission
+changes. Upstream reference: https://github.com/openai/codex/blob/main/codex-rs/features/src/lib.rs
+and https://github.com/openai/codex/blob/main/codex-rs/core/config.schema.json.
+No configuration has been installed or tested on a user PC.
+
+The compact surface exposes 13 canonical MCP tools, derived from the same
+15 SDK method routes (three Probe SDK methods share `probe_qa`). It refuses
+unlisted names and disallowed arguments at ingress, including legacy QA
+aliases, launch, screenshot/sampler operations, restart, native reservation,
+status publication and experimental input. It is intended for read/plan/QA
+composition, not native gameplay control. To use the existing explicit image
+or control operations, select the full legacy surface for that session;
+never switch a live core or start a second connection to bypass its limits.
+Both profiles use one operation core. Compact stdio cannot start a sampler;
+visual metadata is only useful if the same core already has a sampler via an
+independently admitted trusted embedded host, otherwise no frames are available.
+Capability responses describe the selected public surface; direct SDK capability
+names are SDK method paths. The 13/25 count is a catalog reduction, not a measured
+token, process, latency or memory saving.
+
+### Direct SDK for independently trusted hosts
+
 For a separately authorized trusted PC-local host, create one
 `createOperationCore(config)` from `operation-core.mjs`. Attach
 `createCodeModeClient(core)` from `code-mode.mjs` per script; the trusted
@@ -23,8 +67,11 @@ host passes only the fixed `tester` facade to its own permission-controlled
 execution environment and closes the facade in finally. If MCP is also
 needed inside that host, attach `createMcpHandler(core)`; do not start a
 second core for the same workflow. The existing stdio entry `mcp.mjs` and
-all 25 default tool names remain compatible. No arbitrary-code execution
+all 25 default legacy tool names remain compatible. No arbitrary-code execution
 tool, Deno/Node guest, dependency, new controller or PC permission is added.
+Direct SDK call budgets apply per client facade; Codex owns its own cell budget.
+MCP retains its existing request/response limits, not the direct SDK's per-script
+64-call budget.
 
 Prefer the existing combined `tester.testing.context({slots:[2,3,4,5]})`
 instead of separate profile, peer and evidence reads. Compose diagnostics,
@@ -52,7 +99,11 @@ protocol conformance tests executed.
 
 - `operation-core.mjs` is the single coordinator for session-bound
   state, admission, QA checkpoints and recovery.
-- `tool-catalog.mjs` owns the one descriptor inventory.
+- `tool-catalog.mjs` owns the one descriptor inventory. `code-mode.mjs`
+  declares the shared SDK routes and derives the compact MCP subset from it.
+- The canonical native transport already validates its receipts. The core
+  selects it once or validates injected provider results at the same seam;
+  fresh target reads, independent consumer validation and native gates remain.
 - `native-transport.mjs` owns the existing same-image CLI and exact
   receipt validators; `evidence-reader.mjs` owns the bounded capture
   file read; `agent-contract.mjs` owns common argument and text bounds.

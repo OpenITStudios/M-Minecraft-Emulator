@@ -33,3 +33,14 @@ export function createCodeModeClient(core:{
   isClosed():boolean;
   callTool(name:string,args:Record<string,unknown>):Promise<unknown>;
 }):Readonly<{tester:Tester;close():void}>;
+
+// Trusted adapter helper, not a model-facing generic dispatcher.
+export interface CodeModeToolDescriptor {
+  name:string;
+  description?:string;
+  inputSchema:{properties?:Record<string,Json>;required?:string[];additionalProperties?:boolean;[key:string]:Json|undefined};
+}
+export function createCodeModeSurface(
+  descriptors:CodeModeToolDescriptor[],
+  callTool:(name:string,args:Record<string,unknown>)=>Promise<unknown>,
+):{listTools():CodeModeToolDescriptor[];callTool(name:string,args?:Record<string,unknown>):Promise<unknown>};

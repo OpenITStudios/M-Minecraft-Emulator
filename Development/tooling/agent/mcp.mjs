@@ -3,13 +3,16 @@
 import {pathToFileURL} from 'node:url';
 import readline from 'node:readline';
 import {createOperationCore,REQUEST_LIMIT,MAX_MCP_IMAGE_CHARS,boundedMcpText,publicToolError,parseConfiguration} from './operation-core.mjs';
+import {createCodeModeSurface} from './code-mode.mjs';
 export * from './operation-core.mjs';
 
 // The 2026-07-28 protocol removes initialize and requires per-request
 // metadata. Do not advertise it through this retained legacy lifecycle.
 const SUPPORTED_PROTOCOLS = new Set(['2025-06-18','2025-11-25']);
 
-export function createMcpHandler(core) {
+export function createMcpHandler(core,surface='legacy') {
+  if(!['legacy','code-mode'].includes(surface))throw new Error('Unknown agent surface');
+  const route=surface==='code-mode'?createCodeModeSurface(core.listTools(),core.callTool):core;
   async function handle(message) {
     if(core.isClosed())return null;
     if (!message || message.jsonrpc!=='2.0' || typeof message.method!=='string') return null;
@@ -24,12 +27,12 @@ export function createMcpHandler(core) {
           capabilities:{tools:{listChanged:false}},serverInfo:{name:'lazy-tester-agent',version:'0.1.0'}});
       }
       if (message.method==='ping') return result({});
-      if (message.method==='tools/list') return result({tools:core.listTools()});
+      if (message.method==='tools/list') return result({tools:route.listTools()});
       if (message.method==='tools/call') {
         const name=message.params?.name;
         if (typeof name!=='string') return err(-32602,'Tool name is required');
         try {
-          const data=await core.callTool(name,message.params?.arguments??{});
+          const data=await route.callTool(name,message.params?.arguments??{});
           if (name==='observe_client' || name==='read_visual_observation') {
             // Cached rolling observation returns metadata alone unless a
             // newer frame is explicitly requested by the model.
@@ -52,11 +55,16 @@ export function createMcpHandler(core) {
     }catch {return err(-32603,'Internal error');}
   }
 
-  return {handle,callTool:core.callTool,shutdown:core.shutdown};
+  return {handle,callTool:route.callTool,shutdown:core.shutdown};
 }
 
 export function createHandler(config,dependencies) {
-  return createMcpHandler(createOperationCore(config,dependencies));
+  const surface=config.surface??'legacy';
+  if(!['legacy','code-mode'].includes(surface))throw new Error('Unknown agent surface');
+  if(surface==='code-mode'&&(config.experimentalMc02InputEnabled||config.experimentalMultiClientInputEnabled)) {
+    throw new Error('Code Mode surface does not admit experimental input');
+  }
+  return createMcpHandler(createOperationCore(config,dependencies),surface);
 }
 
 export function serve(config) {

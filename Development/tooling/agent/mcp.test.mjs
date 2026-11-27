@@ -5020,7 +5020,12 @@ test('Code Mode and MCP share the original operation core, one combined context 
     assert.equal(nativeCalls,2);
     const list=await mcp.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
     const capability=await code.tester.capabilities();
-    assert.deepEqual(capability.available,list.result.tools.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
+    assert.equal(list.result.tools.length,25);
+    assert.equal(capability.available.length,15);
+    assert.ok(capability.available.includes('testing.context'));
+    assert.ok(!capability.available.includes('launch_profile'));
+    const legacyCapability=await mcp.callTool('agent_capabilities',{});
+    assert.deepEqual(legacyCapability.available,list.result.tools.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
     code.close();
     await assert.rejects(code.tester.profiles.inspect(),/CODE_MODE_CLOSED/);
     assert.equal(core.isClosed(),false);
@@ -5096,4 +5101,69 @@ test('Code Mode closure fences pending results without claiming native cancellat
   release();
   await assert.rejects(pending,/MCP_CONNECTION_CLOSED/);
   await assert.rejects(code.tester.capabilities(),/CODE_MODE_CLOSED/);
+});
+
+test('opt-in Code Mode MCP surface has one compact catalog and refuses hidden operations',async()=>{
+  const cfg={...config(),surface:'code-mode'};
+  let nativeCalls=0;
+  const h=createHandler(cfg,{
+    native:async(_exe,operation)=>{nativeCalls++;assert.equal(operation,'inspect');return snapshot(operation);},
+  });
+  try {
+    const listing=await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'});
+    const tools=listing.result.tools;
+    assert.equal(tools.length,13);
+    assert.deepEqual(tools.map(t=>t.name),[
+      'get_multi_client_visual_state','get_test_context','agent_capabilities',
+      'inspect_profiles','plan_player_actions','assess_input_route','summarize_test_evidence',
+      'read_game_evidence','probe_qa','get_diagnostics_overview','list_issue_candidates',
+      'get_issue_details','query_diagnostic_evidence']);
+    assert.deepEqual(Object.keys(tools.find(t=>t.name==='probe_qa').inputSchema.properties),
+      ['slot','inspectRun','scope','archivedRunId']);
+    assert.deepEqual(tools.find(t=>t.name==='agent_capabilities').inputSchema.properties,{});
+    for(const [name,args] of [
+      ['launch_profile',{slot:2}],['prepare_probe_qa',{slot:2}],
+      ['observe_client',{slot:2}],['start_visual_observation',{slots:[2]}],
+      ['run_experimental_multi_client_actions',{actions:[]}],
+      ['probe_qa',{slot:2,coordinateNative:true}],['probe_qa',{slot:2,restart:true}],
+      ['probe_qa',{slot:2,inspectRun:false}],['probe_qa',{inspectRun:true,scope:'full'}],
+      ['probe_qa',{slot:2,archivedRunId:'a'.repeat(32)}],
+      ['agent_capabilities',{publishToDesktop:true}],
+    ]) {
+      const wire=await h.handle({jsonrpc:'2.0',id:name,method:'tools/call',params:{name,arguments:args}});
+      assert.equal(wire.result.isError,true);
+      await assert.rejects(h.callTool(name,args),/Unknown tool|Invalid tool arguments/);
+    }
+    assert.equal(nativeCalls,0);
+    const caps=await h.callTool('agent_capabilities',{});
+    assert.deepEqual(caps.available,tools.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
+    const context=await h.callTool('get_test_context',{slots:[2]});
+    assert.equal(context.nativeProfiles.length,5);
+    assert.equal(nativeCalls,1);
+  }finally{h.shutdown();}
+});
+
+test('Code Mode surface selection is explicit and incompatible with input experiments',()=>{
+  assert.equal(parseConfiguration([],{}).surface,'legacy');
+  assert.equal(parseConfiguration(['--surface','code-mode'],{}).surface,'code-mode');
+  assert.throws(()=>parseConfiguration(['--surface','other'],{}),/Unknown agent surface/);
+  assert.throws(()=>parseConfiguration(['--surface','code-mode','--multi-client-input-experimental','on'],{}),
+    /does not admit experimental input/);
+  assert.throws(()=>createHandler({...config(),surface:'code-mode',experimentalMc02InputEnabled:true}),
+    /does not admit experimental input/);
+});
+
+test('native receipt seam still rejects invalid injected targets and strips private profile fields',async()=>{
+  const core=createOperationCore(config(),{
+    native:async(_exe,operation)=>operation==='target'?{schema:1,ok:true,operation:'target'}:{
+      ...snapshot(operation),privatePath:'never-return',
+      profiles:snapshot(operation).profiles.map(p=>({...p,privatePath:'never-return'})),
+    },
+  });
+  const code=createCodeModeClient(core);
+  try {
+    const receipt=await code.tester.profiles.inspect();
+    assert.equal(JSON.stringify(receipt).includes('never-return'),false);
+    await assert.rejects(core.callTool('get_computer_use_target',{slot:2}),/target is not verified/);
+  }finally{code.close();core.shutdown();}
 });

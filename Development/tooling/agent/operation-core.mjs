@@ -79,6 +79,7 @@ export const MAX_MCP_IMAGE_CHARS = OBSERVATION_LIMITS.maximumEncodedFrameChars; 
 
 export function parseConfiguration(argv, env = process.env) {
   let mode = 'human-plus-four-ai';
+  let surface = 'legacy';
   let executable = env.LAZY_TESTER_AGENT_EXE ?? '';
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
   let diagnosticsDirectory = env.LAZY_TESTER_DIAGNOSTICS_DIR ?? '';
@@ -91,11 +92,12 @@ export function parseConfiguration(argv, env = process.env) {
   let experimentalMultiClientInputEnabled=false;
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--testing-archive-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <project|Data/Diagnostics>] [--testing-archive-dir <project|Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
+    if (!['--surface','--mode','--exe','--evidence-dir','--diagnostics-dir','--testing-archive-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
+      throw new Error('Accepted arguments: [--surface legacy|code-mode] --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <project|Data/Diagnostics>] [--testing-archive-dir <project|Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
+    if (flag==='--surface') surface=value;
     if (flag==='--exe') executable=value;
     if (flag==='--evidence-dir') evidenceDirectory=value;
     if (flag==='--diagnostics-dir') diagnosticsDirectory=value;
@@ -112,6 +114,10 @@ export function parseConfiguration(argv, env = process.env) {
       if(value!=='on')throw new Error('Multi-client input opt-in requires explicit on');
       experimentalMultiClientInputEnabled=true;
     }
+  }
+  if(!['legacy','code-mode'].includes(surface)) throw new Error('Unknown agent surface');
+  if(surface==='code-mode'&&(experimentalMc02InputEnabled||experimentalMultiClientInputEnabled)) {
+    throw new Error('Code Mode surface does not admit experimental input');
   }
   if(experimentalMc02InputEnabled&&experimentalMultiClientInputEnabled) {
     throw new Error('Select only one experimental native input mode');
@@ -166,7 +172,7 @@ export function parseConfiguration(argv, env = process.env) {
   }
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
   if (gpuExecutable) validateGpuExecutable(gpuExecutable);
-  return Object.freeze({mode, executable, evidenceDirectory,diagnosticsDirectory,
+  return Object.freeze({mode, surface, executable, evidenceDirectory,diagnosticsDirectory,
     testingArchiveDirectory,probeZip,mapContractPath,
     cuaExecutable,gpuExecutable,experimentalMc02InputEnabled,
     experimentalMultiClientInputEnabled});
@@ -260,6 +266,16 @@ export function createOperationCore(config,{
   mapRevisionStatus=mapContractSourceStatus,
   qaClock=()=>Date.now(),
 }={}) {
+  // The canonical transport already validates/projects its fresh response.
+  // Injected providers must pass the same validators before any consumer.
+  // Select once; never use a caller-supplied flag to bypass validation.
+  const readNative=native===runNative
+    ? (operation,slot)=>runNative(config.executable,operation,slot)
+    : async (operation,slot)=>{
+        const receipt=await native(config.executable,operation,slot);
+        return operation==='target'?
+          validateNativeWindowTarget(receipt,slot):validateNativeReport(receipt,operation);
+      };
   let inFlight=false; // mutating or exclusive native operation
   // Stdio closure fences pending preflight/lease continuations in THIS
   // existing MCP handler. It does not own game lifecycle or recovery.
@@ -364,8 +380,7 @@ export function createOperationCore(config,{
     // its own mutation lock until its authenticated request completes.
     visualReadBusy=true;
     try {
-      const before=validateNativeWindowTarget(
-        await native(config.executable,'target',slot),slot);
+      const before=await readNative('target',slot);
       // GPU provider is a persistent producer started by the same explicit
       // visual-observation MCP action. No fallback to desktop/global capture.
       // Read ONLY from the WGC worker pinned to this same exact native
@@ -378,8 +393,7 @@ export function createOperationCore(config,{
       const captureStartedAtMs=Date.now();
       const frame=gpuSource ? gpuSource.latest(slot,before) :
         await capture(config.cuaExecutable,before);
-      const after=validateNativeWindowTarget(
-        await native(config.executable,'target',slot),slot);
+      const after=await readNative('target',slot);
       if (before.pid!==after.pid || before.windowId!==after.windowId ||
           before.createdFileTime!==after.createdFileTime ||
           before.sessionId!==after.sessionId) {
@@ -1186,8 +1200,7 @@ export function createOperationCore(config,{
         // processes, worlds or authenticated controller instances are created.
         for (const slot of slots) {
           if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
-          const target=validateNativeWindowTarget(
-            await native(config.executable,'target',slot),slot);
+          const target=await readNative('target',slot);
           if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
           await gpuSource.start(slot,target,{durationMs,fps});
           started.push(slot);
@@ -1251,8 +1264,7 @@ export function createOperationCore(config,{
       if(mustRevalidate){
         let live;
         try {
-          live=validateNativeWindowTarget(
-            await native(config.executable,'target',slot),slot);
+          live=await readNative('target',slot);
         } catch {
           // No native identity proof means no cached PNG or screen-text
           // review, even if the timestamp still falls within 3.5 seconds.
@@ -1354,11 +1366,9 @@ export function createOperationCore(config,{
       // owns game lifecycle nor introduces a second input/visual scheduler.
       visualReadBusy=true;
       try {
-        const before=validateNativeWindowTarget(
-          await native(config.executable,'target',slot),slot);
+        const before=await readNative('target',slot);
         const ui=await inspectCua(config.cuaExecutable,before);
-        const after=validateNativeWindowTarget(
-          await native(config.executable,'target',slot),slot);
+        const after=await readNative('target',slot);
         requireOpen();
         if(!sameNativeVisualTarget(after,before)) {
           throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
@@ -1389,8 +1399,7 @@ export function createOperationCore(config,{
       if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
-        const current=validateNativeWindowTarget(
-          await native(config.executable,'target',slot),slot);
+        const current=await readNative('target',slot);
         if (name==='get_computer_use_target') {
           return computerUseTarget(current,slot,config.mode);
         }
@@ -1411,8 +1420,7 @@ export function createOperationCore(config,{
       if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
-        const nativeSnapshot=validateNativeReport(
-          await native(config.executable,'inspect'),'inspect');
+        const nativeSnapshot=await readNative('inspect');
         const peerPlan=planPeerSession(config.mode,nativeSnapshot);
         const gameEvidence=await summarizeGameEvidence(
           config.evidenceDirectory,slots,evidence);
@@ -1567,8 +1575,7 @@ export function createOperationCore(config,{
         for(const frame of state.frames) {
           let live;
           try {
-            live=validateNativeWindowTarget(
-              await native(config.executable,'target',frame.slot),frame.slot);
+            live=await readNative('target',frame.slot);
           } catch {
             // Unavailable native identity is NOT permission to use cached
             // imagery for a new input batch. Do not guess a replacement PID.
@@ -1899,8 +1906,7 @@ export function createOperationCore(config,{
       try {
         const observed=[];
         for (const slot of required.observedSlots) {
-          observed.push(validateNativeWindowTarget(
-            await native(config.executable,'target',slot),slot));
+          observed.push(await readNative('target',slot));
         }
         const elapsed=Date.now()-started;
         return {
@@ -1916,8 +1922,8 @@ export function createOperationCore(config,{
       if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
-        const report=await native(config.executable,'inspect');
-        return planPeerSession(config.mode,validateNativeReport(report,'inspect'));
+        const report=await readNative('inspect');
+        return planPeerSession(config.mode,report);
       } finally {inFlight=false;}
     }
     if (name==='agent_capabilities') {
@@ -1982,8 +1988,7 @@ export function createOperationCore(config,{
       if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       try {
-        return validateNativeReport(
-          await native(config.executable,'inspect'),'inspect');
+        return await readNative('inspect');
       } finally {inFlight=false;}
     }
     if (name==='launch_profile') {
@@ -1998,8 +2003,7 @@ export function createOperationCore(config,{
         const operation=multiEnabled?
           (config.mode==='five-ai'?'launch-ai-five':'launch-ai-hybrid') :
           (mc02Enabled&&slot===2?'launch-mc02-input':'launch');
-        const report=validateNativeReport(
-          await native(config.executable,operation,slot),operation);
+        const report=await readNative(operation,slot);
         // A successful *new* native experimental launch creates a fresh
         // exact-process channel with neutral initial input state. It
         // cannot adopt an already-running game. Only a non-attention
