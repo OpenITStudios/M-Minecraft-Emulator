@@ -29,9 +29,9 @@ const METHODS=Object.freeze(ROUTES.map(([method])=>method));
 const PLAYTEST_EXCLUDE=new Set(['get_test_context','plan_player_actions','assess_input_route','read_game_evidence']);
 const PLAYTEST_EXTRA=[
   ['launch_profile',['slot']],
-  ['observe_client',['slot']],
+  ['observe_client',['slot','width','height']],
   ['inspect_client_ui',['slot']],
-  ['start_visual_observation',['slots','intervalMs','durationMs']],
+  ['start_visual_observation',['slots','intervalMs','durationMs','width','height']],
   ['read_visual_observation',['slot','afterSequence','includeImage']],
   ['stop_visual_observation',['slots']],
 ];
@@ -71,6 +71,10 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
       properties.inspectRun={const:true,type:'boolean'};
     }
     return {...tool,
+      ...(playtest&&tool.name==='observe_client'?{description:'One on-demand WGC WebP preview, default 640x360. Set both width and height (160-1536) for detail. No PNG fallback. For active sampler use read_visual_observation.'}:{}),
+      ...(playtest&&tool.name==='start_visual_observation'?{description:'Optional bounded local WGC WebP sampler. Default 640x360, set both width and height (160-1536). Images only on requested reads.'}:{}),
+      ...(playtest&&tool.name==='read_visual_observation'?{description:'Read a cached WebP frame only if newer than afterSequence; metadata only with includeImage=false.'}:{}),
+      ...(playtest&&tool.name==='get_multi_client_visual_state'?{description:'Metadata only for existing local frame caches. No new capture; byte changes are not gameplay proof.'}:{}),
       ...(tool.name==='probe_qa'?{description:playtest?
         'Canonical source-only Probe preparation/status, explicit restart, inspectRun=true or explicit archivedRunId. No publication, reservation or game command dispatch.':
         'Canonical source-only Probe preparation/status, inspectRun=true or explicit archivedRunId. No restart, publication, reservation or game command dispatch.'}:{}),
@@ -100,13 +104,16 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
         Object.keys(args).some(key=>!allowed.has(key))) {
         throw new Error('Invalid tool arguments');
       }
-      const result=await callTool(name,{...args});
+      const forceWebp=playtest&&['observe_client','start_visual_observation','read_visual_observation'].includes(name);
+      const result=await callTool(name,{...args,...(forceWebp?{imageFormat:'webp'}:{})});
       return name==='agent_capabilities'?{...result,available:[...names],
         ...(playtest?{playtest:{
           surface:'playtest',
           autonomousGameplay:'BLOCKED_NO_VERIFIED_INPUT_BACKEND',
           close:'NOT_EXPOSED_DESKTOP_ADMISSION_REQUIRED',
           nativeCapture:'APP_CAPTURE_BINARY_APPROVAL_HELD',
+          observation:{format:'image/webp',defaultWidth:640,defaultHeight:360,
+            provider:result.configuredSources?.visual==='WGC'?'WGC_SOURCE_CANDIDATE':'WEBP_CAPTURE_REQUIRES_WGC'},
           evidenceAttribution:'OPERATOR_NAMED_UNVERIFIED',
         }}:{})}:result;
     },

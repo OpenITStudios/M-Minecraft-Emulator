@@ -49,7 +49,9 @@ function boundedFrame(frame) {
       !HASH.test(meta.sha256??'') ||
       !Number.isInteger(meta.width) || meta.width<1 || meta.width>1536 ||
       !Number.isInteger(meta.height) || meta.height<1 || meta.height>1536 ||
-      meta.screenshotStatus!=='PNG_RETURNED_NOT_GAMEPLAY_PROOF') {
+      !(meta.screenshotStatus==='PNG_RETURNED_NOT_GAMEPLAY_PROOF'&&meta.mimeType!=='image/webp'||
+        meta.screenshotStatus==='WEBP_RETURNED_NOT_GAMEPLAY_PROOF'&&meta.mimeType==='image/webp'&&
+        meta.provider==='NATIVE_WGC_PERSISTENT')) {
     throw new TypeError('Unusable frame or unverified capture metadata');
   }
   // WGC's worker sequence and readback timestamp are producer-authored.
@@ -92,7 +94,7 @@ export function projectF3VisualReview(meta) {
     automaticCopyAllowed:false,
   };
   if(meta?.schema!==1 || !Number.isInteger(meta.slot) ||
-     meta.slot<1 || meta.slot>5) return refusal;
+     meta.slot<1 || meta.slot>5 || meta.mimeType==='image/webp') return refusal;
   const pin=meta.processIdentity??meta.captureIdentity;
   try {
     frameIdentity({processIdentity:pin});
@@ -332,6 +334,7 @@ export function createVisualObserver({
         state.imageBase64=frame.imageBase64;
         state.width=meta.width;
         state.height=meta.height;
+        state.mimeType=meta.mimeType??'image/png';
         state.sameBytesCount=0;
         state.status='FRAME_BYTES_CHANGED_NOT_SEMANTIC_PROOF';
       } else {
@@ -339,7 +342,7 @@ export function createVisualObserver({
         // PNG byte hashes are NOT pixel-level comparisons, and a still image
         // is not sufficient proof that a game has stopped.
         state.status=state.sameBytesCount>=3 ?
-          'STATIC_PNG_BYTES_GAME_STATE_UNKNOWN':'FRAME_BYTES_UNCHANGED';
+          (state.mimeType==='image/webp'?'STATIC_WEBP_BYTES_GAME_STATE_UNKNOWN':'STATIC_PNG_BYTES_GAME_STATE_UNKNOWN'):'FRAME_BYTES_UNCHANGED';
         delay=Math.min(OBSERVATION_LIMITS.maximumIntervalMs,
           state.intervalMs*(state.sameBytesCount>=3?3:2));
       }
@@ -412,7 +415,7 @@ export function createVisualObserver({
         sourceFrameAtMs:null,sourceTimeKind:null,producerSequence:null,
         duplicateGpuReads:0,
         lastHash:null,lastDeliveredFrame:null,lastCollectedAt:null,lastCollectedMs:null,
-        width:null,height:null,windowBackground:null,
+        width:null,height:null,windowBackground:null,mimeType:null,
         successfulSamples:0,sameBytesCount:0,
         skippedBusy:0,totalErrors:0,consecutiveErrors:0,lastError:null,
       };
@@ -494,12 +497,13 @@ export function createVisualObserver({
         windowBackground:state.windowBackground,
         width:state.width,height:state.height,
         successfulSamples:state.successfulSamples,
-        repeatedPngBytes:state.sameBytesCount,
+        ...(state.mimeType==='image/webp'?{mimeType:'image/webp',repeatedFrameBytes:state.sameBytesCount}:
+          {repeatedPngBytes:state.sameBytesCount}),
         duplicateGpuReads:state.duplicateGpuReads,
         skippedBusy:state.skippedBusy,
         captureErrors:state.totalErrors,
         errorCode:state.lastError,
-        visualChange:'PNG_BYTE_HASH_ONLY_NOT_SEMANTIC_MOTION',
+        visualChange:state.mimeType==='image/webp'?'WEBP_BYTE_HASH_ONLY_NOT_SEMANTIC_MOTION':'PNG_BYTE_HASH_ONLY_NOT_SEMANTIC_MOTION',
         modelDelivery:'ONLY_ON_MCP_READ',
         gameInput:'INDEPENDENT_BACKGROUND_INPUT_NOT_VERIFIED',
       },
@@ -641,7 +645,9 @@ export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
       // MCP image path. A fresh metadata sample is not visual model review.
       imageDeliveredForReview:Boolean(fresh&&meta.screenReviewFrameDelivered===true),
       baseline:basis,observedSameProcessSinceBaseline:previous?sameTarget:null,
-      sampledSinceBaseline:sampledSince,pngBytesChangedSinceBaseline:pngBytesChanged,
+      sampledSinceBaseline:sampledSince,
+      ...(meta.mimeType==='image/webp'?{mimeType:'image/webp',frameBytesChangedSinceBaseline:pngBytesChanged}:
+        {pngBytesChangedSinceBaseline:pngBytesChanged}),
       // Only requesting a single already-cached frame via existing
       // read_visual_observation passes image bytes to Codex/Claude.
       imageRead:fresh?{tool:'read_visual_observation',slot,afterSequence:0,
@@ -660,7 +666,8 @@ export function summarizeTeamVisualState(mode,slots,readings,since=[]) {
     frameCount:projection.filter(item=>item.freshFrameAvailable).length,
     frames:projection,imagesIncluded:false,
     decision:'REQUIRES_EXPLICIT_AI_IMAGE_REVIEW',
-    motionInference:'PNG_BYTES_AND_TIMESTAMPS_NOT_GAMEPLAY_PROOF',
+    motionInference:readings.some(meta=>meta.mimeType==='image/webp')?
+      'IMAGE_BYTES_AND_TIMESTAMPS_NOT_GAMEPLAY_PROOF':'PNG_BYTES_AND_TIMESTAMPS_NOT_GAMEPLAY_PROOF',
     note:'One metadata read of 1-5 existing local caches; no new capture, gameplay input, world identity, or automated AI decision is implied.',
   };
 }

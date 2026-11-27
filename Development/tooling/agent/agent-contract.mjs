@@ -24,6 +24,8 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'MC01 human host is protected from AI visual observation',
   'MC01 human host is protected from AI computer-use targeting',
   'Visual provider is NOT_CONFIGURED',
+  'WEBP_CAPTURE_REQUIRES_WGC','GPU_PREVIEW_UNAVAILABLE',
+  'GPU_PREVIEW_USE_EXISTING_SAMPLER','VISUAL_FORMAT_MISMATCH',
   'Visual provider is NOT_CONFIGURED; set --cua-exe or --gpu-capture-exe',
   'Native integration is not configured; set --exe',
   'Native controller unavailable or operation refused',

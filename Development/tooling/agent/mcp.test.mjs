@@ -5170,7 +5170,8 @@ test('native receipt seam still rejects invalid injected targets and strips priv
 
 test('playtest uses the same native launch, bounded image and evidence operations',async()=>{
   const calls=[];
-  const cfg={...config(),surface:'playtest',cuaExecutable:path.resolve('cua-driver.exe')};
+  const cfg={...config(),surface:'playtest',gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')};
+  const requested=[];
   const h=createHandler(cfg,{
     native:async(_exe,op,slot)=>{
       calls.push([op,slot]);
@@ -5180,7 +5181,12 @@ test('playtest uses the same native launch, bounded image and evidence operation
         foreground:false,visible:true,minimized:false,
         verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
     },
-    capture:async()=>({mimeType:'image/png',imageBase64:'iVBORw0KGgo=',width:800,height:600}),
+    gpuSourceFactory:()=>({
+      captureOnce:async(slot,_target,size)=>{requested.push({slot,...size});return {
+        mimeType:'image/webp',imageBase64:'UklGRgAAAABXRUJQ',...size,
+        sha256:'a'.repeat(64),capturedAtMs:Date.now(),workerSequence:1,
+      };},stop:()=>{},shutdown:()=>{},
+    }),
   });
   try {
     const listed=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
@@ -5195,7 +5201,8 @@ test('playtest uses the same native launch, bounded image and evidence operation
     assert.equal(listed.find(t=>t.name==='probe_qa').inputSchema.properties.restart.type,'boolean');
     const caps=await h.callTool('agent_capabilities',{});
     assert.equal(caps.playtest.autonomousGameplay,'BLOCKED_NO_VERIFIED_INPUT_BACKEND');
-    assert.equal(caps.configuredSources.visual,'CUA');
+    assert.equal(caps.configuredSources.visual,'WGC');
+    assert.equal(caps.playtest.observation.format,'image/webp');
     assert.deepEqual(caps.available,listed.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
     for(const [name,args] of [
       ['launch_profile',{slot:1}],['observe_client',{slot:1}],
@@ -5218,12 +5225,23 @@ test('playtest uses the same native launch, bounded image and evidence operation
       name:'observe_client',arguments:{slot:2}}});
     assert.equal(image.result.isError,false);
     assert.equal(image.result.content[1].type,'image');
-    assert.deepEqual(calls,[['launch',2],['target',2],['target',2]]);
+    assert.equal(image.result.content[1].mimeType,'image/webp');
+    const meta=JSON.parse(image.result.content[0].text);
+    assert.equal(meta.provider,'NATIVE_WGC_ON_DEMAND');
+    assert.equal(Object.hasOwn(meta,'f3VisualReview'),false);
+    assert.deepEqual(requested,[{slot:2,width:640,height:360}]);
+    const custom=await h.handle({jsonrpc:'2.0',id:3,method:'tools/call',params:{
+      name:'observe_client',arguments:{slot:2,width:320,height:180}}});
+    assert.equal(custom.result.isError,false);
+    assert.deepEqual(requested.at(-1),{slot:2,width:320,height:180});
+    await assert.rejects(h.callTool('observe_client',{slot:2,width:640}),/Invalid tool arguments/);
+    await assert.rejects(h.callTool('observe_client',{slot:2,imageFormat:'png'}),/Invalid tool arguments/);
+    assert.deepEqual(calls,[['launch',2],['target',2],['target',2],['target',2],['target',2]]);
     const evidence=await h.callTool('summarize_test_evidence',{slots:[2]});
     assert.equal(evidence.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
     assert.equal(evidence.worldIdentity,'NOT_VERIFIED');
     assert.equal(evidence.sources[0].status,'NOT_CONFIGURED');
-    assert.equal(calls.length,3);
+    assert.equal(calls.length,5);
   }finally{h.shutdown();}
 });
 
@@ -5424,4 +5442,34 @@ test('compact group preview uses existing planner, bounded receipt and no native
     assert.equal(listing.some(t=>t.name==='plan_player_actions'||t.name==='execute_actions'),false);
     await assert.rejects(playtest.callTool('plan_player_actions',{groups}),/Unknown tool/);
   }finally{code.close();core.shutdown();}
+});
+
+test('playtest refuses CUA-only PNG rather than silently changing image format',async()=>{
+  let calls=0;
+  const h=createHandler({...config(),surface:'playtest',cuaExecutable:path.resolve('cua-driver.exe')},{
+    native:async()=>{calls++;throw Error('No capture should be requested');},
+  });
+  try {
+    const caps=await h.callTool('agent_capabilities',{});
+    assert.equal(caps.playtest.observation.provider,'WEBP_CAPTURE_REQUIRES_WGC');
+    for(const [name,args] of [['observe_client',{slot:2}],['start_visual_observation',{slots:[2]}]]) {
+      const wire=await h.handle({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}});
+      assert.equal(wire.result.isError,true);
+      assert.equal(wire.result.content[0].text,'WEBP_CAPTURE_REQUIRES_WGC');
+    }
+    assert.equal(calls,0);
+  }finally{h.shutdown();}
+});
+test('playtest cached image read refuses a PNG cache before delivery or target lookup',async()=>{
+  let calls=0;
+  const core=createOperationCore(config(),{
+    native:async()=>{calls++;throw Error('Unexpected target check');},
+    visualObserverFactory:()=>({read:()=>({metadata:{schema:1,slot:2,
+      freshFrameAvailable:true,sequence:1},imageBase64:null}),shutdown:()=>{}}),
+  });
+  const h=createMcpHandler(core,'playtest');
+  try {
+    await assert.rejects(h.callTool('read_visual_observation',{slot:2}),/VISUAL_FORMAT_MISMATCH/);
+    assert.equal(calls,0);
+  }finally{h.shutdown();}
 });

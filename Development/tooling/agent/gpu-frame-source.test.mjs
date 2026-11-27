@@ -5,7 +5,7 @@ import {EventEmitter} from 'node:events';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
 import {
-  createGpuPacketDecoder,createGpuFrameSource,validateGpuExecutable,
+  createGpuPacketDecoder,createGpuFrameSource,validateGpuExecutable,inspectWebp,previewSize,
 } from './gpu-frame-source.mjs';
 const png=Buffer.from(
  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6YQAAAAASUVORK5CYII=',
@@ -284,4 +284,84 @@ test('startup refuses and kills an unsupervisable GPU worker',async()=>{
   await assert.rejects(()=>source.start(2,target),/bounded stdout pipe/);
   assert.equal(killed,1);
   source.shutdown();
+});
+
+ // Structural packet fixtures only; Rust decoder fixture covers actual encoding.
+function webpPacket(width=640,height=360,sequence=1,time=100000) {
+  const bytes=Buffer.alloc(26);
+  bytes.write('RIFF',0);bytes.writeUInt32LE(18,4);bytes.write('WEBPVP8L',8);
+  bytes.writeUInt32LE(6,16);bytes[20]=0x2f;
+  bytes.writeUInt32LE((width-1)|((height-1)<<14),21);
+  const header=Buffer.alloc(28);header.write('LTG2',0);
+  header.writeUInt32BE(bytes.length,4);header.writeUInt32BE(width,8);
+  header.writeUInt32BE(height,12);header.writeUInt32BE(sequence,16);
+  header.writeBigUInt64BE(BigInt(time),20);
+  return Buffer.concat([header,bytes]);
+}
+test('explicit WebP decoder checks exact negotiated size and format, with no PNG downgrade',()=>{
+  const frames=[],size=previewSize(320,180);
+  const decoder=createGpuPacketDecoder(f=>frames.push(f),{clock:()=>100000,webpSize:size});
+  const bytes=webpPacket(320,180);
+  decoder.push(bytes.subarray(0,29));decoder.push(bytes.subarray(29));decoder.finish();
+  assert.equal(frames.length,1);assert.equal(frames[0].mimeType,'image/webp');
+  assert.equal(inspectWebp(frames[0].bytes).width,320);
+  const make=()=>createGpuPacketDecoder(()=>{}, {clock:()=>100000,webpSize:size});
+  assert.throws(()=>make().push(packet(1)),/protocol/);
+  assert.throws(()=>make().push(webpPacket()),/sequence\/size/);
+  const partial=make();partial.push(bytes.subarray(0,bytes.length-1));
+  assert.throws(()=>partial.finish(),/Incomplete/);
+  const mismatch=Buffer.from(bytes);mismatch.writeUInt32LE(0,28+21);
+  assert.throws(()=>make().push(mismatch),/dimensions/);
+  assert.throws(()=>previewSize(4096,360),/Invalid tool arguments/);
+});
+test('one-shot preview uses the existing executable, exact target, bounded exit and no stream',async()=>{
+  const target={pid:42,windowId:123,createdFileTime:'134000000000000001',sessionId:1};
+  let calls=0,output=webpPacket(320,180);
+  const source=createGpuFrameSource({
+    executable:path.resolve('lazy-tester-gpu-capture.exe'),platform:'win32',clock:()=>100000,
+    statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+    spawnProcess:()=>{throw Error('One shot must not create a persistent stream');},
+    executePreview:async(_exe,args,options)=>{
+      calls++;assert.deepEqual(args,['--preview','--pid','42','--window-id','123',
+        '--birth',target.createdFileTime,'--session','1','--width','320','--height','180']);
+      assert.equal(options.shell,false);assert.equal(options.timeout,8000);
+      assert.equal(options.maxBuffer,3*1024*1024+28);
+      return {stdout:output};
+    },
+  });
+  try {
+    const image=await source.captureOnce(2,target,{width:320,height:180});
+    assert.equal(image.mimeType,'image/webp');assert.equal(image.width,320);
+    assert.equal(source.status(2).active,false);
+    output=Buffer.concat([webpPacket(320,180),webpPacket(320,180,2)]);
+    await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/GPU_PREVIEW_UNAVAILABLE/);
+    output=packet(1);
+    await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/GPU_PREVIEW_UNAVAILABLE/);
+    assert.equal(calls,3);
+  }finally{source.shutdown();}
+});
+test('WebP stream and one-shot share slot admission; cached image is not re-encoded',async()=>{
+  const target={pid:42,windowId:123,createdFileTime:'134000000000000001',sessionId:1};
+  const child=new EventEmitter();child.stdout=new EventEmitter();child.kill=()=>true;
+  let calls=0;
+  const source=createGpuFrameSource({
+    executable:path.resolve('lazy-tester-gpu-capture.exe'),platform:'win32',clock:()=>100000,
+    statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+    spawnProcess:(_exe,args)=>{assert.equal(args[0],'--webp');assert.deepEqual(args.slice(-4),
+      ['--width','320','--height','180']);return child;},
+    executePreview:async()=>{calls++;return {stdout:webpPacket(320,180)};},
+    schedule:()=>({unref(){}}),cancel:()=>{},
+  });
+  try {
+    await source.start(2,target,{webpSize:{width:320,height:180}});
+    child.stdout.emit('data',webpPacket(320,180));
+    const frame=source.latest(2,target);
+    assert.equal(frame.mimeType,'image/webp');
+    child.stdout.emit('data',webpPacket(320,180,2));
+    assert.equal(source.latest(2,target).imageBase64,frame.imageBase64);
+    await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/USE_EXISTING_SAMPLER/);
+    assert.equal(calls,0);
+    source.stop([2]);
+    assert.equal((await source.captureOnce(2,target,{width:320,height:180})).mimeType,'image/webp');
+  }finally{source.shutdown();}
 });

@@ -1,6 +1,6 @@
 //! Optional Windows Graphics Capture producer for one controller-owned Minecraft.
 //! Source only: not built, not installed, not executed. No game inputs.
-//! stdout is LTG1 PNG for observation, or one raw WebP for explicit screenshot mode.
+//! stdout is legacy LTG1 PNG, explicit LTG2 WebP observation/preview, or raw native-resolution WebP screenshot.
 //! stderr is for errors; no file paths, input or game lifecycle commands.
 //! Existing Lazy Tester MCP remains the only AI-facing tool owner.
 #![cfg_attr(not(windows), allow(unused))]
@@ -38,8 +38,9 @@ mod windows_capture {
 
     const FRAME_WIDTH: u32 = 960;
     const FRAME_HEIGHT: u32 = 540;
-    const MAX_PNG_BYTES: usize = 3 * 1024 * 1024;
+    const MAX_FRAME_BYTES: usize = 3 * 1024 * 1024;
     const HEADER: &[u8; 4] = b"LTG1";
+    const WEBP_HEADER: &[u8; 4] = b"LTG2";
     const HEADER_BYTES: usize = 28;
 
     struct ProcessPin(HANDLE);
@@ -56,6 +57,8 @@ mod windows_capture {
         session_id: u32,
         duration_ms: u64,
         fps: u32,
+        webp_size: Option<(u32,u32)>,
+        once: bool,
     }
 
     enum Mode { Observe(Target), Screenshot(Target) }
@@ -66,11 +69,16 @@ mod windows_capture {
 
     fn parse_args(args: &[String]) -> io::Result<Mode> {
         let screenshot = args.first().is_some_and(|arg| arg == "--screenshot");
-        let args = if screenshot { &args[1..] } else { args };
-        if args.len() != (if screenshot { 8 } else { 12 }) ||
+        let once = args.first().is_some_and(|arg| arg == "--preview");
+        let webp = once || args.first().is_some_and(|arg| arg == "--webp");
+        let args = if screenshot || webp { &args[1..] } else { args };
+        let single = screenshot || once;
+        let base = if single {8} else {12};
+        if args.len() != base + (if webp {4} else {0}) ||
             args[0] != "--pid" || args[2] != "--window-id" ||
             args[4] != "--birth" || args[6] != "--session" ||
-            (!screenshot && (args[8] != "--duration-ms" || args[10] != "--fps")) {
+            (!single && (args[8] != "--duration-ms" || args[10] != "--fps")) ||
+            (webp && (args[base] != "--width" || args[base+2] != "--height")) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Expected bounded exact-target capture flags"));
         }
@@ -79,13 +87,21 @@ mod windows_capture {
         let window_id = parse(3).filter(|n| *n > 0 && *n <= 0x001f_ffff_ffff_ffff);
         let birth = parse(5).filter(|n| *n != 0);
         let session_id = parse(7).and_then(|n| u32::try_from(n).ok());
-        let duration_ms = if screenshot { Some(5000) } else { parse(9).filter(|n| (5000..=90000).contains(n)) };
-        let fps = if screenshot { Some(1) } else { parse(11).and_then(|n| u32::try_from(n).ok())
+        let webp_size = if webp {
+            let width=parse(base+1).filter(|n|(160..=1536).contains(n));
+            let height=parse(base+3).filter(|n|(160..=1536).contains(n));
+            match (width,height) {
+                (Some(w),Some(h))=>Some((w as u32,h as u32)),
+                _=>return Err(io::Error::new(io::ErrorKind::InvalidInput,"Invalid preview dimensions")),
+            }
+        } else {None};
+        let duration_ms = if single { Some(5000) } else { parse(9).filter(|n| (5000..=90000).contains(n)) };
+        let fps = if single { Some(1) } else { parse(11).and_then(|n| u32::try_from(n).ok())
             .filter(|n| (1..=10).contains(n)) };
         match (pid, window_id, birth, session_id, duration_ms, fps) {
             (Some(pid), Some(window_id), Some(birth), Some(session_id),
              Some(duration_ms), Some(fps)) => {
-                let target=Target { pid, window_id, birth, session_id, duration_ms, fps };
+                let target=Target { pid, window_id, birth, session_id, duration_ms, fps, webp_size, once };
                 Ok(if screenshot { Mode::Screenshot(target) } else { Mode::Observe(target) })
             },
             _ => Err(io::Error::new(io::ErrorKind::InvalidInput,
@@ -158,25 +174,39 @@ mod windows_capture {
         PngEncoder::new(&mut *png)
             .write_image(pixels,FRAME_WIDTH,FRAME_HEIGHT,ExtendedColorType::Rgba8)
             .map_err(|_|io::Error::other("PNG encoding unavailable"))?;
-        if png.len()>MAX_PNG_BYTES {
+        if png.len()>MAX_FRAME_BYTES {
             return Err(io::Error::new(io::ErrorKind::InvalidData,
                 "Captured frame exceeds memory/IPC budget"));
         }
-        // LTG1 header: magic(4), png bytes(4), width(4), height(4),
+        write_packet(out,HEADER,png,FRAME_WIDTH,FRAME_HEIGHT,sequence,readback_at_ms)
+    }
+
+    fn write_webp_frame(out:&mut impl Write,encoded:&mut Vec<u8>,sequence:u32,
+        pixels:&[u8],width:u32,height:u32,readback_at_ms:u64)->io::Result<()> {
+        if !(160..=1536).contains(&width)||!(160..=1536).contains(&height){
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Invalid preview dimensions"));
+        }
+        super::screenshot::encode_webp_rgba(pixels,width,height,encoded,MAX_FRAME_BYTES)?;
+        write_packet(out,WEBP_HEADER,encoded,width,height,sequence,readback_at_ms)
+    }
+
+    fn write_packet(out:&mut impl Write,magic:&[u8;4],encoded:&[u8],
+        width:u32,height:u32,sequence:u32,readback_at_ms:u64)->io::Result<()> {
+        // LTG1 PNG / LTG2 VP8L: magic(4), bytes(4), width(4), height(4),
         // sequence(4), Unix *readback completion* ms(8). Big-endian.
         // This time is sampled BEFORE PNG encoding and stdout delay,
         // not after. The WGC frame may still represent older pixels;
         // it is not a proof of presentation or Minecraft gameplay.
         // 28 fixed bytes: no heap allocation for the frame header.
         let mut header=[0u8;HEADER_BYTES];
-        header[0..4].copy_from_slice(HEADER);
-        header[4..8].copy_from_slice(&(png.len() as u32).to_be_bytes());
-        header[8..12].copy_from_slice(&FRAME_WIDTH.to_be_bytes());
-        header[12..16].copy_from_slice(&FRAME_HEIGHT.to_be_bytes());
+        header[0..4].copy_from_slice(magic);
+        header[4..8].copy_from_slice(&(encoded.len() as u32).to_be_bytes());
+        header[8..12].copy_from_slice(&width.to_be_bytes());
+        header[12..16].copy_from_slice(&height.to_be_bytes());
         header[16..20].copy_from_slice(&sequence.to_be_bytes());
         header[20..28].copy_from_slice(&readback_at_ms.to_be_bytes());
         out.write_all(&header)?;
-        out.write_all(png.as_slice())?;
+        out.write_all(encoded)?;
         out.flush()?;
         Ok(())
     }
@@ -196,7 +226,8 @@ mod windows_capture {
         let emit_gap=Duration::from_millis((1000/target.fps) as u64);
         let mut last_emit:Option<Instant>=None;
         let mut sequence=0u32;
-        let mut png=Vec::new(); // Reuse one bounded output buffer per worker.
+        let mut encoded=Vec::new(); // Reuse one bounded output buffer per worker.
+        let (width,height)=target.webp_size.unwrap_or((FRAME_WIDTH,FRAME_HEIGHT));
         let out=io::stdout();
         let mut out=out.lock();
         for candidate in session {
@@ -205,7 +236,7 @@ mod windows_capture {
             if last_emit.is_some_and(|time|time.elapsed()<emit_gap) {continue;}
             verify_target(&target,&pin)?; // fail closed before every frame
             let fitted=frame.pixels_fitted(FrameSize {
-                width:FRAME_WIDTH,height:FRAME_HEIGHT
+                width,height
             }).map_err(|_|io::Error::other("GPU pixel readback unavailable"))?;
             // Timestamp IMMEDIATELY upon GPU readback completion. Capturing
             // after the subsequent window verification could incorrectly
@@ -214,11 +245,17 @@ mod windows_capture {
             verify_target(&target,&pin)?; // do not publish after window reuse
             sequence=sequence.checked_add(1).ok_or_else(||
                 io::Error::other("Capture sequence exhausted"))?;
-            write_frame(&mut out,&mut png,sequence,&fitted,readback_at_ms)?;
+            if target.webp_size.is_some() {
+                write_webp_frame(&mut out,&mut encoded,sequence,&fitted,width,height,readback_at_ms)?;
+            } else {
+                write_frame(&mut out,&mut encoded,sequence,&fitted,readback_at_ms)?;
+            }
+            if target.once{return Ok(());}
             last_emit=Some(Instant::now());
         }
         // WGC's blocking iterator may not yield when a window stops rendering.
         // The MCP parent MUST enforce a separate wall-clock kill timeout.
+        if target.once {return Err(io::Error::other("Preview frame unavailable"));}
         Ok(())
     }
 
@@ -281,6 +318,26 @@ mod windows_capture {
             assert!(parse_args(&args(&format!("--screenshot {target} --duration-ms 5000 --fps 1"))).is_err());
             assert!(parse_args(&args(target)).is_err());
             assert!(parse_args(&args("--screenshot")).is_err());
+        }
+
+        #[test]
+        fn webp_modes_are_explicit_and_bounded() {
+            let args=|s:&str|s.split_whitespace().map(str::to_owned).collect::<Vec<_>>();
+            let target="--pid 42 --window-id 123 --birth 134000000000000001 --session 1";
+            match parse_args(&args(&format!("--preview {target} --width 640 --height 360"))).unwrap(){
+                Mode::Observe(t)=>{assert!(t.once);assert_eq!(t.webp_size,Some((640,360)));},
+                _=>panic!("Expected preview"),
+            }
+            assert!(matches!(parse_args(&args(&format!("--webp {target} --duration-ms 5000 --fps 2 --width 320 --height 180"))),Ok(Mode::Observe(_))));
+            assert!(parse_args(&args(&format!("--preview {target} --width 4096 --height 2160"))).is_err());
+            assert!(parse_args(&args(&format!("--screenshot {target} --width 640 --height 360"))).is_err());
+            let pixels=vec![255u8;320*180*4];let mut scratch=Vec::new();let mut packet=Vec::new();
+            write_webp_frame(&mut packet,&mut scratch,1,&pixels,320,180,12345).unwrap();
+            assert_eq!(&packet[..4],b"LTG2");
+            assert_eq!(&packet[28..32],b"RIFF");
+            assert_eq!(&packet[36..44],b"WEBPVP8L");
+            let decoder=image_webp::WebPDecoder::new(std::io::Cursor::new(&packet[28..])).unwrap();
+            assert_eq!(decoder.dimensions(),(320,180));
         }
 
         #[test]

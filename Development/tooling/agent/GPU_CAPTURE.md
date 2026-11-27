@@ -1,6 +1,7 @@
 # Optional persistent GPU stream transport — source only
 
-`gpu-frame-source.mjs` consumes bounded, binary `LTG1` PNG frames produced
+`gpu-frame-source.mjs` consumes bounded, binary `LTG1` PNG (legacy) or
+explicit `LTG2` WebP previews produced
 by the isolated `native-gpu-capture` Rust worker. It is the **same existing
 Lazy Tester MCP process** that owns at most one worker per profile and at
 most one recent complete frame in RAM per worker.
@@ -8,7 +9,7 @@ most one recent complete frame in RAM per worker.
 Each worker must be explicitly configured and started only after native
 controller verification. It cannot launch/close Minecraft, receive
 keyboard/mouse actions, or change game focus. The decoder refuses corrupt,
-oversized, out-of-order, mismatched PNG and stale timestamp packets. Frames
+oversized, out-of-order, mismatched codec/dimensions and stale timestamp packets. Frames
 older than 3.5 seconds are never presented as current. A stalled stream,
 early exit, or deadline kills only the capture worker, never Minecraft.
 
@@ -21,7 +22,7 @@ provider. This transport is connected to the existing MCP
 `stop_visual_observation` / `observe_client` code when explicitly configured
 with `--gpu-capture-exe`. It is not packaged or runtime validated.
 
-The worker also has an explicit one-shot WebP screenshot source mode, not used by MCP. The existing LTG1 decoder, stream admission and PNG format are unchanged. The product parent is source-integrated with a closed reviewed-binary gate; no installer or native validation is available yet.
+Playtest requests LTG2 WebP with 640x360 default or explicit fitted dimensions. One-shot preview uses the same worker without a running sampler; one worker/reservation per slot. Legacy LTG1 and the separate original-resolution product screenshot contract remain unchanged. The product parent is source-integrated with a closed reviewed-binary gate; no installer or native validation is available yet.
 
 See `native-gpu-capture/README.md` for the upstream WGC crate,
 frame protocol, licensing and unverified platform limitations.

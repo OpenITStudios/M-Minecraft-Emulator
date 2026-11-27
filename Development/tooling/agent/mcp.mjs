@@ -42,7 +42,11 @@ export function createMcpHandler(core,surface='legacy') {
               if(data.imageBase64.length>MAX_MCP_IMAGE_CHARS) {
                 throw new Error('MCP_IMAGE_RESPONSE_TOO_LARGE');
               }
-              content.push({type:'image',mimeType:'image/png',
+              const mimeType=data.metadata?.mimeType??'image/png';
+              if(!['image/png','image/webp'].includes(mimeType)||(surface==='playtest'&&mimeType!=='image/webp')) {
+                throw new Error('VISUAL_FORMAT_MISMATCH');
+              }
+              content.push({type:'image',mimeType,
                 data:data.imageBase64});
             }
             return result({content,isError:false});

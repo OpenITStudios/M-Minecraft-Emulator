@@ -104,10 +104,20 @@ pub(super) fn encode_client(width:u32,height:u32,mut rgba:Vec<u8>,crop:Crop)->io
         return Err(io::Error::new(io::ErrorKind::InvalidData,"Screenshot client is not opaque"));
     }
     let mut encoded=Vec::new();
-    WebPEncoder::new(&mut encoded).encode(&rgba,crop.width,crop.height,ColorType::Rgba8)
-        .map_err(|_|io::Error::other("WebP lossless encode failed"))?;
-    if encoded.len()>MAX_WEBP_BYTES{return Err(io::Error::other("Screenshot output budget exceeded"));}
+    encode_webp_rgba(&rgba,crop.width,crop.height,&mut encoded,MAX_WEBP_BYTES)?;
     Ok(encoded)
+}
+
+// Shared direct RGBA -> VP8L encoder. The screenshot caller retains its
+// exact native crop/opacity checks; fitted AI previews have their own cap.
+pub(super) fn encode_webp_rgba(rgba:&[u8],width:u32,height:u32,
+    encoded:&mut Vec<u8>,max_bytes:usize)->io::Result<()> {
+    if rgba.len()!=rgba_len(width,height)?{return Err(invalid());}
+    encoded.clear();
+    WebPEncoder::new(&mut *encoded).encode(rgba,width,height,ColorType::Rgba8)
+        .map_err(|_|io::Error::other("WebP lossless encode failed"))?;
+    if encoded.len()>max_bytes{return Err(io::Error::other("WebP output budget exceeded"));}
+    Ok(())
 }
 
 #[cfg(test)]

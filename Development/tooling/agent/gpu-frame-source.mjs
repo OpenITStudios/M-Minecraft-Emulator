@@ -2,12 +2,35 @@
 // One bounded process/frame cache per explicit AI-owned Minecraft slot.
 // Does NOT launch Minecraft, inject inputs, persist pixels or expose a port.
 // Source-only candidate; no local/source/Windows tests authorized yet.
-import {spawn} from 'node:child_process';
+import {spawn,execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {createHash} from 'node:crypto';
 import {lstat} from 'node:fs/promises';
 import path from 'node:path';
 import {inspectPng,MAX_PNG_BYTES} from './visual-capture.mjs';
 
-const MAGIC='LTG1', HEADER=28;
+const MAGIC='LTG1', WEBP_MAGIC='LTG2', HEADER=28;
+const execFileAsync=promisify(execFile);
+export const DEFAULT_PREVIEW_SIZE=Object.freeze({width:640,height:360});
+export function previewSize(width=DEFAULT_PREVIEW_SIZE.width,height=DEFAULT_PREVIEW_SIZE.height) {
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<160||height<160||width>1536||height>1536) {
+    throw new Error('Invalid tool arguments');
+  }
+  return {width,height};
+}
+// Same restricted RIFF/VP8L structure as the desktop receipt; no new codec.
+export function inspectWebp(bytes) {
+  if(!Buffer.isBuffer(bytes)||bytes.length<26||bytes.length>MAX_PNG_BYTES||
+     bytes.toString('ascii',0,4)!=='RIFF'||bytes.toString('ascii',8,16)!=='WEBPVP8L'||bytes[20]!==0x2f||
+     bytes.readUInt32LE(4)+8!==bytes.length)throw new Error('Invalid bounded WebP frame');
+  const chunk=bytes.readUInt32LE(16),head=bytes.readUInt32LE(21);
+  if(chunk<6||20+chunk+chunk%2!==bytes.length||(chunk%2&&bytes.at(-1)!==0)||head>>>29!==0) {
+    throw new Error('Invalid bounded WebP frame');
+  }
+  const width=(head&0x3fff)+1,height=((head>>>14)&0x3fff)+1;
+  if(width>1536||height>1536)throw new Error('Invalid bounded WebP dimensions');
+  return {width,height,sha256:createHash('sha256').update(bytes).digest('hex')};
+}
 const MAX_FRAME=MAX_PNG_BYTES;
 const MAX_PENDING=2*MAX_FRAME+HEADER*2;
 const MAX_AGE_MS=3500;
@@ -34,11 +57,12 @@ export function validateGpuTarget(target) {
 }
 
 // Parse a binary stdout frame protocol, not arbitrary user-supplied JSON.
-// A frame is exposed only after a complete PNG and ordered identity-free
+// A frame is exposed only after a complete configured image and ordered identity-free
 // packet header has arrived. The owning worker separately checks HWND.
-export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
+export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now(),webpSize=null}={}) {
   if (typeof onFrame!=='function') throw new TypeError('A frame consumer is required');
-  // Assemble one bounded PNG without copying all previously received chunks.
+  if(webpSize!==null)webpSize=previewSize(webpSize.width,webpSize.height);
+  // Assemble one bounded image without copying all previously received chunks.
   const header=Buffer.alloc(HEADER);
   let headerUsed=0,bytes=null,bytesUsed=0,fields=null,lastSequence=0;
   function push(chunk) {
@@ -54,22 +78,23 @@ export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
         headerUsed+=count;
         if(headerUsed<HEADER) break;
         headerUsed=0;
-        if(header.toString('ascii',0,4)!==MAGIC) {
+        if(header.toString('ascii',0,4)!==(webpSize?WEBP_MAGIC:MAGIC)) {
           throw new Error('Unknown GPU frame protocol');
         }
         const length=header.readUInt32BE(4);
         const width=header.readUInt32BE(8),height=header.readUInt32BE(12);
         const sequence=header.readUInt32BE(16);
         const epoch=header.readBigUInt64BE(20);
-        if(length<33 || length>MAX_FRAME ||
+        if(length<(webpSize?26:33) || length>MAX_FRAME ||
            width<1 || height<1 || width>1536 || height>1536 ||
+           (webpSize&&(width!==webpSize.width||height!==webpSize.height)) ||
            sequence<=lastSequence || sequence>1000000 ||
            epoch>BigInt(Number.MAX_SAFE_INTEGER)) {
           throw new Error('Invalid GPU frame sequence/size/time');
         }
         const capturedAtMs=Number(epoch);
         // Reject untrusted stale/future header times BEFORE allocating or
-        // copying up to 3 MiB of PNG data for a frame we cannot use.
+        // copying up to 3 MiB of image data for a frame we cannot use.
         const now=clock();
         if(capturedAtMs>now+5000 || capturedAtMs<now-90000) {
           throw new Error('GPU frame timestamp outside capture lifecycle');
@@ -90,13 +115,13 @@ export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
       if(capturedAtMs>now+5000 || capturedAtMs<now-90000) {
         throw new Error('GPU frame timestamp outside capture lifecycle');
       }
-      const image=inspectPng(bytes);
+      const image=webpSize?inspectWebp(bytes):inspectPng(bytes);
       if(image.width!==width || image.height!==height ||
-         bytes.toString('ascii',bytes.length-8,bytes.length-4)!=='IEND') {
-        throw new Error('GPU frame PNG and transport dimensions disagree');
+         (!webpSize&&bytes.toString('ascii',bytes.length-8,bytes.length-4)!=='IEND')) {
+        throw new Error('GPU image and transport dimensions disagree');
       }
       const frame={sequence,capturedAtMs,width,height,
-        sha256:image.sha256,bytes};
+        sha256:image.sha256,bytes,...(webpSize?{mimeType:'image/webp'}:{})};
       lastSequence=sequence;
       bytes=null;
       bytesUsed=0;
@@ -104,7 +129,7 @@ export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now()}={}) {
       onFrame(frame);
     }
   }
-  return {push};
+  return {push,finish:()=>{if(headerUsed!==0||bytes!==null)throw new Error('Incomplete GPU frame stream');}};
 }
 
 /** One provider for an existing MCP process, not a second game session owner. */
@@ -112,6 +137,7 @@ export function createGpuFrameSource({
   executable,
   platform=process.platform,
   spawnProcess=spawn,
+  executePreview=execFileAsync,
   statFile=lstat,
   clock=()=>Date.now(),
   schedule=setTimeout,
@@ -142,7 +168,8 @@ export function createGpuFrameSource({
         errors:state.errors,active:false});
     }
   }
-  async function start(slot,target,{durationMs=30000,fps=5}={}) {
+  async function start(slot,target,{durationMs=30000,fps=5,webpSize=null}={}) {
+    if(webpSize!==null)webpSize=previewSize(webpSize.width,webpSize.height);
     if (closed) throw new Error('GPU capture source closed');
     if (platform!=='win32') throw new Error('GPU capture is Windows-only');
     if (!Number.isInteger(slot) || slot<1 || slot>MAX_SLOTS ||
@@ -165,9 +192,11 @@ export function createGpuFrameSource({
         throw new Error('GPU worker executable must be an ordinary file');
       }
       const args=[
+        ...(webpSize?['--webp']:[]),
         '--pid',String(selected.pid),'--window-id',String(selected.windowId),
         '--birth',selected.createdFileTime,'--session',String(selected.sessionId),
-        '--duration-ms',String(durationMs),'--fps',String(fps)
+        '--duration-ms',String(durationMs),'--fps',String(fps),
+        ...(webpSize?['--width',String(webpSize.width),'--height',String(webpSize.height)]:[])
       ];
       const child=spawnProcess(executable,args,
         {shell:false,windowsHide:true,stdio:['ignore','pipe','ignore']});
@@ -186,12 +215,12 @@ export function createGpuFrameSource({
       try {
         const decoder=createGpuPacketDecoder(frame=>{
           if (!state.active) return;
-          // A new worker sequence can carry the EXACT same PNG bytes.
+          // A new worker sequence can carry the exact same image bytes.
           // Reuse the last encoded representation when it already exists,
-          // without re-encoding or retaining a second raw PNG buffer.
+          // without re-encoding or retaining a second raw image buffer.
           const prior=state.latest;
           if(typeof prior?.imageBase64==='string' &&
-             prior.sha256===frame.sha256 &&
+             prior.sha256===frame.sha256 && prior.mimeType===frame.mimeType &&
              prior.width===frame.width && prior.height===frame.height) {
             frame.imageBase64=prior.imageBase64;
             frame.bytes=null;
@@ -200,7 +229,7 @@ export function createGpuFrameSource({
           state.lastFrameAt=clock();
           state.frames++;
           state.status='FRAME_FROM_NATIVE_WGC_NOT_GAMEPLAY_VERIFIED';
-        },{clock});
+        },{clock,webpSize});
         child.stdout.on('data',chunk=>{
           if (!state.active) return;
           try {decoder.push(chunk);}
@@ -219,6 +248,7 @@ export function createGpuFrameSource({
       }
       return {slot,status:'GPU_SOURCE_STARTED_NO_FRAME_PROOF',
         provider:'NATIVE_WGC_PERSISTENT',durationMs,fps,
+        ...(webpSize?{mimeType:'image/webp',...webpSize}:{}),
         gameInput:'NOT_IMPLEMENTED'};
     } finally {
       if (pendingStarts.get(slot)===reservation) pendingStarts.delete(slot);
@@ -261,17 +291,66 @@ export function createGpuFrameSource({
     }
     return {
       provider:'NATIVE_WGC_PERSISTENT',
-      mimeType:'image/png',imageBase64:frame.imageBase64,
+      mimeType:frame.mimeType??'image/png',imageBase64:frame.imageBase64,
       width:frame.width,height:frame.height,sha256:frame.sha256,
       capturedAtMs:frame.capturedAtMs,
       workerSequence:frame.sequence,
       frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED',
     };
   }
+  // One-shot uses the SAME worker and target validation, without an
+  // active sampler or a second capture process for the same slot.
+  async function captureOnce(slot,target,size=DEFAULT_PREVIEW_SIZE) {
+    if(closed||platform!=='win32')throw new Error('GPU_PREVIEW_UNAVAILABLE');
+    if(!Number.isInteger(slot)||slot<1||slot>MAX_SLOTS)throw new Error('Invalid tool arguments');
+    const webpSize=previewSize(size.width,size.height);
+    const selected=validateGpuTarget(target);
+    if(slots.get(slot)?.active||pendingStarts.has(slot))throw new Error('GPU_PREVIEW_USE_EXISTING_SAMPLER');
+    const abort=new AbortController();
+    const reservation={cancelled:false,abort};
+    pendingStarts.set(slot,reservation);
+    try {
+      const file=await statFile(executable);
+      if(closed||reservation.cancelled||!file.isFile()||file.isSymbolicLink()) {
+        throw new Error('GPU_PREVIEW_UNAVAILABLE');
+      }
+      const args=['--preview','--pid',String(selected.pid),'--window-id',String(selected.windowId),
+        '--birth',selected.createdFileTime,'--session',String(selected.sessionId),
+        '--width',String(webpSize.width),'--height',String(webpSize.height)];
+      let output;
+      try {
+        ({stdout:output}=await executePreview(executable,args,{
+          encoding:'buffer',shell:false,windowsHide:true,timeout:8000,
+          maxBuffer:MAX_FRAME+HEADER,signal:abort.signal}));
+      }catch {throw new Error('GPU_PREVIEW_UNAVAILABLE');}
+      if(closed||reservation.cancelled||!Buffer.isBuffer(output)||output.length>MAX_FRAME+HEADER) {
+        throw new Error('GPU_PREVIEW_UNAVAILABLE');
+      }
+      let frame=null;
+      try {
+        const decoder=createGpuPacketDecoder(value=>{
+          if(frame!==null||value.sequence!==1)throw new Error('Expected one preview');
+          frame=value;
+        },{clock,webpSize});
+        decoder.push(output);
+        decoder.finish();
+      }catch {throw new Error('GPU_PREVIEW_UNAVAILABLE');}
+      const now=clock();
+      if(!frame||frame.capturedAtMs>now||now-frame.capturedAtMs>MAX_AGE_MS) {
+        throw new Error('GPU_PREVIEW_UNAVAILABLE');
+      }
+      return {provider:'NATIVE_WGC_ON_DEMAND',mimeType:'image/webp',
+        imageBase64:frame.bytes.toString('base64'),width:frame.width,height:frame.height,
+        sha256:frame.sha256,capturedAtMs:frame.capturedAtMs,workerSequence:frame.sequence,
+        frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED'};
+    }finally {
+      if(pendingStarts.get(slot)===reservation)pendingStarts.delete(slot);
+    }
+  }
   function stop(slotsToStop) {
     for(const slot of slotsToStop) {
       const reservation=pendingStarts.get(slot);
-      if(reservation) reservation.cancelled=true;
+      if(reservation) {reservation.cancelled=true;reservation.abort?.abort();}
       const state=slots.get(slot);
       if(state) drop(state,'STOPPED_BY_REQUEST');
     }
@@ -279,7 +358,7 @@ export function createGpuFrameSource({
   function shutdown() {
     closed=true;
     for(const reservation of pendingStarts.values()) {
-      reservation.cancelled=true;
+      reservation.cancelled=true;reservation.abort?.abort();
     }
     stop([...slots.keys()]);
     pendingStarts.clear();
@@ -290,5 +369,5 @@ export function createGpuFrameSource({
     return s?{slot,status:s.status,frames:s.frames,errors:s.errors,
       active:s.active}:{slot,status:'NOT_STARTED',active:false};
   }
-  return {start,latest,stop,shutdown,status};
+  return {start,latest,captureOnce,stop,shutdown,status};
 }

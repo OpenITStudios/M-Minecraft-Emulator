@@ -35,7 +35,7 @@ all illustrative paths with reviewed absolute local paths):
 ```toml
 [mcp_servers.lazy_tester]
 command = 'C:\Tools\node.exe'
-args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'playtest', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe']
+args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'playtest', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe', '--gpu-capture-exe', 'D:\ReviewedTools\lazy-tester-gpu-capture.exe']
 default_tools_approval_mode = 'prompt'
 ```
 
@@ -86,17 +86,26 @@ of autonomous play.
    may compose multiple explicit single-slot launches serially, stopping on
    refusal or uncertain outcome; no server-side launch batch or retries.
    A launch receipt is not a game/world/login receipt.
-2. Prefer one on-demand CUA screenshot for a concrete observation.
-   If WGC is explicitly selected, start its bounded sampler before reading
-   frames; stop it when done. Fetch metadata first for repeated monitoring
-   and retrieve pixels only for relevant fresh observations. Never assume
-   a changed image hash proves a game action.
+2. For a quick look, call `observe_client({slot:2})`: one WGC WebP
+   preview, 640x360 by default, no sampler startup or separate read.
+   Override both width and height only as needed (each 160–1536); e.g.
+   320x180 for a glance, 960x540 for detail. Same worker, direct WebP
+   lossless encoding of fitted pixels; no PNG intermediary or new codec.
+   If repeated monitoring is useful, start its bounded WebP sampler with
+   the chosen size; use metadata first and read with afterSequence to avoid
+   sending unchanged images. Stop before changing sampler resolution or
+   starting a separate one-shot on that slot. No automatic HD escalation.
+   An image hash is not gameplay proof. WebP is required for Playtest image
+   routes; if no reviewed optional WGC worker is configured, return
+   WEBP_CAPTURE_REQUIRES_WGC rather than silently use CUA PNG. CUA remains
+   semantic/no-image inspection and Legacy PNG compatibility.
 3. Actual gameplay input is BLOCKED_NO_VERIFIED_INPUT_BACKEND. A human can
    play using the normal app; do not turn a planned action into executed
    evidence or enable experiments to fill the gap. Close remains manual
    until the full desktop recording/window release admission can be reused.
-   Native product capture/recording approval is still held; existing CUA
-   or WGC providers are optional and not runtime verified.
+   Native product capture/recording approval is still held; the optional
+   WGC source requires a separately reviewed matching worker and host;
+   CUA PNG compatibility and WGC are not runtime verified.
 4. Before gameplay, call `summarize_test_evidence({slots:[2],window:'begin'})`
    to record a bounded local capture baseline for the selected slots. After
    play, call the same tool with `window:'read'`. Reuses the existing pinned
@@ -131,6 +140,22 @@ operator remains in control of manual app actions. Code Mode uses the
 same MCP request/result bounds; no additional native ownership or
 execution privilege is granted. Tool count is not measured latency,
 CPU, memory or token savings.
+
+### Visual context budget (source-only)
+
+Use WebP for new Playtest image calls, with the smallest readable fitted
+canvas. WebP reduces potential encoded payload size, not a guaranteed model
+token discount; dimensions and number of delivered images affect vision
+context according to the actual model/host. Use the host's supported low-detail
+option only when appropriate. OpenAI API vision accepts WebP and documents
+model-specific image sizing: https://developers.openai.com/api/docs/guides/images-vision.
+Actual Codex MCP image handling, native latency, compression ratios, clarity
+and token savings remain unverified. No automatic PNG retry or format lie.
+Legacy defaults remain PNG; explicit imageFormat='webp' with optional size is
+available only on non-experimental WGC connections. Resized WebP does not
+admit the legacy F3/XYZ review path or authorize coordinate-based input.
+Manual product screenshot remains original-resolution lossless WebP with its
+existing binary approval and no-overwrite save gates. No gate is opened here.
 
 ### Compact player action authoring (source-only)
 

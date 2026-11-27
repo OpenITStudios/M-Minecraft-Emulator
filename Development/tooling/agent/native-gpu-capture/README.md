@@ -32,7 +32,7 @@ lazy-tester-gpu-capture.exe
 ```
 
 The capture session owns one WGC window item. No interactive picker,
-monitor capture, full-desktop capture or file recording. The observation mode remains unchanged.
+monitor capture, full-desktop capture or file recording. The legacy LTG1 observation mode remains unchanged.
 
 Frames are fitted with letterboxing to fixed 960×540 RGBA, encoded into
 PNG and emitted as a binary stdout protocol. The worker reuses one PNG output
@@ -57,6 +57,26 @@ only selected frames to Codex. No callback into a game process is required.
 Windows may show a native capture border. WGC may return a black/stale
 surface or refuse certain protected/minimized windows. Runtime behavior
 for Minecraft Education 26.32/26.33 remains UNKNOWN.
+
+## Fitted AI WebP preview / observation (source-only)
+
+The same WGC producer and existing image-webp encoder expose two explicit
+modes, with bounded fitted width/height in 160–1536 (default selected by MCP
+640x360). No PNG intermediate, no second capture library or worker owner.
+
+```text
+lazy-tester-gpu-capture.exe --preview --pid <pid> --window-id <hwnd> --birth <birth> --session <session> --width 640 --height 360
+lazy-tester-gpu-capture.exe --webp --pid <pid> --window-id <hwnd> --birth <birth> --session <session> --duration-ms 5000 --fps 2 --width 320 --height 180
+```
+
+Both use the same 28-byte packet header with magic LTG2, actual fitted
+canvas dimensions, sequence, and producer readback timestamp; payload is
+one RIFF VP8L WebP up to 3 MiB. The parent selects the exact expected format
+and size; the one-shot parent requires exactly one complete packet and a
+successful bounded exit, and refuses an already-active sampler. Fit preserves
+aspect via the existing WGC fitting path; no promise of native pixel fidelity
+or coordinate mapping. WebP source readiness is not binary approval. No
+automatic fallback to LTG1 or CUA. Legacy CLI flags/PNG remain unchanged.
 
 ## Explicit one-shot product screenshot candidate (CAP-01)
 

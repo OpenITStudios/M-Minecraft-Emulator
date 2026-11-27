@@ -890,3 +890,29 @@ test('F3 screen review rejects a changed/stale/cross-slot frame and invalid text
   reject(m,{...evidence,recognizedLine:'Position: 1000000001, 70, 0'},
     'SCREEN_COORDINATES_OUT_OF_RANGE');
 });
+
+test('WebP sampler retains changed-only delivery and does not enable legacy screen review',async()=>{
+  const t=clockFixture();let sampled=0;
+  const observer=createVisualObserver({...t,capture:async slot=>{
+    const value=frame(slot);sampled++;
+    return {...value,metadata:{...value.metadata,provider:'NATIVE_WGC_PERSISTENT',
+      width:320,height:180,mimeType:'image/webp',screenshotStatus:'WEBP_RETURNED_NOT_GAMEPLAY_PROOF',
+      capturedAtMs:t.clock(),workerSequence:sampled}};
+  }});
+  try {
+    observer.start([2],{durationMs:10000});
+    await t.next();
+    const first=observer.read(2);
+    assert.equal(first.metadata.mimeType,'image/webp');
+    assert.equal(first.metadata.hasNewImage,true);
+    assert.equal(projectF3VisualReview(first.metadata).status,'NO_CURRENT_WINDOW_FRAME');
+    await t.next();
+    const next=observer.read(2,{afterSequence:first.metadata.sequence});
+    assert.equal(next.metadata.mimeType,'image/webp');
+    assert.equal(next.imageBase64,null);
+    assert.equal(next.metadata.repeatedFrameBytes,1);
+    const visual=summarizeTeamVisualState('human-plus-four-ai',[2],[next.metadata]);
+    assert.equal(visual.frames[0].mimeType,'image/webp');
+    assert.equal(Object.hasOwn(visual.frames[0],'pngBytesChangedSinceBaseline'),false);
+  }finally{observer.shutdown();}
+});
