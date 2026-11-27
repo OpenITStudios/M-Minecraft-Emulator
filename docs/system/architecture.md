@@ -103,9 +103,19 @@ layout/refresh admission and recording uncertainty retain their independent
 lifetimes; the UI is not a second lifecycle controller.
 
 One deadline-driven UI timer observes eligible sessions every 2 seconds
-when live/recovery/unsettled or every 10 seconds when healthy idle.
-Recording status uses its own 2-second deadline only while active or
-uncertain, sharing the earlier eligible wake. Blocked lanes have no
+during launch/recovery/unsettled or live non-Play, every 5 seconds in
+settled healthy Play (current selected binding and registered running
+background previews), or every 10 seconds when healthy idle. The existing
+identity-matched DWM invalidation, WebView focus return during live Play,
+and visibility resume coalesce a read hint against the existing 2-second
+last-start floor. Hints arriving during a read remain pending; blocked
+lanes retain their admission and the original read owns native verification.
+No direct preview retry, controller push subscription, new transport or
+watcher. Unsignaled exit/hang, newly published agent activity or other
+unhinted changes can wait until the longer live reconciliation (nominal
+5s, not a hard bound); launch/recovery/agent activity already observed
+retain the short lane. Recording status uses its own 2-second deadline
+only while active or uncertain, sharing the earlier eligible wake. Blocked lanes have no
 deadline, hidden views pause scheduled reads, and disposal cancels the
 timer. These are source scheduling targets, not measured latency.
 Explicit Refresh and native mutation admission remain independent.

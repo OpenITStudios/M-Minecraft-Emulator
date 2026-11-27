@@ -6,7 +6,7 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -174,7 +174,7 @@ describe('Lazy Tester profile contract', () => {
       expect(()=>parseNativeBackendSupport(forged)).toThrow('Invalid native backend capability');
     }
   });
-  it('schedules 10s healthy idle deadlines and 2s live or recovery deadlines', () => {
+  it('schedules 10s idle, 5s settled live Play and 2s recovery deadlines', () => {
     for (const page of ['settings', 'storage'] as const) {
       expect(periodicInspectionInterval(page, 0, true)).toBe(10_000);
       expect(periodicInspectionInterval(page, 1, true)).toBe(2000);
@@ -184,6 +184,19 @@ describe('Lazy Tester profile contract', () => {
     expect(periodicInspectionInterval('workspace', 0, true, true)).toBe(10_000);
     expect(periodicInspectionInterval('workspace', 1, true, true)).toBe(2000);
     expect(periodicInspectionInterval('workspace', 0, false, true)).toBe(2000);
+    expect(periodicInspectionInterval('workspace', 1, true, false, true)).toBe(5000);
+    expect(periodicInspectionInterval('workspace', 5, true, false, true)).toBe(5000);
+    expect(periodicInspectionInterval('workspace', 1, false, false, true)).toBe(2000);
+    expect(periodicInspectionInterval('settings', 1, true, false, true)).toBe(2000);
+    expect(periodicInspectionInterval('storage', 1, true, false, true)).toBe(2000);
+  });
+  it('coalesces hints against the last read start, not a new timer or deadline',()=>{
+    const started=1200;
+    expect(sessionInspectionDeadline(started,5000,false)).toBe(6200);
+    expect(sessionInspectionDeadline(started,5000,true)).toBe(3200);
+    expect(sessionInspectionDeadline(started,10000,true)).toBe(3200);
+    expect(sessionInspectionDeadline(started,2000,true)).toBe(3200);
+    expect(sessionInspectionDeadline(Number.NEGATIVE_INFINITY,5000,true)).toBe(Number.NEGATIVE_INFINITY);
   });
   it('uses one earliest deadline without accelerating the other lane', () => {
     const start=1200;
@@ -200,7 +213,16 @@ describe('Lazy Tester profile contract', () => {
   it('shares the observation clocks, pauses blocked lanes, and cancels the one timer on teardown', () => {
     const mounted = readFileSync(new URL('../src/LazyTesterApp.svelte', import.meta.url), 'utf8');
     expect(mounted).toMatch(/async function refresh\(\)[\s\S]*?refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/);
-    expect(mounted).toContain('lastInspectionStartedAt + periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle)');
+    expect(mounted).toContain('sessionInspectionDeadline(lastInspectionStartedAt,');
+    expect(mounted).toContain('periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle, workspaceSettledLive)');
+    expect(mounted).toContain("selectedIdentity !== '' && selectedIdentity === identity(profiles.find(profile => profile.slot === active))");
+    expect(mounted).toContain("profile.slot === active || previewStatuses.some(status => status.slot === profile.slot && status.registered)");
+    expect(mounted).toContain('lastInspectionStartedAt = performance.now();\n    sessionObservationHint = false;');
+    expect(mounted).toContain('if (visibilityChanged && visible) sessionObservationHint = true;');
+    expect(mounted).toContain("window.removeEventListener('focus', returnedFocus);");
+    const invalidation=mounted.split("void listen<string>('workspace-surface-error'")[1]!.split("void listen<number>")[0]!;
+    expect(invalidation.indexOf('!dwmPreviewInvalidationApplies')).toBeLessThan(invalidation.indexOf('sessionObservationHint=true;'));
+    expect(invalidation).not.toContain('void refresh()');
     expect(mounted).toContain('lastRecordingInspectionStartedAt + 2000');
     expect(mounted).toContain('sessionObservationEnabled = mounted && !disposed && managerVisible');
     expect(mounted).toContain('recordingObservationEnabled = mounted && !disposed && managerVisible');

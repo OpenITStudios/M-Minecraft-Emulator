@@ -1035,8 +1035,9 @@ try {
   await page.getByRole('status',{name:'Minecraft - 2 preview unavailable'}).waitFor();
   assert.equal(await page.getByRole('status',{name:'Minecraft - 3 preview unavailable'}).count(),0);
 
-  // DWM refresh has its own existing error event; no extra native RPC or
-  // periodic layout. A worker-side failure invalidates MC02 only. An event
+  // DWM refresh has its own existing error event. It may hint the existing
+  // read lane, but never directly schedule preview RPC/layout. A worker-side
+  // failure invalidates MC02 only. An event
   // from another PID is ignored rather than changing MC02's current image.
   await page.goto('http://lazy-tester.test/?preview-async=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
@@ -1044,6 +1045,21 @@ try {
   await page.waitForFunction(()=>window.__nativeListeners.has('workspace-surface-error') &&
     window.__calls.some(call=>call.command==='lazy_tester_previews'));
   await heading('Minecraft 1').waitFor();
+  // A settled live Play roster with current selected identity and registered
+  // peers waits for the 5s fallback. A focus hint shortens that same deadline.
+  // Start from an observed Inspect so there is no ambiguous old clock.
+  await page.waitForFunction(()=>window.__calls.some(call=>call.command==='lazy_tester_previews' &&
+    call.args.tiles.some(tile=>tile.slot===2) && call.args.tiles.some(tile=>tile.slot===3)));
+  const beforeStableInspect=await countInspect();
+  await page.waitForFunction(count=>window.__calls.filter(call=>call.args?.request?.operation==='Inspect').length>count,beforeStableInspect);
+  const stableInspectCount=await countInspect();
+  await page.waitForTimeout(2150);
+  assert.equal(await countInspect(),stableInspectCount,'Settled live Play must not poll at 2s');
+  await page.evaluate(()=>{for(let i=0;i<8;i++)window.dispatchEvent(new Event('focus'));});
+  await page.waitForFunction(count=>window.__calls.filter(call=>call.args?.request?.operation==='Inspect').length===count+1,
+    stableInspectCount,{timeout:1800});
+  await page.waitForTimeout(2150);
+  assert.equal(await countInspect(),stableInspectCount+1,'Focus hint burst must not replay or add a second timer');
   const readPreviewGeometry=()=>page.evaluate(()=>['.lazytester-viewport',...Array.from({length:5},(_,i)=>'.lazytester-launcher-entry[data-slot="'+(i+1)+'"] .lazytester-launcher-preview')].map(selector=>{
     const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
     return {x,y,width,height};

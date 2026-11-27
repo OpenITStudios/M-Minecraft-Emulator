@@ -114,16 +114,26 @@ export function releasedSelectionStillCurrent(
     released.identity === current.identity;
 }
 
-// Schedule the actual deadline, not a 2s tick that merely checks a 10s
-// threshold. Keep the existing live/recovery and healthy idle policies.
+// Schedule the actual deadline. Only a settled Play observation with
+// current selected identity and background preview coverage may slow live
+// inspection. Neither coverage nor an event certifies native liveness.
 export function periodicInspectionInterval(
   page: 'workspace' | 'storage' | 'settings',
   runningCount: number,
   available: boolean,
   workspaceSettledIdle = false,
+  workspaceSettledLive = false,
 ): number {
+  if (!available) return 2000;
+  if (page === 'workspace' && runningCount > 0 && workspaceSettledLive) return 5000;
   return (page === 'workspace' && !workspaceSettledIdle) ||
-    runningCount > 0 || !available ? 2000 : 10_000;
+    runningCount > 0 ? 2000 : 10_000;
+}
+
+// A hint accelerates the next read, never resets its last-start clock or
+// bypasses the existing admission lane. Bursts coalesce at the 2s floor.
+export function sessionInspectionDeadline(lastStartedAt: number, interval: number, hinted: boolean): number {
+  return lastStartedAt + (hinted ? Math.min(interval, 2000) : interval);
 }
 
 // A blocked lane has no deadline. A recording never accelerates session

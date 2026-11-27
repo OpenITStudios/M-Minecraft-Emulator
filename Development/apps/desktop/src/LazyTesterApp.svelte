@@ -15,7 +15,7 @@
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
   import type {StorageReview, StorageReviewKind, StorageSettingsAction} from './app/storageReview.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -156,6 +156,8 @@
   let manualRefreshRequested=false, manualRefreshing=false;
   // Each observation uses its own last-start deadline; both share one timer.
   let lastInspectionStartedAt = Number.NEGATIVE_INFINITY;
+  // One coalesced hint for the existing read lane, not a native receipt.
+  let sessionObservationHint = false;
   let lastRecordingInspectionStartedAt = Number.NEGATIVE_INFINITY;
   let managerVisible = false;
   let observationTimer: number | undefined;
@@ -234,13 +236,22 @@
     previewsVisible: page === 'workspace' && !detached,
   });
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
-  // Only a fully observed healthy stopped roster may slow Play. Keep
-  // existing rapid observation for launch, recovery and agent activity.
-  $: workspaceSettledIdle = profiles.length === 5 &&
-    profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null) &&
-    active === null && requested === null && queued === null && queuedLaunch === null &&
+  // Only fully observed, healthy Play may slow reconciliation. A selected
+  // native binding and registered background previews provide event hints,
+  // not proof that the game is still alive or responsive.
+  $: workspaceObservationHealthy = profiles.length === 5 &&
+    requested === null && queued === null && queuedLaunch === null &&
     !detached && attentionCount === 0 && issueKey === null && connectionIssueKey === null &&
     previewIssue === '' && !closeFailure && agentActivity === null;
+  $: workspaceSettledIdle = workspaceObservationHealthy && active === null &&
+    profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null);
+  $: workspaceSettledLive = workspaceObservationHealthy && active !== null &&
+    selectedIdentity !== '' && selectedIdentity === identity(profiles.find(profile => profile.slot === active)) &&
+    profiles.some(profile => profile.slot === active && profile.state === 'RUNNING') &&
+    profiles.every(profile => profile.issue === null &&
+      (profile.state === 'STOPPED' && profile.process === null ||
+       profile.state === 'RUNNING' && profile.process?.responding === true &&
+       (profile.slot === active || previewStatuses.some(status => status.slot === profile.slot && status.registered))));
   // All reactive dependencies are explicit. A blocked lane has no deadline;
   // resuming uses its last start, not a fresh full delay after each UI event.
   $: sessionObservationEnabled = mounted && !disposed && managerVisible &&
@@ -251,7 +262,9 @@
     recordingAvailable && recordingWatch && !recordingStatusPending &&
     activeOperation === null && !closeInProgress && !nativeExitReview;
   $: sessionDeadline = sessionObservationEnabled
-    ? lastInspectionStartedAt + periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle)
+    ? sessionInspectionDeadline(lastInspectionStartedAt,
+        periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle, workspaceSettledLive),
+        sessionObservationHint)
     : null;
   $: recordingDeadline = recordingObservationEnabled ? lastRecordingInspectionStartedAt + 2000 : null;
   $: scheduleBackgroundObservation(sessionDeadline, recordingDeadline);
@@ -384,6 +397,7 @@
     const issued = observationEpoch;
     refreshing = true;
     lastInspectionStartedAt = performance.now();
+    sessionObservationHint = false;
     try {
       const snapshot = page === 'settings' || page === 'storage' ? await lazyTester.settings() : await lazyTester.inspect();
       // A close review starting mid-request invalidates this old snapshot.
@@ -495,6 +509,7 @@
       }
       if(next==='settings'||next==='storage') {
         lastInspectionStartedAt=performance.now();
+        sessionObservationHint=false;
         const snapshot=await lazyTester.settings();
         if (!current()) return;
         publishProfiles(snapshot.profiles);observeSettings(snapshot.settings);available=true;
@@ -1115,6 +1130,7 @@
       const visible = !document.hidden;
       const visibilityChanged = managerVisible !== visible;
       managerVisible = visible;
+      if (visibilityChanged && visible) sessionObservationHint = true;
       if (!managerVisible) {
         previewStatuses=[];pendingPreviewInvalidations.clear();
       }
@@ -1122,6 +1138,11 @@
           event?.type==='visibilitychange') dirty = true;
     };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
+    const returnedFocus = () => {
+      if (page==='workspace' && available && runningCount>0 && managerVisible)
+        sessionObservationHint=true;
+    };
+    window.addEventListener('focus', returnedFocus);
     const stopDisplayScale=observeDisplayScale(window,changed);
     // Main can scroll even when native targets retain their original size.
     const workspaceScrolled = (event: Event) => {
@@ -1170,7 +1191,10 @@
           !dwmPreviewInvalidationApplies(notice,profiles.find(p=>p.slot===notice.slot))) return;
         previewInvalidationEpoch++;
         pendingPreviewInvalidations.set(notice.slot,{...notice,epoch:previewInvalidationEpoch});
-        // Preserve peer statuses and avoid new preview RPC/layout work.
+        // Hint only the existing session read lane. A stale/unmatched
+        // notice is rejected above; unchanged native identity never relayouts.
+        sessionObservationHint=true;
+        // Preserve peer statuses and avoid direct preview RPC/layout work.
         previewStatuses=previewStatuses.map(status=>status.slot===notice.slot?
           {...status,registered:false,reason:notice.reason}:status);
       } catch (error) {issueKey='preview';}
@@ -1184,6 +1208,7 @@
     return () => {
       mounted = false; disposed = true; clearBackgroundObservation(); observer?.disconnect();stopDisplayScale();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
+      window.removeEventListener('focus', returnedFocus);
       document.removeEventListener('scroll', workspaceScrolled, true);
       stops.forEach(stop => stop());pendingPreviewInvalidations.clear();
       // Unsupported diagnostic UI holds no native game-window lease.
