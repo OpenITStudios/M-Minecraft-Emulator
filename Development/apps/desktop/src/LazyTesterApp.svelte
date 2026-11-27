@@ -505,7 +505,7 @@
     if(busy||refreshing||resizing||!available||navigationReviewOpen||settings?.storagePreferences===undefined)return;
     busy=true;storageNotice='';
     try {
-      const snapshot=await lazyTester.saveStoragePreferences({autoClearWebCache:enabled});
+      const snapshot=await lazyTester.saveStoragePreferences({...settings.storagePreferences,autoClearWebCache:enabled});
       settings=snapshot.settings;publishProfiles(snapshot.profiles);
       storageNotice='Web cache preference saved.';
     } catch {

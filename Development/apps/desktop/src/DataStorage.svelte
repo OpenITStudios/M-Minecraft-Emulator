@@ -180,7 +180,7 @@
                 <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Old Logs" checked={false} disabled/></label>
               </div>
               <div class="lazytester-actions lazytester-settings-panel-footer lazytester-global-storage-footer">
-                <p class="lazytester-help">Web cache preference is saved when changed. Download cache and log cleanup remain unavailable.</p>
+                <p class="lazytester-help">Web cache preference is saved when changed. Download cache and old log preferences remain off until native target verification.</p>
               </div>
             </div>
           </section>

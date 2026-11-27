@@ -35,7 +35,7 @@ export function parseNativeBackendSupport(value: unknown): NativeBackendSupport 
 }
 export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
-export interface StoragePreferences {autoClearWebCache:boolean}
+export interface StoragePreferences {autoClearWebCache:boolean; autoClearDownloadCache?:boolean; autoClearOldLogs?:boolean}
 export interface SettingsReport {storagePreferences?:StoragePreferences; backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
 export type SelectiveCategory = 'Worlds' | 'ResourcePacks' | 'BehaviorPacks';
 export interface SelectiveInventory {slot: ProfileSlot; category: SelectiveCategory; items: {root: string; name: string; identity: string}[]}
@@ -314,7 +314,7 @@ export function parseSession(value: unknown): SessionSnapshot {
   if(Object.hasOwn(value,'settings')) {
     const settings=value.settings;
     if(!record(settings)||!exact(settings,['activeFps','backgroundFps','renderDistanceChunks','canApplyPreset','changedProfiles',...['graphicsPresets','backgroundAudio','audioIssue','storagePreferences'].filter(key=>Object.hasOwn(settings,key))])||
-      Object.hasOwn(settings,'storagePreferences')&&(!record(settings.storagePreferences)||!exact(settings.storagePreferences,['autoClearWebCache'])||typeof settings.storagePreferences.autoClearWebCache!=='boolean')||
+      Object.hasOwn(settings,'storagePreferences')&&(!record(settings.storagePreferences)||!exact(settings.storagePreferences,['autoClearWebCache',...['autoClearDownloadCache','autoClearOldLogs'].filter(key=>Object.hasOwn(settings.storagePreferences as object,key))])||typeof settings.storagePreferences.autoClearWebCache!=='boolean'||Object.hasOwn(settings.storagePreferences,'autoClearDownloadCache')&&typeof settings.storagePreferences.autoClearDownloadCache!=='boolean'||Object.hasOwn(settings.storagePreferences,'autoClearOldLogs')&&typeof settings.storagePreferences.autoClearOldLogs!=='boolean')||
       Object.hasOwn(settings,'backgroundAudio')&&!['Keep','Mute'].includes(String(settings.backgroundAudio))||
       Object.hasOwn(settings,'audioIssue')&&(!Object.hasOwn(settings,'backgroundAudio')||typeof settings.audioIssue!=='string'||settings.audioIssue.length>8192)||
       Object.hasOwn(settings,'graphicsPresets')&&(!Array.isArray(settings.graphicsPresets)||settings.graphicsPresets.length!==5||settings.graphicsPresets.some(p=>p!=='Preserve'&&p!=='High'&&p!=='Low'))||
@@ -427,9 +427,10 @@ export function parseSelectedClose(value:unknown):SelectedCloseReport {
 
 export const lazyTester = {
   saveStoragePreferences:async(preferences:StoragePreferences)=>{
-    if(typeof preferences.autoClearWebCache!=='boolean')throw new TypeError('Invalid storage preference');
+    if(typeof preferences.autoClearWebCache!=='boolean'||preferences.autoClearDownloadCache===true||preferences.autoClearOldLogs===true)throw new TypeError('Unverified storage cleanup preference');
     const snapshot=settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveStoragePreferences',preferences}}));
-    if(snapshot.settings.storagePreferences?.autoClearWebCache!==preferences.autoClearWebCache)throw new TypeError('Storage preference could not be confirmed');
+    const saved=snapshot.settings.storagePreferences;
+    if(saved?.autoClearWebCache!==preferences.autoClearWebCache||(saved.autoClearDownloadCache??false)!==(preferences.autoClearDownloadCache??false)||(saved.autoClearOldLogs??false)!==(preferences.autoClearOldLogs??false))throw new TypeError('Storage preference could not be confirmed');
     return snapshot;
   },
   saveAudio:async(mode:BackgroundAudio)=>{

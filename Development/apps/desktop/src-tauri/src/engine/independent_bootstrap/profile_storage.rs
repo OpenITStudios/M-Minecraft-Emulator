@@ -35,7 +35,6 @@ fn expired_log(last_write: u64, now: u64) -> bool {
 // Internal candidate policy. The root and file class must come
 // from a native-reviewed producer contract, never a UI path or extension
 // search. A .log suffix is NOT sufficient to identify a producer's logs.
-#[allow(dead_code)]
 fn plan_expired_logs(root: &File, now: u64, budget: InspectionBudget, deleting: bool,
     is_owned_log: impl Fn(&std::ffi::OsStr) -> bool) -> io::Result<ExpiredLogPlan> {
     super::directory_id(root)?;
@@ -80,14 +79,12 @@ fn plan_expired_logs(root: &File, now: u64, budget: InspectionBudget, deleting: 
     Ok(ExpiredLogPlan { _root: root, candidates, budget, deleting })
 }
 
-#[allow(dead_code)]
 struct ExpiredLogPlan {
     _root: File,
     candidates: Vec<File>,
     budget: InspectionBudget,
     deleting: bool,
 }
-#[allow(dead_code)]
 impl ExpiredLogPlan {
     // Only a complete mutating plan is disposable. The caller must first
     // verify producer identity, root and native idle admission. No public
@@ -103,6 +100,43 @@ impl ExpiredLogPlan {
     }
 }
 
+
+// Source-owned producer contract: add a concrete root and exact filename
+// classifier only after matching native producer evidence. Never accept a
+// path or classifier from IPC/settings, and never treat arbitrary .log as safe.
+struct LogProducer {
+    parts: &'static [&'static str],
+    owns: fn(&std::ffi::OsStr) -> bool,
+}
+const LOG_PRODUCER: Option<LogProducer> = None;
+pub(super) fn clear_old_logs(private: &File, inactive: bool) -> io::Result<()> {
+    if !crate::engine::manager_settings::OLD_LOGS_REVIEWED {
+        return Err(io::Error::new(io::ErrorKind::Unsupported,"Minecraft log producer is not verified"));
+    }
+    let producer=LOG_PRODUCER.ok_or_else(||io::Error::new(io::ErrorKind::Unsupported,"Minecraft log root is not verified"))?;
+    if !inactive || producer.parts.is_empty() {return Err(invalid("Log retention not admitted"));}
+    let budget=InspectionBudget::new(Duration::from_secs(2));
+    let mut path=directory_path(private)?;
+    let mut pins=vec![private.try_clone()?];
+    for part in producer.parts {
+        let mut components=Path::new(part).components();
+        if budget.exhausted()||!matches!(components.next(),Some(std::path::Component::Normal(_)))||components.next().is_some()||part.contains(':') {
+            return Err(invalid("Unsupported log root"));
+        }
+        path.push(part);
+        match open_directory(&path,FILE_READ_ATTRIBUTES|FILE_LIST_DIRECTORY) {
+            Ok(pin)=>pins.push(pin),
+            Err(e) if e.kind()==io::ErrorKind::NotFound=>return Ok(()),
+            Err(e)=>return Err(e),
+        }
+    }
+    let root=pins.last().ok_or_else(||invalid("Log root unavailable"))?;
+    let elapsed=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?;
+    let ticks=u64::try_from(elapsed.as_nanos()/100).map_err(io::Error::other)?
+        .checked_add(116_444_736_000_000_000).ok_or_else(||invalid("Log timestamp overflow"))?;
+    // All ancestor pins survive disposition; no recursive or path-based fallback.
+    plan_expired_logs(root,ticks,budget,true,producer.owns)?.dispose()
+}
 
 pub(super) fn scan_profile_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget) {
     scan_size(path, result, budget, 0);
@@ -616,6 +650,13 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    #[test]
+    fn unreviewed_log_cleanup_is_refused_before_touching_profile() {
+        let fixture=Fixture::new();let pin=fixture.pin();
+        fs::write(fixture.0.join("keep.log"),b"keep").unwrap();
+        assert_eq!(clear_old_logs(&pin,true).unwrap_err().kind(),io::ErrorKind::Unsupported);
+        assert_eq!(fs::read(fixture.0.join("keep.log")).unwrap(),b"keep");
+    }
     #[test]
     fn retention_keeps_recent_boundary_future_and_unknown_timestamps() {
         let now = LOG_RETENTION_TICKS + 100;

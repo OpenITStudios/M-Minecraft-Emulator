@@ -105,9 +105,28 @@ pub(crate) fn product_settings() -> io::Result<PathBuf> {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StoragePreferences {
     pub auto_clear_web_cache: bool,
+    #[serde(default)]
+    pub auto_clear_download_cache: bool,
+    #[serde(default)]
+    pub auto_clear_old_logs: bool,
+}
+
+// Explicit native acceptance gates; a preference is never producer evidence.
+pub(crate) const DOWNLOAD_CACHE_REVIEWED: bool = false;
+pub(crate) const OLD_LOGS_REVIEWED: bool = false;
+impl StoragePreferences {
+    fn validate(&self) -> io::Result<()> {
+        if self.auto_clear_download_cache && !DOWNLOAD_CACHE_REVIEWED || self.auto_clear_old_logs && !OLD_LOGS_REVIEWED {
+            return Err(io::Error::new(io::ErrorKind::Unsupported,"Download cache or old log cleanup is not native-verified"));
+        }
+        Ok(())
+    }
+    pub(super) fn has_maintenance(&self) -> bool {
+        self.auto_clear_web_cache || (DOWNLOAD_CACHE_REVIEWED && self.auto_clear_download_cache) || (OLD_LOGS_REVIEWED && self.auto_clear_old_logs)
+    }
 }
 impl Default for StoragePreferences {
-    fn default() -> Self { Self { auto_clear_web_cache: true } }
+    fn default() -> Self { Self { auto_clear_web_cache: true, auto_clear_download_cache: false, auto_clear_old_logs: false } }
 }
 pub fn load_storage_preferences() -> io::Result<StoragePreferences> {
     read_storage_preferences(&product_settings()?.join("storage.json"))
@@ -136,10 +155,13 @@ fn read_storage_preferences(path:&std::path::Path)->io::Result<StoragePreference
     #[cfg(windows)] {use std::os::windows::fs::MetadataExt; if meta.file_attributes()&0x400!=0{return Err(io::Error::other("Linked storage settings"));}}
     file.take(4097).read_to_end(&mut bytes)?;
     if bytes.len()>4096{return Err(io::Error::other("Storage settings are too large"));}
-    serde_json::from_slice(&bytes).map_err(|_|io::Error::other("Storage settings invalid; saved file preserved"))
+    let value: StoragePreferences=serde_json::from_slice(&bytes).map_err(|_|io::Error::other("Storage settings invalid; saved file preserved"))?;
+    value.validate()?;
+    Ok(value)
 }
 fn write_storage_preferences(path:&std::path::Path,value:StoragePreferences)->io::Result<()> {
     use std::io::Write;
+    value.validate()?;
     read_storage_preferences(path)?;
     let temp=path.with_extension(format!("{}-{}.tmp",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_nanos()));
     let mut file=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
@@ -303,7 +325,12 @@ mod tests {
         let root=std::env::temp_dir().join(format!("lazy-storage-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         fs::create_dir(&root).unwrap();let path=root.join("storage.json");
         assert!(read_storage_preferences(&path).unwrap().auto_clear_web_cache);
-        let disabled=StoragePreferences{auto_clear_web_cache:false};
+        let disabled=StoragePreferences{auto_clear_web_cache:false,..StoragePreferences::default()};
+        assert!(!disabled.has_maintenance());
+        fs::write(&path,br#"{"autoClearWebCache":false}"#).unwrap();
+        assert_eq!(read_storage_preferences(&path).unwrap(),disabled);
+        assert!(write_storage_preferences(&path,StoragePreferences{auto_clear_old_logs:true,..disabled}).is_err());
+        assert!(write_storage_preferences(&path,StoragePreferences{auto_clear_download_cache:true,..disabled}).is_err());
         write_storage_preferences(&path,disabled).unwrap();
         assert_eq!(read_storage_preferences(&path).unwrap(),disabled);
         write_storage_preferences(&path,StoragePreferences::default()).unwrap();

@@ -74,3 +74,11 @@ it('keeps both selective disposition categories held and uses distinct IPC opera
   expect(dialog).toContain('worldsOnly||packsOnly');
   expect(source('app/bridge/lazyTester.ts')).toContain("operation:'ConfirmSelectedPacks'");
 });
+
+
+it('does not expose native-held automatic cleanup as enabled',()=>{
+  const bridge=source('app/bridge/lazyTester.ts');
+  expect(bridge).toContain('preferences.autoClearDownloadCache===true||preferences.autoClearOldLogs===true');
+  const app=source('LazyTesterApp.svelte');
+  expect(app).toContain('...settings.storagePreferences,autoClearWebCache:enabled');
+});

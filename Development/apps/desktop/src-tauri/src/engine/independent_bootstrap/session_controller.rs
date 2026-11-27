@@ -96,8 +96,8 @@ struct Sessions {
     windows: Vec<Option<OwnedProcess>>,
     path: String,
     exiting: bool,
-    // One best-effort cache cleanup per confirmed successful exit, never a worker.
-    pending_http_cleanup: [bool; 5],
+    // One best-effort storage maintenance job per confirmed successful exit, never a worker.
+    pending_storage_maintenance: [bool; 5],
     #[cfg(feature="mc02-native-input")]
     ai_leases:AiLeaseBook, // ONE native actor: no additional game owner.
 }
@@ -132,7 +132,7 @@ impl Sessions {
             windows: vec![None; 5],
             path,
             exiting: false,
-            pending_http_cleanup: [false; 5],
+            pending_storage_maintenance: [false; 5],
             #[cfg(feature="mc02-native-input")]
             ai_leases:AiLeaseBook::default(),
         })
@@ -175,7 +175,7 @@ impl Sessions {
             let started = self.running[index].take().unwrap();
             let [mut child] = started.children;
             self.stores[index] = child.storage.take();
-            self.pending_http_cleanup[index] = code == 0 && journal_saved && self.stores[index].is_some();
+            self.pending_storage_maintenance[index] = code == 0 && journal_saved && self.stores[index].is_some();
             self.windows[index] = None;
             #[cfg(feature="mc02-native-input")]
             self.ai_leases.forget_slot(index as u32+1);
@@ -204,7 +204,7 @@ impl Sessions {
         let index = slot as usize - 1;
         self.reap();
         // A new launch supersedes optional cleanup from the prior exit.
-        self.pending_http_cleanup[index] = false;
+        self.pending_storage_maintenance[index] = false;
         #[cfg(feature="mc02-native-input")]
         if let Some(mode)=experimental_input {
             // A single controller must not mix hybrid and full-AI channels.
@@ -862,12 +862,13 @@ impl Sessions {
 
     // Run only from the existing idle maintenance lane, after queued requests
     // have priority. Never delay a close reply or retry an uncertain deletion.
-    fn maintain_http_cache(&mut self) {
-        if self.exiting { self.pending_http_cleanup = [false; 5]; return; }
-        let Some(index) = self.pending_http_cleanup.iter().position(|pending| *pending) else { return; };
-        self.pending_http_cleanup[index] = false;
+    fn maintain_storage(&mut self) {
+        if self.exiting { self.pending_storage_maintenance = [false; 5]; return; }
+        let Some(index) = self.pending_storage_maintenance.iter().position(|pending| *pending) else { return; };
+        self.pending_storage_maintenance[index] = false;
         // Missing preferences preserve the established default; corrupt/unreadable preferences fail closed.
-        if !crate::engine::manager_settings::load_storage_preferences().is_ok_and(|p|p.auto_clear_web_cache) {return;}
+        let Ok(preferences)=crate::engine::manager_settings::load_storage_preferences() else {return;};
+        if !preferences.has_maintenance() {return;}
         let slot = index as u32 + 1;
         let Ok(workspace) = super::super::inspect_native_workspace() else { return; };
         if self.data_admission(slot, &workspace.processes).is_err() { return; }
@@ -879,7 +880,10 @@ impl Sessions {
         }
         // Best effort: a locked file, incomplete preflight, or lost admission
         // is not a game exit failure and never triggers a retry loop.
-        let _ = profile_storage::clear(&store.private, true);
+        // Do not retry or continue to another target after an uncertain failure.
+        if preferences.auto_clear_web_cache && profile_storage::clear(&store.private,true).is_err() {return;}
+        if preferences.auto_clear_download_cache && profile_storage::clear_cache_target(&store.private,profile_storage::CacheTarget::Download,true).is_err() {return;}
+        if preferences.auto_clear_old_logs {let _=profile_storage::clear_old_logs(&store.private,true);}
     }
 
     fn selective_inventory(&mut self, slot: u32, category: SelectiveCategory) -> io::Result<SelectiveInventory> {
@@ -980,7 +984,7 @@ impl Sessions {
 
     fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
         self.admit_profile_mutation(slot)?;
-        self.pending_http_cleanup[slot as usize - 1] = false;
+        self.pending_storage_maintenance[slot as usize - 1] = false;
         profile_storage::clear(&self.store(slot)?.private, true)
     }
 
@@ -1006,7 +1010,7 @@ impl Sessions {
     fn clear_data(&mut self,slot:u32,token:&str)->io::Result<()> {
         self.admit_profile_mutation(slot)?;
         let index=slot as usize-1;
-        self.pending_http_cleanup[index] = false;
+        self.pending_storage_maintenance[index] = false;
         let store=self.store(slot)?;
         if product_profiles::clear::confirmation(store)?!=token {
             return Err(invalid("Launcher data changed after confirmation; review it again"));
@@ -1611,7 +1615,7 @@ fn run() -> io::Result<()> {
                 // An original game exit is still observed within the same
                 // 250 ms idle policy. Audio does not gate or replace reaping.
                 sessions.reap();
-                sessions.maintain_http_cache();
+                sessions.maintain_storage();
                 let roster = audio_roster(&sessions);
                 if !audio_maintenance_needed(audio_mode, audio.is_some(), roster) {
                     audio_issue = None;
@@ -1713,7 +1717,7 @@ fn run() -> io::Result<()> {
                 }
                 SessionRequest::SaveStoragePreferences {preferences}=>{
                     crate::engine::manager_settings::save_storage_preferences(preferences).map_err(|e|e.to_string())?;
-                    if !preferences.auto_clear_web_cache {sessions.pending_http_cleanup=[false;5];}
+                    if !preferences.has_maintenance() {sessions.pending_storage_maintenance=[false;5];}
                     settings=Some(sessions.fresh_settings_report().map_err(|e|e.to_string())?);
                 }
                 SessionRequest::SaveAudio {mode}=>{
@@ -2164,7 +2168,7 @@ mod tests {
             issues:vec![None;5],windows:vec![None;5],
             path:String::new(),
             exiting:false,
-            pending_http_cleanup:[false;5],
+            pending_storage_maintenance:[false;5],
             #[cfg(feature="mc02-native-input")]
             ai_leases:AiLeaseBook::default(),
         };
@@ -2186,12 +2190,12 @@ mod tests {
         let mut sessions=Sessions {
             stores:(0..5).map(|_|None).collect(), running:(0..5).map(|_|None).collect(),
             issues:vec![None;5], windows:vec![None;5], path:String::new(),
-            exiting:true, pending_http_cleanup:[true;5],
+            exiting:true, pending_storage_maintenance:[true;5],
             #[cfg(feature="mc02-native-input")]
             ai_leases:AiLeaseBook::default(),
         };
-        sessions.maintain_http_cache();
-        assert_eq!(sessions.pending_http_cleanup,[false;5]);
+        sessions.maintain_storage();
+        assert_eq!(sessions.pending_storage_maintenance,[false;5]);
     }
 
     #[test]
@@ -2210,7 +2214,7 @@ mod tests {
 
     #[test]
     fn full_exit_of_idle_sessions_does_not_prepare_profiles_and_denies_new_launches() {
-        let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),exiting:false,pending_http_cleanup:[false;5],#[cfg(feature="mc02-native-input")] ai_leases:AiLeaseBook::default()};
+        let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),exiting:false,pending_storage_maintenance:[false;5],#[cfg(feature="mc02-native-input")] ai_leases:AiLeaseBook::default()};
         // The selected-close owner must never report a successful exit
         // for a stopped slot even if it has no process to wait for.
         for slot in 1..=5 {
@@ -2439,7 +2443,7 @@ mod tests {
             stores:(0..5).map(|_|None).collect(), running:(0..5).map(|_|None).collect(),
             issues:vec![None;5], windows:vec![None;5], path:String::new(),
             exiting:false,
-            pending_http_cleanup:[false;5],
+            pending_storage_maintenance:[false;5],
             #[cfg(feature="mc02-native-input")]
             ai_leases:AiLeaseBook::default(),
         };
