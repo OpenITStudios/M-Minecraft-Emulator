@@ -362,6 +362,72 @@ pub(super) fn global_pack_references(private: &File, budget: InspectionBudget)
     Ok(refs.map(|refs| refs.into_iter().map(|r| r.pack_id.to_ascii_lowercase()).collect()))
 }
 
+// The review retains native identities but grants no mutation authority.
+// Caller selections must match fresh enumerated entries, never joined paths.
+pub(super) struct ReviewSelection {
+    pub(super) category: InventoryCategory,
+    pub(super) root: String,
+    pub(super) name: String,
+}
+
+pub(super) struct SelectiveReview {
+    pub(super) profile_identity: windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
+    pub(super) items: Vec<InventoryItem>,
+    pub(super) warnings: Vec<String>,
+}
+
+pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
+    budget: InspectionBudget) -> io::Result<SelectiveReview> {
+    if selections.is_empty() || selections.len() > 128 || budget.exhausted() {
+        return Err(io::Error::other("Invalid or expired selective review"));
+    }
+    let profile_identity = directory_id(private)?;
+    let mut items = Vec::new();
+    for category in [InventoryCategory::Worlds, InventoryCategory::ResourcePacks, InventoryCategory::BehaviorPacks] {
+        if !selections.iter().any(|s| s.category == category) { continue; }
+        let inventory = individual_inventory(private, category, budget)?;
+        for selection in selections.iter().filter(|s| s.category == category) {
+            let item = inventory.iter().find(|item| item.root == selection.root.as_str()
+                && item.name == selection.name)
+                .ok_or_else(|| io::Error::other("Selection no longer matches inventory"))?;
+            if items.iter().any(|previous: &InventoryItem| super::same_image(&previous.identity, &item.identity)) {
+                return Err(io::Error::other("Duplicate selective review item"));
+            }
+            items.push(InventoryItem {
+                category, root: item.root, name: item.name.clone(), identity: item.identity,
+            });
+        }
+    }
+    let mut warnings = Vec::new();
+    if items.iter().any(|item| item.category != InventoryCategory::Worlds) {
+        let packs = pack_dependency_evidence(private, budget)?;
+        let worlds = world_pack_references(private, budget)?;
+        let global = global_pack_references(private, budget)?;
+        for item in items.iter().filter(|item| item.category != InventoryCategory::Worlds) {
+            let pack = packs.iter().find(|pack| super::same_image(&item.identity, &pack.item.identity))
+                .ok_or_else(|| io::Error::other("Selected pack identity changed during review"))?;
+            // Compare UUID regardless of declared version: a mismatch is
+            // not evidence that the selected installed pack is dispensable.
+            if worlds.iter().any(|reference| reference.uuid == pack.uuid) {
+                warnings.push(format!("{} / {}: referenced by a world", item.root, item.name));
+            }
+            if packs.iter().any(|other| other.dependencies.contains(&pack.uuid)) {
+                warnings.push(format!("{} / {}: referenced by a pack", item.root, item.name));
+            }
+            match &global {
+                Some(refs) if refs.contains(&pack.uuid) => warnings.push(format!("{} / {}: globally referenced", item.root, item.name)),
+                None => warnings.push(format!("{} / {}: global references unknown", item.root, item.name)),
+                _ => {}
+            }
+        }
+        // Candidate global path and current manifest census are not yet
+        // validated against the native installation. Never authorize deletion.
+        warnings.push("Pack dependency coverage is not native-verified".into());
+    }
+    if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
+    Ok(SelectiveReview { profile_identity, items, warnings })
+}
+
 fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
     Ok(read_pack_references(path)?.map(|refs| refs.len() as u32))
 }
@@ -482,6 +548,30 @@ mod tests {
         assert_eq!(dependency_uuids(&manifest).unwrap(), vec!["bbbbbbbb-2222-3333-4444-555555555555".to_string()]);
         let unknown: PackManifest = serde_json::from_str(r#"{"header":{"uuid":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]},"dependencies":[{"unknown":true}]}"#).unwrap();
         assert!(dependency_uuids(&unknown).is_err());
+    }
+
+    #[test]
+    fn selective_review_rejects_unknown_and_duplicate_items() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let world = parent.join("Roaming/Minecraft Education Edition/games/com.mojang/minecraftWorlds/one");
+        fs::create_dir_all(&world).unwrap();
+        fs::write(world.join("level.dat"), b"fixture").unwrap();
+        let selection = || ReviewSelection {
+            category: InventoryCategory::Worlds, root: "minecraftWorlds".into(), name: "one".into(),
+        };
+        let budget = || InspectionBudget::new(Duration::from_secs(2));
+        let review = review_selection(&private, &[selection()], budget()).unwrap();
+        assert_eq!(review.items.len(), 1);
+        assert!(review.warnings.is_empty());
+        assert!(super::super::same_image(&review.profile_identity, &directory_id(&private).unwrap()));
+        assert!(review_selection(&private, &[selection(), selection()], budget()).is_err());
+        let unknown = ReviewSelection { name: "../outside".into(), ..selection() };
+        assert!(review_selection(&private, &[unknown], budget()).is_err());
+        assert!(review_selection(&private, &[], budget()).is_err());
+        assert!(review_selection(&private, &[selection()], InspectionBudget::new(Duration::ZERO)).is_err());
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]
