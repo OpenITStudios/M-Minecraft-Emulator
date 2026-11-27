@@ -1210,10 +1210,29 @@ fn can_reconcile_pending_transport(request:&SessionRequest)->bool {
 }
 
 #[cfg(windows)]
-fn validate_request(request: &SessionRequest) -> io::Result<()> {
+pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::ReviewSelectiveInventory { selections, .. } = request {
-        if selections.is_empty() || selections.len() > 128 || selections.iter().any(|s| s.root.len() > 64 || s.name.is_empty() || s.name.len() > 255 || s.identity.len() != 64 || !s.identity.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))) {
+        let mut identities = std::collections::HashSet::new();
+        let mut names = std::collections::HashSet::new();
+        if selections.is_empty() || selections.len() > 128 || selections.iter().any(|s| {
+            let roots: &[&str] = match s.category {
+                SelectiveCategory::Worlds => &["minecraftWorlds"],
+                SelectiveCategory::ResourcePacks => &["resource_packs", "development_resource_packs"],
+                SelectiveCategory::BehaviorPacks => &["behavior_packs", "development_behavior_packs"],
+            };
+            !roots.contains(&s.root.as_str()) || s.name.is_empty() || s.name.len() > 255 ||
+                s.name == "." || s.name == ".." ||
+                s.name.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':')) ||
+                s.identity.len() != 64 ||
+                !s.identity.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) ||
+                !identities.insert(s.identity.as_str()) ||
+                !names.insert((s.root.as_str(), s.name.to_ascii_lowercase()))
+        }) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selective review selection"));
+        }
+        // Bound the existing pipe contract before starting a transport worker.
+        if serde_json::to_vec(request).map_err(io::Error::other)?.len() >= 32768 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Selection exceeds the session request limit"));
         }
     }
     match request {

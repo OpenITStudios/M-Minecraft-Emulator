@@ -322,13 +322,14 @@ export function parseSession(value: unknown): SessionSnapshot {
       inventory.category==='BehaviorPacks'?['behavior_packs','development_behavior_packs']:[];
     if(!roots.length)throw new TypeError('Invalid inventory category');
     const keys=new Set<string>();
+    const ids=new Set<string>();
     for(const item of inventory.items) {
       if(!record(item)||!exact(item,['root','name','identity'])||typeof item.identity!=='string'||!/^[0-9a-f]{64}$/.test(item.identity)||typeof item.root!=='string'||!roots.includes(item.root)||
         typeof item.name!=='string'||!item.name.length||item.name.length>255||item.name==='.'||item.name==='..'||
         /[\\/\x00-\x1f:]/.test(item.name))throw new TypeError('Invalid inventory item');
       const key=item.root+'/'+item.name.toLowerCase();
-      if(keys.has(key))throw new TypeError('Duplicate inventory item');
-      keys.add(key);
+      if(keys.has(key)||ids.has(item.identity))throw new TypeError('Duplicate inventory item');
+      keys.add(key);ids.add(item.identity);
     }
   }
   if(Object.hasOwn(value,'selectiveReview')) {
@@ -344,15 +345,19 @@ export function parseSession(value: unknown): SessionSnapshot {
       !(review.confirmationToken===null||typeof review.confirmationToken==='string'&&/^[0-9a-f]{64}$/.test(review.confirmationToken))||
       (review.warnings.length>0)!==(review.confirmationToken===null))throw new TypeError('Invalid selective review');
     const ids=new Set<string>();
+    const names=new Set<string>();
     for(const item of review.items) {
       if(!record(item)||!exact(item,['category','root','name','identity'])||
         !['Worlds','ResourcePacks','BehaviorPacks'].includes(String(item.category))||
-        typeof item.root!=='string'||typeof item.name!=='string'||!item.name.length||item.name.length>255||
+        typeof item.root!=='string'||typeof item.name!=='string'||!item.name.length||item.name.length>255||item.name==='.'||item.name==='..'||/[\\/\x00-\x1f:]/.test(item.name)||
         typeof item.identity!=='string'||!/^[0-9a-f]{64}$/.test(item.identity)||ids.has(item.identity))
         throw new TypeError('Invalid reviewed item');
       const roots=item.category==='Worlds'?['minecraftWorlds']:item.category==='ResourcePacks'?['resource_packs','development_resource_packs']:['behavior_packs','development_behavior_packs'];
       if(!roots.includes(item.root))throw new TypeError('Invalid reviewed root');
-      ids.add(item.identity);
+      const key=item.root+'/'+item.name.toLowerCase();
+      if(names.has(key))throw new TypeError('Duplicate reviewed item');
+      names.add(key);ids.add(item.identity);
+      if(item.category!=='Worlds'&&review.confirmationToken!==null)throw new TypeError('Pack deletion remains unavailable');
     }
   }
   if(Object.hasOwn(value,'agentActivity'))parseAgentActivity(value.agentActivity);

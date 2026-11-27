@@ -12,6 +12,22 @@ const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
+describe('Selective inventory wire contract',()=>{
+  const item={root:'minecraftWorlds',name:'one',identity:'a'.repeat(64)};
+  const inventory={slot:1,category:'Worlds',items:[item]};
+  const review={slot:1,items:[{...item,category:'Worlds'}],bytes:7,files:1,warnings:[],confirmationToken:'b'.repeat(64)};
+  it('accepts explicit read-only receipts and preserves old snapshots',()=>{
+    expect(parseSession(stopped()).selectiveInventory).toBeUndefined();
+    expect(parseSession({...stopped(),selectiveInventory:inventory}).selectiveInventory).toEqual(inventory);
+    expect(parseSession({...stopped(),selectiveReview:review}).selectiveReview).toEqual(review);
+  });
+  it('rejects duplicate identity, unsafe names and unverified pack confirmation',()=>{
+    expect(()=>parseSession({...stopped(),selectiveInventory:{...inventory,items:[item,{...item,name:'two'}]}})).toThrow();
+    expect(()=>parseSession({...stopped(),selectiveReview:{...review,items:[{...review.items[0],name:'../outside'}]}})).toThrow();
+    expect(()=>parseSession({...stopped(),selectiveReview:{...review,items:[{...item,category:'ResourcePacks',root:'resource_packs'}]}})).toThrow();
+    expect(()=>parseSession({...stopped(),profiles:[running(1),...stopped().profiles.slice(1)],selectiveInventory:inventory})).toThrow();
+  });
+});
 describe('Lazy Tester profile contract', () => {
   it('compares all profile observation fields before suppressing redundant UI updates', () => {
     const base = parseSession({...stopped(), profiles: [running(1), ...stopped().profiles.slice(1)]}).profiles;

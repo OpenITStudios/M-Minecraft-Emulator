@@ -501,7 +501,12 @@ fn serve(
     if !peer.alive() {
         return Err(refused("Manager exited before request admission"));
     }
-    let request = serde_json::from_str(&text).map_err(io::Error::other)?;
+    let request: SessionRequest = serde_json::from_str(&text).map_err(io::Error::other)?;
+    // Validate at the authenticated controller ingress as well as the client.
+    // A denied request must receive an ordinary error receipt, not an ambiguous disconnect.
+    if let Err(error) = super::validate_request(&request) {
+        return send_reply(file, &mut reader, Err(error.to_string()));
+    }
     let (reply, response) = mpsc::sync_channel(1);
     sender
         .send(Envelope {
@@ -520,6 +525,10 @@ fn serve(
             Err(_) => return Err(io::Error::other("Controller stopped")),
         }
     };
+    send_reply(file, &mut reader, reply)
+}
+
+fn send_reply(file: &mut File, reader: &mut BufReader<File>, reply: SessionReply) -> io::Result<()> {
     let mut bytes = serde_json::to_vec(&reply)?;
     if bytes.len() >= 32768 {
         bytes = serde_json::to_vec(&SessionReply::Err(
@@ -528,7 +537,7 @@ fn serve(
     }
     bytes.push(b'\n');
     file.write_all(&bytes)?;
-    if read_message(&mut reader)?.as_deref() != Some("ack\n") {
+    if read_message(reader)?.as_deref() != Some("ack\n") {
         return Err(io::Error::other("Response was not acknowledged"));
     }
     Ok(())
