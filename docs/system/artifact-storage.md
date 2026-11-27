@@ -28,14 +28,17 @@ in this change. Do not describe source inspection as REA runtime proof.
 | --- | --- | --- | --- |
 | Product code and runtime contracts | `Development/apps/`, `Development/engine/`, `Development/tooling/` | Yes | Keep source and deterministic tests under their actual owners |
 | Toolchain declarations and lockfiles | `Development/toolchain.json`, `Development/apps/desktop/package-lock.json` and Rust `Cargo.lock` | Yes | These are immutable inputs, not generated binary caches |
-| Node, Vite, Rust, Tauri output | `Development/apps/desktop/node_modules/`, `Development/apps/desktop/dist/`, Rust/Tauri `target/`, Tauri staging | No | Already contained by the one checkout; preserve tool-native paths |
+| Tool-native frontend and Tauri staging | `Development/apps/desktop/node_modules/`, `Development/apps/desktop/dist/`, Tauri staging | No | Preserve required tool-native paths; historical source-local Cargo targets are not active roots |
+| Active Cargo output and intermediates | `workspace/builds/desktop/target/` | No | One target for DEV.cmd and supported package entrypoint |
+| Prepared application and private product data | `App/`, `Data/` | No | See [product data layout](data-layout.md); separate installed root, never a developer cache |
 | Portable developer tool installations | `workspace/toolchains/` | No | Opt-in `DEV.cmd bootstrap`: pinned and checksum-verified Node/PowerShell ZIPs, Rustup checksum sidecar and local Rustup home |
-| Developer caches and temporary files | `workspace/cache/`, `workspace/tmp/` | No | `DEV.cmd` applies process-scoped npm/NuGet caches and temporary directories; direct shells are not managed |
+| Developer caches and temporary files | `workspace/cache/`, `workspace/tmp/` | No | DEV.cmd and supported packaging use process-scoped paths; unrelated direct tools are not managed |
 | External installer and prerequisite downloads | `workspace/downloads/` | No | Record original URL, vendor, version and SHA-256 |
 | Native-engine build reports | `workspace/builds/<fresh-run>/` | No | Only new, non-reparse destinations; reports remain inside this checkout |
 | Engine staged payloads and future approved packages | `workspace/packages/<fresh-run>/` | No | Fresh path only; staged native engine is NOT-INSTALLABLE, never released or signed by copying |
 | Per-attempt local tests | `workspace/runs/` | No | Separate logs, raw records, redacted extracts and provenance |
 | Temporary investigation | `workspace/scratch/` | No | Never promote hypotheses into observed results |
+| Retained local history | `workspace/archive/` | No | Not active output; see preservation boundaries below |
 | Restricted machine data | Protected user/application paths; `workspace/private/` only when authorized | Never | Git ignore is not a secrecy control |
 | Durable, sanitized decisions | `docs/` and `planning/development.md` | Yes | Record only reviewable facts with exact revision |
 | Published release | Separately approved distribution channel | No | Requires release gate, signatures and hashes first |
@@ -74,8 +77,8 @@ one-time recompilation; old artifacts remain until separately reviewed.
 
 `DEV.cmd storage cargo` uses
 `Development/tooling/storage/cargo-footprint.mjs` to inspect **only** the
-canonical `workspace/builds/desktop/target` and two historical
-source-local Cargo `target` directories. It groups regular-file logical
+canonical `workspace/builds/desktop/target`, two historical
+source-local Cargo `target` directories and the fixed retired compiler archive target. It groups regular-file logical
 bytes by Windows MSVC versus host-default output, debug/release profile,
 and Cargo subdirectories including `deps`, `incremental`, `build`,
 `.fingerprint`, `examples`, and `bundle`. Unknown Cargo layouts remain
@@ -89,15 +92,9 @@ distinct physical data, duplicates, or recoverable savings. A partial
 scan is a lower bound and cannot authorize deletion. The tool never
 touches `App/`, `Data/`, backups, game data or installed services.
 
-For developer commands via `DEV.cmd`, the local PowerShell environment
-now **enforces one canonical** `CARGO_TARGET_DIR`: 
-`workspace/builds/desktop/target`. Conflicting external environment
-overrides are refused, and existing link/reparse points along that
-target path block compilation. Direct Cargo from an unrelated shell
-is not governed by `DEV.cmd` and can still create alternate output.
-The new report is optional and does not launch Cargo, compile Rust,
-relocate caches or produce additional log files. It does not override
-the package-specific release gates.
+The supported build and package routes use the [canonical output contract](#lazy-tester-development-candidate-and-installed-data).
+This optional report does not launch Cargo, compile Rust, relocate caches
+or produce additional log files. It does not override package release gates.
 
 Cargo's [build-cache documentation](https://doc.rust-lang.org/cargo/reference/build-cache.html)
 notes that internal output layout can change and that
@@ -125,16 +122,9 @@ the result. A failed check still fails the benchmark; the extra sampling
 neither builds a new target nor removes old artifacts. The frontend benchmark
 does not scan Cargo.
 
-The existing portable Windows developer environment also guards the other
-Cargo 1.99 environment overrides `CARGO_BUILD_TARGET_DIR` and
-`CARGO_BUILD_BUILD_DIR`, in addition to `CARGO_TARGET_DIR`. All are pinned
-process-locally to the same approved
-`workspace/builds/desktop/target`; conflicting inherited values fail
-**before** cache initialization. These variables apply only to `DEV.cmd`;
-direct Cargo from a separate terminal remains outside this guard.
-Cargo [build-cache](https://doc.rust-lang.org/cargo/reference/build-cache.html)
-and [configuration](https://doc.rust-lang.org/cargo/reference/config.html)
-document the separate target and intermediate build locations.
+The standalone scanner is `node Development/tooling/storage/cargo-footprint.mjs --active-json`.
+See the [canonical output contract](#lazy-tester-development-candidate-and-installed-data)
+for Cargo target/intermediate path admission.
 
 ## Retention review and verified post-build export turnover
 
@@ -258,29 +248,22 @@ Reorganizing development output never relocates their user data. Product data
 locations are owned by product_profiles.rs; cross-volume migration and fresh-PC
 Minecraft acceptance remain unfinished.
 
-**Repository-controlled storage contract:** one checkout root is the parent
-of every project download, source tree, locally staged payload and
-project-generated report. The current owned v1.18.6 builder must accept
-`workspace/builds/<new-name>/` as its report directory and
-`workspace/packages/<new-name>/` as the optional payload directory;
-the assembler enforces those same boundaries. Both require preexisting,
-non-junction parent directories and refuse reuse. Tool-owned compiler
-outputs inside `Development/engine/isolation-owned/` are ignored and independently
-checked for preexisting binaries. The opt-in `DEV.cmd bootstrap` installs pinned portable developer tools
-under `workspace/toolchains/` from checksum-verified downloads saved in
-`workspace/downloads/`. `DEV.cmd` refuses global runtime fallback and
-scopes developer caches/temp to this root without altering OS/user PATH.
-Git and VS2022/MSVC/WDK remain system prerequisites; neither game runtime
-nor installed Windows services is relocatable by this developer workflow.
-These source contracts do not prove that bootstrap executed on target Windows.
-Do not create root `artifacts/`, `downloads/`, `installers/`,
-or `test-results/` directories. The root is an entry/config boundary,
-not a second build or evidence owner.
+## Preserved local history
 
-Existing destinations `workspace/evidence/`, `captures/`, `images/`,
-`runtime/` and `diagnostics/` are historical compatibility paths.
-**Do not redirect or delete them** without tracing their actual callers
-and agreeing on a reversible migration.
+One checkout root owns project-generated files; OS installations and explicit
+user exports remain separate. The historical owned v1.18.6 builder and assembler
+are retired, not active output producers. See [legacy retirement](legacy-retirement.md).
+The opt-in DEV.cmd bootstrap stores verified downloads in workspace/downloads
+and pinned portable tools in workspace/toolchains. See [development operations](development-operations.md)
+for setup and host prerequisites. No system toolchain or game data relocation.
+Do not create root artifacts/, downloads/, installers/ or test-results/ as second output roots.
+
+Existing workspace/evidence/, captures/, images/, runtime/ and diagnostics/
+are historical compatibility paths. The archived compiler cache and
+archive/layout-20261026 checker tree, loose logs, scripts, screenshots and
+opaque probe directories remain preserved; their current contents and
+consumers are not established by source review. No blanket deletion,
+migration or reclaimable-space claim is authorized.
 
 ## Session storage contract (for future real tests)
 

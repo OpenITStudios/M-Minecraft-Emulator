@@ -6,8 +6,9 @@ import { join } from 'node:path';
 import { checkTracked, checkLinks, checkPhysical } from './check-structure.mjs';
 
 test('reject outputs and competing root owners while preserving native provenance', () => {
-  assert.deepEqual(checkTracked(['README.md', 'workspace/README.md']), []);
-  for (const path of ['Development/apps/desktop/.svelte-check/tsconfig.json', 'scratch.mjs', 'workspace/report.json', 'Development/apps/desktop/dist/index.html',
+  assert.deepEqual(checkTracked(['README.md', 'workspace/README.md',
+    '.agent-standard/profile.json', '.agent-standard/core/INDEX.md', '.agents/README.md']), []);
+  for (const path of ['Development/apps/desktop/.svelte-check/tsconfig.json', 'scratch.mjs', 'workspace/report.json', '.agent-standard/target/debug/helper.exe', 'Development/apps/desktop/dist/index.html',
     'Development/engine/runtime-core/target/debug/core.exe', '.github/workflows/verify.yml',
     '.gitmodules', 'Development/engine/isolation-owned/tools/dist/tool.exe',
     'Development/engine/isolation-candidates/target/reference.log',
@@ -31,7 +32,7 @@ test('reject outputs and competing root owners while preserving native provenanc
 test('physical layout rejects leftover source roots and root build metadata', () => {
   const root = mkdtempSync(join(tmpdir(), 'emulator-layout-'));
   try {
-    for (const name of ['Development', 'Archive', 'App', 'Data', 'workspace']) mkdirSync(join(root, name));
+    for (const name of ['Development', 'Archive', 'App', 'Data', 'workspace', '.agent-standard', '.agents']) mkdirSync(join(root, name));
     writeFileSync(join(root, '.git'), 'gitdir: linked-worktree');
     assert.deepEqual(checkPhysical(root), []);
     writeFileSync(join(root,'Lazy Tester.exe'),'MZfixture');

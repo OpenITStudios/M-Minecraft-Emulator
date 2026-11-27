@@ -87,7 +87,7 @@ Lazy Tester.exe    ignored prepared root launcher (when built)
 RUN.cmd            compatibility wrapper for that launcher
 DEV.cmd            one guarded developer entrypoint
 App/               ignored prepared application and reviewed DLL payload
-Data/              ignored settings, private profiles and optional diagnostics
+Data/              ignored settings, private launchers, optional diagnostics/testing
 Development/
   apps/desktop/    one active Svelte/Tauri desktop
   engine/          portable contracts and distribution
@@ -96,23 +96,17 @@ docs/              active guides and historical reference documents
 planning/          ONE concise current handoff + archived handoffs
 Archive/           old investigations; not a runtime fallback
 workspace/         ignored local builds, packages, tools and private material
+.agent-standard/   adopted repository policy and profile
+.agents/           existing project skills
 ```
 
-**Use a single checkout root for pre-localtest development.** Approved
-`DEV.cmd dev` builds from `workspace/builds/desktop/target/` but
-resolves manager/profile state to the sibling `Data/` under this checkout
-even before `App/` is staged. Do not create a second Data folder inside
-the build target or attempt to merge it into the repo. If a legacy
-build-local Data folder is found, startup blocks and preserves it for
-manual review. Keep installed NSIS application data separate until
-an explicitly approved disposable install/upgrade test.
-
-`App/`, `Data/`, worlds, accounts, private registry hives, local
-compiler artifacts and installer candidates are **not Git source**.
-Do not move, reset or delete them as part of repository cleanup.
-See [data layout](docs/system/data-layout.md),
-[artifact retention](docs/system/artifact-storage.md) and
-[security boundaries](SECURITY.md). Sandboxie, VMware and Guest Agent
+**One checkout root; separate installed data.** For the actual launcher paths,
+legacy-data safeguards and app data owner, see [product data layout](docs/system/data-layout.md).
+For build, caches, packages, evidence and retention, see
+[artifact storage](docs/system/artifact-storage.md) or the
+[local workspace guide](workspace/README.md). App/Data and generated files
+are not Git source; do not move, reset or delete protected material.
+See [security boundaries](SECURITY.md). Sandboxie, VMware and Guest Agent
 are retired from the active runtime; historical evidence is retained.
 
 ## Developer entrypoints (reference only; not executed by repository review)

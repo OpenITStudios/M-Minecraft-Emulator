@@ -30,7 +30,8 @@ Read one relevant owner, not the entire documentation tree:
 | How do I operate the existing read-only Probe QA entry? | [Map-Aware Probe QA](system/map-aware-probe-qa.md) / [MCP bridge](../Development/tooling/agent/README.md) |
 | Where is the AI Computer Use local-test procedure? | [Controlled Windows local-test guide](validation/ai-computer-use-localtest.md) |
 | What is the one current work status/next action? | [Development handoff](../planning/development.md) |
-| How are installer data and developer cache protected? | [Storage](system/artifact-storage.md) / [distribution](../Development/engine/distribution/README.md) |
+| Where are launcher folders, settings, diagnostics and testing stored? | [Product data layout](system/data-layout.md) |
+| Where are build, cache, packages and developer evidence stored? | [Artifact storage](system/artifact-storage.md) / [workspace quick guide](../workspace/README.md) |
 | Where are the retired VMware/Sandboxie studies? | [Legacy retirement](system/legacy-retirement.md) and previous Git commits |
 
 ```text

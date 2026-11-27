@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 const rootFiles = new Set(['.editorconfig', '.gitattributes', '.gitignore',
   'AGENTS.md', 'CONTEXT.md', 'CONTRIBUTING.md', 'DEV.cmd',
   'GITHUB_RULES.md', 'README.md', 'RUN.cmd', 'SECURITY.md']);
-const roots = new Set(['.agents', 'Development', 'Archive', 'docs', 'planning', 'workspace']);
+const roots = new Set(['.agent-standard', '.agents', 'Development', 'Archive', 'docs', 'planning', 'workspace']);
 const development = new Set(['apps', 'engine', 'tooling', 'README.md', 'package.json', 'toolchain.json', 'VERSION', '.node-version']);
 // Vendor forks and upstream gitlinks are retired from the active source tree.
 const retired = /^(?:\.gitmodules$|Development\/engine\/isolation-(?:owned|candidates|upstream)(?:\/|$))/;

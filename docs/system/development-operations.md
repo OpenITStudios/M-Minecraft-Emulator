@@ -184,68 +184,27 @@ new scoped routes do not modify game/session/process authority.
 
 ## Cargo storage attribution
 
-`DEV.cmd storage cargo` is a no-build, read-only report of the canonical
-Cargo `target` and historical source-local targets. It groups logical
-file bytes by target layout and profile and will flag coexisting
-host-default/explicit-Windows debug output without claiming either is
-safe to remove. The portable `DEV.cmd` local environment refuses
-noncanonical `CARGO_TARGET_DIR` overrides (and existing links in the
-compiler-target ancestors). This **does not** affect direct Cargo shell
-commands or any installed product/runtime data.
-
-The scan is bounded, treats errors as `PARTIAL`, counts hardlinked files
-as logical entries and makes **no** physical disk savings claim.
-Read it alongside `DEV.cmd storage report` and
-`DEV.cmd storage plan` before considering any separate,
-explicitly authorized cleanup proposal. No automatic pruning is enabled.
+The [artifact storage policy](artifact-storage.md#cargo-build-cache-attribution-read-only)
+owns the no-build metadata inventory, canonical target and historical output
+boundaries. Storage reports are read-only; measured logical bytes do not prove
+physical savings or authorize cleanup.
 
 ## Build-check cache growth evidence
 
-The optional `DEV.cmd bench:rust` samples only the active Cargo target
-before the first pass and after each pass, using a compact, bounded,
-read-only `--active-json` report from the existing Cargo footprint
-scanner. Snapshot time is excluded from the compilation stopwatch.
-An incomplete result is `UNKNOWN`; any displayed change is in
-**logical file bytes**, not observed physical disk allocation, guaranteed
-causal compiler growth or space safe to reclaim. This does not replace
-the existing read-only `storage report`, `storage cargo`, and
-`storage plan` analyses. No deletion command is enabled.
-
-The portable developer shell now refuses conflicting inherited
-`CARGO_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR` and
-`CARGO_BUILD_BUILD_DIR` values, pinning all three to the approved
-`workspace/builds/desktop/target`. Direct Cargo commands outside
-`DEV.cmd` do not inherit this enforcement unless the operator sets
-up the same environment.
+The [bounded Cargo snapshot contract](artifact-storage.md#build-evidence-with-bounded-per-pass-cargo-snapshots)
+defines the additional evidence for the existing opt-in bench:rust route.
+Snapshot time is excluded from the stopwatch. No new output root or deletion.
 
 ## Package and release boundary
 
-The current product is **Lazy Tester**, with Windows-native independently
-managed Minecraft Education profiles. VMware/Sandboxie runtime providers and
-the legacy VMware package path are retired and remain blocked. The
-`npm --prefix Development run package:windows` command is the dedicated
-native Lazy Tester candidate packager; it requires clean committed `Local`
-source, reviewed DLL payload, pinned toolchain and its original safety
-gates. Its export is **unsigned, unaccepted and not published**. The
-`--export-only` option leaves the local `App/` candidate unchanged;
-the normal local candidate refresh retains protected `Data/` and
-archives the previous `App/` under the protected private backup owner.
-After a **successfully completed candidate** (including any local staging
-and startup verification), the packager may delete **only older verified
-three-file installer exports** beyond the latest two, bounded to eight
-candidates per build. Actual installer SHA-256, receipt agreement, ordinary
-directories and singly linked files are revalidated before removal.
-Unknown/modified files block retention. Partial cleanup is reported
-separately and never includes the active Cargo target, historical archive,
-toolchains, App/Data or private backups. `storage plan` stays read-only.
-
-Separately, `storage.retire-archive` is an **approval-gated** task which
-invokes pinned Cargo `clean --target-dir` only for
-`workspace/archive/compiler-cache-20261026/target`. It requires a complete
-read-only scan, recognized Cargo layout without links or hardlinks, and a
-populated canonical Windows MSVC replacement target. Unknown or partial
-archives are preserved. This never runs against the active target and does
-not establish physically reclaimed NTFS bytes. No generic cleaner is exposed.
+The current product is Lazy Tester. Its only supported candidate packager
+is `npm --prefix Development run package:windows`, subject to the
+existing reviewed DLL, clean Local source and pinned toolchain requirements.
+The old VMware/Sandboxie package route remains retired.
+See [candidate layout and staging](artifact-storage.md#lazy-tester-development-candidate-and-installed-data),
+[verified export turnover](artifact-storage.md#retention-review-and-verified-post-build-export-turnover)
+and [separately approved historical target retirement](artifact-storage.md#historical-compiler-target-retirement-separate-approval).
+No storage policy grants release approval.
 
 GitHub Actions is **disabled entirely** on `Local` and `main`.
 No push, manual, scheduled, PR, package or deployment workflows are allowed
