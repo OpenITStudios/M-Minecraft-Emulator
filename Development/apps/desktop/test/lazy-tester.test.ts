@@ -28,6 +28,20 @@ describe('Selective inventory wire contract',()=>{
     expect(()=>parseSession({...stopped(),profiles:[running(1),...stopped().profiles.slice(1)],selectiveInventory:inventory})).toThrow();
   });
 });
+describe('Absent-controller Settings observation',()=>{
+  it('reuses the admitted empty inventory for read-only Settings but retains fresh save observation',()=>{
+    const source=readFileSync(new URL('../src-tauri/src/engine/native_clients_session.rs',import.meta.url),'utf8');
+    const fallback=source.split('fn transact(request: SessionRequest)')[1]!
+      .split('// A report or Testing correlation')[0]!;
+    const gate=fallback.indexOf('require_absent_controller_idle(observation.processes.len())?;');
+    const save=fallback.indexOf('super::manager_settings::save_audio(mode)?;');
+    const observation=fallback.indexOf('let idle = matches!(request, SessionRequest::InspectSettings)\n                || super::native_clients::inspect_native_workspace()?.processes.is_empty();');
+    expect(gate).toBeGreaterThan(-1);
+    expect(save).toBeGreaterThan(gate);
+    expect(observation).toBeGreaterThan(save);
+    expect(fallback).toContain('snapshot.settings = Some(SettingsReport::policy(idle, None)?);');
+  });
+});
 describe('Storage on-demand boundary', () => {
   it('keeps complete storage scans out of startup, periodic observation and slot selection', () => {
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
@@ -950,6 +964,14 @@ describe('Lazy Tester queue scheduling parity',()=>{
 });
 
 describe('Workspace geometry identity',()=>{
+  it('does not request layout solely for non-Play geometry changes',()=>{
+    const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const mount=source.split('onMount(() => {')[1]!.split('const stopDisplayScale=')[0]!;
+    expect(mount).toContain("if (page==='workspace' || previewIssue!=='') dirty = true;");
+    expect(mount).toContain("if (page==='workspace' || previewIssue!=='' || visibilityChanged ||\n          event?.type==='visibilitychange') dirty = true;");
+    expect(source).toContain("if (next !== 'workspace') await workspaceSurface.suspend();");
+    expect(source).toContain('if (current()) dirty = true;');
+  });
   it('passes the captured DPI to both native layout bridge calls',()=>{
     const source=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
     expect(source).toContain('workspaceSurface.update(geometry.viewport,geometry.pixelRatio)');

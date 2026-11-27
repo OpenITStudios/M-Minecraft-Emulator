@@ -1522,7 +1522,11 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
             super::manager_settings::save_performance(super::manager_settings::PerformanceSettings {active_fps,background_fps})?;
         }
         if !matches!(request, SessionRequest::Inspect) {
-            let idle = super::native_clients::inspect_native_workspace()?.processes.is_empty();
+            // Read-only Settings shares the already admitted empty inventory.
+            // There is no intervening mutation. Saves still reobserve after
+            // their write; this hint never grants mutation authority.
+            let idle = matches!(request, SessionRequest::InspectSettings)
+                || super::native_clients::inspect_native_workspace()?.processes.is_empty();
             snapshot.settings = Some(SettingsReport::policy(idle, None)?);
         }
         return Ok(Ok(snapshot));

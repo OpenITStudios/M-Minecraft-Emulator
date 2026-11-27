@@ -109,6 +109,11 @@ uncertain, sharing the earlier eligible wake. Blocked lanes have no
 deadline, hidden views pause scheduled reads, and disposal cancels the
 timer. These are source scheduling targets, not measured latency.
 Explicit Refresh and native mutation admission remain independent.
+Without a retained controller, read-only Settings shares the fresh verified
+empty inventory already used for its stopped roster; saves still reobserve
+after writing. Geometry-only resize/DPI events outside Play do not schedule
+preview cleanup; navigation, visibility transitions, failed preview recovery
+and native safety admission retain their original paths.
 
 Full five-slot storage reports are requested on Storage entry, explicit
 Refresh and mutation receipts. Category inventory is on demand.

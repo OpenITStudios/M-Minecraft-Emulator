@@ -1100,19 +1100,26 @@
     catch { layoutPersistenceIssue = 'Saved layout unavailable. Using Bottom.'; }
     managerVisible = !document.hidden;
     mounted = true;
-    observer = new ResizeObserver(() => { dirty = true; });
+    // Geometry-only changes outside Play cannot acquire a new preview.
+    // Preserve explicit cleanup, visibility transitions and failed recovery.
+    observer = new ResizeObserver(() => {
+      if (page==='workspace' || previewIssue!=='') dirty = true;
+    });
     try { observer.observe(viewport, {box: 'device-pixel-content-box'}); }
     catch { observer.observe(viewport); } // Older WebView fallback; DPR listener below remains active.
     observer.observe(stageSpace);
     for (const node of images.values()) observer.observe(node);
-    const changed = () => {
+    const changed = (event?: Event) => {
       // Hidden/minimized WebViews cannot claim current DWM visibility.
       // Losing focus while the manager remains shown is not a hide.
-      managerVisible = !document.hidden;
+      const visible = !document.hidden;
+      const visibilityChanged = managerVisible !== visible;
+      managerVisible = visible;
       if (!managerVisible) {
         previewStatuses=[];pendingPreviewInvalidations.clear();
       }
-      dirty = true;
+      if (page==='workspace' || previewIssue!=='' || visibilityChanged ||
+          event?.type==='visibilitychange') dirty = true;
     };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
     const stopDisplayScale=observeDisplayScale(window,changed);

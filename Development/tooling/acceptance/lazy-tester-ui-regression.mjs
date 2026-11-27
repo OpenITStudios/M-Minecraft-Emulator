@@ -613,7 +613,20 @@ try {
   assert.deepEqual(await page.evaluate(()=>window.__visualChanges),[],'unchanged polling must leave controls stable');
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_previews').length===window.__previewBaseline),true,'unchanged polling must not reapply native geometry');
   await page.evaluate(()=>window.__stableObserver.disconnect());
+  const clearCount=()=>page.evaluate(()=>window.__calls.filter(c=>c.command==='lazy_tester_clear_previews').length);
+  const beforeSettingsClear=await clearCount();
   await nav('Settings').click();await heading('General').waitFor();
+  await page.waitForFunction(count=>window.__calls.filter(c=>c.command==='lazy_tester_clear_previews').length>count,beforeSettingsClear);
+  // Navigation retains explicit clear. Subsequent non-Play resize events
+  // cannot repeatedly clear the already suspended workspace.
+  const settledSettingsClear=await clearCount();
+  const previousViewport=page.viewportSize();
+  assert.ok(previousViewport);
+  await page.setViewportSize({width:previousViewport.width+20,height:previousViewport.height});
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  await page.setViewportSize(previousViewport);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  assert.equal(await clearCount(),settledSettingsClear,'Settings geometry alone must not request another preview clear');
   // Source-authored browser geometry; does not prove native DPI, screen
   // reader, high contrast or game-window behavior until actually executed.
   const settingsTargets=await page.evaluate(()=>{
