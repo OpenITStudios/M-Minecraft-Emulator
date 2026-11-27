@@ -11,7 +11,7 @@ NMS-02: shared the existing handoff guard with structure/quick/full checks; Git 
 
 NMS-03: retired the executable VMware G0 batch and obsolete package output inspection; old command now refuses before environment setup. Native preflight/package unchanged. Fixture authored, not run.
 
-Status: SOURCE_IN_PROGRESS / LOCAL_TEST_DEFERRED. SOURCE_REVIEWED for this documentation change; validation NOT_EXECUTED. Continue only with a source-proven independent non-MCP candidate; otherwise record the result and stop at the source proof ceiling.
+NMS-04 integration: compared baseline to `e03024ec603d786f6b4d5e0048929f4111fa5512` (13 modified paths, no added/deleted paths); confirmed shared guard, move routing, early G0 refusal, unchanged native preflight/package and preserved MCP source. SOURCE_COMMITTED / SOURCE_REVIEWED; fixtures TEST_AUTHORED_NOT_RUN; LOCAL_TEST_DEFERRED. Coordinate bookmarks retain an intentional compatibility command; no deletion. No independent capture/desktop redundancy proven in inspected paths; no speculative refactor. Next: CONTINUE only for remaining non-MCP candidates with concrete source evidence, not closed tracks.
 
 ## Unreleased — Rust-first integration
 
@@ -44,7 +44,7 @@ CAP-01–05 source integrated: explicit lossless client WebP screenshot; indepen
 
 ## Source-to-local handoff — SOURCE_READY_FOR_LOCAL
 
-Applies to previously closed source scopes, not NMS work in progress. Re-pin exact Local HEAD before any separately authorized verified LOCAL_PC_AGENT phase. No action requested or authorized here.
+Applies to previously closed source scopes; NMS runtime proof remains held. Re-pin exact Local HEAD before any separately authorized verified LOCAL_PC_AGENT phase. No action requested or authorized here.
 
 | Gate | Existing evidence owner |
 | --- | --- |
