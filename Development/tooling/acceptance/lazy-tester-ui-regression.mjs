@@ -241,6 +241,17 @@ try {
     assert.equal(await page.getByRole('button',{name:'Set up launchers',exact:true}).count(),0);
     assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.import===true||['Choose','Locate'].includes(c.args?.action)||c.args?.request?.operation==='Launch')),false);
   }
+  // The explicit diagnostic route still reports the mounted DOM exactly once.
+  await page.goto('http://lazy-tester.test/?startup-diagnostic=1');
+  await page.waitForFunction(()=>!!window.__finishBinding);
+  await page.evaluate(()=>window.__finishBinding());
+  await page.waitForFunction(()=>window.__calls.some(call=>call.command==='startup_diagnostic_result'));
+  const diagnosticReports=await page.evaluate(()=>window.__calls.filter(call=>call.command==='startup_diagnostic_result'));
+  assert.equal(diagnosticReports.length,1);
+  assert.deepEqual(diagnosticReports[0].args,{connection:'Profile data verified',issue:'',cards:5,enabled:5});
+  assert.equal(await page.evaluate(()=>window.__calls.filter(call=>call.command==='lazy_tester_startup_capabilities').length),1);
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.command==='lazy_tester_recording_status')),false);
+
   // Host capability must suppress unsupported platform startup without
   // probing private Windows data or retrying profile/game session commands.
   await page.goto('http://lazy-tester.test/?unsupported-platform=1');
