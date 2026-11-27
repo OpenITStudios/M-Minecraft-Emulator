@@ -12,8 +12,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-const COMMAND_TIMEOUT: Duration = Duration::from_secs(45);
-
 // Pipe readers may outlive a direct child if an unrelated descendant inherits
 // stdout/stderr. Cap retained workers rather than allowing repeated timed-out
 // inspections to accumulate unbounded detached threads. This is a safety
@@ -43,14 +41,6 @@ fn reserve_io_workers(count: usize) -> io::Result<Vec<IoWorkerSlot>> {
             )
         })?;
     Ok((0..count).map(|_| IoWorkerSlot).collect())
-}
-
-pub(crate) fn command_output<I, S>(program: &Path, args: I) -> io::Result<String>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    command_output_with_timeout(program, args, COMMAND_TIMEOUT)
 }
 
 pub(crate) fn command_output_with_timeout<I, S>(
@@ -420,29 +410,6 @@ fn require_success(
         io::ErrorKind::Other,
         format!("{} failed: {}", program.display(), detail),
     ))
-}
-
-pub(crate) fn wait_for_state<F>(
-    mut predicate: F,
-    expected: bool,
-    timeout: Duration,
-) -> io::Result<()>
-where
-    F: FnMut() -> io::Result<bool>,
-{
-    let started = Instant::now();
-    loop {
-        if predicate()? == expected {
-            return Ok(());
-        }
-        if started.elapsed() >= timeout {
-            return Err(io::Error::new(
-                io::ErrorKind::TimedOut,
-                "virtual machine did not reach the expected power state",
-            ));
-        }
-        thread::sleep(Duration::from_millis(250));
-    }
 }
 
 #[cfg(test)]
