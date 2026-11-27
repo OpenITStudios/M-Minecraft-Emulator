@@ -96,6 +96,33 @@ pub(super) fn disk(private: &File) -> io::Result<DiskSpace> {
     })
 }
 
+// Shared exclusive bounds: read-only review must not promise a selection
+// that the aggregate mutation preflight would necessarily refuse.
+fn within_tree_limits(files: usize, directories: usize, entries: usize) -> bool {
+    files < MAX_FILES && directories < MAX_DIRECTORIES && entries < MAX_FILES + MAX_DIRECTORIES
+}
+
+#[derive(Default)]
+pub(super) struct SelectedTreeExtent {
+    pub(super) bytes: u64,
+    pub(super) files: u32,
+    directories: usize,
+    entries: usize,
+}
+impl SelectedTreeExtent {
+    pub(super) fn accumulate(&mut self, next: Self) -> io::Result<()> {
+        let bytes = self.bytes.checked_add(next.bytes).ok_or_else(|| invalid("Selection size overflow"))?;
+        let files = self.files.checked_add(next.files).ok_or_else(|| invalid("Selection file count overflow"))?;
+        let directories = self.directories.checked_add(next.directories).ok_or_else(|| invalid("Selection directory count overflow"))?;
+        let entries = self.entries.checked_add(next.entries).ok_or_else(|| invalid("Selection entry count overflow"))?;
+        if !within_tree_limits(files as usize, directories, entries) {
+            return Err(invalid("Selection exceeds aggregate tree inspection limits"));
+        }
+        *self = Self { bytes, files, directories, entries };
+        Ok(())
+    }
+}
+
 struct CachePlan {
     directories: Vec<File>,
     files: Vec<File>,
@@ -121,9 +148,7 @@ impl CachePlan {
     }
     fn bounded(&self, depth: usize) -> io::Result<()> {
         if depth > 8
-            || self.files.len() >= MAX_FILES
-            || self.directories.len() >= MAX_DIRECTORIES
-            || self.entries >= MAX_FILES + MAX_DIRECTORIES
+            || !within_tree_limits(self.files.len(), self.directories.len(), self.entries)
             || self.budget.exhausted()
         {
             return Err(invalid(
@@ -251,7 +276,7 @@ impl CachePlan {
 // The caller must retain the verified ancestor chain and exact item pin.
 // Never pass user-supplied paths directly; this does not grant DELETE access.
 pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
-    budget: InspectionBudget) -> io::Result<(u64, u32, [u8; 32])> {
+    budget: InspectionBudget) -> io::Result<(SelectedTreeExtent, [u8; 32])> {
     let pin = open_directory(path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
     if !super::same_image(expected, &super::directory_id(&pin)?) {
         return Err(invalid("Selected directory changed before tree inspection"));
@@ -261,7 +286,8 @@ pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
     plan.visit(path, 0)?;
     plan.bounded(0)?;
     let digest = plan.tree_digest(0);
-    Ok((plan.bytes, plan.files.len() as u32, digest))
+    Ok((SelectedTreeExtent { bytes: plan.bytes, files: plan.files.len() as u32,
+        directories: plan.directories.len(), entries: plan.entries }, digest))
 }
 
 // Exclusive selected-world preflight only. Retain category and profile
@@ -598,6 +624,17 @@ mod tests {
 #[cfg(test)]
 mod size_tests {
     use super::*;
+
+    #[test]
+    fn selected_review_uses_same_aggregate_bounds_as_preflight() {
+        let mut extent = SelectedTreeExtent { bytes: 1, files: 1, directories: MAX_DIRECTORIES - 2, entries: 1 };
+        extent.accumulate(SelectedTreeExtent { bytes: 2, files: 1, directories: 1, entries: 1 }).unwrap();
+        assert_eq!((extent.bytes, extent.files, extent.directories), (3, 2, MAX_DIRECTORIES - 1));
+        assert!(extent.accumulate(SelectedTreeExtent { directories: 1, ..Default::default() }).is_err());
+        assert_eq!(extent.directories, MAX_DIRECTORIES - 1);
+        let mut extent = SelectedTreeExtent { files: MAX_FILES as u32 - 1, ..Default::default() };
+        assert!(extent.accumulate(SelectedTreeExtent { files: 1, ..Default::default() }).is_err());
+    }
 
     #[test]
     fn metadata_scan_counts_files_and_reports_bounds_without_opening_contents() {

@@ -493,22 +493,19 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
     // No partial total is returned on failure; no file contents are read.
     let (base, _pins) = base_path(private, budget)?
         .ok_or_else(|| io::Error::other("Selected profile data disappeared"))?;
-    let mut bytes = 0u64;
-    let mut files = 0u32;
+    let mut extent = super::profile_storage::SelectedTreeExtent::default();
     let mut tree_digests = Vec::new();
     for item in &items {
         if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
         let root = base.join(item.root);
         let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
-        let (item_bytes, item_files, digest) = super::profile_storage::inspect_selected_tree(
+        let (item_extent, digest) = super::profile_storage::inspect_selected_tree(
             &root.join(&item.name), &item.identity, budget)?;
         tree_digests.push(digest);
-        bytes = bytes.checked_add(item_bytes).ok_or_else(|| io::Error::other("Selection size overflow"))?;
-        files = files.checked_add(item_files).ok_or_else(|| io::Error::other("Selection file count overflow"))?;
-        if files > 2048 { return Err(io::Error::other("Selection file limit exceeded")); }
+        extent.accumulate(item_extent)?;
     }
     if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
-    Ok(SelectiveReview { profile_identity, items, warnings, bytes, files, tree_digests })
+    Ok(SelectiveReview { profile_identity, items, warnings, bytes: extent.bytes, files: extent.files, tree_digests })
 }
 
 fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
