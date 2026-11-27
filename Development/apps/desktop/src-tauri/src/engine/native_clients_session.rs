@@ -642,6 +642,26 @@ pub struct CacheStorage {
     pub issue: Option<String>,
 }
 impl SessionSnapshot {
+    // Private experimental input/lease ACK, never a roster observation.
+    // The same authenticated request/reply envelope carries the result.
+    // No fabricated STOPPED entries, settings, issues or agent activity.
+    #[cfg(feature="mc02-native-input")]
+    pub(crate) fn input_receipt() -> Self {
+        Self {
+            schema:1, profiles:Vec::new(), storage:None,
+            selective_inventory:None, selective_review:None, settings:None,
+            agent_activity:None, testing_run:None, testing_inspection:None,
+        }
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    fn is_input_receipt(&self)->bool {
+        self.schema==1 && self.profiles.is_empty() && self.storage.is_none() &&
+        self.selective_inventory.is_none() && self.selective_review.is_none() &&
+        self.settings.is_none() && self.agent_activity.is_none() &&
+        self.testing_run.is_none() && self.testing_inspection.is_none()
+    }
+
     pub fn stopped() -> Self {
         Self {
             schema: 1,
@@ -746,13 +766,19 @@ impl SessionRequest {
             Self::TestingInspect { .. })
     }
 
+    // Launch is still a lifecycle operation and must return a full roster.
+    #[cfg(feature="mc02-native-input")]
+    pub(crate) fn expects_input_receipt(&self)->bool {
+        matches!(self, Self::Mc02Input { .. } | Self::AiInputGroup { .. } |
+            Self::AiLeasedInput { .. } | Self::AiLeaseAcquire { .. } |
+            Self::AiLeaseRelease { .. })
+    }
+
     pub(crate) fn is_experimental_input(&self) -> bool {
         #[cfg(feature="mc02-native-input")]
         {
-            matches!(self, Self::Mc02Input { .. } | Self::AiInputGroup { .. } |
-                Self::AiLeasedInput { .. } | Self::AiLeaseAcquire { .. } |
-                Self::AiLeaseRelease { .. } | Self::LaunchMc02Experiment { .. } |
-                Self::LaunchAiExperiment { .. })
+            self.expects_input_receipt() || matches!(self,
+                Self::LaunchMc02Experiment { .. } | Self::LaunchAiExperiment { .. })
         }
         #[cfg(not(feature="mc02-native-input"))]
         { false }
@@ -1385,6 +1411,8 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     // only a complete session Inspect may reconcile that uncertainty.
     let reconciling = can_reconcile_pending_transport(&request);
     #[cfg(feature="mc02-native-input")]
+    let input_receipt_expected=request.expects_input_receipt();
+    #[cfg(feature="mc02-native-input")]
     let neutral_mc02_release = matches!(request,
         SessionRequest::Mc02Input {keys:0,dx:0,dy:0,..} |
         SessionRequest::AiLeasedInput {keys:0,dx:0,dy:0,..});
@@ -1418,6 +1446,17 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
             owner.join_finished_request();
             match result {
                 Ok(reply) => {
+                    // Validate even cleanup-only calls which discard the
+                    // returned value. Never accept an input ACK as an Inspect
+                    // result either. A wrong receipt may follow publication;
+                    // keep the existing uncertainty/recovery gate.
+                    #[cfg(feature="mc02-native-input")]
+                    if reply.as_ref().is_ok_and(|snapshot|
+                       input_receipt_expected!=snapshot.is_input_receipt()) {
+                        owner.uncertain=true;
+                        return Err(io::Error::new(io::ErrorKind::BrokenPipe,
+                            "Invalid native input receipt; outcome uncertain"));
+                    }
                     if reconciling && reply.is_ok() {
                         owner.uncertain = false;
                     }
@@ -2763,6 +2802,29 @@ mod tests {
         assert!(matches!(serde_json::from_value::<SessionRequest>(five),
             Ok(SessionRequest::AiLeaseAcquire {
                 mode:AgentControlMode::FiveAi,..})));
+    }
+
+    #[cfg(feature="mc02-native-input")]
+    #[test]
+    fn private_input_receipt_is_not_a_session_roster_or_status_report() {
+        let receipt=SessionSnapshot::input_receipt();
+        assert!(receipt.is_input_receipt());
+        assert_eq!(serde_json::to_value(&receipt).unwrap(),
+            serde_json::json!({"schema":1,"profiles":[],"storage":null}));
+        let roundtrip:SessionSnapshot=serde_json::from_value(
+            serde_json::to_value(&receipt).unwrap()).unwrap();
+        assert!(roundtrip.is_input_receipt());
+        assert!(!SessionSnapshot::stopped().is_input_receipt());
+        let mut wrong=receipt;
+        wrong.schema=2;
+        assert!(!wrong.is_input_receipt());
+        assert!(!SessionRequest::Inspect.expects_input_receipt());
+        assert!(!SessionRequest::LaunchMc02Experiment{slot:2}.expects_input_receipt());
+        assert!(!SessionRequest::LaunchAiExperiment{slot:2,
+            mode:AgentControlMode::HumanPlusFourAi}.expects_input_receipt());
+        assert!(SessionRequest::AiLeasedInput{slot:2,keys:0,dx:0,dy:0,
+            ttl_ms:1,issued_at_ms:1,owner_id:"a".repeat(32),
+            lease_epoch:"b".repeat(32)}.expects_input_receipt());
     }
 
     #[cfg(feature="mc02-native-input")]

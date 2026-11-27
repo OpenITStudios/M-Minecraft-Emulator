@@ -566,9 +566,9 @@ impl Sessions {
 
     // During a coordinated normal CloseAll/CloseOne, avoid unrelated journal
     // persistence both before the close request and in its response snapshot.
-    // MC02's 160-ms input receipts should not write game-window titles for
-    // all five profiles. Keep the SAME original process/HWND verification
-    // and five-profile response shape; normal Inspect still repairs labels.
+    // Read-only status receipts should not write game-window titles for
+    // all five profiles. Keep the SAME process/HWND verification for those
+    // roster observations. Private input ACKs need no roster at all.
     fn snapshot_without_reaping(&mut self, relabel: bool) -> SessionSnapshot {
         self.snapshot_slots(relabel, 0..5)
     }
@@ -1617,10 +1617,14 @@ enum ReplySnapshot {
     Full,
     Close,
     Receipt,
+    #[cfg(feature="mc02-native-input")]
+    InputReceipt,
     Selected(u32),
 }
 impl ReplySnapshot {
     fn for_request(request: &SessionRequest) -> Self {
+        #[cfg(feature="mc02-native-input")]
+        if request.expects_input_receipt(){return Self::InputReceipt;}
         match request {
             SessionRequest::CloseOne { .. } | SessionRequest::CloseAll => Self::Close,
             SessionRequest::OpenProfileFolder { slot, selected_profile } |
@@ -1634,12 +1638,6 @@ impl ReplySnapshot {
             SessionRequest::TestingReserve { .. } |
             SessionRequest::TestingFinalize { .. } |
             SessionRequest::TestingInspect { .. } => Self::Receipt,
-            #[cfg(feature="mc02-native-input")]
-            SessionRequest::Mc02Input { .. } |
-            SessionRequest::AiLeasedInput { .. } |
-            SessionRequest::AiInputGroup { .. } |
-            SessionRequest::AiLeaseAcquire { .. } |
-            SessionRequest::AiLeaseRelease { .. } => Self::Receipt,
             _ => Self::Full,
         }
     }
@@ -1649,6 +1647,8 @@ impl ReplySnapshot {
             Self::Full => sessions.snapshot(),
             Self::Close => sessions.snapshot_without_reaping(true),
             Self::Receipt => sessions.snapshot_without_reaping(false),
+            #[cfg(feature="mc02-native-input")]
+            Self::InputReceipt => SessionSnapshot::input_receipt(),
             Self::Selected(slot) => sessions.snapshot_slots(false, (slot as usize - 1)..slot as usize),
         }
     }
@@ -2013,7 +2013,14 @@ fn run() -> io::Result<()> {
                     .open_folder(slot)
                     .map_err(|error| error.to_string())?,
             }
+            // All admitted input mutations (including neutral cleanup) use
+            // the original authenticated actor reply, without observing five
+            // unrelated profile windows, touching storage or cloning activity.
             let mut snapshot = reply_snapshot.collect(&mut sessions);
+            #[cfg(feature="mc02-native-input")]
+            if reply_snapshot==ReplySnapshot::InputReceipt {
+                return Ok(snapshot);
+            }
             // Read-only Settings shares the full snapshot's reap. No actor
             // request can change its roster between these two observations.
             // External process exit may still race; mutation admission reaps
@@ -2265,7 +2272,25 @@ mod tests {
                 owner_id:"a".repeat(32),
                 lease_epoch:"1".repeat(32),
             };
-            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Receipt);
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::InputReceipt);
+            for request in [
+                SessionRequest::Mc02Input {slot:2,keys:1,dx:0,dy:0,
+                    ttl_ms:350,issued_at_ms:1,batch_origin:None},
+                SessionRequest::AiLeasedInput {slot:2,keys:0,dx:0,dy:0,
+                    ttl_ms:1,issued_at_ms:1,owner_id:"a".repeat(32),lease_epoch:"b".repeat(32)},
+                SessionRequest::AiLeaseAcquire {slots:vec![2],owner_id:"a".repeat(32),
+                    mode:AgentControlMode::HumanPlusFourAi,lease_epoch:"b".repeat(32),neutral_only:false},
+                SessionRequest::AiLeaseRelease {slots:vec![2],owner_id:"a".repeat(32),
+                    lease_epoch:"b".repeat(32)},
+            ] {
+                assert_eq!(ReplySnapshot::for_request(&request),ReplySnapshot::InputReceipt);
+            }
+            for request in [
+                SessionRequest::LaunchMc02Experiment{slot:2},
+                SessionRequest::LaunchAiExperiment{slot:2,mode:AgentControlMode::HumanPlusFourAi},
+            ] {
+                assert_eq!(ReplySnapshot::for_request(&request),ReplySnapshot::Full);
+            }
         }
         // CloseOne reaps one verified slot; CloseAll still reaps all five.
         for slot in 1..=5 {

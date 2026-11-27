@@ -227,6 +227,19 @@ behavior are preserved. Fingerprints reuse the already-compiled plan
 where available. This reduces deterministic compiler work, not a measured
 runtime or token saving. Source fixtures are authored NOT_EXECUTED.
 
+Native experimental input/lease requests use the same authenticated
+controller envelope with an empty-roster receipt (schema 1, no status
+payloads). The actor performs the original slot, process, lease, focus,
+expiry and release checks before acknowledging, but skips unrelated roster
+observation for each pulse/group/neutral/lease. The common request owner
+validates the compact response even for cleanup-only consumers and marks a
+wrong success shape uncertain; no retry or false neutral ACK. Normal and
+experimental Launch and Inspect retain their five-profile observation.
+Desktop admission and same-image peer pinning are unchanged; native input
+remains compile-OFF and no gameplay effect is inferred from transport ACK.
+This avoids up to five profile observation iterations per private receipt,
+not a measured timing, resource or token improvement.
+
 ### Direct SDK for independently trusted hosts
 
 For a separately authorized trusted PC-local host, create one

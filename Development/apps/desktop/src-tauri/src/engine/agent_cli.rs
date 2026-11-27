@@ -246,10 +246,8 @@ fn execute_ai_lease(args:&[String])->Result<Value,&'static str> {
             slots:slots.clone(),owner_id:owner,lease_epoch:epoch,
         }
     };
-    let snapshot=native_clients_session::request(request).map_err(native_error)?;
-    if snapshot.schema!=1||snapshot.profiles.len()!=5 {
-        return Err("INVALID_NATIVE_SNAPSHOT");
-    }
+    // request() validates the request-specific private input/lease receipt.
+    native_clients_session::request(request).map_err(native_error)?;
     Ok(json!({"schema":1,"ok":true,"operation":args[0],
         "slots":slots,"lease":"NATIVE_CONTROLLER_PER_SLOT_ONLY",
         "gameplayObserved":false}))
@@ -338,16 +336,13 @@ fn execute_mc02_batch(args:&[String])->Result<Value,&'static str> {
             // including a pulse whose acknowledgement may be lost.
             let issued_at_ms=unsafe{GetTickCount64()};
             last_attempted_issue_ms=Some(issued_at_ms);
-            let snapshot=native_clients_session::request(SessionRequest::Mc02Input{
+            native_clients_session::request(SessionRequest::Mc02Input{
                 slot:2,keys:pulse.keys,dx:pulse.dx,dy:pulse.dy,
                 ttl_ms:pulse.ttl_ms,issued_at_ms,
                 batch_origin:Some(batch_origin),
             }).map_err(native_error)?;
-            if snapshot.schema!=1||snapshot.profiles.len()!=5 {
-                return Err("INVALID_NATIVE_SNAPSHOT");
-            }
             // The pre-dispatch check alone cannot establish a timely
-            // heartbeat: authenticated IPC and the five-profile receipt
+            // heartbeat: authenticated IPC and the private input receipt
             // can finish after this pulse's +150-ms budget. Refuse a
             // late ACK even for the final pulse, and enter the existing
             // exact-MC02 neutral release below. This is NOT evidence
@@ -394,7 +389,7 @@ struct MultiAiPulse {
 
 // The CLI validates ascending (at_ms,slot) before calling this function.
 // One timestamp group uses ONE authenticated native session transaction,
-// rather than 4–5 independent snapshot-producing IPC exchanges.
+// rather than 4–5 independent authenticated IPC exchanges.
 #[cfg(all(windows,target_arch="x86_64",
           feature="lazy-tester-package",feature="mc02-native-input"))]
 fn multi_ai_group_end(pulses:&[MultiAiPulse],first:usize)->usize {
@@ -512,15 +507,12 @@ fn execute_multi_ai_batch(args:&[String])->Result<Value,&'static str> {
             // The original session actor still verifies every owned process
             // and channel. A group is NOT an atomic or simultaneous Windows
             // input broadcast; it only removes redundant IPC round trips.
-            let snapshot=native_clients_session::request(
+            native_clients_session::request(
                 SessionRequest::AiInputGroup {
                     frames,issued_at_ms,deadline_at_ms:latest,
                     owner_id:owner.clone(),lease_epoch:epoch.clone(),
                 }
             ).map_err(native_error)?;
-            if snapshot.schema!=1||snapshot.profiles.len()!=5 {
-                return Err("INVALID_NATIVE_SNAPSHOT");
-            }
             if unsafe{GetTickCount64()}>latest {
                 return Err("AI_SEQUENCE_DEADLINE");
             }
@@ -736,11 +728,7 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
                 owner_id:writer_id()?,lease_epoch:lease_epoch()?,
             }
         };
-        let snapshot=native_clients_session::request(request)
-            .map_err(native_error)?;
-        if snapshot.schema!=1||snapshot.profiles.len()!=5 {
-            return Err("INVALID_NATIVE_SNAPSHOT");
-        }
+        native_clients_session::request(request).map_err(native_error)?;
         return Ok(json!({"schema":1,"ok":true,
             "operation":args[0],"slot":slot,
             "delivery":"PER_CLIENT_SHARED_STATE_WRITTEN_NOT_GAMEPLAY_PROOF",
