@@ -46,16 +46,17 @@ user inspects the relevant setting. No raw native exception is displayed.
 A failed native preview offers "Select game" only when window response is
 positively observed; otherwise the safe offered action is "Refresh".
 
-The five-card rail retains its original fixed profile identities and native live preview nodes. The single adaptive Play layout compacts card chrome, reserves the original Close control in each card title band and automatically balances the game viewport against readable previews. Visual card labels are always MC01–MC05, with full Minecraft slot names preserved for accessibility and confirmations. Play-only system warnings have bounded keyboard-scrollable content so long recovery messages cannot indefinitely shrink the game stage. No display-density selector or additional native DWM target is needed.
-The fixed 56px launcher action strip hosts Close confirmation, pending close,
-and noncritical selection/preview feedback without inserting another workspace row.
+The five-card rail retains its original fixed profile identities and native live preview nodes. One shared Play layout supports a saved Bottom or Right preference, compacts card chrome, reserves the original Close control in each card title band and automatically balances the game viewport against readable previews. Right falls back to Bottom when workspace dimensions are insufficient without rewriting the preference. Complete single-line labels at supported widths are the target; a readable two-line fallback remains below the estimated card-width budget. Visual card labels are always MC01–MC05, with full Minecraft slot names preserved for accessibility and confirmations. Play-only system warnings have bounded keyboard-scrollable content so long recovery messages cannot indefinitely shrink the game stage. No display-density selector or additional native DWM target is needed.
+The bounded 56px launcher action strip hosts Close confirmation, pending close,
+and noncritical selection/preview feedback. It collapses when empty and expands
+in normal flow without overlaying native surfaces.
 Each keyed launcher reserves a 42px health row. Launch receipt uncertainty is scoped
 to its slot and blocks retry until fresh native observation; it never authorizes launch.
 Critical connection and restoration warnings remain global. Layout uses one captured
-viewport/preview/DPI snapshot per pass. During selected Close review only retained
+viewport/preview/DPI snapshot per pass. During Close review only presentation cleanup and existing selected
 viewport updates are admitted; inspection and full preview configuration wait for
-review completion. Review-only resize clears old DWM destinations before moving the
-retained surface; normal layout recreates previews after review. Critical warnings
+review completion. Review-only resize clears old DWM destinations before moving any
+retained selected surface; normal layout recreates previews after review. Critical warnings
 share one bounded scroll region rather than independently consuming stage height.
 Native passive placement defers while the main HWND is disabled
 by a modal. These are source contracts, not Windows acceptance; temporary preview
@@ -64,11 +65,10 @@ A selected-game Close review still uses the original native CloseOne admission;
 its UI defaults keyboard focus to Cancel, supports Escape dismissal, and returns
 focus to the invoking Close game button without scrolling the rail. No implicit
 game exit, forced termination, or new window manager is introduced. General
-Settings keeps graphics preferences per launcher, global FPS limits, and
-background audio with explicit save timing and scope; legacy graphics details
-remain collapsed. Preserve Visuals is visibly recommended, while its saved
-effect and the legacy High/Low compatibility tradeoffs remain explicit.
-Frame Limits explains FPS as limits, not measured game performance. Data Storage is reached through the existing Settings sidebar only. The one native per-game FPS policy must react to an original verified Play switch: when the selected game has actual Windows foreground it gets the active cap; if LazyTester itself remains foreground, its original, visibly placed native game may receive the active cap only after exact window and viewport readback. Other games remain background; foreign foreground, minimized/suspended/covered surfaces or unverified identity demote all manager-selected hints. This changes event timing/selection of existing 144/10 ceilings, not saved settings, real measured FPS or game focus, and needs exact-SHA Windows acceptance.
+Settings exposes Workspace Layout, global FPS limits and background audio
+with explicit save timing and scope. Per-launcher graphics controls are retired
+from the UI; existing native compatibility data remains preserved.
+Frame Rate explains FPS as limits, not measured game performance. Data Storage is reached through the existing Settings sidebar only. The one native per-game FPS policy must react to an original verified Play switch: when the selected game has actual Windows foreground it gets the active cap; if LazyTester itself remains foreground, its original, visibly placed native game may receive the active cap only after exact window and viewport readback. Other games remain background; foreign foreground, minimized/suspended/covered surfaces or unverified identity demote all manager-selected hints. This changes event timing/selection of existing 144/10 ceilings, not saved settings, real measured FPS or game focus, and needs exact-SHA Windows acceptance.
 General has no duplicate folder actions or navigation section. Data Storage reports byte units
 honestly (B/KiB/MiB/GiB), distinguishes zero from unavailable and incomplete
 measurements, and labels the UI receipt time rather than claiming an exact
@@ -467,7 +467,7 @@ Before accepting the developer integration as complete, prove:
 3. One actual game: rendering, relative mouse/capture/release, keyboard, login and
    save dialogs, resize, minimize/restore, close and reopen inside the manager.
 4. Two games: repeated swaps, correct input destination and independent sessions.
-5. Four games: live previews, sequential restart, multiplayer and 60-minute soak.
+5. Five games: live previews, sequential restart, multiplayer and 60-minute soak.
    Measure displayed FPS separately; unavailable measurement is NOT_EXECUTED.
 
 The failed SetParent route remains rejected. Do not call a capture image an

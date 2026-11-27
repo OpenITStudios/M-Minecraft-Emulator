@@ -886,12 +886,18 @@ body{
 .lazytester-filmstrip .lazytester-launcher-card small.lazytester-status-routine{color:var(--lazytester-success)}
 .lazytester-filmstrip .lazytester-launcher-card.selected small.lazytester-status-routine{color:var(--lazytester-accent)}
 .lazytester-app .lazytester-close-launcher{top:8px;right:7px;width:24px;height:24px;min-height:24px;border:0;background:transparent;font-size:17px}
-/* Query actual card width, not window width. The 206px content budget
-   reserves 29px for Close, 5px gap and 172px for the two labels and dot.
-   All five equal tracks switch together. Narrow windows retain readable
-   full labels below Close; the native minimum size is not increased. */
-.lazytester-launcher-entry{container-type:inline-size}
-@container (max-width:221px){
+/* Compact the same header at narrow card widths, retaining complete labels,
+   status dot and 24px Close target. Below the estimated single-line budget,
+   all five tracks retain the readable two-line fallback for high zoom. */
+.lazytester-launcher-entry{container:lazytester-launcher / inline-size}
+@container lazytester-launcher (max-width:221px){
+  .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card{padding-inline:4px}
+  .lazytester-play-main .lazytester-filmstrip .lazytester-launcher-card :is(strong,small){font-size:11px}
+  .lazytester-launcher-header{gap:3px;justify-content:flex-start}
+  .lazytester-launcher-header small::before{width:5px;height:5px;margin-right:3px}
+  .lazytester-app .lazytester-close-launcher{right:4px}
+}
+@container lazytester-launcher (max-width:159px){
   .lazytester-launcher-header{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:24px 18px;gap:0;min-height:42px;padding-right:0;justify-items:start}
   .lazytester-launcher-header strong{max-width:calc(100% - 29px)}
   .lazytester-launcher-header::after{top:3px;bottom:auto;height:20px}
@@ -997,10 +1003,12 @@ body{
 @container lazytester-workspace (min-width:960px) and (min-height:840px){
   .lazytester-workspace-right .lazytester-workspace-grid{display:grid;grid-template-columns:minmax(0,1fr) 230px;grid-template-rows:minmax(0,1fr)}
   .lazytester-workspace-right .lazytester-filmstrip{width:100%;height:100%;grid-template-columns:minmax(0,1fr);grid-template-rows:repeat(5,minmax(0,1fr));gap:6px}
-  .lazytester-workspace-right .lazytester-launcher-entry{min-height:0}
+  .lazytester-workspace-right .lazytester-launcher-entry{min-height:0;container-type:size}
   .lazytester-workspace-right .lazytester-launcher-health-slot{flex:0 0 42px}
   .lazytester-workspace-right .lazytester-filmstrip .lazytester-launcher-card{min-height:0;gap:3px;padding:6px;align-items:stretch}
-  .lazytester-workspace-right .lazytester-launcher-preview{width:min(100%,calc(max(0px,(100cqh - 80px) / 5 - 92px) * 16 / 9),144px);flex:none}
+  /* Entry height already excludes the action strip and grid gaps.
+     Reserve 42px health, 4px entry gap, 14px card edges, 26px header and 3px card gap. */
+  .lazytester-workspace-right .lazytester-launcher-preview{width:min(100%,calc(max(0px,100cqh - 89px) * 16 / 9),144px);flex:none}
 }
 .lazytester-layout-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .lazytester-app .lazytester-layout-option{background:var(--lazytester-panel);color:var(--lazytester-text);border:1px solid var(--lazytester-line);border-radius:8px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:8px;font-size:13px}

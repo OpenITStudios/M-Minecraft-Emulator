@@ -669,6 +669,22 @@ try {
     assert.equal(await page.locator('.lazytester-launcher-action-strip').isVisible(),false,
       'An empty feedback strip must not reserve workspace height');
     assert.ok(previews.every(p=>Math.abs(p.width-p.height*16/9)<2),'previews must stay 16:9');
+    // Exercise longest authored labels without inventing a native observation.
+    const headerFits=await page.locator('.lazytester-launcher-header').evaluateAll(headers=>headers.every(header=>{
+      const name=header.querySelector('strong'),status=header.querySelector('small');
+      const original=status.textContent;
+      try {
+        return ['Unavailable','Not Responding','Needs Attention','Selected','Starting…'].every(label=>{
+          status.textContent=label;
+          const a=name.getBoundingClientRect(),b=status.getBoundingClientRect(),h=header.getBoundingClientRect();
+          const reserved=parseFloat(getComputedStyle(header).paddingRight);
+          return Math.abs((a.top+a.bottom)-(b.top+b.bottom))<=2 &&
+            b.left>=a.right && b.right<=h.right-reserved+1 &&
+            name.scrollWidth<=name.clientWidth+1 && status.scrollWidth<=status.clientWidth+1;
+        });
+      } finally {status.textContent=original;}
+    }));
+    assert.equal(headerFits,true,'Supported Bottom widths must fit complete launcher labels on one line');
     if((size.width===920&&size.height===620)||(size.width===1280&&size.height===900)){
       const slots=await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count();
       assert.equal(slots,5,'The original five DWM preview slots are retained');
@@ -728,7 +744,26 @@ try {
   assert.ok(adaptivePreviews.every(({width,height})=>
     height>=70&&height<=109&&Math.abs(width-height*16/9)<2),
     'Adaptive previews stay readable, 16:9 and bounded at 1280x900');
-  await nav('Settings').click();await section('Data Storage').click();
+  await nav('Settings').click();await heading('General').waitFor();
+  await page.getByRole('group',{name:'Workspace Layout'}).getByRole('button',{name:'Right',exact:true}).click();
+  await nav('Back').click();
+  await page.setViewportSize({width:1920,height:1080});
+  const railDirection=()=>page.locator('.lazytester-workspace-grid').evaluate(node=>getComputedStyle(node).display);
+  assert.equal(await railDirection(),'grid','Right preference uses the side rail when workspace size permits');
+  const rightFits=await page.locator('.lazytester-launcher-entry').evaluateAll(entries=>entries.every(entry=>{
+    const preview=entry.querySelector('.lazytester-launcher-preview').getBoundingClientRect();
+    const health=entry.querySelector('.lazytester-launcher-health-slot').getBoundingClientRect();
+    return preview.width>0&&preview.height>0&&preview.width<=145&&
+      Math.abs(preview.width-preview.height*16/9)<2&&preview.bottom<=health.top+1;
+  }));
+  assert.equal(rightFits,true,'Right previews stay 16:9 within their own card and above health content');
+  await page.setViewportSize({width:920,height:620});
+  assert.equal(await railDirection(),'flex','Right preference falls back to Bottom at insufficient workspace size');
+  assert.equal(await page.evaluate(()=>localStorage.getItem('lazytester.workspace-layout')),'Right',
+    'Responsive fallback must not overwrite the saved preference');
+  await nav('Settings').click();await heading('General').waitFor();
+  await page.getByRole('group',{name:'Workspace Layout'}).getByRole('button',{name:'Bottom',exact:true}).click();
+  await section('Data Storage').click();
   await page.setViewportSize({width:1280,height:900});
   // Preserve navigation clicks while an inspect is in flight.
   await page.evaluate(()=>{window.__holdInspect=true;});await page.waitForFunction(()=>!!window.__finishInspect);
