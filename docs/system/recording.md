@@ -59,7 +59,15 @@ discards the temporary output instead of publishing ambiguous footage;
 no attempt to reacquire a replacement HWND. This periodic check is not
 per-frame identity proof; exact WGC capture-item lifetime must be verified.
 Stop sends q to the child stdin only, then waits for graceful finalization
-up to 10 s. Child/job cleanup on failure; process crash can leave a .part
+up to 10 s. A BrokenPipe during concurrent natural exit still requires
+successful exit and complete progress; it is not an automatic success or
+retry. A final progress report without child exit also has a 10 s deadline.
+The same 15 s frame-progress deadline covers both startup and mid-stream
+stalls: only a completed, monotonic frame-count report resets it. A game
+that produces no new frames for 15 s is conservatively failed, including
+a static/stalled capture source; this is not proof of game failure. The
+progress parser rejects missing/duplicate frame counts, unknown terminal
+markers and data after progress=end. Child/job cleanup on failure; process crash can leave a .part
 file, which is not marked Saved or auto-deleted by storage maintenance.
 Immediate job assignment has a small spawn-to-assignment race; binary
 approval requires review of this boundary. No game process is in the job.
@@ -81,7 +89,9 @@ world, cache or diagnostic data.
 Review exact FFmpeg version/options and native filter negotiation; verify
 unsupported hardware fails with one attempt and no alternate encoder;
 D3D11 frames reach NVENC without CPU readback, decode the completed MKV,
-test stop/start, immediate stop, target exit/resize, no-clobber, disk full,
+test stop/start, immediate stop, first/later frame stalls, malformed progress,
+terminal report without child exit, natural exit racing Stop, target
+exit/resize, no-clobber, disk full,
 GPU exhaustion, failure cleanup, crash recovery, job containment, mixed DPI,
 background/occluded games, and one-to-five workloads. Measure CPU/GPU/RAM,
 game FPS, actual video FPS, bitrate, small text and texture detail. Review CAP-05 typed UI controls at supported widths/DPI, independently

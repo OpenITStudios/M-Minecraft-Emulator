@@ -133,7 +133,7 @@ mod windows_capture {
         };
         if !ok || observed_pid!=target.pid || birth!=target.birth ||
             game_session!=target.session_id || own_session!=target.session_id ||
-            !window_valid {
+            !window_valid || unsafe{WaitForSingleObject(pin.0,0)}!=WAIT_TIMEOUT {
             return Err(io::Error::new(io::ErrorKind::PermissionDenied,
                 "Game PID/birth/session/root HWND or visibility changed"));
         }

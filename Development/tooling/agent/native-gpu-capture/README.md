@@ -82,7 +82,7 @@ dimensions above 4096 on either side. Raw and encoded limits are 64 and
 80 MiB respectively; these bound the payload, not total codec/GPU memory.
 See [WGC 3.1.0 Frame](https://docs.rs/wgc/3.1.0/wgc/frame/struct.Frame.html)
 and [image-webp 0.2.4](https://docs.rs/image-webp/0.2.4/image_webp/struct.WebPEncoder.html).
-Native DWM/WGC mapping, DPI, opacity, deadline and actual file size are
+Original process handle liveness is rechecked after window identity observation. Native DWM/WGC mapping, DPI, opacity, deadline and actual file size are
 unverified. No GPU or CPU recording encoder has been selected or added.
 
 No tests or builds may be run until the operator explicitly authorizes them.

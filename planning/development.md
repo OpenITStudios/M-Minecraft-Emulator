@@ -96,6 +96,15 @@ live HWND/size/liveness checks retained (including a post-observation
 liveness check), and early failure on invalid progress. Keep the independent
 bounded pipe reader so a blocked synchronous pipe cannot stall supervisor
 deadlines. No added worker/timer/dependency; no measured savings claimed.
+Blindspot review: one 15 s watchdog now covers first and later frame
+stalls; completed progress reports only, monotonic count, strict terminal
+marker, bounded natural-exit finalization and no false failure solely
+from BrokenPipe during Stop. Screenshot/AI worker rechecks original handle
+liveness after window identity observation. Fixtures authored NOT_EXECUTED.
+Remaining native risks: WGC same-process HWND reuse and mixed DPI/occlusion,
+actual GPU frame negotiation, job assignment before manager crash,
+disk full/destination races and recoverability of interrupted MKV.
+No new fallback, dependency, idle worker or automatic retry.
 Reviewed binary, exact native capture/resize/cleanup and measured quality
 remain held. Source only, no CI, no test execution, no release.
 

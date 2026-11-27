@@ -19,7 +19,7 @@ const SAVED:u8=3;
 const FAILED:u8=4;
 const MAX_ACTIVE_PIXEL_RATE:u64=4096*2160*30; // conservative initial admission, not measured GPU throughput
 const POLL:Duration=Duration::from_millis(200);
-const START_TIMEOUT:Duration=Duration::from_secs(15);
+const FRAME_TIMEOUT:Duration=Duration::from_secs(15);
 const STOP_TIMEOUT:Duration=Duration::from_secs(10);
 
 #[derive(Clone,Serialize)]
@@ -154,6 +154,8 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     let started=Instant::now();
     let mut stopping=None;
     let mut progress_complete=false;
+    let mut last_frame=0;
+    let mut last_advance=started;
     loop{
         target.verify()?; // fail closed; no replacement window/slot
         if !progress_complete{
@@ -170,15 +172,26 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
             if !status.success(){return Err(io::Error::other("Hardware recorder failed"));}
             break;
         }
-        if run.frames.load(Ordering::Acquire)==0&&started.elapsed()>=START_TIMEOUT{
-            return Err(io::Error::new(io::ErrorKind::TimedOut,"Recording produced no frames"));
+        // A final progress report is not proof that the child exited.
+        // Bound the remaining trailer/exit wait even after a natural end.
+        if stopping.is_none()&&progress_complete{
+            run.state.store(STOPPING,Ordering::Release);
+            stopping=Some(Instant::now());
         }
         if stopping.is_none()&&(run.stop.load(Ordering::Acquire)||
             started.elapsed()>=Duration::from_secs(video::MAX_SECONDS)){
             run.state.store(STOPPING,Ordering::Release);
             stopping=Some(Instant::now());
             let mut stdin=rec.child.stdin.take().ok_or_else(||io::Error::other("Recording stop unavailable"))?;
-            stdin.write_all(b"q\n")?; // FFmpeg graceful flush/trailer; no game input
+            // Natural exit may close stdin just before the user stops.
+            // BrokenPipe is not success; still require exit and trailer proof.
+            if let Err(error)=stdin.write_all(b"q\n"){
+                if error.kind()!=io::ErrorKind::BrokenPipe{return Err(error);}
+            }
+        }
+        if stopping.is_none()&&frame_stalled(
+            &mut last_frame,&mut last_advance,run.frames.load(Ordering::Acquire),Instant::now()){
+            return Err(io::Error::new(io::ErrorKind::TimedOut,"Recording frame progress stalled"));
         }
         if stopping.is_some_and(|t:Instant|t.elapsed()>=STOP_TIMEOUT){
             return Err(io::Error::new(io::ErrorKind::TimedOut,"Recording finalization timed out"));
@@ -204,26 +217,47 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     Ok(())
 }
 
+// One deadline for first-frame and mid-stream stalls, no additional timer.
+fn frame_stalled(last:&mut u64,advanced:&mut Instant,current:u64,now:Instant)->bool{
+    if current>*last{*last=current;*advanced=now;}
+    now.saturating_duration_since(*advanced)>=FRAME_TIMEOUT
+}
+
 fn read_progress(mut input:impl Read,run:&Run)->io::Result<bool>{
     let mut buf=[0u8;4096];
     let mut line=[0u8;256];
     let mut length=0;
     let mut total=0usize;
     let mut ended=false;
+    let mut report_frame=None;
     loop{
         let n=input.read(&mut buf)?;
         if n==0{break;}
         total+=n;
         if total>8*1024*1024{return Err(io::Error::other("Recording progress budget exceeded"));}
         for &b in &buf[..n]{
+            if ended{return Err(io::Error::other("Unexpected data after final recording progress"));}
             if b==b'\n'{
                 let text=std::str::from_utf8(&line[..length]).map_err(|_|io::Error::other("Invalid recording progress"))?.trim();
                 if let Some(value)=text.strip_prefix("frame="){
                     let frames=value.trim().parse::<u64>().map_err(|_|io::Error::other("Invalid frame count"))?;
-                    run.frames.fetch_max(frames,Ordering::AcqRel);
+                    if report_frame.replace(frames).is_some(){
+                        return Err(io::Error::other("Duplicate frame count in recording progress"));
+                    }
+                }else if let Some(value)=text.strip_prefix("progress="){
+                    if !matches!(value,"continue"|"end"){
+                        return Err(io::Error::other("Invalid recording progress marker"));
+                    }
+                    let frames=report_frame.take().ok_or_else(||io::Error::other("Recording report has no frame count"))?;
+                    if frames<run.frames.load(Ordering::Acquire){
+                        return Err(io::Error::other("Recording frame count regressed"));
+                    }
+                    // Publish only a complete progress report, not an isolated
+                    // frame line from a truncated or malformed stream.
+                    run.frames.store(frames,Ordering::Release);
                     if frames>0{let _=run.state.compare_exchange(STARTING,RECORDING,Ordering::AcqRel,Ordering::Acquire);}
+                    ended=value=="end";
                 }
-                if text=="progress=end"{ended=true;}
                 length=0;
             }else{
                 if length==line.len(){return Err(io::Error::other("Recording progress line too long"));}
@@ -259,6 +293,29 @@ mod tests{
         let receipt=r.receipt(1);
         assert_eq!(receipt.state,"Recording");
         assert_eq!(receipt.frames,1);
+    }
+    #[test]
+    fn frame_watchdog_detects_first_and_later_stalls(){
+        let start=Instant::now();
+        let mut advanced=start;
+        let mut last=0;
+        assert!(!frame_stalled(&mut last,&mut advanced,0,start+Duration::from_secs(14)));
+        assert!(frame_stalled(&mut last,&mut advanced,0,start+FRAME_TIMEOUT));
+        assert!(!frame_stalled(&mut last,&mut advanced,10,start+FRAME_TIMEOUT));
+        assert!(!frame_stalled(&mut last,&mut advanced,10,start+FRAME_TIMEOUT+Duration::from_secs(14)));
+        assert!(frame_stalled(&mut last,&mut advanced,10,start+FRAME_TIMEOUT*2));
+    }
+    #[test]
+    fn malformed_or_truncated_reports_cannot_claim_more_frames(){
+        let r=run(1);
+        assert!(!read_progress(&b"frame=5\n"[..],&r).unwrap());
+        assert_eq!(r.frames.load(Ordering::Acquire),0);
+        for invalid in [&b"progress=end\n"[..],&b"frame=1\nframe=2\nprogress=end\n"[..],
+            &b"frame=1\nprogress=unknown\n"[..]]{
+            assert!(read_progress(invalid,&r).is_err());
+        }
+        assert!(read_progress(&b"frame=5\nprogress=end\nframe=6\n"[..],&r).is_err());
+        assert!(read_progress(&b"frame=4\nprogress=end\n"[..],&r).is_err());
     }
     #[test]
     fn progress_requires_terminal_receipt_and_real_frames(){
