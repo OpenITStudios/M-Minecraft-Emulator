@@ -2,7 +2,7 @@
 use super::*;
 use crate::engine::{
     native_clients_session::{
-        pipe::{Endpoint, Peer, Server},
+        pipe::{Activity, Endpoint, Peer, Server},
         ProfileSession, ProfileStorage, SessionRequest, SessionSnapshot, SettingsReport,
         SelectiveCategory, SelectiveInventory, SelectiveInventoryEntry, SelectiveSelection, SelectiveReviewReceipt,
     },
@@ -138,15 +138,18 @@ impl Sessions {
         })
     }
 
-    fn reap(&mut self) {
-        self.reap_selected(&[true; 5]);
+    fn reap(&mut self) -> bool {
+        self.reap_selected(&[true; 5])
     }
 
     // Only the already-exited target of CloseOne needs journal persistence
     // before its acknowledgement. Other slots retain their original handles
     // and journals for the next ordinary idle/Inspect maintenance cycle.
     // CloseAll supplies all five slots and retains its full cleanup contract.
-    fn reap_selected(&mut self, selected: &[bool; 5]) {
+    // Return whether an original exit observation failed; a signaled
+    // handle must not spin when its exit receipt cannot be collected.
+    fn reap_selected(&mut self, selected: &[bool; 5]) -> bool {
+        let mut failed = false;
         for index in 0..5 {
             if !selected[index] {
                 continue;
@@ -159,6 +162,7 @@ impl Sessions {
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => continue,
                 Err(error) => {
                     self.issues[index] = Some(error.to_string());
+                    failed = true;
                     continue;
                 }
             };
@@ -180,6 +184,7 @@ impl Sessions {
             #[cfg(feature="mc02-native-input")]
             self.ai_leases.forget_slot(index as u32+1);
         }
+        failed
     }
 
     fn launch(&mut self, slot: u32) -> io::Result<()> {
@@ -1489,7 +1494,7 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
     valid_retained_window(&process).then_some(process)
 }
 
-// Audio COM reads are separate from process reaping. Active maintenance
+// Audio COM reads are separate from process exit. Active audio maintenance
 // retains its 250 ms cadence; stable audio uses its 1-second discovery
 // deadline. A change of owned foreground or exact roster bypasses it.
 const AUDIO_IDLE_RESYNC: Duration = Duration::from_secs(1);
@@ -1566,22 +1571,6 @@ fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
     })
 }
 
-// Admit an authenticated, queued request before optional idle maintenance on
-// this SAME controller actor. It introduces no additional worker or game owner.
-fn receive_before_maintenance<T>(
-    receiver: &std::sync::mpsc::Receiver<T>,
-    timeout: Duration,
-    on_idle: impl FnOnce(),
-) -> Result<T, std::sync::mpsc::RecvTimeoutError> {
-    let result = receiver.recv_timeout(timeout);
-    if result.is_err() {
-        // Include transport disconnect: retain and reap exact game handles
-        // rather than mistaking a disconnected manager for game exit.
-        on_idle();
-    }
-    result
-}
-
 // Keep reply work in one policy: coordinated close already reaps the selected
 // slots; status and input receipts must not flush unrelated journals or
 // rewrite window labels. All ordinary operations retain full observation.
@@ -1618,10 +1607,12 @@ impl ReplySnapshot {
     }
 }
 
-// The existing request channel wakes immediately for incoming requests.
-// Only the fully inactive controller may use a longer maintenance timeout.
-fn maintenance_interval(running: bool, pending_storage: bool, audio_present: bool) -> Duration {
-    Duration::from_millis(if running || pending_storage || audio_present {250} else {1000})
+// A live game alone has no periodic reaping deadline: its original process
+// handle wakes the actor. Keep the old 1s bounded reconciliation wait for
+// the controller's Windows/peer boundary, and 250ms only for due maintenance
+// or degraded exit observation. This is not a busy wait.
+fn maintenance_interval(pending_storage: bool, audio_needed: bool, exit_retry: bool) -> Duration {
+    Duration::from_millis(if pending_storage || audio_needed || exit_retry {250} else {1000})
 }
 
 fn run() -> io::Result<()> {
@@ -1641,14 +1632,15 @@ fn run() -> io::Result<()> {
     let mut testing_runs=crate::engine::native_clients_session::NativeTestingRunBook::default();
     let mut audio=None;
     let mut audio_mode=crate::engine::manager_settings::load_audio()?;
-    // Audio's COM session enumerator already has a one-second discovery
-    // cadence. Keep 250 ms original game exit/reap checks unchanged; avoid
-    // re-running all COM mute checks while focus and owned processes are stable.
+    // Audio keeps its existing bounded maintenance; game exit has its own
+    // retained-handle wake and does not need periodic process scanning.
     let mut audio_idle = AudioIdleGate::default();
     // No audio failure observed before the first idle maintenance cycle.
     let mut audio_issue: Option<String> = None;
     let server = Server::start(Endpoint::current()?)?;
     let mut manager: Option<Peer> = None;
+    let mut exit_retry = false;
+    let mut native_wait_failed = false;
     let startup = std::time::Instant::now();
     {
         let mut output = io::stdout().lock();
@@ -1660,15 +1652,47 @@ fn run() -> io::Result<()> {
         // A queued CloseOne/CloseAll should not wait behind journal sync_all
         // or COM audio discovery for an unrelated, already-exited game.
         // Native I/O is still unpreemptible once idle maintenance begins.
-        let cadence=maintenance_interval(sessions.running.iter().any(Option::is_some),
-            sessions.pending_storage_maintenance.iter().any(|pending|*pending),audio.is_some());
-        let pending = receive_before_maintenance(
-            &server.requests,
-            cadence,
-            || {
-                // Live games, outstanding audio leases and queued storage keep
-                // the original 250 ms policy. Only fully inactive state slows.
-                sessions.reap();
+        let running = sessions.running.iter().any(Option::is_some);
+        let pending_storage = sessions.pending_storage_maintenance.iter().any(|pending|*pending);
+        let audio_needed = audio_maintenance_needed(audio_mode, audio.is_some(), audio_roster(&sessions));
+        let cadence = maintenance_interval(pending_storage, audio_needed,
+            exit_retry || native_wait_failed && running);
+        // Direct wait on the original actor's handles. A dead manager cannot
+        // repeatedly wake a controller that still owns games; it is relevant
+        // to detach only when no game remains.
+        let activity = if !native_wait_failed && !exit_retry {
+            let lifetimes = sessions.running.iter().flatten()
+                .map(|started| started.children[0].process.as_handle())
+                .chain(manager.as_ref().filter(|_| !running).map(Peer::wait_handle));
+            match server.wait_for_activity(lifetimes, cadence) {
+                Ok(activity) => Some(activity),
+                Err(error) => {
+                    // Actual native wait failure: preserve ownership and the
+                    // original bounded maintenance for this controller lifetime.
+                    eprintln!("Session lifetime wait unavailable: {error}");
+                    native_wait_failed = true;
+                    None
+                }
+            }
+        } else { None };
+        let activity = activity.unwrap_or_else(|| {
+            match server.requests.recv_timeout(cadence) {
+                Ok(envelope) => Activity::Request(envelope),
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Activity::Lifetime,
+                Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Activity::Disconnected,
+            }
+        });
+        let envelope = match activity {
+            // A new authenticated peer wins over the previous peer's detach
+            // indication. Its own liveness is still checked before admission.
+            Activity::Request(envelope) => envelope,
+            idle => {
+                let disconnected = matches!(idle, Activity::Disconnected);
+                if !matches!(idle, Activity::Deadline) {
+                    exit_retry = sessions.reap();
+                }
+                // A successful ordinary timeout performs no per-game exit
+                // scan. Storage and audio retain their original admission.
                 sessions.maintain_storage();
                 let roster = audio_roster(&sessions);
                 if !audio_maintenance_needed(audio_mode, audio.is_some(), roster) {
@@ -1690,24 +1714,17 @@ fn run() -> io::Result<()> {
                         }
                     }
                 }
-            },
-        );
-        let detached = manager.as_ref().map_or_else(
-            || startup.elapsed() > Duration::from_secs(45),
-            |peer| !peer.alive(),
-        );
-        if detached && sessions.running.iter().all(Option::is_none) {
-            return Ok(());
-        }
-        let envelope = match pending {
-            Ok(envelope) => envelope,
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
-            Err(_) => {
-                // Even a failed transport must retain game/storage/FPS ownership until normal exit.
                 if sessions.running.iter().all(Option::is_none) {
-                    return Err(invalid("Session transport stopped"));
+                    let detached = manager.as_ref().map_or_else(
+                        || startup.elapsed() > Duration::from_secs(45),
+                        |peer| !peer.alive(),
+                    );
+                    if detached { return Ok(()); }
+                    if disconnected { return Err(invalid("Session transport stopped")); }
                 }
-                std::thread::sleep(Duration::from_millis(250));
+                // A disconnected channel is permanently ready. Preserve the
+                // original bounded delay rather than spin or abandon games.
+                if disconnected { std::thread::sleep(Duration::from_millis(250)); }
                 continue;
             }
         };
@@ -2179,43 +2196,17 @@ mod tests {
     }
 
     #[test]
-    fn idle_controller_cadence_preserves_active_and_pending_work() {
+    fn idle_controller_cadence_preserves_only_actual_deadlines() {
         assert_eq!(maintenance_interval(false,false,false),Duration::from_secs(1));
-        for running in [false,true] {
-            for storage in [false,true] {
-                for audio in [false,true] {
-                    if running||storage||audio {
-                        assert_eq!(maintenance_interval(running,storage,audio),Duration::from_millis(250));
+        for storage in [false,true] {
+            for audio in [false,true] {
+                for retry in [false,true] {
+                    if storage||audio||retry {
+                        assert_eq!(maintenance_interval(storage,audio,retry),Duration::from_millis(250));
                     }
                 }
             }
         }
-    }
-    #[test]
-    fn queued_close_admission_precedes_idle_journal_maintenance() {
-        use std::sync::mpsc::{self, RecvTimeoutError};
-        // Pure channel fixture: no native process, journal, helper or game.
-        let (sender, receiver) = mpsc::sync_channel(1);
-        sender.send(SessionRequest::CloseOne { slot: 2 }).unwrap();
-        let mut maintenance = 0;
-        let queued = receive_before_maintenance(&receiver, Duration::ZERO, || {
-            maintenance += 1;
-        }).unwrap();
-        assert!(matches!(queued, SessionRequest::CloseOne { slot: 2 }));
-        assert_eq!(maintenance, 0, "queued close must precede idle I/O");
-
-        let idle = receive_before_maintenance(&receiver, Duration::ZERO, || {
-            maintenance += 1;
-        });
-        assert!(matches!(idle, Err(RecvTimeoutError::Timeout)));
-        assert_eq!(maintenance, 1, "idle maintenance remains scheduled");
-
-        drop(sender);
-        let disconnected = receive_before_maintenance(&receiver, Duration::ZERO, || {
-            maintenance += 1;
-        });
-        assert!(matches!(disconnected, Err(RecvTimeoutError::Disconnected)));
-        assert_eq!(maintenance, 2, "disconnection retains cleanup");
     }
 
     // Private synthetic OGLES class, not Minecraft. Shared registration is

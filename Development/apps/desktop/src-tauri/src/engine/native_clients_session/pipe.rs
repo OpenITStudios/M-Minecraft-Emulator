@@ -9,7 +9,7 @@ use std::{
     os::windows::{
         ffi::OsStringExt,
         fs::OpenOptionsExt,
-        io::{AsRawHandle, FromRawHandle, OwnedHandle},
+        io::{AsHandle, AsRawHandle, BorrowedHandle, FromRawHandle, OwnedHandle},
     },
     ptr,
     sync::{
@@ -184,6 +184,9 @@ impl Peer {
     #[cfg(feature="mc02-native-input")]
     pub(crate) fn input_sender(&self)->(u32,u64) {
         (self.pid,self.birth)
+    }
+    pub(crate) fn wait_handle(&self) -> BorrowedHandle<'_> {
+        self.process.as_handle()
     }
     pub(crate) fn alive(&self) -> bool {
         // Original handle remains pinned; PID reuse cannot turn it into another peer.
@@ -445,8 +448,16 @@ pub(crate) struct Envelope {
     pub peer: Peer,
     pub reply: mpsc::SyncSender<SessionReply>,
 }
+pub(crate) enum Activity {
+    Request(Envelope),
+    Lifetime,
+    Deadline,
+    Disconnected,
+}
+
 pub(crate) struct Server {
     pub requests: mpsc::Receiver<Envelope>,
+    request_ready: Arc<OwnedHandle>,
     stopped: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
 }
@@ -457,6 +468,10 @@ impl Server {
         let stopped = Arc::new(AtomicBool::new(false));
         let stop = Arc::clone(&stopped);
         let (sender, requests) = mpsc::sync_channel(1);
+        // Unnamed auto-reset event, shared only by the existing pipe worker
+        // and controller. The channel remains the sole request authority.
+        let request_ready = Arc::new(own(unsafe { CreateEventW(ptr::null(), 0, 0, ptr::null()) })?);
+        let ready = Arc::clone(&request_ready);
         let worker = thread::Builder::new().name("lazytester-session-pipe".into()).spawn(move || {
             while !stop.load(Ordering::Acquire) {
                 let connected =
@@ -472,7 +487,7 @@ impl Server {
                     thread::sleep(Duration::from_millis(20));
                     continue;
                 }
-                let _ = serve(&endpoint, &mut file, &sender, &stop);
+                let _ = serve(&endpoint, &mut file, &sender, &stop, &ready);
                 unsafe {
                     DisconnectNamedPipe(file.as_raw_handle() as _);
                 }
@@ -480,9 +495,59 @@ impl Server {
         })?;
         Ok(Self {
             requests,
+            request_ready,
             stopped,
             worker: Some(worker),
         })
+    }
+
+    // The actor exclusively owns the retained lifetimes and cannot close or
+    // replace them during this synchronous wait. The pipe worker is also
+    // waited on: a failed notification cannot strand a queued request.
+    pub(crate) fn wait_for_activity<'a>(
+        &self, lifetimes: impl Iterator<Item=BorrowedHandle<'a>>, timeout: Duration,
+    ) -> io::Result<Activity> {
+        use mpsc::TryRecvError;
+        match self.requests.try_recv() {
+            Ok(envelope) => return Ok(Activity::Request(envelope)),
+            Err(TryRecvError::Disconnected) => return Ok(Activity::Disconnected),
+            Err(TryRecvError::Empty) => {},
+        }
+        let worker = self.worker.as_ref().ok_or_else(|| io::Error::other("Session pipe stopped"))?;
+        // Request first, worker second, at most five games and one peer.
+        let mut handles = [ptr::null_mut(); 8];
+        handles[0] = raw(&self.request_ready);
+        handles[1] = worker.as_raw_handle() as HANDLE;
+        let mut count = 2;
+        for handle in lifetimes {
+            if count == handles.len() {
+                return Err(io::Error::other("Controller lifetime wait exceeds its bound"));
+            }
+            handles[count] = handle.as_raw_handle() as HANDLE;
+            count += 1;
+        }
+        let started = Instant::now();
+        loop {
+            let remaining = timeout.saturating_sub(started.elapsed());
+            let milliseconds = remaining.as_nanos().div_ceil(1_000_000)
+                .min(u128::from(u32::MAX - 1)) as u32;
+            let wake = unsafe { WaitForMultipleObjects(count as u32, handles.as_ptr(), 0, milliseconds) };
+            if wake != WAIT_TIMEOUT && !(WAIT_OBJECT_0..WAIT_OBJECT_0 + count as u32).contains(&wake) {
+                return Err(if wake == u32::MAX { io::Error::last_os_error() }
+                    else { io::Error::other("Unexpected controller lifetime wait result") });
+            }
+            // An authenticated request wins even when another handle signaled.
+            // Consume a stale auto-reset signal without manufacturing a
+            // maintenance deadline or restarting the original timeout.
+            match self.requests.try_recv() {
+                Ok(envelope) => return Ok(Activity::Request(envelope)),
+                Err(TryRecvError::Disconnected) => return Ok(Activity::Disconnected),
+                Err(TryRecvError::Empty) if wake == WAIT_OBJECT_0 + 1 => return Ok(Activity::Disconnected),
+                Err(TryRecvError::Empty) if wake == WAIT_TIMEOUT => return Ok(Activity::Deadline),
+                Err(TryRecvError::Empty) if wake == WAIT_OBJECT_0 => continue,
+                Err(TryRecvError::Empty) => return Ok(Activity::Lifetime),
+            }
+        }
     }
 }
 fn serve(
@@ -490,6 +555,7 @@ fn serve(
     file: &mut File,
     sender: &mpsc::SyncSender<Envelope>,
     stop: &AtomicBool,
+    request_ready: &OwnedHandle,
 ) -> io::Result<()> {
     if stop.load(Ordering::Acquire) {
         return Ok(());
@@ -515,6 +581,13 @@ fn serve(
             reply,
         })
         .map_err(|_| io::Error::other("Controller stopped"))?;
+    // Publish before signaling. A failed signal stops this transport worker,
+    // whose retained thread handle also wakes the actor. Never replay a request.
+    if unsafe { SetEvent(raw(request_ready)) } == 0 {
+        let error = io::Error::last_os_error();
+        stop.store(true, Ordering::Release);
+        return Err(error);
+    }
     let reply = loop {
         if stop.load(Ordering::Acquire) {
             return Ok(());
@@ -772,16 +845,48 @@ mod tests {
     }
 
     #[test]
+    fn native_wait_distinguishes_deadline_lifetime_and_queued_request() {
+        let (endpoint, client) = endpoints();
+        let mut server = Server::start(endpoint).unwrap();
+        let lifetime = own(unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) }).unwrap();
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+            Activity::Deadline));
+        assert_ne!(unsafe { SetEvent(raw(&server.request_ready)) }, 0);
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+            Activity::Deadline));
+        assert_ne!(unsafe { SetEvent(raw(&server.request_ready)) }, 0);
+        assert_ne!(unsafe { SetEvent(raw(&lifetime)) }, 0);
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+            Activity::Lifetime));
+        let caller = thread::spawn(move || exchange(&client, client.connect().unwrap(), &SessionRequest::CloseOne { slot: 2 }));
+        // Force the queue and lifetime to be ready together, including the
+        // case where the notification was consumed before the actor looked.
+        assert_eq!(unsafe { WaitForSingleObject(raw(&server.request_ready), 5000) }, WAIT_OBJECT_0);
+        let Activity::Request(envelope) = server.wait_for_activity(
+            std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap() else {
+            panic!("queued request must precede maintenance");
+        };
+        assert!(matches!(envelope.request, SessionRequest::CloseOne { slot: 2 }));
+        envelope.reply.send(Ok(SessionSnapshot::stopped())).unwrap();
+        assert!(caller.join().unwrap().unwrap().is_ok());
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+            Activity::Lifetime));
+        assert!(server.stop());
+        assert!(matches!(server.wait_for_activity(std::iter::empty(), Duration::ZERO).unwrap(),
+            Activity::Disconnected));
+    }
+
+    #[test]
     fn real_pipe_reconnects_and_round_trips_five_slot_contract_without_minecraft() {
         let (endpoint, client) = endpoints();
         let mut server = Server::start(endpoint).unwrap();
         let (done, finished) = mpsc::channel();
         let actor = thread::spawn(move || {
             for _ in 0..3 {
-                let envelope = server
-                    .requests
-                    .recv_timeout(Duration::from_secs(5))
-                    .unwrap();
+                let Activity::Request(envelope) = server.wait_for_activity(
+                    std::iter::empty(), Duration::from_secs(5)).unwrap() else {
+                    panic!("authenticated request must wake the controller");
+                };
                 assert!(matches!(envelope.request, SessionRequest::Inspect));
                 assert!(envelope.peer.alive());
                 assert!(envelope.peer.birth > 0);
@@ -869,17 +974,24 @@ mod tests {
         let (endpoint, client) = endpoints();
         let mut server = Server::start(endpoint).unwrap();
         let (expected, identities) = mpsc::channel();
+        let (observed_exit, exits) = mpsc::channel();
         let (done, finished) = mpsc::channel();
         let actor = thread::spawn(move || {
             for _ in 0..2 {
                 let pid = identities.recv_timeout(Duration::from_secs(5)).unwrap();
-                let envelope = server
-                    .requests
-                    .recv_timeout(Duration::from_secs(5))
-                    .unwrap();
+                let Activity::Request(envelope) = server.wait_for_activity(
+                    std::iter::empty(), Duration::from_secs(5)).unwrap() else {
+                    panic!("verified child request did not wake the controller");
+                };
                 assert_eq!(unsafe { GetProcessId(raw(&envelope.peer.process)) }, pid);
                 assert_ne!(pid, std::process::id());
                 envelope.reply.send(Ok(SessionSnapshot::stopped())).unwrap();
+                // The original verified child handle stays pinned after reply.
+                assert!(matches!(server.wait_for_activity(
+                    std::iter::once(envelope.peer.wait_handle()), Duration::from_secs(5)).unwrap(),
+                    Activity::Lifetime));
+                assert!(!envelope.peer.alive());
+                observed_exit.send(pid).unwrap();
             }
             finished.recv_timeout(Duration::from_secs(5)).unwrap();
             assert!(server.stop());
@@ -914,6 +1026,7 @@ mod tests {
                 thread::sleep(Duration::from_millis(10));
             };
             assert!(status.success());
+            assert_eq!(exits.recv_timeout(Duration::from_secs(5)).unwrap(), child.id());
         }
         done.send(()).unwrap();
         actor.join().unwrap();

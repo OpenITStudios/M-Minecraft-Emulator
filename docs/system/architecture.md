@@ -124,8 +124,16 @@ requests. The complete five-slot wire contract remains unchanged.
 A selected workspace presentation uses one verified path and retains
 original recovery checkpoints where possible. Passive placement skips
 only positively empty retained workspace state; DWM and native process
-liveness/recovery remain independent. The native controller still checks
-active/pending maintenance at 250 ms and idle detach at 1 second.
+liveness/recovery remain independent. The native controller waits directly
+on original retained game process handles, an unnamed request-ready event
+and its existing pipe worker. A live game alone no longer schedules 250ms
+exit scans; ordinary bounded 1s waits do not reap. Audio/pending storage and
+exit-observation retry retain 250ms deadlines. A failed native wait degrades
+to the existing bounded channel/maintenance path without replacing or
+abandoning the original controller. Manager lifetime participates only when
+no games remain; a queued authenticated request takes priority over
+idle detach and must still pass its own peer liveness check. Stale request
+signals consume no maintenance deadline and do not restart the wait.
 Native restore precedes managed normal game close; failed window destruction
 reuses the existing post-release recovery path.
 Audio maintenance retains its one-second discovery deadline and immediate
