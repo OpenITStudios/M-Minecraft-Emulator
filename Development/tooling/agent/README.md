@@ -91,9 +91,14 @@ of autonomous play.
    Override both width and height only as needed (each 160–1536); e.g.
    320x180 for a glance, 960x540 for detail. Same worker, direct WebP
    lossless encoding of fitted pixels; no PNG intermediary or new codec.
+   Save the returned frameRef in Code Mode and pass it as afterFrame on a
+   later one-shot call to suppress identical encoded images. This still
+   captures and verifies a fresh frame. A different target, size or hash
+   returns a new image; omitting afterFrame explicitly requests the image.
    If repeated monitoring is useful, start its bounded WebP sampler with
    the chosen size; use metadata first and read with afterSequence to avoid
-   sending unchanged images. Stop before changing sampler resolution or
+   sending unchanged images. afterSequence is scoped to that running sampler;
+   omit it after restart. Stop before changing sampler resolution or
    starting a separate one-shot on that slot. No automatic HD escalation.
    An image hash is not gameplay proof. WebP is required for Playtest image
    routes; if no reviewed optional WGC worker is configured, return
@@ -144,7 +149,18 @@ CPU, memory or token savings.
 ### Visual context budget (source-only)
 
 Use WebP for new Playtest image calls, with the smallest readable fitted
-canvas. WebP reduces potential encoded payload size, not a guaranteed model
+canvas. One-shot frameRef is an opaque equality hint, not an input token,
+world/session identity or guarantee of gameplay sameness. It binds slot,
+verified process/window/birth/session, format, dimensions and the original
+encoded-image hash; it requires no server-side image/history store. Suppress
+only exact byte matches requested by the caller; never suppress based on
+assumed visual similarity. Playtest observe/read image responses project
+compact receipts (size, status, timestamp, sequence/reference, freshness
+where applicable); native identity and validation remain in the core. Full
+legacy responses and the existing multi-client metadata/baseline contract
+are preserved. No native capture or encoding work is claimed saved by
+one-shot deduplication; it avoids sending a repeated image to the host.
+ WebP reduces potential encoded payload size, not a guaranteed model
 token discount; dimensions and number of delivered images affect vision
 context according to the actual model/host. Use the host's supported low-detail
 option only when appropriate. OpenAI API vision accepts WebP and documents

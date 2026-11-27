@@ -5473,3 +5473,100 @@ test('playtest cached image read refuses a PNG cache before delivery or target l
     assert.equal(calls,0);
   }finally{h.shutdown();}
 });
+
+test('playtest one-shot frame reference suppresses only identical fresh target and dimensions',async()=>{
+  let captures=0,checks=0,pidBase=400,hash='a'.repeat(64);
+  const h=createHandler({...config(),surface:'playtest',
+    gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')},{
+    native:async(_exe,operation,slot)=>{
+      checks++;
+      return {schema:1,ok:true,operation,slot,pid:pidBase+slot,
+        windowId:1000+slot,createdFileTime:'134000000000000001',sessionId:1,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+    },
+    gpuSourceFactory:()=>({
+      captureOnce:async(_slot,_target,size)=>{
+        captures++;
+        return {mimeType:'image/webp',imageBase64:'UklGRgAAAABXRUJQ',...size,
+          sha256:hash,capturedAtMs:Date.now(),workerSequence:1};
+      },stop:()=>{},shutdown:()=>{},
+    }),
+  });
+  const read=async(args)=>{
+    const result=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/call',
+      params:{name:'observe_client',arguments:args}})).result;
+    assert.equal(result.isError,false);
+    return {meta:JSON.parse(result.content[0].text),images:result.content.filter(c=>c.type==='image')};
+  };
+  try {
+    const listing=(await h.handle({jsonrpc:'2.0',id:0,method:'tools/list'})).result.tools;
+    assert.equal(listing.length,15);
+    const schema=listing.find(t=>t.name==='observe_client').inputSchema;
+    assert.equal(schema.properties.afterFrame.pattern,'^[a-f0-9]{64}$');
+    assert.deepEqual(schema.dependentRequired,{width:['height'],height:['width']});
+    const first=await read({slot:2});
+    assert.match(first.meta.frameRef,/^[a-f0-9]{64}$/);
+    assert.equal(first.meta.hasNewImage,true);
+    assert.equal(first.images.length,1);
+    assert.equal(Object.hasOwn(first.meta,'processIdentity'),false);
+    assert.equal(Object.hasOwn(first.meta,'sha256'),false);
+    const duplicate=await read({slot:2,afterFrame:first.meta.frameRef});
+    assert.equal(duplicate.meta.hasNewImage,false);
+    assert.equal(duplicate.meta.frameRef,first.meta.frameRef);
+    assert.equal(duplicate.meta.screenshotStatus,'WEBP_UNCHANGED_NOT_GAMEPLAY_PROOF');
+    assert.equal(duplicate.images.length,0);
+    assert.equal(captures,2);
+    assert.equal(checks,4);
+    const smaller=await read({slot:2,width:320,height:180,afterFrame:first.meta.frameRef});
+    assert.notEqual(smaller.meta.frameRef,first.meta.frameRef);
+    assert.equal(smaller.images.length,1);
+    pidBase=800;
+    const replaced=await read({slot:2,afterFrame:first.meta.frameRef});
+    assert.notEqual(replaced.meta.frameRef,first.meta.frameRef);
+    assert.equal(replaced.images.length,1);
+    const other=await read({slot:3,afterFrame:replaced.meta.frameRef});
+    assert.notEqual(other.meta.frameRef,replaced.meta.frameRef);
+    assert.equal(other.images.length,1);
+    hash='b'.repeat(64);
+    const changed=await read({slot:2,afterFrame:replaced.meta.frameRef});
+    assert.notEqual(changed.meta.frameRef,replaced.meta.frameRef);
+    assert.equal(changed.images.length,1);
+    // Explicit unconditional fetch always works; the model need not retain
+    // image context or a reference across scripts.
+    const unconditional=await read({slot:2});
+    assert.equal(unconditional.images.length,1);
+    await assert.rejects(h.callTool('observe_client',{slot:2,afterFrame:'bad'}),/Invalid tool arguments/);
+    assert.equal(captures,7);
+    assert.equal(checks,14);
+  }finally{h.shutdown();}
+});
+
+test('playtest cached image receipts are compact while core and legacy metadata stay intact',async()=>{
+  const frame={metadata:{schema:1,slot:2,status:'FRAME_BYTES_CHANGED_NOT_SEMANTIC_PROOF',
+    active:true,freshFrameAvailable:true,sequence:7,hasNewImage:false,
+    frameAgeMs:100,mimeType:'image/webp',width:320,height:180,
+    sourceFrameAtMs:1000,sourceTimeKind:'WGC_READBACK_COMPLETED',
+    successfulSamples:8,captureErrors:0,captureIdentity:{pid:42,windowId:99,
+      sessionId:1,createdFileTime:'134000000000000001'},
+    intervalMs:400,duplicateGpuReads:1,screenReviewFrameDelivered:false,
+    gameInput:'INDEPENDENT_BACKGROUND_INPUT_NOT_VERIFIED'},imageBase64:null};
+  const core=createOperationCore(config(),{
+    native:async()=>{throw Error('No target lookup for metadata only');},
+    visualObserverFactory:()=>({read:()=>frame,shutdown:()=>{}}),
+  });
+  const legacy=createMcpHandler(core),playtest=createMcpHandler(core,'playtest');
+  try {
+    const full=await legacy.callTool('read_visual_observation',{slot:2,includeImage:false});
+    const small=await playtest.callTool('read_visual_observation',{slot:2,includeImage:false});
+    assert.equal(full.metadata.captureIdentity.pid,42);
+    assert.equal(small.metadata.sequence,7);
+    assert.equal(small.metadata.freshFrameAvailable,true);
+    assert.equal(small.metadata.sourceFrameAtMs,1000);
+    assert.equal(small.metadata.mimeType,'image/webp');
+    assert.equal(small.imageBase64,null);
+    assert.equal(Object.hasOwn(small.metadata,'captureIdentity'),false);
+    assert.ok(JSON.stringify(small.metadata).length<JSON.stringify(full.metadata).length);
+    assert.equal(frame.metadata.captureIdentity.pid,42);
+  }finally{core.shutdown();}
+});

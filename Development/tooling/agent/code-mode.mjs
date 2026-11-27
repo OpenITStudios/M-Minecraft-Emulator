@@ -29,12 +29,37 @@ const METHODS=Object.freeze(ROUTES.map(([method])=>method));
 const PLAYTEST_EXCLUDE=new Set(['get_test_context','plan_player_actions','assess_input_route','read_game_evidence']);
 const PLAYTEST_EXTRA=[
   ['launch_profile',['slot']],
-  ['observe_client',['slot','width','height']],
+  ['observe_client',['slot','width','height','afterFrame']],
   ['inspect_client_ui',['slot']],
   ['start_visual_observation',['slots','intervalMs','durationMs','width','height']],
   ['read_visual_observation',['slot','afterSequence','includeImage']],
   ['stop_visual_observation',['slots']],
 ];
+
+// Playtest image responses need a small visual receipt, not the native
+// identity/diagnostic transcript. The core retains and validates that full
+// metadata before this projection. Existing legacy responses are unchanged.
+function compactVisualReceipt(name,result) {
+  const m=result.metadata;
+  if(name==='observe_client')return {metadata:{
+    schema:m.schema,slot:m.slot,provider:m.provider,mimeType:m.mimeType,
+    width:m.width,height:m.height,capturedAtMs:m.capturedAtMs,
+    frameRef:m.frameRef,hasNewImage:m.hasNewImage,
+    background:m.background,screenshotStatus:m.screenshotStatus,
+    gameInput:m.gameInput,
+  },imageBase64:result.imageBase64};
+  return {metadata:{
+    schema:m.schema,slot:m.slot,status:m.status,active:m.active??false,
+    freshFrameAvailable:m.freshFrameAvailable??false,sequence:m.sequence,
+    hasNewImage:m.hasNewImage,frameAgeMs:m.frameAgeMs??null,
+    ...(m.mimeType?{mimeType:m.mimeType}:{}),
+    width:m.width??null,height:m.height??null,
+    sourceFrameAtMs:m.sourceFrameAtMs??null,sourceTimeKind:m.sourceTimeKind??null,
+    successfulSamples:m.successfulSamples??0,captureErrors:m.captureErrors??0,
+    ...(m.errorCode?{errorCode:m.errorCode}:{}),
+    gameInput:m.gameInput,
+  },imageBase64:result.imageBase64};
+}
 
 export function createCodeModeSurface(descriptors,callTool,surface='code-mode') {
   assertAgentSurface(surface,descriptors.some(tool=>tool.name.includes('experimental')));
@@ -71,9 +96,9 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
       properties.inspectRun={const:true,type:'boolean'};
     }
     return {...tool,
-      ...(playtest&&tool.name==='observe_client'?{description:'One on-demand WGC WebP preview, default 640x360. Set both width and height (160-1536) for detail. No PNG fallback. For active sampler use read_visual_observation.'}:{}),
+      ...(playtest&&tool.name==='observe_client'?{description:'One on-demand WGC WebP preview, default 640x360. Set width and height (160-1536) if needed. Pass earlier frameRef as afterFrame to omit identical images. No PNG fallback. Use read_visual_observation for an active sampler.'}:{}),
       ...(playtest&&tool.name==='start_visual_observation'?{description:'Optional bounded local WGC WebP sampler. Default 640x360, set both width and height (160-1536). Images only on requested reads.'}:{}),
-      ...(playtest&&tool.name==='read_visual_observation'?{description:'Read a cached WebP frame only if newer than afterSequence; metadata only with includeImage=false.'}:{}),
+      ...(playtest&&tool.name==='read_visual_observation'?{description:'Read a cached WebP frame only if newer than afterSequence (within the active sampler); metadata only with includeImage=false. After restarting the sampler, omit afterSequence.'}:{}),
       ...(playtest&&tool.name==='get_multi_client_visual_state'?{description:'Metadata only for existing local frame caches. No new capture; byte changes are not gameplay proof.'}:{}),
       ...(tool.name==='probe_qa'?{description:playtest?
         'Canonical source-only Probe preparation/status, explicit restart, inspectRun=true or explicit archivedRunId. No publication, reservation or game command dispatch.':
@@ -106,6 +131,9 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
       }
       const forceWebp=playtest&&['observe_client','start_visual_observation','read_visual_observation'].includes(name);
       const result=await callTool(name,{...args,...(forceWebp?{imageFormat:'webp'}:{})});
+      if(playtest&&['observe_client','read_visual_observation'].includes(name)) {
+        return compactVisualReceipt(name,result);
+      }
       return name==='agent_capabilities'?{...result,available:[...names],
         ...(playtest?{playtest:{
           surface:'playtest',

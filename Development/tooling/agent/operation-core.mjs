@@ -1409,12 +1409,30 @@ export function createOperationCore(config,{
       } finally {visualReadBusy=false;}
     }
     if (name==='observe_client') {
-      keysExactly(args,['slot','imageFormat','width','height']);
+      keysExactly(args,['slot','imageFormat','width','height','afterFrame']);
       const slot=slotOf(args.slot);
       protectedSlot(slot);
-      const result=await captureVerifiedFrame(slot,visualSize(args));
+      if(args.afterFrame!==undefined&&(args.imageFormat!=='webp'||
+         typeof args.afterFrame!=='string'||!/^[a-f0-9]{64}$/.test(args.afterFrame))) {
+        throw new Error('Invalid tool arguments');
+      }
+      const size=visualSize(args);
+      const result=await captureVerifiedFrame(slot,size);
       if(args.imageFormat==='png'&&result.metadata.mimeType==='image/webp')throw new Error('VISUAL_FORMAT_MISMATCH');
-      return result;
+      if(!size)return result;
+      // Exact encoded-image equality, only AFTER the usual fresh capture and
+      // native identity recheck. The caller holds the reference, not a second
+      // image cache. It is neither authority nor proof of gameplay sameness.
+      const meta=result.metadata,identity=meta.processIdentity;
+      if(!/^[a-f0-9]{64}$/.test(meta.sha256??''))throw new Error('GPU_PREVIEW_UNAVAILABLE');
+      const frameRef=createHash('sha256').update(JSON.stringify([
+        slot,identity.pid,identity.windowId,identity.createdFileTime,identity.sessionId,
+        meta.mimeType,meta.width,meta.height,meta.sha256,
+      ])).digest('hex');
+      const unchanged=args.afterFrame===frameRef;
+      return {metadata:{...meta,frameRef,hasNewImage:!unchanged,
+        ...(unchanged?{screenshotStatus:'WEBP_UNCHANGED_NOT_GAMEPLAY_PROOF'}:{})},
+        imageBase64:unchanged?null:result.imageBase64};
     }
     if (name==='get_computer_use_target' ||
         name==='revalidate_computer_use_target') {
