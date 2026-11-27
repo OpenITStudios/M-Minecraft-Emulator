@@ -101,8 +101,10 @@ pub(super) fn configure(
         // validate manager geometry. Do not allocate a source roster or
         // admit native Park/Place work for a request already invalidated.
         windows::require_current_admission(&issued_epochs)?;
-        let monitored=profiles.iter().filter(|(slot,_)|tiles.iter().any(|tile|tile.slot==*slot)).cloned().collect::<Vec<_>>();
-        let unavailable = controller::adopt_preview_sources(manager, viewport, &monitored)?;
+        // Borrow the requested sources from the fresh roster. Adoption
+        // does not need a second vector or clones of every process identity.
+        let monitored = profiles.iter().filter(|(slot,_)|tiles.iter().any(|tile|tile.slot==*slot));
+        let unavailable = controller::adopt_preview_sources(manager, viewport, monitored)?;
         // Adoption is owned by the existing native recovery controller and
         // may take time. Its returned report must not enqueue stale DWM
         // work if a CloseOne/Clear canceled this snapshot in the meantime.

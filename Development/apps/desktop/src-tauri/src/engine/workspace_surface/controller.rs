@@ -915,8 +915,8 @@ pub(super) fn active_preview_slot(manager: u64) -> io::Result<Option<u32>> {
     }
     client.parse::<u32>().map(Some).map_err(io::Error::other)
 }
-pub(super) fn adopt_preview_sources(manager: u64, viewport: Viewport,
-    sources: &[(u32, OwnedProcess)]) -> io::Result<Vec<(u32, String)>> {
+pub(super) fn adopt_preview_sources<'a>(manager: u64, viewport: Viewport,
+    sources: impl Iterator<Item = &'a (u32, OwnedProcess)>) -> io::Result<Vec<(u32, String)>> {
     let rect = native::rectangle(manager, viewport.validate()?)?;
     let mut state = SURFACE.lock().map_err(|_| io::Error::other("Workspace state unavailable"))?;
     if state.closing { return Err(io::Error::other("Lazy Tester is closing")); }

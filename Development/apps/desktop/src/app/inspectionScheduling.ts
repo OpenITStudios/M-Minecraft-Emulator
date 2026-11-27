@@ -2,21 +2,31 @@
 // Launch/Close; those remain under the Rust controller and Tauri admission.
 import type {ProfileSession, SettingsReport, AgentActivityReport} from './bridge/lazyTester.js';
 
-// Compare every field of the validated profile contract, including issue
-// text. This only suppresses redundant UI assignments, never native reads.
+// Compare the layout-relevant fields of the validated profile contract.
+// Issue text changes feedback, not the native geometry or source identity.
+function sameLayoutProfile(current: ProfileSession, incoming: ProfileSession): boolean {
+  if (current.slot !== incoming.slot || current.state !== incoming.state) return false;
+  const a = current.process, b = incoming.process;
+  if (a === null || b === null) return a === b;
+  return a.pid === b.pid && a.createdFileTime === b.createdFileTime &&
+    a.sessionId === b.sessionId && a.windowHandle === b.windowHandle &&
+    a.responding === b.responding;
+}
+
+export function sameProfileLayout(
+  current: readonly ProfileSession[], incoming: readonly ProfileSession[],
+): boolean {
+  return current.length === incoming.length && current.every((profile, index) =>
+    sameLayoutProfile(profile, incoming[index]!));
+}
+
+// Full observation additionally compares issue text. This only suppresses
+// redundant UI assignments, never native reads.
 export function sameProfileObservation(
   current: readonly ProfileSession[], incoming: readonly ProfileSession[],
 ): boolean {
-  return current.length === incoming.length && current.every((profile, index) => {
-    const next = incoming[index]!;
-    if (profile.slot !== next.slot || profile.state !== next.state ||
-        profile.issue !== next.issue) return false;
-    const a = profile.process, b = next.process;
-    if (a === null || b === null) return a === b;
-    return a.pid === b.pid && a.createdFileTime === b.createdFileTime &&
-      a.sessionId === b.sessionId && a.windowHandle === b.windowHandle &&
-      a.responding === b.responding;
-  });
+  return current.length === incoming.length && current.every((profile, index) =>
+    profile.issue === incoming[index]!.issue && sameLayoutProfile(profile, incoming[index]!));
 }
 
 // Only validated wire reports reach these comparisons. Optional fields and
@@ -69,7 +79,7 @@ export function observationStillCurrent(
 // promote an obsolete DWM thumbnail after review, minimize or geometry change.
 export interface PreviewLayoutIdentity {
   readonly observationEpoch: number;
-  readonly processIdentity: string;
+  readonly profiles: readonly ProfileSession[];
   readonly primarySlot: number;
 }
 export interface PreviewLayoutObservation extends PreviewLayoutIdentity {
@@ -83,7 +93,7 @@ export function previewLayoutStillCurrent(
   review: CloseReview,
 ): boolean {
   return observationStillCurrent(issued.observationEpoch, current.observationEpoch, review) &&
-    issued.processIdentity === current.processIdentity &&
+    sameProfileLayout(issued.profiles, current.profiles) &&
     issued.primarySlot === current.primarySlot &&
     !current.dirty && current.managerVisible && current.workspaceAvailable;
 }

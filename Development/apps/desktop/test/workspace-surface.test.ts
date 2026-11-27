@@ -62,6 +62,15 @@ it('empty unowned layout performs no session inspection but retained or requeste
   expect(handler.indexOf('configure_previews(')).toBeGreaterThan(handler.indexOf('SessionRequest::Inspect'));
 });
 
+it('borrows requested preview sources without a second cloned process roster',()=>{
+  const previews=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/previews.rs',import.meta.url),'utf8');
+  const adoption=previews.slice(previews.indexOf('let monitored ='),previews.indexOf('let primary =',previews.indexOf('let monitored =')));
+  expect(adoption).toContain('profiles.iter().filter(');
+  expect(adoption).not.toMatch(/\.cloned\(|\.collect\(/);
+  expect(adoption).toContain('adopt_preview_sources(manager, viewport, monitored)');
+  expect(adoption).toContain('require_current_admission(&issued_epochs)');
+});
+
 it('rearms display-scale observation once and removes the current listener on teardown',()=>{
   let ratio=1;
   let calls=0;

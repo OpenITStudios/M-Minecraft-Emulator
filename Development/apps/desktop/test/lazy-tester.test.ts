@@ -6,7 +6,7 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -53,6 +53,28 @@ describe('Lazy Tester profile contract', () => {
     const next = copy();
     next[1]!.process = {...base[0]!.process!};
     expect(sameProfileObservation(base, next)).toBe(false);
+  });
+  it('compares layout identity directly while keeping issue-only changes in feedback', () => {
+    const base = parseSession({...stopped(), profiles: [running(1), ...stopped().profiles.slice(1)]}).profiles;
+    const copy = () => base.map(profile => ({...profile, process: profile.process && {...profile.process}}));
+    expect(sameProfileLayout(base, copy())).toBe(true);
+    expect(sameProfileLayout(base, [])).toBe(false);
+    expect(sameProfileLayout(base, [...base].reverse())).toBe(false);
+    const issueOnly = copy();
+    issueOnly[0]!.issue = 'Native issue';
+    expect(sameProfileLayout(base, issueOnly)).toBe(true);
+    expect(sameProfileObservation(base, issueOnly)).toBe(false);
+    for (const change of [{state: 'NOT_RESPONDING' as const}, {process: null}]) {
+      const next = copy();
+      Object.assign(next[0]!, change);
+      expect(sameProfileLayout(base, next)).toBe(false);
+    }
+    for (const change of [{pid: 999}, {createdFileTime: '999'}, {sessionId: 2},
+      {windowHandle: '0x99'}, {responding: false}]) {
+      const next = copy();
+      Object.assign(next[0]!.process!, change);
+      expect(sameProfileLayout(base, next)).toBe(false);
+    }
   });
   it('preserves changed settings receipts, optional fields and ordered presets', () => {
     const base = parseSession({...stopped(), settings: {
@@ -172,12 +194,18 @@ describe('Lazy Tester profile contract', () => {
     const idle: CloseReview = {
       nativeExitReview:false,closeAllRunning:false,selectedReview:false,selectedCloseRunning:false,
     };
-    const issued={observationEpoch:5,processIdentity:'2:RUNNING:pid100/windowA',primarySlot:1};
+    const profiles=parseSession({...stopped(),profiles:[running(1),running(2),...stopped().profiles.slice(2)]}).profiles;
+    const issued={observationEpoch:5,profiles,primarySlot:1};
     const current={...issued,dirty:false,managerVisible:true,workspaceAvailable:true};
+    const nextProfiles=profiles.map(profile=>profile.slot===2
+      ? {...profile,process:{...profile.process!,pid:999}} : profile);
+    const issueOnly=profiles.map(profile=>profile.slot===2
+      ? {...profile,issue:'Native issue'} : profile);
+    expect(previewLayoutStillCurrent(issued,{...current,profiles:issueOnly},idle)).toBe(true);
     expect(previewLayoutStillCurrent(issued,current,idle)).toBe(true);
     for(const changed of [
       {...current,observationEpoch:6},
-      {...current,processIdentity:'2:RUNNING:pid101/windowB'},
+      {...current,profiles:nextProfiles},
       {...current,primarySlot:2},
       {...current,dirty:true},
       {...current,managerVisible:false},

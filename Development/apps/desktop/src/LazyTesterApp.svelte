@@ -14,7 +14,7 @@
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -210,7 +210,6 @@
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Stopped', STARTING: 'Starting…', RUNNING: 'Running', NOT_RESPONDING: 'Not Responding', ATTENTION: 'Needs Attention'};
   const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
-  const layoutIdentity=(items:ProfileSession[])=>items.map(p=>p.slot+':'+p.state+':'+identity(p)+':'+(p.process?.responding??false)).join('|');
   $: primary = active ?? requested ?? profiles.find(profile => profile.state === 'RUNNING')?.slot ?? 1;
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;
@@ -360,10 +359,9 @@
       // A close review starting mid-request invalidates this old snapshot.
       if (!isCurrentObservation(issued)) return;
       const profilesChanged = !sameProfileObservation(profiles, snapshot.profiles);
-      // Identical validated observations cannot change layout. Avoid building
-      // two layout identity strings on the normal unchanged polling path.
+      // An issue-only change updates feedback without reapplying geometry.
       const layoutChanged = !available || (profilesChanged &&
-        layoutIdentity(profiles) !== layoutIdentity(snapshot.profiles));
+        !sameProfileLayout(profiles, snapshot.profiles));
       if (profilesChanged) profiles = snapshot.profiles;
       available = true; connectionIssueKey=null;
       reconcileLaunchFailures(snapshot.profiles);
@@ -778,14 +776,16 @@
     }
     // This UI snapshot grants no native process/window authority. The
     // original selected slot and process set must still match on return.
+    // Profile observations are replaced as complete arrays, never mutated
+    // in place by the UI. Retain the original observation across awaits.
     const issued = {
       observationEpoch,
-      processIdentity: layoutIdentity(profiles),
+      profiles,
       primarySlot: primary,
     };
     const layoutCurrent = () => previewLayoutStillCurrent(issued,{
       observationEpoch,
-      processIdentity: layoutIdentity(profiles),
+      profiles,
       primarySlot: primary,
       dirty,
       managerVisible: !document.hidden,
