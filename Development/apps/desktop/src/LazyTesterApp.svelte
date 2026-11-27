@@ -137,7 +137,8 @@
   });
   // Page changes must not silently dispose a visible CloseOne or Storage
   // review. The user explicitly cancels it before navigating elsewhere.
-  $: navigationReviewOpen = closeReviewPending || clearingData ||
+  let selectiveOpen = false;
+  $: navigationReviewOpen = selectiveOpen || closeReviewPending || clearingData ||
     clearSlot !== null || recovery !== null || fullReview !== null;
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Stopped', STARTING: 'Starting…', RUNNING: 'Running', NOT_RESPONDING: 'Not Responding', ATTENTION: 'Needs Attention'};
@@ -1144,6 +1145,7 @@
           {clearSlot} {recovery} {fullReview} {clearingData}
           {dataLocation} {locationIssue} {runningCount}
           onChooseSlot={chooseSlot}
+          bind:selectiveOpen
           onInspectSelective={lazyTester.selectiveInventory}
           onReviewSelective={lazyTester.reviewSelectiveInventory}
           onReviewCache={() => {if (!navigationReviewOpen && !busy && !refreshing && !resizing) {fullReview=null;recovery=null;clearSlot=selectedSlot;}}}

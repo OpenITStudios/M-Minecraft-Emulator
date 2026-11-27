@@ -39,11 +39,16 @@
   export let onInspectSelective: (slot: ProfileSlot, category: SelectiveCategory) => Promise<SelectiveInventory>;
   export let onReviewSelective: (slot: ProfileSlot, selections: SelectiveSelection[]) => Promise<SelectiveReviewReceipt>;
   let selectiveSlot: ProfileSlot | null = null;
+  export let selectiveOpen = false;
+  $: selectiveOpen = selectiveSlot !== null;
   let selectiveTrigger: HTMLButtonElement | undefined;
-  $: if (selectiveSlot !== null && (selectiveSlot !== selectedSlot || !available || !bindingConfigured || selectedProfile?.state !== 'STOPPED')) selectiveSlot = null;
+  $: if (selectiveSlot !== null && (selectiveSlot !== selectedSlot || !available || !bindingConfigured || selectedProfile?.state !== 'STOPPED' || !selectedStorage || selectedStorage.fullClear?.pending === true || clearSlot !== null || recovery !== null || fullReview !== null)) closeSelective();
   function closeSelective(): void {
     selectiveSlot = null;
-    void tick().then(() => { if(selectiveTrigger?.isConnected && !selectiveTrigger.disabled) selectiveTrigger.focus({preventScroll:true}); });
+    void tick().then(() => {
+      if(selectiveTrigger?.isConnected && !selectiveTrigger.disabled) selectiveTrigger.focus({preventScroll:true});
+      else if(storageOverviewHeading?.isConnected) storageOverviewHeading.focus({preventScroll:true});
+    });
   }
   export let onReviewCache: () => void;
   export let onClearCache: (slot: ProfileSlot) => void;
@@ -151,9 +156,9 @@
           <section class="lazytester-group" aria-labelledby="lazytester-storage-overview-section">
             <div class="lazytester-profile-management-heading">
               <h2 id="lazytester-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Profile Management</h2>
-              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||storageReviewOpen} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||storageReviewOpen} aria-label="Choose Minecraft launcher" aria-describedby={storageReviewOpen?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
             </div>
-          {#if clearSlot!==null||recovery!==null||fullReview!==null}<p id="lazytester-storage-review-guidance" class="lazytester-help" role="status">Finish or cancel this review before switching profiles.</p>{/if}
+          {#if storageReviewOpen}<p id="lazytester-storage-review-guidance" class="lazytester-help" role="status">Finish or cancel this review before switching profiles.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
           {#if storage===null}
             <p class="lazytester-storage-feedback" role="status">Storage unavailable. Refresh to inspect again. Unknown does not mean empty.</p>

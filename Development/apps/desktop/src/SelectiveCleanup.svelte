@@ -1,5 +1,5 @@
 <script lang="ts">
-  import {onMount, onDestroy} from 'svelte';
+  import {onMount, onDestroy, tick} from 'svelte';
   import type {ProfileSlot, SelectiveCategory, SelectiveInventory, SelectiveSelection, SelectiveReviewReceipt} from './app/bridge/lazyTester.js';
   import {formatStorageBytes} from './app/presentation/storageSize.js';
 
@@ -12,6 +12,9 @@
     {value:'Worlds',label:'Worlds'}, {value:'ResourcePacks',label:'Resource Packs'}, {value:'BehaviorPacks',label:'Behavior Packs'}
   ];
   let dialog: HTMLDialogElement;
+  let closeButton: HTMLButtonElement;
+  let reviewHeading: HTMLHeadingElement | undefined;
+  let closed = false;
   let category: SelectiveCategory = 'Worlds';
   let inventories: Partial<Record<SelectiveCategory, SelectiveInventory>> = {};
   let selected: SelectiveSelection[] = [];
@@ -22,10 +25,25 @@
   $: items = inventories[category]?.items ?? [];
   $: allSelected = items.length>0 && items.every(item=>selected.some(s=>s.identity===item.identity));
 
-  onMount(()=>{dialog.showModal(); void load('Worlds');});
-  onDestroy(()=>{generation++;});
+  onMount(()=>{
+    dialog.showModal();
+    closeButton.focus({preventScroll:true});
+    void load('Worlds');
+  });
+  function close(): void {
+    if(closed)return;
+    closed=true;
+    generation++;
+    if(dialog?.open)dialog.close();
+    onClose();
+  }
+  onDestroy(()=>{
+    closed=true;
+    generation++;
+    if(dialog?.open)dialog.close();
+  });
   async function load(next: SelectiveCategory, refresh=false): Promise<void> {
-    if(loading)return;
+    if(closed||loading)return;
     category=next;
     issue='';
     if(inventories[next]&&!refresh)return;
@@ -48,13 +66,17 @@
     } finally {if(request===generation)loading=false;}
   }
   function toggle(item: SelectiveInventory['items'][number], checked: boolean): void {
+    if(closed||loading)return;
     receipt=null;
+    issue='';
     if(checked && selected.length<128 && !selected.some(s=>s.identity===item.identity))
       selected=[...selected,{category,...item}];
     else if(!checked)selected=selected.filter(s=>s.identity!==item.identity);
   }
   function selectAll(): void {
+    if(closed||loading)return;
     receipt=null;
+    issue='';
     const others=selected.filter(s=>s.category!==category);
     if(allSelected){selected=others;return;}
     if(others.length+items.length>128){issue='Select up to 128 items per review.';return;}
@@ -62,21 +84,25 @@
     issue='';
   }
   async function inspectSelection(): Promise<void> {
-    if(loading||!selected.length)return;
+    if(closed||loading||!selected.length)return;
     const request=++generation;
     loading=true;issue='';receipt=null;
     try {
       const result=await review(slot,selected.slice());
-      if(request===generation)receipt=result;
+      if(request===generation){
+        receipt=result;
+        await tick();
+        if(request===generation&&reviewHeading?.isConnected)reviewHeading.focus({preventScroll:true});
+      }
     } catch {if(request===generation)issue='Review unavailable or data changed. Refresh inventory before trying again.';}
     finally {if(request===generation)loading=false;}
   }
 </script>
 
-<dialog class="lazytester-selective-dialog" bind:this={dialog} aria-labelledby="lazytester-selective-title" on:cancel|preventDefault={onClose}>
+<dialog class="lazytester-selective-dialog" bind:this={dialog} aria-labelledby="lazytester-selective-title" on:cancel|preventDefault={close}>
   <header class="lazytester-selective-heading">
     <div><h2 id="lazytester-selective-title">Selective Cleanup</h2><p>Minecraft {slot}</p></div>
-    <button class="lazytester-secondary" on:click={onClose} autofocus>Close</button>
+    <button class="lazytester-secondary" bind:this={closeButton} on:click={close}>Close</button>
   </header>
   <div class="lazytester-selective-categories" role="group" aria-label="Data category">
     {#each categories as entry}
@@ -98,7 +124,7 @@
   {#if issue}<p class="lazytester-field-error" role="status">{issue}</p>{/if}
   {#if receipt}
     <section class="lazytester-cache-confirm" aria-label="Selection review">
-      <h3>Review selected data</h3>
+      <h3 bind:this={reviewHeading} tabindex="-1">Review selected data</h3>
       <p>{receipt.items.length} items · {receipt.files} files · {formatStorageBytes(receipt.bytes)}</p>
       {#each receipt.warnings as warning}<p class="lazytester-help">{warning}</p>{/each}
       <p role="status">Deletion is unavailable until native validation is complete. No data has been changed.</p>
