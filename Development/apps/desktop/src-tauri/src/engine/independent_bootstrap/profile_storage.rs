@@ -165,7 +165,8 @@ fn scan_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget,
             result.partial = true;
             continue;
         };
-        let Ok(metadata) = std::fs::symlink_metadata(entry.path()) else {
+        let entry_path = entry.path();
+        let Ok(metadata) = std::fs::symlink_metadata(&entry_path) else {
             result.partial = true;
             continue;
         };
@@ -175,7 +176,7 @@ fn scan_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget,
             continue;
         }
         if metadata.is_dir() {
-            scan_size(&entry.path(), result, budget, depth + 1);
+            scan_size(&entry_path, result, budget, depth + 1);
         } else if metadata.is_file() {
             result.bytes = result.bytes.saturating_add(metadata.len());
             result.files += 1;
@@ -186,8 +187,8 @@ fn scan_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget,
     if budget.exhausted() { result.partial = true; }
 }
 
-pub(super) fn disk(private: &File) -> io::Result<DiskSpace> {
-    let path = directory_path(private)?;
+// Caller resolves the path from its retained verified profile handle.
+pub(super) fn disk_at_verified_path(path: &Path) -> io::Result<DiskSpace> {
     let path = wide(path.as_os_str())?;
     let (mut available, mut total) = (0u64, 0u64);
     if unsafe {
@@ -743,7 +744,7 @@ mod tests {
         assert!(!inspect_fixture(&pin, false).can_clear);
         assert!(clear(&pin, false).is_err());
         assert!(cache.join("Cache_Data/a").exists());
-        let space = disk(&pin).unwrap();
+        let space = disk_at_verified_path(&directory_path(&pin).unwrap()).unwrap();
         assert!(space.total_bytes > 0 && space.available_bytes <= space.total_bytes);
         clear(&pin, true).unwrap();
         assert_eq!(fs::read(other.cache().join("other-profile-cache")).unwrap(), b"other profile");

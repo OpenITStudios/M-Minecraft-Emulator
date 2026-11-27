@@ -784,6 +784,9 @@ impl Sessions {
         // still block; this is not a hard latency guarantee or a new worker.
         let budget = InspectionBudget::new(Duration::from_secs(2));
         let observed = super::super::inspect_native_workspace()?.processes;
+        // One report-local observation of the original retained handles.
+        // Do not carry this result into a later request or mutation.
+        let owned = self.owned_data_processes();
         (1..=5)
             .map(|slot| {
                 let store = self.store(slot)?;
@@ -791,7 +794,8 @@ impl Sessions {
                 // Only read-only reports share this admission observation.
                 // Cache deletion, profile clear, launch and settings writes each
                 // recheck their own authority at the moment of mutation.
-                let admission = self.data_admission(slot, &observed);
+                let admission = report_data_admission(
+                    self.running[slot as usize - 1].is_none(), &owned, &observed);
                 let replay_admission = || {
                     admission.as_ref().map(|_| ()).map_err(|error| {
                         io::Error::new(error.kind(), error.to_string())
@@ -803,7 +807,7 @@ impl Sessions {
                     bytes: 0,
                     files: 0,
                     partial: false,
-                    disk: profile_storage::disk(&store.private).ok(),
+                    disk: profile_storage::disk_at_verified_path(&path).ok(),
                     cache: {
                         let mut cache = profile_storage::inspect(&store.private, admission.is_ok(), budget);
                         if !cache.partial {
@@ -910,12 +914,17 @@ impl Sessions {
             SelectiveCategory::ResourcePacks => InventoryCategory::ResourcePacks,
             SelectiveCategory::BehaviorPacks => InventoryCategory::BehaviorPacks,
         };
-        let items = resource_pack_inventory::individual_inventory(&store.private, native_category,
-            InspectionBudget::new(Duration::from_secs(2)))?
-            .into_iter().map(|item| {
-                let identity = resource_pack_inventory::inventory_identity(&store.private, slot, &item)?;
-                Ok(SelectiveInventoryEntry { root: item.root.into(), name: item.name, identity })
-            }).collect::<io::Result<Vec<_>>>()?;
+        let inventory = resource_pack_inventory::individual_inventory(&store.private, native_category,
+            InspectionBudget::new(Duration::from_secs(2)))?;
+        let items = if inventory.is_empty() {
+            Vec::new()
+        } else {
+            let profile = directory_id(&store.private)?;
+            inventory.into_iter().map(|item| {
+                let identity = resource_pack_inventory::inventory_identity(&profile, slot, &item);
+                SelectiveInventoryEntry { root: item.root.into(), name: item.name, identity }
+            }).collect()
+        };
         Ok(SelectiveInventory { slot, category, items })
     }
 
@@ -941,7 +950,8 @@ impl Sessions {
             let item = review.items.iter().find(|i| i.category == selection.category &&
                 i.root == selection.root.as_str() && i.name == selection.name)
                 .ok_or_else(|| invalid("Selection no longer matches inventory"))?;
-            if resource_pack_inventory::inventory_identity(&store.private, slot, item)? != requested.identity {
+            // Keep fresh handle validation on the review/confirmation path.
+            if resource_pack_inventory::inventory_identity(&directory_id(&store.private)?, slot, item) != requested.identity {
                 return Err(invalid("Inventory changed; refresh selection"));
             }
         }
@@ -1011,14 +1021,19 @@ impl Sessions {
         self.storage()
     }
 
-    fn data_admission(&self, slot: u32, observed: &[OwnedProcess]) -> io::Result<()> {
-        self.store(slot)?;
+    fn owned_data_processes(&self) -> io::Result<Vec<(u32, u64)>> {
         if self.exiting { return Err(invalid("Minecraft sessions are closing; wait before changing launcher data")); }
-        let owned = self.running.iter().flatten().map(|started| {
+        self.running.iter().flatten().map(|started| {
             let child = &started.children[0];
             child.identity()?;
             Ok((child.pid, child.created))
-        }).collect::<io::Result<Vec<_>>>()?;
+        }).collect()
+    }
+
+    fn data_admission(&self, slot: u32, observed: &[OwnedProcess]) -> io::Result<()> {
+        self.store(slot)?;
+        // Mutations always obtain fresh retained-handle observations.
+        let owned = self.owned_data_processes()?;
         require_data_idle(self.running[slot as usize - 1].is_none(), &owned, observed)
     }
 
@@ -1078,6 +1093,14 @@ impl Sessions {
     }
 
 
+}
+
+// Reuse one observation for the read-only report, retaining per-slot admission
+// and propagating a failed native identity check to every report entry.
+fn report_data_admission(selected_idle: bool, owned: &io::Result<Vec<(u32,u64)>>,
+    observed: &[OwnedProcess]) -> io::Result<()> {
+    let owned = owned.as_ref().map_err(|error| io::Error::new(error.kind(), error.to_string()))?;
+    require_data_idle(selected_idle, owned, observed)
 }
 
 fn require_data_idle(selected_idle: bool, owned: &[(u32,u64)], observed: &[OwnedProcess]) -> io::Result<()> {
@@ -2201,6 +2224,23 @@ mod tests {
         assert!(require_data_idle(true, &[(42,123455)], std::slice::from_ref(&other)).is_err());
         assert!(require_data_idle(true, &[(43,123456)], std::slice::from_ref(&other)).is_err());
         assert!(require_data_idle(true, &[], &[]).is_ok());
+    }
+
+    #[test]
+    fn report_admission_reuses_one_observation_without_granting_failed_identity() {
+        let other = OwnedProcess { pid:42, created_file_time:"123456".into(), session_id:1,
+            window_handle:"0x1234".into(), responding:true };
+        let observed = [other];
+        let owned = Ok(vec![(42,123456)]);
+        assert!(report_data_admission(true, &owned, &observed).is_ok());
+        assert!(report_data_admission(false, &owned, &observed).is_err());
+        assert!(report_data_admission(true, &Ok(vec![(42,123455)]), &observed).is_err());
+        let failed = Err(io::Error::new(io::ErrorKind::PermissionDenied, "Identity unavailable"));
+        for selected_idle in [true, false] {
+            let error = report_data_admission(selected_idle, &failed, &observed).unwrap_err();
+            assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(error.to_string(), "Identity unavailable");
+        }
     }
 
     #[test]

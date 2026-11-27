@@ -32,13 +32,13 @@ pub(super) struct InventoryItem {
 
 // Opaque display identity also binds the retained profile and selected slot.
 // This is not an authorization token.
-pub(super) fn inventory_identity(private: &File, slot: u32, item: &InventoryItem) -> io::Result<String> {
+pub(super) fn inventory_identity(profile: &windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
+    slot: u32, item: &InventoryItem) -> String {
     use sha2::{Digest, Sha256};
-    let profile = directory_id(private)?;
     let mut hash = Sha256::new();
     hash.update(b"LazyTester/selective-item/v1");
     hash.update(slot.to_le_bytes());
-    for id in [&profile, &item.identity] {
+    for id in [profile, &item.identity] {
         hash.update(id.VolumeSerialNumber.to_le_bytes());
         hash.update(id.FileId.Identifier);
     }
@@ -46,7 +46,7 @@ pub(super) fn inventory_identity(private: &File, slot: u32, item: &InventoryItem
         hash.update((field.len() as u64).to_le_bytes());
         hash.update(field.as_bytes());
     }
-    Ok(hash.finalize().iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(""))
+    hash.finalize().iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join("")
 }
 
 pub(super) fn individual_inventory(private: &File, category: InventoryCategory,
@@ -659,6 +659,32 @@ mod tests {
             assert!(serde_json::from_str::<PackManifest>(&json)
                 .map_or(true, |manifest| dependency_uuids(&manifest).is_err()));
         }
+    }
+
+    #[test]
+    fn inventory_fingerprint_retains_exact_wire_bytes_and_slot_binding() {
+        use sha2::{Digest, Sha256};
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let profile = directory_id(&private).unwrap();
+        let item = InventoryItem { category: InventoryCategory::Worlds, root: "minecraftWorlds",
+            name: "fixture".into(), identity: profile };
+        let mut reference = Sha256::new();
+        reference.update(b"LazyTester/selective-item/v1");
+        reference.update(1u32.to_le_bytes());
+        for id in [&profile, &item.identity] {
+            reference.update(id.VolumeSerialNumber.to_le_bytes());
+            reference.update(id.FileId.Identifier);
+        }
+        for field in [item.root, item.name.as_str()] {
+            reference.update((field.len() as u64).to_le_bytes());
+            reference.update(field.as_bytes());
+        }
+        let expected: String = reference.finalize().iter().map(|byte| format!("{byte:02x}")).collect();
+        assert_eq!(inventory_identity(&profile, 1, &item), expected);
+        assert_ne!(inventory_identity(&profile, 2, &item), expected);
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]
