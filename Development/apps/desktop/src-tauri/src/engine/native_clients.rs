@@ -711,17 +711,9 @@ mod native_workspace_windows {
         }))
     }
 
-    pub(super) fn inspect_for_registered_target(target: &str) -> io::Result<NativeWorkspaceObservation> {
-        // The caller first resolved the single signed registered Education
-        // image. This loop performs no PowerShell, WAM or account-file I/O.
-        let target_wide: Vec<u16> = target.encode_utf16().collect();
-        let mut current_session = 0;
-        if unsafe { ProcessIdToSessionId(std::process::id(), &mut current_session) } == 0
-            || current_session == 0
-        {
-            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Interactive Windows session required"));
-        }
-
+    // One native candidate traversal. A true visitor result terminates the
+    // scan early; errors are never treated as an empty inventory.
+    fn visit_game_candidates(mut visit: impl FnMut(u32) -> io::Result<bool>) -> io::Result<bool> {
         let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) };
         if snapshot == INVALID_HANDLE_VALUE {
             return Err(io::Error::last_os_error());
@@ -733,15 +725,9 @@ mod native_workspace_windows {
             return Err(io::Error::last_os_error());
         }
         let expected_image: Vec<u16> = "Minecraft.Windows.exe".encode_utf16().collect();
-        let mut processes = Vec::new();
         loop {
-            if exact_windows_path(executable_name(&entry)?, &expected_image) {
-                if let Some(process) = observe_one(entry.th32ProcessID, &target_wide, current_session)? {
-                    processes.push(process);
-                    if processes.len() > MAX_NATIVE_WORKSPACE_PROCESSES {
-                        return Err(io::Error::new(io::ErrorKind::InvalidData, "More than five registered Minecraft processes"));
-                    }
-                }
+            if exact_windows_path(executable_name(&entry)?, &expected_image) && visit(entry.th32ProcessID)? {
+                return Ok(true);
             }
             if unsafe { Process32NextW(snapshot.as_raw_handle() as _, &mut entry) } == 0 {
                 if io::Error::last_os_error().raw_os_error() != Some(ERROR_NO_MORE_FILES as i32) {
@@ -750,6 +736,37 @@ mod native_workspace_windows {
                 break;
             }
         }
+        Ok(false)
+    }
+
+    // Conservative name-only hint: any candidate (even from another session)
+    // requests the complete observation. Absence is NOT a stopped snapshot,
+    // installation verification, or mutation permission.
+    pub(super) fn game_candidate_exists() -> io::Result<bool> {
+        visit_game_candidates(|_| Ok(true))
+    }
+
+    pub(super) fn inspect_for_registered_target(target: &str) -> io::Result<NativeWorkspaceObservation> {
+        // The caller first resolved the single signed registered Education
+        // image. This loop performs no PowerShell, WAM or account-file I/O.
+        let target_wide: Vec<u16> = target.encode_utf16().collect();
+        let mut current_session = 0;
+        if unsafe { ProcessIdToSessionId(std::process::id(), &mut current_session) } == 0
+            || current_session == 0
+        {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Interactive Windows session required"));
+        }
+
+        let mut processes = Vec::new();
+        visit_game_candidates(|pid| {
+            if let Some(process) = observe_one(pid, &target_wide, current_session)? {
+                processes.push(process);
+                if processes.len() > MAX_NATIVE_WORKSPACE_PROCESSES {
+                    return Err(io::Error::new(io::ErrorKind::InvalidData, "More than five registered Minecraft processes"));
+                }
+            }
+            Ok(false)
+        })?;
         processes.sort_by_key(|process| process.pid);
         let observation = NativeWorkspaceObservation {
             schema: 1,
@@ -903,6 +920,11 @@ pub fn inspect_native_auth_family() -> io::Result<NativeAuthFamilyObservation> {
 #[cfg(target_os = "windows")]
 pub fn inspect_native_workspace() -> io::Result<NativeWorkspaceObservation> {
     native_workspace_windows::inspect()
+}
+
+#[cfg(windows)]
+pub(super) fn game_candidate_exists() -> io::Result<bool> {
+    native_workspace_windows::game_candidate_exists()
 }
 
 // Existing bootstrap callers retain the process lifetime separately; recheck

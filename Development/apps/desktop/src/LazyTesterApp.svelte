@@ -392,16 +392,19 @@
   function isCurrentObservation(issued: number): boolean {
     return !disposed && observationStillCurrent(issued, observationEpoch, reviewState());
   }
-  async function refresh() {
+  async function refresh(passiveIdle = false) {
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || activeOperation !== null || refreshing || resizing || disposed) return;
     const issued = observationEpoch;
     refreshing = true;
     lastInspectionStartedAt = performance.now();
     sessionObservationHint = false;
     try {
-      const snapshot = page === 'settings' || page === 'storage' ? await lazyTester.settings() : await lazyTester.inspect();
+      const snapshot = page === 'settings' || page === 'storage'
+        ? await lazyTester.settings()
+        : passiveIdle ? await lazyTester.inspectIdle() : await lazyTester.inspect();
+      // Null is a cheap negative hint, not a new status or readiness receipt.
       // A close review starting mid-request invalidates this old snapshot.
-      if (!isCurrentObservation(issued)) return;
+      if (!isCurrentObservation(issued) || snapshot===null) return;
       const profilesChanged = !sameProfileObservation(profiles, snapshot.profiles);
       // An issue-only change updates feedback without reapplying geometry.
       const layoutChanged = !available || (profilesChanged &&
@@ -1106,7 +1109,7 @@
         void refreshRecordingStatus();
       if (sessionDue !== null && sessionDue <= now && sessionObservationEnabled &&
           !closeReviewActive(reviewState()) && binding?.configured && !selectiveOpen && storageReview===null)
-        void refresh();
+        void refresh(page==='workspace' && available && workspaceSettledIdle && !sessionObservationHint);
     }, Math.max(0, Math.ceil(due - performance.now())));
     observationTimer = timer;
   }
@@ -1139,7 +1142,7 @@
     };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
     const returnedFocus = () => {
-      if (page==='workspace' && available && runningCount>0 && managerVisible)
+      if (page==='workspace' && available && managerVisible)
         sessionObservationHint=true;
     };
     window.addEventListener('focus', returnedFocus);

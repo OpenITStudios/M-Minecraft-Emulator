@@ -106,7 +106,7 @@ One deadline-driven UI timer observes eligible sessions every 2 seconds
 during launch/recovery/unsettled or live non-Play, every 5 seconds in
 settled healthy Play (current selected binding and registered running
 background previews), or every 10 seconds when healthy idle. The existing
-identity-matched DWM invalidation, WebView focus return during live Play,
+identity-matched DWM invalidation, WebView focus return during Play,
 and visibility resume coalesce a read hint against the existing 2-second
 last-start floor. Hints arriving during a read remain pending; blocked
 lanes retain their admission and the original read owns native verification.
@@ -119,6 +119,16 @@ only while active or uncertain, sharing the earlier eligible wake. Blocked lanes
 deadline, hidden views pause scheduled reads, and disposal cancels the
 timer. These are source scheduling targets, not measured latency.
 Explicit Refresh and native mutation admission remain independent.
+Healthy stopped Play's ordinary 10s background tick uses the existing
+desktop command with an optional passive-idle hint. Under the same manager
+and controller admission, pending/uncertain transport, an existing controller
+or any Minecraft.Windows.exe candidate requires a complete Inspect. A
+successful negative native process-name scan with absent controller gates
+before/after returns null (no new observation), not a fabricated stopped
+snapshot or proof of installation. Startup, explicit refresh, focus/visibility
+hints and mutations retain full verification. Installation changes without a
+candidate or a UI hint can remain unobserved until full inspection; native
+launch/settings/storage mutation admission is not weakened.
 Without a retained controller, read-only Settings shares the fresh verified
 empty inventory already used for its stopped roster; saves still reobserve
 after writing. Geometry-only resize/DPI events outside Play do not schedule

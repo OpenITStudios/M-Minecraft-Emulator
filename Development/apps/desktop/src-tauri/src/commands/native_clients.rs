@@ -31,7 +31,12 @@ pub async fn lazy_tester_profile_binding(import: bool) -> Result<native_clients:
 #[tauri::command]
 pub async fn lazy_tester_session(
     request: crate::engine::native_clients_session::SessionRequest,
-) -> Result<crate::engine::native_clients_session::SessionSnapshot, String> {
+    passive_idle: Option<bool>,
+) -> Result<Option<crate::engine::native_clients_session::SessionSnapshot>, String> {
+    let passive_idle=passive_idle.unwrap_or(false);
+    if passive_idle && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {
+        return Err("Passive idle hint is restricted to Inspect".into());
+    }
     if crate::app_bootstrap::startup_diagnostic_mode() && !matches!(request,crate::engine::native_clients_session::SessionRequest::Inspect) {return Err("Startup diagnostic cannot launch or modify games".into());}
     // Retired individual graphics controls cannot bypass the global desktop policy.
     if matches!(request, crate::engine::native_clients_session::SessionRequest::ApplyGraphicsPreset { .. }) {
@@ -58,7 +63,13 @@ pub async fn lazy_tester_session(
             crate::engine::native_clients_session::SessionRequest::CloseAll=>crate::engine::capture::require_recording_idle(None)?,
             _=>{},
         }
-        crate::engine::native_clients_session::request(request)
+        // Null means no new observation; never fabricate a stopped receipt.
+        // Startup diagnostic and every ordinary command retain full admission.
+        if passive_idle && !crate::app_bootstrap::startup_diagnostic_mode() &&
+            !crate::engine::native_clients_session::passive_idle_needs_inspect()? {
+            return Ok(None);
+        }
+        crate::engine::native_clients_session::request(request).map(Some)
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
 

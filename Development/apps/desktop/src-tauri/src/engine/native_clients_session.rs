@@ -1454,6 +1454,32 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     }
 }
 
+// Only the desktop's passive idle lane may ask whether a fresh read is
+// necessary. An uncertain or pending receipt must always use full Inspect.
+// A negative hint creates no SessionSnapshot and clears no uncertainty.
+#[cfg(windows)]
+fn idle_hint_needs_read(unsettled: bool, mut controller_exists: impl FnMut() -> io::Result<bool>,
+    candidate_exists: impl FnOnce() -> io::Result<bool>) -> io::Result<bool> {
+    if unsettled || controller_exists()? || candidate_exists()? {
+        return Ok(true);
+    }
+    // A controller may have started during the candidate snapshot.
+    controller_exists()
+}
+
+#[cfg(windows)]
+pub(crate) fn passive_idle_needs_inspect() -> io::Result<bool> {
+    let owner=admit_controller(&CONTROLLER)?;
+    idle_hint_needs_read(owner.uncertain || owner.pending.is_some(),
+        || existing_controller_gate(CONTROLLER_GATE_NAME),
+        super::native_clients::game_candidate_exists)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn passive_idle_needs_inspect() -> io::Result<bool> {
+    Ok(true) // Retain the original unsupported-backend refusal.
+}
+
 // Without the retained controller, even a successful IPC round trip cannot
 // assign an observed game to MC01–MC05. Never publish all STOPPED (or change
 // global settings) while independently observed Minecraft processes remain.
@@ -2011,6 +2037,19 @@ mod tests {
         assert!(existing_controller_gate(&name).unwrap());
         drop(handle);
         assert!(!existing_controller_gate(&name).unwrap());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn passive_idle_hint_never_substitutes_for_pending_or_uncertain_inspect() {
+        assert!(idle_hint_needs_read(true, || panic!("unsettled bypasses hint"), || panic!("no candidate scan")).unwrap());
+        assert!(idle_hint_needs_read(false, || Ok(true), || panic!("existing controller requires full read")).unwrap());
+        assert!(idle_hint_needs_read(false, || Ok(false), || Ok(true)).unwrap());
+        let mut checks=0;
+        assert!(idle_hint_needs_read(false, || {checks+=1;Ok(checks==2)}, || Ok(false)).unwrap());
+        assert_eq!(checks,2);
+        assert!(!idle_hint_needs_read(false, || Ok(false), || Ok(false)).unwrap());
+        assert!(idle_hint_needs_read(false, || Ok(false), || Err(io::Error::other("snapshot failed"))).is_err());
+        assert!(idle_hint_needs_read(false, || Err(io::Error::other("gate unavailable")), || Ok(false)).is_err());
     }
     #[test]
     fn missing_controller_inspect_and_settings_require_no_observed_games() {

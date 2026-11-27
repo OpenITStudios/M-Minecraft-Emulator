@@ -490,6 +490,12 @@ export const lazyTester = {
   dataLocation:async(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect')=>parseDataLocation(await invokeRuntime<unknown>('lazy_tester_data_location',{action})),
   binding: async (importProfiles = false) => parseProfileBinding(await invokeRuntime<unknown>('lazy_tester_profile_binding', {import: importProfiles})),
   inspect: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Inspect'}})),
+  // Only the healthy idle scheduler accepts null; ordinary Inspect still
+  // requires a complete validated SessionSnapshot.
+  inspectIdle: async () => {
+    const value=await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:'Inspect'},passiveIdle:true});
+    return value===null ? null : parseSession(value);
+  },
   launch: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Launch', slot}})),
   closeOne: async (slot: ProfileSlot) => {
     if (!profileSlots.includes(slot)) throw new TypeError('Unknown Minecraft profile');

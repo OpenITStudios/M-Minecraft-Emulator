@@ -42,12 +42,29 @@ describe('Absent-controller Settings observation',()=>{
     expect(fallback).toContain('snapshot.settings = Some(SettingsReport::policy(idle, None)?);');
   });
 });
+describe('Passive idle observation boundary',()=>{
+  it('allows a negative hint only on the healthy idle scheduler, not on a full receipt',()=>{
+    const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
+    const commands=readFileSync(new URL('../src-tauri/src/commands/native_clients.rs',import.meta.url),'utf8');
+    expect(app).toContain("void refresh(page==='workspace' && available && workspaceSettledIdle && !sessionObservationHint)");
+    expect(app).toContain('if (!isCurrentObservation(issued) || snapshot===null) return;');
+    expect(bridge).toContain("inspect: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'Inspect'}}))");
+    expect(bridge).toContain('return value===null ? null : parseSession(value);');
+    expect(()=>parseSession(null)).toThrow();
+    expect(commands).toContain('Passive idle hint is restricted to Inspect');
+    expect(commands).toContain('!crate::engine::native_clients_session::passive_idle_needs_inspect()?');
+    expect(commands).toContain('crate::engine::native_clients_session::request(request).map(Some)');
+  });
+});
 describe('Storage on-demand boundary', () => {
   it('keeps complete storage scans out of startup, periodic observation and slot selection', () => {
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
-    const refresh=app.split('async function refresh()')[1]!.split('async function launch(')[0]!;
+    const refresh=app.split('async function refresh(passiveIdle = false)')[1]!.split('async function launch(')[0]!;
     const selection=app.split('function chooseSlot(')[1]!.split('let queuedPerformance:')[0]!;
-    expect(refresh).toContain("page === 'settings' || page === 'storage' ? await lazyTester.settings() : await lazyTester.inspect()");
+    expect(refresh).toContain("page === 'settings' || page === 'storage'");
+    expect(refresh).toContain('? await lazyTester.settings()');
+    expect(refresh).toContain('passiveIdle ? await lazyTester.inspectIdle() : await lazyTester.inspect()');
     expect(refresh).not.toContain('lazyTester.storage(');
     expect(selection).not.toContain('lazyTester.');
     expect(app.match(/lazyTester\.storage\(/g)).toHaveLength(2);
@@ -212,7 +229,7 @@ describe('Lazy Tester profile contract', () => {
   });
   it('shares the observation clocks, pauses blocked lanes, and cancels the one timer on teardown', () => {
     const mounted = readFileSync(new URL('../src/LazyTesterApp.svelte', import.meta.url), 'utf8');
-    expect(mounted).toMatch(/async function refresh\(\)[\s\S]*?refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/);
+    expect(mounted).toMatch(/async function refresh\(passiveIdle = false\)[\s\S]*?refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/);
     expect(mounted).toContain('sessionInspectionDeadline(lastInspectionStartedAt,');
     expect(mounted).toContain('periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle, workspaceSettledLive)');
     expect(mounted).toContain("selectedIdentity !== '' && selectedIdentity === identity(profiles.find(profile => profile.slot === active))");

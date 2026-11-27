@@ -209,7 +209,11 @@ try {
           } : {}),
         }))};
         }
-        if (operation === 'Inspect') { await new Promise(resolve=>setTimeout(resolve,window.__inspectDelay||0));return snapshot(); }
+        if (operation === 'Inspect') {
+          await new Promise(resolve=>setTimeout(resolve,window.__inspectDelay||0));
+          if(args.passiveIdle===true && window.__idleHintEmpty)return null;
+          return snapshot();
+        }
         throw new Error('Unexpected operation: ' + operation);
       },
     };
@@ -293,7 +297,7 @@ try {
   assert.equal(await countInspect(),idleInspectCount,'Healthy idle must not issue a 2s session inspection');
   // The original 10s session deadline passes while the native close review
   // blocks reads. Cancel resumes that overdue deadline without replaying ticks.
-  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',true));
+  await page.evaluate(()=>{window.__idleHintEmpty=true;window.__emitNative('lazy-tester-close-review',true);});
   await page.waitForTimeout(10100);
   assert.equal(await countInspect(),idleInspectCount,'Close review must suppress an overdue background inspection');
   await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
@@ -301,6 +305,14 @@ try {
     call=>call.args?.request?.operation==='Inspect').length===count+1,idleInspectCount);
   await page.waitForTimeout(2150);
   assert.equal(await countInspect(),idleInspectCount+1,'Resume must not replay missed idle intervals');
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='Inspect').at(-1)?.args.passiveIdle),true,
+    'Healthy idle scheduler accepts only an explicit passive hint');
+  await heading('Ready when you are').waitFor();
+  // Focus return requests a full receipt even while the idle hint is empty.
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus')));
+  await page.waitForFunction(count=>window.__calls.filter(c=>c.args?.request?.operation==='Inspect').length===count+1,
+    idleInspectCount+1,{timeout:2500});
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='Inspect').at(-1)?.args.passiveIdle===true),false);
   assert.equal(await page.evaluate(()=>window.__calls.some(
     call=>call.args?.request?.operation==='InspectStorage')),false,'Background observation must not scan Storage');
 
