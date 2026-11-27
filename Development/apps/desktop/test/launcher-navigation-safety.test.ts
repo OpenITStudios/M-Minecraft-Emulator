@@ -30,17 +30,17 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
   it('does not silently dismiss an active close or storage review when navigating',()=>{
     const app=source('LazyTesterApp.svelte');
     const storage=source('DataStorage.svelte');
-    expect(app).toContain('$: navigationReviewOpen = closeReviewPending || clearingData ||');
-    expect(app).toContain('clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;');
-    expect(app).toContain('closeReviewActive(reviewState()) ||');
-    expect(app).toContain('clearSlot !== null || recovery !== null || fullReview !== null) return;');
+    expect(app).toContain('$: navigationReviewOpen = selectiveOpen || closeReviewPending || clearingData || storageReview !== null;');
+    expect(app).toContain('selectiveOpen || clearingData || storageReview !== null) return;');
+    expect(app).toContain('closeReviewActive(reviewState()) || clearingData || storageReview!==null) return;');
+    expect(app).toContain('onCancelReview={cancelStorageReview}');
     expect(app).toContain('disabled={navigationReviewOpen} on:click={()=>navigate(\'workspace\')}>Back</button>');
     expect(app).toContain('disabled={navigationReviewOpen||nativeBackend!==\'WindowsNative\'}');
     expect(app).toContain('disabled={navigationReviewOpen} class:chosen={page===\'storage\'}');
     expect(app).toContain('Save your work first. Only this game closes; other games keep running.');
     expect(storage).toContain('Finish or cancel this review before switching profiles.');
     expect(app).toContain('function cancelCloseOne()');
-    expect(storage).toContain('cancelReview(onCancelFullReview)');
+    expect(storage).toContain('cancelReview(\'full\')');
   });
   it('rejects delayed navigation and Refresh responses after a native close review',()=>{
     const app=source('LazyTesterApp.svelte');

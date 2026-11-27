@@ -20,6 +20,24 @@ describe('Data Storage keyboard review source contract', ()=>{
     expect(app).toContain('confirmationToken!==pending.token');
   });
 
+  it('uses a single tagged review with kind-scoped cancellation and no parallel mutable review slots', ()=>{
+    const app=source('LazyTesterApp.svelte');
+    const storage=source('DataStorage.svelte');
+    const review=source('app/storageReview.ts');
+    expect(review).toContain("kind: 'cache'");
+    expect(review).toContain("kind: 'settings'");
+    expect(review).toContain("kind: 'full'");
+    expect(app).toContain('let storageReview: StorageReview | null = null');
+    expect(app).not.toMatch(/let (clearSlot|recovery|fullReview):/);
+    expect(app).toContain('if (storageReview?.kind === kind) storageReview = null;');
+    expect(app).toContain("storageReview?.kind !== 'cache'");
+    expect(app).toContain("pending?.kind!=='settings'");
+    expect(app).toContain("pending?.kind!=='full'");
+    expect(storage).toContain('export let storageReview: StorageReview | null;');
+    expect(storage).toContain('onCancelReview(kind);');
+    expect(storage).not.toMatch(/export let (clearSlot|recovery|fullReview):/);
+  });
+
   it('defaults focus to safe cache/settings Cancel and preserves full-clear identity entry', ()=>{
     const storage=source('DataStorage.svelte');
     const app=source('LazyTesterApp.svelte');
@@ -42,9 +60,9 @@ describe('Data Storage keyboard review source contract', ()=>{
     expect(storage).toContain('cacheReviewElement?.contains(target)');
     expect(storage).toContain('if (!cancel) return;');
     expect(storage).toContain('if (trigger?.isConnected && !trigger.disabled) trigger.focus({preventScroll: true})');
-    expect(storage).toContain('cancelReview(onCancelCacheReview)');
-    expect(storage).toContain('cancelReview(onCancelSettingsReview)');
-    expect(storage).toContain('cancelReview(onCancelFullReview)');
+    expect(storage).toContain('cancelReview(\'cache\')');
+    expect(storage).toContain('cancelReview(\'settings\')');
+    expect(storage).toContain('cancelReview(\'full\')');
   });
 
   it('uses contextual explanations for unavailable settings without weakening gates', ()=>{

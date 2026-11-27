@@ -48,8 +48,8 @@ describe('Lazy Tester Settings/Storage transient focus source contract',()=>{
     expect(storage).toContain('on:click={()=>commitCacheReview(selectedSlot)}');
     expect(storage).toContain('on:click={commitSettingsReview}');
     expect(storage).toContain('bind:this={storageOverviewHeading} tabindex="-1"');
-    expect(storage).toContain('cancelReview(onCancelCacheReview)');
-    expect(storage).toContain('cancelReview(onCancelSettingsReview)');
+    expect(storage).toContain('cancelReview(\'cache\')');
+    expect(storage).toContain('cancelReview(\'settings\')');
     expect(app).toContain('await lazyTester.clearCache(slot)');
     expect(app).toContain('status.confirmationToken!==pending.token');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');

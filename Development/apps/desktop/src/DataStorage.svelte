@@ -8,7 +8,7 @@
   import {userMessage} from './app/presentation/sessionFeedback.js';
   import {formatStorageBytes, formatStorageExtent} from './app/presentation/storageSize.js';
 
-  type StorageSettingsAction = 'Reset' | 'Restore';
+  import type {StorageReview, StorageReviewKind, StorageSettingsAction} from './app/storageReview.js';
 
   export let profiles: ProfileSession[];
   export let selectedSlot: ProfileSlot;
@@ -25,9 +25,11 @@
   export let available: boolean;
   export let bindingConfigured: boolean;
   export let advanced: boolean;
-  export let clearSlot: ProfileSlot | null;
-  export let recovery: {slot: ProfileSlot; action: StorageSettingsAction} | null;
-  export let fullReview: {slot: ProfileSlot; token: string; pending: boolean} | null;
+  export let storageReview: StorageReview | null;
+  // Presentation aliases only; the parent owns one discriminated review.
+  $: clearSlot = storageReview?.kind === 'cache' ? storageReview.slot : null;
+  $: recovery = storageReview?.kind === 'settings' ? storageReview : null;
+  $: fullReview = storageReview?.kind === 'full' ? storageReview : null;
   export let fullName: string;
   export let fullAck: boolean;
   export let clearingData: boolean;
@@ -46,7 +48,7 @@
   export let selectiveOpen = false;
   $: selectiveOpen = selectiveSlot !== null;
   let selectiveTrigger: HTMLButtonElement | undefined;
-  $: if (selectiveSlot !== null && (selectiveSlot !== selectedSlot || !available || !bindingConfigured || selectedProfile?.state !== 'STOPPED' || !selectedStorage || selectedStorage.fullClear?.pending === true || nativeClosePending || clearSlot !== null || recovery !== null || fullReview !== null)) closeSelective();
+  $: if (selectiveSlot !== null && (selectiveSlot !== selectedSlot || !available || !bindingConfigured || selectedProfile?.state !== 'STOPPED' || !selectedStorage || selectedStorage.fullClear?.pending === true || nativeClosePending || storageReview !== null)) closeSelective();
   function closeSelective(): void {
     selectiveSlot = null;
     void tick().then(() => {
@@ -58,14 +60,12 @@
   export let onSaveWebCachePreference: (enabled:boolean) => Promise<void>;
   export let onReviewCache: () => void;
   export let onClearCache: (slot: ProfileSlot) => void;
-  export let onCancelCacheReview: () => void;
+  export let onCancelReview: (kind: StorageReviewKind) => void;
   export let onOpenFolder: (slot: ProfileSlot) => void;
   export let onReviewSettings: (action: StorageSettingsAction) => void;
   export let onRecoverSettings: () => void;
-  export let onCancelSettingsReview: () => void;
   export let onReviewFullClear: () => void;
   export let onClearAllData: () => void;
-  export let onCancelFullReview: () => void;
   export let onLocateData: () => void;
   export let onChooseData: () => void;
   // Presentation-only keyboard context. The original parent and native engine
@@ -79,7 +79,7 @@
   let settingsCancelButton: HTMLButtonElement | undefined;
 
   // Keep one storage review in place until native confirmation or Cancel.
-  $: storageReviewOpen = clearSlot !== null || recovery !== null || fullReview !== null || selectiveSlot !== null;
+  $: storageReviewOpen = storageReview !== null || selectiveSlot !== null;
 
   // Presentation-only input feedback; native data-clear admission is unchanged.
   $: typedFullClearNameIncorrect = fullReview !== null && fullName.length > 0 &&
@@ -132,10 +132,10 @@
     onRecoverSettings();
   }
 
-  function cancelReview(cancel: () => void): void {
+  function cancelReview(kind: StorageReviewKind): void {
     const trigger = reviewTrigger;
     reviewTrigger = null;
-    cancel();
+    onCancelReview(kind);
     void tick().then(() => {
       if (trigger?.isConnected && !trigger.disabled) trigger.focus({preventScroll: true});
     });
@@ -146,11 +146,11 @@
         !(event.target instanceof Node)) return;
     const target = event.target;
     const cancel = fullReview?.slot === selectedSlot && fullReviewElement?.contains(target)
-      ? onCancelFullReview
+      ? 'full'
       : recovery?.slot === selectedSlot && settingsReviewElement?.contains(target)
-        ? onCancelSettingsReview
+        ? 'settings'
         : clearSlot === selectedSlot && cacheReviewElement?.contains(target)
-          ? onCancelCacheReview
+          ? 'cache'
           : null;
     if (!cancel) return;
     event.preventDefault();
@@ -216,7 +216,7 @@
               : 'Refresh to inspect storage. Not measured does not mean empty.'}</p>
 
           <div class="lazytester-setting"><div><h3>Clear cache</h3><p>Remove temporary web cache. Accounts, worlds and settings stay.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lazytester-help">Cache cleanup unavailable. Refresh to check again.</p>{/if}</div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></div>
-          {#if clearSlot===selectedSlot}<section class="lazytester-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts, settings and other launchers stay.</p><div class="lazytester-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>commitCacheReview(selectedSlot)}>Clear web cache</button><button class="lazytester-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview(onCancelCacheReview)}>Cancel</button></div></section>{/if}
+          {#if clearSlot===selectedSlot}<section class="lazytester-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts, settings and other launchers stay.</p><div class="lazytester-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>commitCacheReview(selectedSlot)}>Clear web cache</button><button class="lazytester-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview('cache')}>Cancel</button></div></section>{/if}
           </div></details>
           <details class="lazytester-location-options" open={!bindingConfigured || !dataLocation?.path}><summary>Find existing profile data</summary><p class="lazytester-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lazytester-error">{locationIssue}</p>{/if}<div class="lazytester-actions"><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing||storageReviewOpen} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
           <details class="lazytester-storage-packs">
@@ -240,7 +240,7 @@
               <div class="lazytester-setting"><div><h3>Restore settings</h3><p>{selectedStorage?.gameSettings?.backupAvailable?'Restore the latest verified backup. Current settings are backed up first.':'No verified backup yet. Reset creates one.'}</p></div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.gameSettings?.canRestore} on:click={event=>showSettingsReview('Restore',event.currentTarget)}>Restore settings…</button></div>
               {#if selectedStorage?.gameSettings?.issue}<p class="lazytester-help">{userMessage('gameSettings')}</p>{:else if !selectedStorage?.gameSettings}<p class="lazytester-help">Refresh to check recovery options.</p>{:else if !selectedStorage.gameSettings.canReset && !selectedStorage.gameSettings.canRestore}<p class="lazytester-help">Recovery unavailable. Close this game normally, then Refresh.</p>{/if}
               {#if recovery?.slot===selectedSlot}
-                <section class="lazytester-cache-confirm" aria-label="Confirm game settings change" bind:this={settingsReviewElement}><h3>{recovery.action} settings for Minecraft - {recovery.slot}?</h3><p>Only this launcher’s game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.</p><div class="lazytester-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={commitSettingsReview}>{recovery.action} settings</button><button class="lazytester-secondary" bind:this={settingsCancelButton} disabled={busy} on:click={()=>cancelReview(onCancelSettingsReview)}>Cancel</button></div></section>
+                <section class="lazytester-cache-confirm" aria-label="Confirm game settings change" bind:this={settingsReviewElement}><h3>{recovery.action} settings for Minecraft - {recovery.slot}?</h3><p>Only this launcher’s game settings change. Accounts, worlds, cache and other launchers are kept. A backup is saved first.</p><div class="lazytester-actions"><button disabled={busy||refreshing||resizing||!(recovery.action==='Reset'?selectedStorage?.gameSettings?.canReset:selectedStorage?.gameSettings?.canRestore)} on:click={commitSettingsReview}>{recovery.action} settings</button><button class="lazytester-secondary" bind:this={settingsCancelButton} disabled={busy} on:click={()=>cancelReview('settings')}>Cancel</button></div></section>
               {/if}
             </div>
           </details>
@@ -255,7 +255,7 @@
               {#if typedFullClearNameIncorrect}<p id="lazytester-full-clear-error" class="lazytester-field-error" role="status">The name does not match Minecraft - {fullReview.slot}. No deletion has been requested.</p>{/if}
               <label class="lazytester-delete-ack"><input type="checkbox" bind:checked={fullAck} disabled={busy} aria-describedby="lazytester-full-clear-ack-hint"/> I understand this cannot be undone and have exported any worlds I need.</label>
               <p id="lazytester-full-clear-ack-hint" class="lazytester-help">Required before permanent deletion.</p>
-              <div class="lazytester-actions"><button type="submit" class="lazytester-danger" disabled={busy||refreshing||resizing||!fullAck||fullName!==`Minecraft - ${fullReview.slot}`||!selectedStorage?.fullClear?.canClear||selectedStorage?.fullClear?.confirmationToken!==fullReview.token}>Permanently clear data</button><button type="button" class="lazytester-secondary" disabled={busy} on:click={()=>cancelReview(onCancelFullReview)}>Cancel</button></div>
+              <div class="lazytester-actions"><button type="submit" class="lazytester-danger" disabled={busy||refreshing||resizing||!fullAck||fullName!==`Minecraft - ${fullReview.slot}`||!selectedStorage?.fullClear?.canClear||selectedStorage?.fullClear?.confirmationToken!==fullReview.token}>Permanently clear data</button><button type="button" class="lazytester-secondary" disabled={busy} on:click={()=>cancelReview('full')}>Cancel</button></div>
             </form>
           {/if}
           </section>

@@ -133,9 +133,9 @@ describe("Emulator source verification routing", () => {
     expect(view).toContain("bind:checked={fullAck}");
     expect(view).toContain("bind:open={advanced}");
     expect(view).toContain("on:submit|preventDefault={onClearAllData}");
-    expect(view).toContain("cancelReview(onCancelFullReview)");
-    expect(view).toContain("cancelReview(onCancelCacheReview)");
-    expect(view).toContain("cancelReview(onCancelSettingsReview)");
+    expect(view).toContain("cancelReview('full')");
+    expect(view).toContain("cancelReview('cache')");
+    expect(view).toContain("cancelReview('settings')");
     expect(view).not.toMatch(/\binvokeRuntime\s*\(|\blazyTester\s*\.\w+\(|\bworkspaceSurface\s*\.\w+\(|\bsetInterval\s*\(/);
   });
 

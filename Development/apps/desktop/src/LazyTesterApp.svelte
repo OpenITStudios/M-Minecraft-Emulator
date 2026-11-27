@@ -14,6 +14,7 @@
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
+  import type {StorageReview, StorageReviewKind, StorageSettingsAction} from './app/storageReview.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
@@ -32,8 +33,7 @@
     // A profile switch is display-only. It must never silently dismiss
     // an active CloseOne/Storage confirmation or an in-flight mutation.
     if (slot===selectedSlot || busy || selectiveOpen ||
-        closeReviewActive(reviewState()) || clearingData ||
-        clearSlot!==null || recovery!==null || fullReview!==null) return;
+        closeReviewActive(reviewState()) || clearingData || storageReview!==null) return;
     selectedSlot=slot;
     // Per-profile success receipts are not native session or storage truth.
     // Do not show the prior slot's receipt under the newly selected slot.
@@ -44,9 +44,8 @@
   let activeFps:number|undefined=144,backgroundFps:number|undefined=10,performanceNotice='';
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
-  let clearSlot: ProfileSlot | null = null, storageNotice = '';
-  let recovery:{slot:ProfileSlot;action:'Reset'|'Restore'}|null=null;
-  let fullReview:{slot:ProfileSlot;token:string;pending:boolean}|null=null,fullName='',fullAck=false,clearingData=false;
+  let storageReview: StorageReview | null = null, storageNotice = '';
+  let fullName='',fullAck=false,clearingData=false;
   type Page = 'workspace' | 'storage' | 'settings';
   let page: Page = 'workspace';
   let queuedPage: Page | null = null;
@@ -56,7 +55,7 @@
   let headerRefreshButton: HTMLButtonElement | undefined;
   // Keyboard-only Refresh focus continuity, not a new status or native action.
   let headerRefreshFocusPage: Page | null = null;
-  let initializing = true, checkingStorage = false, storageReportReceivedAt = '';
+  let initializing = true, storageReportReceivedAt = '';
   // A clock time alone is ambiguous after an overnight/open-window session.
   // The timestamp describes the last UI-received storage report, not a live
   // native filesystem measurement or a verified game/world state.
@@ -205,8 +204,7 @@
   // Page changes must not silently dispose a visible CloseOne or Storage
   // review. The user explicitly cancels it before navigating elsewhere.
   let selectiveOpen = false;
-  $: navigationReviewOpen = selectiveOpen || closeReviewPending || clearingData ||
-    clearSlot !== null || recovery !== null || fullReview !== null;
+  $: navigationReviewOpen = selectiveOpen || closeReviewPending || clearingData || storageReview !== null;
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Stopped', STARTING: 'Starting…', RUNNING: 'Running', NOT_RESPONDING: 'Not Responding', ATTENTION: 'Needs Attention'};
   const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
@@ -433,8 +431,8 @@
   function navigate(next: typeof page) {
     // Settings and storage require the Windows native session owner.
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) ||
-        selectiveOpen || clearingData || clearSlot !== null || recovery !== null || fullReview !== null) return;
-    closeOneSlot=null;closeOneTrigger=null;recovery=null;clearSlot=null;fullReview=null;
+        selectiveOpen || clearingData || storageReview !== null) return;
+    closeOneTrigger=null;
     // A queued Refresh belongs to its original page; moving to another
     // page cancels only the undispatched UI request, never a native action.
     if (next !== page) {
@@ -513,7 +511,7 @@
     try {
     issueKey=null;
     if (page === 'storage') {
-      busy=true;checkingStorage=true;
+      busy=true;
       try {
         if(!binding?.configured)await checkBinding();
         if (!current()) return;
@@ -540,7 +538,7 @@
       }catch(error){
         if (current()) {issueKey='storage';storage=null;}
       }
-      finally{checkingStorage=false;busy=false;}
+      finally{busy=false;}
     } else {
       // Only explicit Refresh of a known preview failure requests another
       // DWM layout. Periodic session inspection and worker errors never
@@ -902,12 +900,12 @@
     try {
       const previousPath = dataLocation?.path;
       dataLocation=await lazyTester.dataLocation(action);
-      if (dataLocation.path !== previousPath) { storage = null; clearSlot = null; storageNotice = ''; }
+      if (dataLocation.path !== previousPath) { storage = null; cancelStorageReview('cache'); storageNotice = ''; }
       if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();
     } catch(error){
       locationIssue=userMessage('location');
       if(action==='Inspect'){
-        dataLocation=null;storage=null;clearSlot=null;storageNotice='';
+        dataLocation=null;storage=null;cancelStorageReview('cache');storageNotice='';
         binding=null;if(!bindingIssue)bindingIssue=locationIssue;
       }
     }finally{busy=false;}
@@ -950,9 +948,17 @@
       throw error;
     } finally {busy=false;}
   }
+  function cancelStorageReview(kind: StorageReviewKind) {
+    if (storageReview?.kind === kind) storageReview = null;
+  }
+  function reviewCache() {
+    if (navigationReviewOpen || storageReview !== null || busy || refreshing || resizing) return;
+    storageReview = {kind:'cache',slot:selectedSlot};
+  }
   async function clearCache(slot: ProfileSlot) {
-    if (busy || refreshing || resizing || clearSlot !== slot || !storage?.find(item=>item.slot===slot)?.cache.canClear) return;
-    busy = true; issueKey=null; storageNotice = ''; clearSlot = null;
+    if (busy || refreshing || resizing || storageReview?.kind !== 'cache' ||
+        storageReview.slot !== slot || !storage?.find(item=>item.slot===slot)?.cache.canClear) return;
+    busy = true; issueKey=null; storageNotice = ''; storageReview = null;
     try {
       const snapshot = await lazyTester.clearCache(slot);
       applyStorageSnapshot(snapshot);
@@ -962,12 +968,12 @@
     } finally { busy = false; }
   }
   async function recoverSettings() {
-    const pending=recovery;
-    if(!pending||busy||refreshing||resizing||pending.slot!==selectedSlot)return;
+    const pending=storageReview;
+    if(pending?.kind!=='settings'||busy||refreshing||resizing||pending.slot!==selectedSlot)return;
     const status=selectedStorage?.gameSettings;
     const allowed=pending.action==='Reset'?status?.canReset:status?.canRestore;
     if(!allowed)return;
-    busy=true;issueKey=null;storageNotice='';recovery=null;
+    busy=true;issueKey=null;storageNotice='';storageReview=null;
     try {
       const snapshot=await lazyTester.recoverSettings(pending.slot,pending.action);
       applyStorageSnapshot(snapshot);
@@ -977,18 +983,18 @@
   }
   function reviewFullClear() {
     const status=selectedStorage?.fullClear;
-    if(busy||navigationReviewOpen||!status?.canClear||!status.confirmationToken)return;
-    recovery=null;clearSlot=null;fullName='';fullAck=false;
-    fullReview={slot:selectedSlot,token:status.confirmationToken,pending:status.pending};
+    if(busy||navigationReviewOpen||storageReview!==null||!status?.canClear||!status.confirmationToken)return;
+    fullName='';fullAck=false;
+    storageReview={kind:'full',slot:selectedSlot,token:status.confirmationToken,pending:status.pending};
     void tick().then(()=>document.getElementById('full-clear-name')?.focus());
   }
-  function reviewSettings(action:'Reset'|'Restore') {
-    if(navigationReviewOpen||busy||refreshing||resizing||!available)return;
-    fullReview=null;clearSlot=null;recovery={slot:selectedSlot,action};
+  function reviewSettings(action:StorageSettingsAction) {
+    if(navigationReviewOpen||storageReview!==null||busy||refreshing||resizing||!available)return;
+    storageReview={kind:'settings',slot:selectedSlot,action};
   }
   async function clearAllData() {
-    const pending=fullReview,status=selectedStorage?.fullClear;
-    if(!pending||busy||refreshing||resizing||!fullAck||pending.slot!==selectedSlot||fullName!==`Minecraft - ${pending.slot}`||
+    const pending=storageReview,status=selectedStorage?.fullClear;
+    if(pending?.kind!=='full'||busy||refreshing||resizing||!fullAck||pending.slot!==selectedSlot||fullName!==`Minecraft - ${pending.slot}`||
       !status?.canClear||status.confirmationToken!==pending.token)return;
     // The exact typed-name/ack/token admission above remains authoritative.
     // This is only a focus handoff from the disappearing confirmation form
@@ -997,7 +1003,7 @@
     if (document.hasFocus() && document.activeElement instanceof Node &&
         deletionReview?.contains(document.activeElement))
       document.getElementById('lazytester-clear-data-heading')?.focus({preventScroll:true});
-    busy=true;clearingData=true;issueKey=null;storageNotice='';fullReview=null;
+    busy=true;clearingData=true;issueKey=null;storageNotice='';storageReview=null;
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
       applyStorageSnapshot(snapshot);
@@ -1021,7 +1027,7 @@
       if(recordingWatch&&!busy&&!closeInProgress&&!nativeExitReview&&!document.hidden)void refreshRecordingStatus();
       // Unsupported, hidden and closing views never schedule Minecraft IPC.
       if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
-          !selectiveOpen && clearSlot===null && recovery===null && fullReview===null &&
+          !selectiveOpen && storageReview===null &&
           !busy && !refreshing && !resizing && !initializing) {
         const now = performance.now();
         // Only a fully observed, healthy stopped roster may slow Play.
@@ -1292,7 +1298,7 @@
           {busy} {refreshing} {resizing} {available}
           bindingConfigured={!!binding?.configured}
           bind:advanced bind:fullName bind:fullAck
-          {clearSlot} {recovery} {fullReview} {clearingData}
+          {storageReview} {clearingData}
           {dataLocation} {locationIssue} {runningCount}
           onChooseSlot={chooseSlot}
           bind:selectiveOpen nativeClosePending={closeReviewPending}
@@ -1300,14 +1306,11 @@
           onInspectSelective={lazyTester.selectiveInventory}
           onReviewSelective={lazyTester.reviewSelectiveInventory}
           onConfirmWorlds={confirmWorlds} onConfirmDownloadCache={confirmDownloadCache}
-          onReviewCache={() => {if (!navigationReviewOpen && !busy && !refreshing && !resizing) {fullReview=null;recovery=null;clearSlot=selectedSlot;}}}
-          onClearCache={clearCache}
-          onCancelCacheReview={() => {clearSlot=null;}}
+          onReviewCache={reviewCache} onClearCache={clearCache}
           onOpenFolder={openFolder} onReviewSettings={reviewSettings}
           onRecoverSettings={recoverSettings}
-          onCancelSettingsReview={() => {recovery=null;}}
           onReviewFullClear={reviewFullClear} onClearAllData={clearAllData}
-          onCancelFullReview={() => {fullReview=null;}}
+          onCancelReview={cancelStorageReview}
           onLocateData={() => loadLocation('Locate')}
           onChooseData={() => loadLocation('Choose')}/>
       {/if}

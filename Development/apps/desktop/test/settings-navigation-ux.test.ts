@@ -19,8 +19,8 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     // The parent rejects unexpected selector events even if the child
     // controls were disabled before the pending review began.
     expect(choose).toContain('closeReviewActive(reviewState()) || clearingData ||');
-    expect(choose).toContain('clearSlot!==null || recovery!==null || fullReview!==null) return;');
-    expect(choose).not.toContain('clearSlot=null;recovery=null;fullReview=null;');
+    expect(choose).toContain('clearingData || storageReview!==null) return;');
+    expect(choose).not.toMatch(/storageReview\s*=\s*null/);
     expect(choose).toContain("settingsNotice='';storageNotice='';");
   });
   it('moves screen-reader focus only to Settings / Storage headings on explicit navigation',()=>{

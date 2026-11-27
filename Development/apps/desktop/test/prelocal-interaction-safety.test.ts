@@ -19,7 +19,7 @@ describe('Pre-localtest interaction admission and storage review safety',()=>{
     const app=ui('LazyTesterApp.svelte'),storage=ui('DataStorage.svelte');
     expect(app).toContain('manualRefreshRequested||navigationReviewOpen');
     expect(app).toContain("if (navigationReviewOpen) return;");
-    expect(storage).toContain('$: storageReviewOpen = clearSlot !== null || recovery !== null || fullReview !== null;');
+    expect(storage).toContain('$: storageReviewOpen = storageReview !== null || selectiveSlot !== null;');
     expect(storage).toContain('disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.cache.canClear}');
     expect(storage).toContain('if(recovery!==null)event.preventDefault();');
     expect(storage).toContain('confirmationToken!==fullReview.token');
