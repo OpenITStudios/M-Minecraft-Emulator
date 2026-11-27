@@ -16,7 +16,11 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(rail).toContain('class="lazytester-launcher-header"');
     expect(css).toContain('padding-right:29px');
     expect(css).toContain('grid-template-rows:24px 18px');
-    expect(css).toContain('.lazytester-workspace-right .lazytester-launcher-header{display:flex;flex-wrap:nowrap;min-height:26px;gap:5px}');
+    expect(css).toContain('.lazytester-launcher-entry{container-type:inline-size}');
+    expect(css).toContain('@container (max-width:221px)');
+    expect(css).toContain('@container lazytester-workspace (min-width:960px) and (min-height:840px)');
+    expect(css).toContain('min-height:42px;padding-right:0');
+    expect(css).not.toContain('@media(max-width:1199px)');
   });
 
   it('limits global Play warnings without obscuring their text or shrinking the native game owner',()=>{
