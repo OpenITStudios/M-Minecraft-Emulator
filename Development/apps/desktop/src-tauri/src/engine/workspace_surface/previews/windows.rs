@@ -287,10 +287,7 @@ impl Thumbnail {
     }
     fn matches(&self, slot: u32, target: &OwnedProcess) -> bool {
         self.slot == slot
-            && self.target.pid == target.pid
-            && self.target.created_file_time == target.created_file_time
-            && self.target.session_id == target.session_id
-            && self.target.window_handle == target.window_handle
+            && self.target.same_window_identity(target)
             && self.destination_owned()
     }
     fn refresh_verified(&mut self, visible: bool) -> io::Result<()> {

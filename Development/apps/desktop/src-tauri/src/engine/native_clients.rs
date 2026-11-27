@@ -472,10 +472,7 @@ pub fn matches_native_workspace_target(
     target: &super::process_identity::OwnedProcess,
 ) -> bool {
     target.responding && observation.processes.iter().any(|candidate| {
-            candidate.pid == target.pid
-                && candidate.created_file_time == target.created_file_time
-                && candidate.session_id == target.session_id
-                && candidate.window_handle == target.window_handle
+            candidate.same_window_identity(target)
                 && candidate.window_handle != "0x0"
                 && candidate.responding
         })

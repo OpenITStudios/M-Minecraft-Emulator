@@ -102,17 +102,10 @@ fn reader_terminal_result(
         Ok(()) => pipe_issue.map_or(Ok(()), Err),
     }
 }
-// Compare exact pinned process + native window identity, never transient
-// responsiveness. Failed MC01 recovery cannot authorize or block MC02
-// merely because both belong to the same desktop window.
-fn same_native_target(a: &OwnedProcess, b: &OwnedProcess) -> bool {
-    a.pid == b.pid
-        && a.created_file_time == b.created_file_time
-        && a.session_id == b.session_id
-        && a.window_handle == b.window_handle
-}
+// Ready must refer to the exact requested process and window; transient
+// responsiveness does not change the checkpoint's identity.
 fn ready_matches_start(ready: &Saved, requested: &OwnedProcess) -> bool {
-    same_native_target(&ready.target, requested)
+    ready.target.same_window_identity(requested)
 }
 // A stale *managed* lease for the same launcher is not an invitation to
 // re-capture a new PID/window while its previous checkpoint is uncertain.
@@ -128,7 +121,7 @@ fn checkpoint_conflicts(
     requested: &OwnedProcess,
     requested_authority: Option<&(String, String)>,
 ) -> bool {
-    same_native_target(pinned, requested)
+    pinned.same_window_identity(requested)
         || matches!((pinned_authority, requested_authority),
             (Some((name, slot)), Some((other_name, other_slot)))
                 if name == "LAZY_TESTER_MANAGED_SESSION"
@@ -434,7 +427,7 @@ static SURFACE: Mutex<Surfaces> = Mutex::new(Surfaces {
 });
 fn same(lease: &Lease, target: &OwnedProcess) -> bool {
     // Never promote the pre-Ready request to an acknowledged Play surface.
-    lease.saved.as_ref().is_some_and(|saved| same_native_target(&saved.target, target))
+    lease.saved.as_ref().is_some_and(|saved| saved.target.same_window_identity(target))
 }
 // Read-only, bounded priority hint for the ONE existing FPS event worker.
 // An in-progress native switch cannot publish an unacknowledged target.

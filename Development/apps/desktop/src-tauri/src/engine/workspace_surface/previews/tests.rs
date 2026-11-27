@@ -90,7 +90,14 @@ fn preview_layout_rejects_duplicates_active_slot_and_invalid_geometry() {
     .is_ok());
     assert!(validate_tiles(&[tile(2, 10.0), tile(2, 170.0)], Some(1)).is_err());
     assert!(validate_tiles(&[tile(1, 10.0)], Some(1)).is_err());
+    assert!(validate_tiles(&[], None).is_ok());
     assert!(validate_tiles(&[tile(0, 10.0)], None).is_err());
+    assert!(validate_tiles(&[tile(6, 10.0)], None).is_err());
+    assert!(validate_tiles(&[tile(u32::MAX, 10.0)], None).is_err());
+    assert!(validate_tiles(&[tile(2, 10.0), tile(3, 170.0),
+        tile(4, 330.0), tile(2, 490.0)], None).is_err());
+    assert!(validate_tiles(&[tile(1, 10.0), tile(2, 170.0),
+        tile(3, 330.0), tile(4, 490.0), tile(5, 650.0)], None).is_err());
     assert!(validate_tiles(&[tile(2, f64::NAN)], None).is_err());
     assert!(validate_tiles(&[tile(2, -1.0)], None).is_err());
 }

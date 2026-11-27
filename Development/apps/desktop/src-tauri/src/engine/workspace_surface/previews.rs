@@ -54,13 +54,14 @@ fn overlaps(a: Rectangle, b: Rectangle) -> bool {
     a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
 fn validate_tiles(tiles: &[PreviewTile], active: Option<u32>) -> io::Result<()> {
-    let mut seen = std::collections::HashSet::new();
     if tiles.len() > 4 {
         return Err(io::Error::other("At most four preview tiles are supported"));
     }
-    for tile in tiles {
+    // The bounded prefix has at most three entries; no hash allocation.
+    for (index, tile) in tiles.iter().enumerate() {
         tile.viewport.validate_preview()?;
-        if !(1..=5).contains(&tile.slot) || active == Some(tile.slot) || !seen.insert(tile.slot) {
+        if !(1..=5).contains(&tile.slot) || active == Some(tile.slot)
+            || tiles[..index].iter().any(|previous| previous.slot == tile.slot) {
             return Err(io::Error::other("Invalid or duplicate preview profile"));
         }
     }
