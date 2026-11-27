@@ -104,7 +104,10 @@ struct Sessions {
 impl Sessions {
     fn prepare() -> io::Result<Self> {
         // Do not adopt arbitrary games or infer a profile from window titles.
-        if !super::super::inspect_native_workspace()?
+        // Resolve once for this initial observation and the image to be pinned.
+        // The existing post-pin RegisteredOnly check still runs before profile work.
+        let target = super::super::registered_education_target()?;
+        if !super::super::native_workspace_windows::inspect_for_registered_target(&target)?
             .processes
             .is_empty()
         {
@@ -113,7 +116,7 @@ impl Sessions {
         }
         // An unsupported game version blocks Launch, not settings or profile observation.
         // Release this temporary image pin before retaining the idle controller.
-        let (path, image, _) = registered_image::registered_image(false)?;
+        let (path, image, _) = registered_image::prepare_registered_image(target)?;
         let launch_issue = match registered_image::reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?) {
             Ok(_) => None,
             Err(error) if error.kind() == io::ErrorKind::Unsupported => Some(error.to_string()),

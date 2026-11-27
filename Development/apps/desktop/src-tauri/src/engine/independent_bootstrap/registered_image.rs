@@ -8,9 +8,19 @@ pub(super) fn registered_image(observe: bool) -> io::Result<(String, File, u32)>
 
 fn registered_image_with(observe: bool, mut resolve: impl FnMut() -> io::Result<String>) -> io::Result<(String, File, u32)> {
     let target = resolve()?;
-    let path = Path::new(&target);
-    let image = pin_image(path)?;
-    let singleton_caller_rva = validate_registered_image_with(&target,&image,observe,&mut resolve)?;
+    pin_registered_image_with(target, observe, resolve)
+}
+
+// Preparation already resolved this exact path for the initial workspace
+// observation. Reuse it only within that transaction; the post-pin resolver
+// still verifies the current signed registration and the same retained bytes.
+pub(super) fn prepare_registered_image(target: String) -> io::Result<(String, File, u32)> {
+    pin_registered_image_with(target, false, || crate::engine::native_clients::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly"))
+}
+
+fn pin_registered_image_with(target: String, observe: bool, resolve: impl FnOnce() -> io::Result<String>) -> io::Result<(String, File, u32)> {
+    let image = pin_image(Path::new(&target))?;
+    let singleton_caller_rva = validate_registered_image_with(&target,&image,observe,resolve)?;
     Ok((target,image,singleton_caller_rva))
 }
 
@@ -82,6 +92,29 @@ mod launch_preflight_measurement {
         assert_eq!(registered_image_with(true,||Ok(second.to_str().unwrap().into())).unwrap_err().kind(),io::ErrorKind::Unsupported);
         assert!(OpenOptions::new().write(true).open(&second).is_ok(),"Refused attempts must release their image pins");
         std::fs::remove_file(first).unwrap();std::fs::remove_file(second).unwrap();std::fs::remove_dir(root).unwrap();
+    }
+
+    #[test]
+    fn preparation_reuses_observed_path_but_rejects_changed_registration_after_pin() {
+        let root=tempfile::tempdir().unwrap();
+        let first=root.path().join("first.exe");
+        let second=root.path().join("second.exe");
+        std::fs::write(&first,[7u8;128]).unwrap();
+        std::fs::write(&second,[9u8;128]).unwrap();
+        let target=first.to_str().unwrap().to_owned();
+        let mut calls=0;
+        let (observed,pin,rva)=pin_registered_image_with(target.clone(),false,||{
+            calls+=1;
+            assert!(OpenOptions::new().write(true).open(&first).is_err(),"Resolve again while the original image is pinned");
+            Ok(target.clone())
+        }).unwrap();
+        assert_eq!(calls,1);
+        assert_eq!(observed,target);
+        assert_eq!(rva,0);
+        drop(pin);
+        assert!(pin_registered_image_with(target.clone(),false,||Ok(second.to_str().unwrap().into())).is_err());
+        assert_eq!(pin_registered_image_with(target,false,||Err(io::Error::from(io::ErrorKind::PermissionDenied))).unwrap_err().kind(),io::ErrorKind::PermissionDenied);
+        assert!(OpenOptions::new().write(true).open(&first).is_ok(),"Failed preparation must release its pin");
     }
 
     #[test]
