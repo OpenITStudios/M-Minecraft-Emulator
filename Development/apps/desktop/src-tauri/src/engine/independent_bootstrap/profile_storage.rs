@@ -575,7 +575,12 @@ fn plan_cache(private: &File, target: CacheTarget, deleting: bool, budget: Inspe
             Err(error) => return Err(error),
         }
     }
-    plan.visit(&path, 0)?;
+    // The last ancestor is the cache root itself, already pinned with the
+    // same access and sharing policy as visit_tree. Keep that original pin
+    // through enumeration and disposition instead of opening it twice.
+    plan.bounded(0)?;
+    let root = plan.directories.pop().expect("nonempty cache path was pinned");
+    plan.visit_pinned_tree(&path, &path, 0, root)?;
     // A final OS call may consume the budget. Refuse incomplete preflight
     // before marking any file for deletion, even on the mutating path.
     plan.bounded(0)?;
@@ -691,6 +696,25 @@ mod tests {
             fs::remove_dir_all(&self.0).unwrap();
         }
     }
+    #[test]
+    fn cache_plan_retains_one_root_pin_for_observation_and_disposition() {
+        let fixture = Fixture::new();
+        let cache = fixture.cache();
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join("leaf"), b"cache").unwrap();
+        let private = fixture.pin();
+        for deleting in [false, true] {
+            let plan = plan_cache(&private, CacheTarget::Web, deleting,
+                InspectionBudget::new(Duration::from_secs(2))).unwrap();
+            assert_eq!(plan.directories.len(), CACHE_PARTS.len() + 1);
+            assert_eq!(directory_path(plan.directories.last().unwrap()).unwrap(), cache);
+            assert_eq!((plan.bytes, plan.files.len()), (5, 1));
+            assert!(fs::rename(&cache, cache.with_file_name("renamed-cache")).is_err(),
+                "The original root pin must still deny rename");
+        }
+        assert_eq!(fs::read(cache.join("leaf")).unwrap(), b"cache");
+    }
+
     #[test]
     fn unresolved_download_cache_never_reuses_web_cache_or_touches_profile() {
         let fixture = Fixture::new();
