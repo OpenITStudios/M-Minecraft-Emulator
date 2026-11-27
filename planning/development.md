@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Rust-first native pacing lifetime: move original Windows waitable timer, duplicated read-only policy handles, QPC sampling, atomic foreground/stop state and wait loop into frame-pacing.rs. C++ Pacer is now a thin opaque-owner adapter; no new worker, policy source or game modifications. One small Rust allocation per existing Pacer lifetime; no per-frame allocation. Existing native controls exercise the same interface, NOT_EXECUTED. Native linking and payload review held.
+
 Rust-first Frame Pacing migration: pure limit/clock validation and deadline arithmetic moved from C++ Pacer to Rust frame-pacing.rs, linked with fps-meter.rs through one native-fps.rs static library. Native Windows handles, wait loop, foreground policy and stop ownership unchanged. Six affected CMake consumers use one library; static CRT aligned across configurations. Rust deadline fixtures authored, NOT_EXECUTED; Windows linking/payload review held. No game changes.
 
 Rust-first FPS Meter migration: one Rust implementation owns accepted-Present arithmetic and freshness; native C++ adapter retains QPC/HRESULT/SRWLOCK and unchanged HUD snapshot ABI. Fixed-width inline state, no allocation or new worker; all four CMake consumers link one Rust static library. No game changes. Rust/C++ tests and Windows build/link NOT_EXECUTED; v4 payload review remains held. Next: source review build consumers, then assess frame pacing migration independently.

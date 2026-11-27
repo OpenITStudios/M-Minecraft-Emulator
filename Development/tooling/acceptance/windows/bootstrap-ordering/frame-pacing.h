@@ -1,6 +1,5 @@
 #pragma once
 #include <windows.h>
-#include <atomic>
 #include "frame-pacing-ffi.h"
 #include <stdexcept>
 
@@ -25,106 +24,25 @@ struct Input {
     unsigned activeFps = 144, backgroundFps = 10;
     HANDLE hudSelected = nullptr; // HUD only; never consumed by Pacer.
 };
+// Thin native compatibility adapter: Rust owns the entire pacing state,
+// waitable timer, duplicated handles, deadline and sticky stop.
 class Pacer {
-    enum class Mode { Background, Foreground, Stopped };
-    std::atomic<Mode> mode_{Mode::Background};
-    HANDLE changed_ = nullptr, timer_ = nullptr;
-    LONGLONG frequency_ = 0, previous_ = 0;
-    HANDLE external_[4]{};
-    unsigned activeFps_, backgroundFps_;
-    void close() noexcept {
-        if (timer_) CloseHandle(timer_);
-        if (changed_) CloseHandle(changed_);
-        for (HANDLE handle : external_) if (handle) CloseHandle(handle);
-    }
+    LazyTesterNativePacer* state_;
 public:
-    explicit Pacer(const Input& input = {}) : activeFps_(input.activeFps), backgroundFps_(input.backgroundFps) {
-        try {
-            if (!validCeilings(activeFps_, backgroundFps_)) throw std::runtime_error("Invalid FPS limits");
-            const HANDLE source[]{input.level, input.changed, input.stop, input.controller};
-            unsigned count = 0;
-            for (HANDLE handle : source) {
-                if (reinterpret_cast<INT_PTR>(handle) < 0) throw std::runtime_error("Pseudo policy handle refused");
-                if (handle) ++count;
-            }
-            if (count && count != 4) throw std::runtime_error("Incomplete policy input");
-            if (count) {
-                if (!GetProcessId(input.controller)) throw std::runtime_error("Missing controller process");
-                using Compare = BOOL (WINAPI*)(HANDLE, HANDLE);
-                const auto compare = reinterpret_cast<Compare>(GetProcAddress(GetModuleHandleW(L"kernelbase.dll"), "CompareObjectHandles"));
-                if (!compare) throw std::runtime_error("Policy identity comparison unavailable");
-                for (unsigned i = 0; i < 4; ++i) {
-                    for (unsigned j = 0; j < i; ++j)
-                        if (source[i] == source[j] || compare(source[i], source[j])) throw std::runtime_error("Aliased policy input");
-                    if (!DuplicateHandle(GetCurrentProcess(), source[i], GetCurrentProcess(), &external_[i],
-                        SYNCHRONIZE, FALSE, 0)) throw std::runtime_error("Policy read capability unavailable");
-                }
-            }
-            LARGE_INTEGER frequency{};
-            if (!QueryPerformanceFrequency(&frequency) || !lazytester_frame_pacing_valid_frequency(frequency.QuadPart))
-                throw std::runtime_error("Unsupported pacing clock");
-            frequency_ = frequency.QuadPart;
-            changed_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-            timer_ = CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION,
-                TIMER_MODIFY_STATE | SYNCHRONIZE);
-            if (!changed_ || !timer_) throw std::runtime_error("Pacing synchronization unavailable");
-        } catch (...) { close(); throw; }
+    explicit Pacer(const Input& input = {}) : state_(lazytester_pacer_create(
+        input.level, input.changed, input.stop, input.controller, input.activeFps, input.backgroundFps)) {
+        if (!state_) throw std::runtime_error("Pacing capability unavailable");
     }
     Pacer(const Pacer&) = delete;
     Pacer& operator=(const Pacer&) = delete;
-    ~Pacer() { close(); }
-
-    bool foreground(bool active) {
-        if (external_[3]) return false; // One policy producer for this consumer.
-        Mode expected = mode_.load(std::memory_order_acquire);
-        const Mode desired = active ? Mode::Foreground : Mode::Background;
-        for (;;) {
-            if (expected == Mode::Stopped) return false;
-            if (expected == desired) return true;
-            if (mode_.compare_exchange_weak(expected, desired, std::memory_order_acq_rel))
-                return SetEvent(changed_) != FALSE;
-        }
-    }
-    bool stop() {
-        mode_.store(Mode::Stopped, std::memory_order_release);
-        return SetEvent(changed_) != FALSE;
-    }
+    ~Pacer() { lazytester_pacer_destroy(state_); }
+    bool foreground(bool active) { return lazytester_pacer_foreground(state_, active ? 1U : 0U) != 0; }
+    bool stop() { return lazytester_pacer_stop(state_) != 0; }
     Permit wait_for_frame() {
-        HANDLE waits[]{external_[2], external_[3], external_[1], changed_, timer_};
-        const bool external = external_[3] != nullptr;
-        for (;;) {
-            Mode mode = mode_.load(std::memory_order_acquire);
-            if (mode == Mode::Stopped) return {Outcome::Stopped, 0, 0};
-            if (external) {
-                for (unsigned i = 0; i < 2; ++i) {
-                    const DWORD state = WaitForSingleObject(waits[i], 0);
-                    if (state == WAIT_OBJECT_0) { stop(); return {Outcome::Stopped, 0, 0}; }
-                    if (state != WAIT_TIMEOUT) return {Outcome::Error, 0, 0};
-                }
-                const DWORD level = WaitForSingleObject(external_[0], 0);
-                if (level != WAIT_OBJECT_0 && level != WAIT_TIMEOUT) return {Outcome::Error, 0, 0};
-                mode = level == WAIT_OBJECT_0 ? Mode::Foreground : Mode::Background;
-            }
-            const unsigned ceiling = mode == Mode::Foreground ? activeFps_ : backgroundFps_;
-            LARGE_INTEGER now{};
-            if (!QueryPerformanceCounter(&now)) return {Outcome::Error, 0, 0};
-            const auto deadline = lazytester_frame_pacing_deadline(frequency_, previous_, now.QuadPart, ceiling);
-            if (deadline > 0) return {Outcome::Error, 0, 0};
-            if (deadline == 0) {
-                // Never repay missed deadlines with a catch-up burst.
-                previous_ = now.QuadPart;
-                return {Outcome::Frame, ceiling, previous_};
-            }
-            LARGE_INTEGER due{};
-            due.QuadPart = deadline;
-            if (!SetWaitableTimerEx(timer_, &due, 0, nullptr, nullptr, nullptr, 0))
-                return {Outcome::Error, 0, 0};
-            const DWORD count = external ? 5 : 2;
-            const DWORD result = WaitForMultipleObjects(count, external ? waits : waits + 3, FALSE, INFINITE);
-            if (result >= WAIT_OBJECT_0 + count)
-                return {Outcome::Error, 0, 0};
-            // A focus event interrupts the old deadline; timer wakes recheck QPC.
-        }
+        LazyTesterFramePermit result{};
+        lazytester_pacer_wait(state_, &result);
+        return {result.outcome == 0 ? Outcome::Frame : result.outcome == 1 ? Outcome::Stopped : Outcome::Error,
+            result.ceiling, result.released};
     }
 };
 } // namespace presentation_pacing
