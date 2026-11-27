@@ -847,7 +847,7 @@
     finally { busy = false; }
   }
   async function confirmWorlds(slot: ProfileSlot, receipt: import('./app/bridge/lazyTester.js').SelectiveReviewReceipt): Promise<void> {
-    if(busy||refreshing||resizing||!available||!selectiveOpen||slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending)throw new Error('World cleanup is unavailable');
+    if(busy||refreshing||resizing||!available||!binding?.configured||!selectiveOpen||slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending||!selectedStorage||selectedStorage.fullClear?.pending===true)throw new Error('Selected data cleanup is unavailable');
     busy=true;storageNotice='';
     try {
       const snapshot=receipt.items.every(item=>item.category==='Worlds')

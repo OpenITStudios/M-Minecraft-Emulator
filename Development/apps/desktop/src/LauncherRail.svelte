@@ -54,6 +54,7 @@
     {@const observedSlot = profiles.some(item => item.slot === profile.slot)}
     {@const observed = observedSlot && available && bindingConfigured}
     {@const launchAllowed = observed && canRequestProfileLaunch(profile,launchFailures)}
+    {@const hasClose = observedSlot && ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
     {@const healthItem = observedSlot ? healthIssues.find(item => item.slot === profile.slot) : undefined}
     {@const guidance = launcherCardGuidance(
       profile, observedSlot && available && bindingConfigured && !unresolvedRecovery.has(profile.slot)
@@ -69,15 +70,15 @@
     <div class="lazytester-launcher-entry" data-slot={profile.slot}
       role="group" tabindex="-1" aria-label={'Minecraft - '+profile.slot+' launcher controls'}
       title={guidance??undefined}>
-      <button class="lazytester-launcher-card" class:selected={observedSlot&&active===profile.slot&&!detached}
-        aria-pressed={observedSlot&&profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
+      <button class="lazytester-launcher-card" class:selected={observed&&profile.state==='RUNNING'&&active===profile.slot&&!detached}
+        aria-pressed={observed&&profile.state==='RUNNING' ? active===profile.slot&&!detached : undefined}
         aria-label={cardActionName(profile, statusLabel, launchAllowed, observed)}
         aria-describedby={guidance ? 'lazytester-launcher-guidance-'+profile.slot : undefined}
         disabled={busy||reviewPending||!observedSlot||!available||!bindingConfigured||
           (profile.state!=='RUNNING'&&!launchAllowed)}
         on:click={()=>profile.state==='RUNNING'?onSelect(profile.slot):launchAllowed&&onLaunch(profile.slot)}>
         <!-- Compact visual identity, full Minecraft slot stays in accessible names and dialogs. -->
-        <span class="lazytester-launcher-header">
+        <span class="lazytester-launcher-header" class:has-close={hasClose}>
           <strong title={'Minecraft - '+profile.slot}>MC0{profile.slot}</strong>
           <small class={observedSlot&&available&&bindingConfigured
           ? (profile.state==='ATTENTION'||profile.state==='NOT_RESPONDING'||launchFailures.has(profile.slot)
@@ -102,7 +103,7 @@
             })}/>
       {/if}
       </div>
-      {#if observedSlot && ['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)}
+      {#if hasClose}
         <button class="lazytester-secondary lazytester-close-launcher"
           aria-label={'Close Minecraft - '+profile.slot+' normally'}
           title={'Close Minecraft - '+profile.slot+' normally'}

@@ -11,8 +11,9 @@
   export let confirmDownloadCache: (slot: ProfileSlot) => Promise<void>;
   let downloadView=false;
   let downloadAck=false;
+  let downloadAcknowledgedReport: ProfileStorage['cache'] | undefined;
   $: downloadEligible=!!downloadCache?.canClear&&!downloadCache.partial&&downloadCache.issue===null&&downloadCache.files>0;
-  $: if(!downloadEligible)downloadAck=false;
+  $: if(!downloadEligible || downloadCache!==downloadAcknowledgedReport)downloadAck=false;
   export let confirmWorlds: (slot: ProfileSlot, receipt: SelectiveReviewReceipt) => Promise<void>;
   // Source-only until native disposition acceptance; never imply deletion is available.
   export let worldDeletionAvailable = false;
@@ -107,15 +108,15 @@
   function showDownloadCache():void {
     if(closed||loading||deleting)return;
     generation++;
-    downloadView=true;downloadAck=false;receipt=null;issue='';selected=[];
+    downloadView=true;downloadAck=false;downloadAcknowledgedReport=undefined;receipt=null;issue='';
   }
   async function deleteDownloadCache():Promise<void> {
-    if(closed||loading||deleting||!downloadView||!downloadEligible||!downloadAck)return;
+    if(closed||loading||deleting||!downloadView||!downloadEligible||!downloadAck||downloadCache!==downloadAcknowledgedReport)return;
     const request=++generation;
     deleting=true;loading=true;downloadAck=false;issue='';
     try {
       await confirmDownloadCache(slot);
-      if(request===generation)issue='Download cache cleanup completed.';
+      if(request===generation){inventories={};issue='Download cache cleanup completed.';}
     } catch {
       if(request===generation)issue='Download cache cleanup was refused or its result is uncertain. Refresh session and storage before retrying.';
     } finally {
@@ -177,6 +178,7 @@
   {#if downloadView}
     <section class="lazytester-cache-confirm" aria-label="Download cache review">
       <h3>Download Cache — Minecraft {slot}</h3>
+      {#if selected.length}<p class="lazytester-help">{selected.length} world or pack selections are retained separately. They are not part of this cache review.</p>{/if}
       {#if downloadCache&&!downloadCache.partial}
         <p>{downloadCache.files} files · {formatStorageBytes(downloadCache.bytes)}</p>
       {:else}
@@ -186,7 +188,7 @@
         <p role="status">{downloadCache?.issue??'Download cache cleanup is unavailable. Refresh storage to check again.'}</p>
       {:else}
         <p>Only the reviewed download cache for this launcher will be cleared. Worlds, packs, accounts and web cache are not targeted.</p>
-        <label><input type="checkbox" bind:checked={downloadAck} disabled={loading}/> I understand this will remove downloaded cache files.</label>
+        <label><input type="checkbox" checked={downloadAck} disabled={loading} on:change={event=>{downloadAck=event.currentTarget.checked;downloadAcknowledgedReport=downloadAck?downloadCache:undefined;}}/> I understand this will remove downloaded cache files.</label>
         <button class="lazytester-danger" disabled={loading||!downloadAck||!downloadEligible} on:click={deleteDownloadCache}>Clear Download Cache</button>
       {/if}
       {#if deleting}<p role="status">Clearing download cache…</p>{/if}

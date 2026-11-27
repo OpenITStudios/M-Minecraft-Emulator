@@ -92,3 +92,11 @@ it('uses native download cache report and explicit acknowledgement in the shared
   expect(source('DataStorage.svelte')).toContain('confirmDownloadCache={onConfirmDownloadCache}');
   expect(source('LazyTesterApp.svelte')).toContain('await lazyTester.clearDownloadCache(slot)');
 });
+
+
+it('retains separate world/pack selection and binds download acknowledgement to the reviewed report',()=>{
+  const dialog=source('SelectiveCleanup.svelte');
+  expect(dialog).toContain('downloadCache!==downloadAcknowledgedReport');
+  expect(dialog).toContain('They are not part of this cache review.');
+  expect(source('LazyTesterApp.svelte')).toContain("throw new Error('Selected data cleanup is unavailable')");
+});
