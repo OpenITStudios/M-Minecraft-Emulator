@@ -9,7 +9,7 @@ impl FileId { pub(crate) fn as_bytes(&self)->[u8;24] { let mut b=[0;24];b[..8].c
 #[repr(C)]
 #[derive(Clone,Copy,Default)]
 pub struct ImageMetadata { pub timestamp:u32, pub bytes:u32, pub id:FileId }
-const _:()=assert!(mem::size_of::<ImageMetadata>()==32);
+const _:()=assert!(mem::size_of::<ImageMetadata>()==32 && mem::offset_of!(ImageMetadata,id)==8);
 #[repr(C)]
 struct MemoryInfo {
     base:Handle,allocation_base:Handle,allocation_protect:u32,partition:u16,

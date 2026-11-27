@@ -104,7 +104,7 @@ mod windows {
         fn stopped() -> Self { Self { outcome: 1, ceiling: 0, released: 0 } }
         fn error() -> Self { Self { outcome: 2, ceiling: 0, released: 0 } }
     }
-    const _: () = assert!(std::mem::size_of::<FramePermit>() == 16);
+    const _: () = assert!(std::mem::size_of::<FramePermit>() == 16 && std::mem::offset_of!(FramePermit, released) == 8);
 
     impl NativePacer {
         unsafe fn new(source: [Handle; 4], active_fps: u32, background_fps: u32) -> Option<Self> {

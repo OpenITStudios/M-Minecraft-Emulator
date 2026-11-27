@@ -56,7 +56,12 @@ pub struct HudSnapshot {
     accepted:u64,milli:u32,valid:u32,window:usize,bounds:Rect,dpi:u32,
     draws:u32,failures:u32,visible:u32,active:u32,
 }
-const _:()=assert!(std::mem::size_of::<HudSnapshot>()==64);
+const _:()={
+    use std::mem::{align_of,offset_of,size_of};
+    assert!(size_of::<HudSnapshot>()==64 && align_of::<HudSnapshot>()==8);
+    assert!(offset_of!(HudSnapshot,window)==16 && offset_of!(HudSnapshot,bounds)==24);
+    assert!(offset_of!(HudSnapshot,dpi)==40 && offset_of!(HudSnapshot,active)==56);
+};
 struct Binding {
     owner:usize,thread:u32,life:Option<Owned>,idle:u64,generation:u64,
     finished:bool,display:HudSnapshot,meter:FpsMeterState,

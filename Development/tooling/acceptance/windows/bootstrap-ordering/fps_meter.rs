@@ -80,8 +80,12 @@ pub unsafe extern "C" fn lazytester_fps_meter_read(state: *const FpsMeterState, 
     output.write(reading);
 }
 
-const _: () = assert!(std::mem::size_of::<FpsMeterState>() == 48);
-const _: () = assert!(std::mem::size_of::<FpsMeterReading>() == 16);
+const _: () = {
+    use std::mem::{align_of, offset_of, size_of};
+    assert!(size_of::<FpsMeterState>() == 48 && align_of::<FpsMeterState>() == 8);
+    assert!(offset_of!(FpsMeterState, accepted) == 32 && offset_of!(FpsMeterState, valid) == 44);
+    assert!(size_of::<FpsMeterReading>() == 16 && offset_of!(FpsMeterReading, valid) == 12);
+};
 
 #[cfg(test)]
 mod tests {

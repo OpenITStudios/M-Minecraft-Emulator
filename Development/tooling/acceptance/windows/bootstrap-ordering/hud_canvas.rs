@@ -165,6 +165,11 @@ pub(crate) mod windows {
     }
     #[repr(C)]
     pub struct CanvasView { pub dc:Handle,pixels:*const u32,pub size:Size }
+    const _:()={
+        use std::mem::{align_of,offset_of,size_of};
+        assert!(size_of::<CanvasView>()==24 && align_of::<CanvasView>()==8);
+        assert!(offset_of!(CanvasView,pixels)==8 && offset_of!(CanvasView,size)==16);
+    };
     // Borrowed view valid only until next paint or destruction on owner thread.
     #[no_mangle]
     pub unsafe extern "C" fn lazytester_hud_canvas_create() -> *mut Canvas {

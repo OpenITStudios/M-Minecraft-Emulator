@@ -46,7 +46,11 @@ pub struct Admission {
     mode:u32,active:u32,background:u32,reserved:u32,
     old_entry:Handle,hwnd_entry:Handle,level:Handle,changed:Handle,stop:Handle,controller:Handle,selected:Handle,
 }
-const _:()=assert!(std::mem::size_of::<Admission>()==72);
+const _:()={
+    use std::mem::{align_of,offset_of,size_of};
+    assert!(size_of::<Admission>()==72 && align_of::<Admission>()==8);
+    assert!(offset_of!(Admission,old_entry)==16 && offset_of!(Admission,selected)==64);
+};
 impl Admission {
     fn empty()->Self{Self{mode:0,active:144,background:10,reserved:0,old_entry:ptr::null_mut(),hwnd_entry:ptr::null_mut(),
         level:ptr::null_mut(),changed:ptr::null_mut(),stop:ptr::null_mut(),controller:ptr::null_mut(),selected:ptr::null_mut()}}

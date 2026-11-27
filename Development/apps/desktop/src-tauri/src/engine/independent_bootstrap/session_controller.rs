@@ -984,6 +984,10 @@ impl Sessions {
 
     fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
         self.admit_profile_mutation(slot)?;
+        #[cfg(feature="lazy-tester-package")]
+        if product_profiles::clear::pending(self.store(slot)?)? {
+            return Err(invalid("Finish pending profile cleanup first"));
+        }
         self.pending_storage_maintenance[slot as usize - 1] = false;
         profile_storage::clear(&self.store(slot)?.private, true)
     }

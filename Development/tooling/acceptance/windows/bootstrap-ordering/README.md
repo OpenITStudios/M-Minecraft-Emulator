@@ -208,6 +208,10 @@ Host World/focus/resource acceptance next action stay in planning/development.md
 ### Native compatibility source boundary
 
 The receiver presentation admission and candidate classification are Rust-owned.
+The canonical `native_fps_ffi.h` and corresponding Rust modules assert size,
+alignment and critical member offsets at compile time. Legacy FFI headers
+are forwarding includes only; no duplicate declaration owner or ABI change.
+These assertions are authored, not compiled on this source-only surface.
 The remaining C++ code is not treated as universally impossible to migrate:
 
 | Source group | Retained responsibility |

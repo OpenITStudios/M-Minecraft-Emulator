@@ -16,6 +16,7 @@ struct LazyTesterFpsMeterReading {
     std::uint32_t milliFps, valid;
 };
 static_assert(sizeof(LazyTesterFpsMeterState) == 48 && alignof(LazyTesterFpsMeterState) == 8);
+static_assert(offsetof(LazyTesterFpsMeterState, accepted) == 32 && offsetof(LazyTesterFpsMeterState, valid) == 44);
 static_assert(sizeof(LazyTesterFpsMeterReading) == 16 && offsetof(LazyTesterFpsMeterReading, valid) == 12);
 extern "C" {
 void lazytester_fps_meter_init(LazyTesterFpsMeterState*, std::int64_t frequency);
@@ -28,7 +29,7 @@ struct LazyTesterNativePacer;
 struct LazyTesterFramePermit { std::uint32_t outcome, ceiling; std::int64_t released; };
 static_assert(sizeof(LazyTesterFramePermit) == 16 && offsetof(LazyTesterFramePermit, released) == 8);
 
-// Fixed-width C ABI; zero releases, negative waits, positive refuses.
+// Fixed-width C ABI: FramePermit outcome 0 = frame, 1 = stopped, 2 = error.
 extern "C" {
 LazyTesterNativePacer* lazytester_pacer_create(void* level, void* changed, void* stop, void* controller, std::uint32_t active, std::uint32_t background);
 void lazytester_pacer_destroy(LazyTesterNativePacer*);
@@ -42,7 +43,8 @@ std::int64_t lazytester_frame_pacing_deadline(std::int64_t frequency, std::int64
 
 struct LazyTesterHudCanvas;
 struct LazyTesterHudCanvasView { HDC dc; const DWORD* pixels; SIZE size; };
-static_assert(sizeof(LazyTesterHudCanvasView)==24);
+static_assert(sizeof(LazyTesterHudCanvasView)==24 && alignof(LazyTesterHudCanvasView)==8);
+static_assert(offsetof(LazyTesterHudCanvasView,pixels)==8 && offsetof(LazyTesterHudCanvasView,size)==16);
 extern "C" {
 void lazytester_hud_placement(const RECT*, std::uint32_t, RECT*);
 std::uint32_t lazytester_hud_physical_client(HWND, RECT*);
@@ -56,7 +58,9 @@ struct LazyTesterHudSnapshot {
     std::uint64_t accepted; std::uint32_t milli, valid; HWND window; RECT bounds;
     std::uint32_t dpi, draws, failures, visible, active;
 };
-static_assert(sizeof(LazyTesterHudSnapshot)==64);
+static_assert(sizeof(LazyTesterHudSnapshot)==64 && alignof(LazyTesterHudSnapshot)==8);
+static_assert(offsetof(LazyTesterHudSnapshot,window)==16 && offsetof(LazyTesterHudSnapshot,bounds)==24);
+static_assert(offsetof(LazyTesterHudSnapshot,dpi)==40 && offsetof(LazyTesterHudSnapshot,active)==56);
 extern "C" {
 LazyTesterNativeHud* lazytester_hud_create(HANDLE,HANDLE,HANDLE);
 void lazytester_hud_destroy(LazyTesterNativeHud*);
@@ -87,6 +91,7 @@ struct LazyTesterPresentationAdmission {
     void* oldEntry; void* hwndEntry; HANDLE level,changed,stop,controller,selected;
 };
 static_assert(sizeof(LazyTesterPresentationAdmission)==72 && offsetof(LazyTesterPresentationAdmission,oldEntry)==16);
+static_assert(alignof(LazyTesterPresentationAdmission)==8 && offsetof(LazyTesterPresentationAdmission,selected)==64);
 extern "C" std::uint32_t lazytester_presentation_admit(std::uint32_t pid,std::uint32_t session,
     std::uint32_t birthLow,std::uint32_t birthHigh,LazyTesterPresentationAdmission*);
 
