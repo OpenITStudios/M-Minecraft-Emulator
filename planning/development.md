@@ -2,6 +2,9 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective Cleanup consumer checkpoint: refresh preserves selections only when identity, root and name all match; rejected review invalidates all cached categories and selections so stale cross-category data cannot be silently retried. Browser fixture now exercises read-only inventory, cross-category review, dependency warning, replaced identity, rejected review and delayed receipt after Close through existing bridge; NOT_EXECUTED. No public deletion or new settings writes. FPS HUD currently measures accepted Present rate and visibility follows owner HWND, not manager-selected identity; do not substitute pacing ceiling or foreground policy for exact selection. Selected-only native FPS presentation remains unresolved; capture and storage mutation gates held.
+
+
 Launcher layout checkpoint: compact single-line header candidate uses 11px text and reduced horizontal spacing on cards from 160–221px, preserves full labels, status dot and 24px Close target; smaller effective widths retain readable two-line fallback. Native minimum unchanged. Right preview sizes now derive from actual entry height (excluding feedback and grid gaps), reserving existing card chrome and health row; 144px width cap retained. Browser fixtures authored for longest labels at supported Bottom sizes, Right fit and preference-preserving fallback; NOT_EXECUTED. Workspace product contract reconciled with layout, collapsed feedback and retired graphics UI. Font/zoom/DPI and native geometry acceptance remain unverified, measured FPS and storage gates remain held. Capture held.
 
 

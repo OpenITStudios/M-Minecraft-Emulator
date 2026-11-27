@@ -175,6 +175,20 @@ try {
           settings.activeFps = args.request.activeFps; settings.backgroundFps = args.request.backgroundFps;
           return {...snapshot(), settings};
         }
+        if (operation === 'InspectSelectiveInventory') {
+          const {slot,category}=args.request;
+          const items=category==='Worlds'?[{root:'minecraftWorlds',name:'Fixture World',identity:(window.__worldReplaced?'c':'a').repeat(64)}]:
+            category==='ResourcePacks'?[{root:'resource_packs',name:'Fixture Pack',identity:'b'.repeat(64)}]:[];
+          if(window.__holdSelective)await new Promise(resolve=>{window.__finishSelective=resolve;});
+          return {...snapshot(),selectiveInventory:{slot,category,items}};
+        }
+        if (operation === 'ReviewSelectiveInventory') {
+          if(window.__rejectSelective)throw 'Synthetic stale selection';
+          const {slot,selections}=args.request;
+          const packs=selections.some(item=>item.category!=='Worlds');
+          return {...snapshot(),selectiveReview:{slot,items:selections,bytes:1024,files:1,
+            warnings:packs?['Pack dependency coverage unavailable']:[],confirmationToken:packs?null:'d'.repeat(64)}};
+        }
         if (operation === 'InspectStorage') {
           if (window.__holdStorage) await new Promise(resolve => {
             window.__finishStorage = () => {window.__finishStorage=null;resolve();};
@@ -624,6 +638,36 @@ try {
   });
   assert.equal(storageOrder,true,
     'Profile Folder, Selective Cleanup and Clear All Data share one ordered panel');
+  // Selective Cleanup uses the real bridge parser with synthetic read-only receipts.
+  const selectData=page.getByRole('button',{name:'Select Data',exact:true});
+  await selectData.click();
+  const selective=page.getByRole('dialog',{name:'Selective Cleanup'});
+  await selective.getByRole('checkbox',{name:/Fixture World/}).check();
+  await selective.getByRole('button',{name:'Resource Packs',exact:true}).click();
+  await selective.getByRole('checkbox',{name:/Fixture Pack/}).check();
+  await selective.getByRole('button',{name:'Review Selection'}).click();
+  await selective.getByRole('heading',{name:'Review selected data'}).waitFor();
+  assert.match(await selective.textContent(),/2 items/);
+  assert.match(await selective.textContent(),/Pack dependency coverage unavailable/);
+  assert.equal(await selective.getByRole('button',{name:/delete|clear/i}).count(),0);
+  await selective.getByRole('button',{name:'Worlds',exact:true}).click();
+  await page.evaluate(()=>{window.__worldReplaced=true;});
+  await selective.getByRole('button',{name:'Refresh',exact:true}).click();
+  await selective.getByRole('checkbox',{name:/Fixture World/}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('.lazytester-selective-item input')?.disabled===false);
+  assert.equal(await selective.getByRole('checkbox',{name:/Fixture World/}).isChecked(),false);
+  await page.evaluate(()=>{window.__rejectSelective=true;});
+  await selective.getByRole('button',{name:'Review Selection'}).click();
+  await selective.getByText(/Refresh inventory and select data again/).waitFor();
+  assert.equal(await selective.getByRole('button',{name:'Review Selection'}).isDisabled(),true);
+  await page.evaluate(()=>{window.__holdSelective=true;});
+  await selective.getByRole('button',{name:'Refresh',exact:true}).click();
+  await page.waitForFunction(()=>!!window.__finishSelective);
+  await selective.getByRole('button',{name:'Close',exact:true}).click();
+  await selective.waitFor({state:'detached'});
+  await page.evaluate(()=>{window.__holdSelective=false;window.__finishSelective();});
+  assert.equal(await selectData.evaluate(node=>document.activeElement===node),true);
+  assert.equal(await page.evaluate(()=>window.__calls.some(c=>/ConfirmSelective|DeleteSelective|ClearProfileData/.test(c.args?.request?.operation??''))),false);
   await section('General').click();assert.equal(await page.getByLabel('Active FPS',{exact:true}).inputValue(),'60');
   await page.getByRole('button',{name:'Save Changes',exact:true}).click();
   await page.getByText('FPS limits saved. Applies when each game next starts.').waitFor();

@@ -54,7 +54,8 @@
       if(request!==generation)return;
       inventories={...inventories,[next]:result};
       // A refresh cannot preserve a selection whose native identity changed.
-      selected=selected.filter(s=>s.category!==next||result.items.some(i=>i.identity===s.identity));
+      selected=selected.filter(s=>s.category!==next||result.items.some(i=>
+        i.identity===s.identity&&i.root===s.root&&i.name===s.name));
       receipt=null;
     } catch {
       if(request===generation) {
@@ -94,7 +95,13 @@
         await tick();
         if(request===generation&&reviewHeading?.isConnected)reviewHeading.focus({preventScroll:true});
       }
-    } catch {if(request===generation)issue='Review unavailable or data changed. Refresh inventory before trying again.';}
+    } catch {
+      if(request===generation){
+        // No trustworthy receipt: discard cached selection across every category.
+        inventories={};selected=[];
+        issue='Review unavailable or data changed. Refresh inventory and select data again.';
+      }
+    }
     finally {if(request===generation)loading=false;}
   }
 </script>
