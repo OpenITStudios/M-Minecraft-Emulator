@@ -14,11 +14,45 @@ was archived without deleting the technical notes. Use the
 [single current handoff](../../../planning/development.md) for status and
 one next action; old archived "Next" entries are not authorization.
 
+## Code Mode-first composition (Unreleased, source-only)
+
+For a separately authorized trusted PC-local host, create one
+`createOperationCore(config)` from `operation-core.mjs`. Attach
+`createCodeModeClient(core)` from `code-mode.mjs` per script; the trusted
+host passes only the fixed `tester` facade to its own permission-controlled
+execution environment and closes the facade in finally. If MCP is also
+needed inside that host, attach `createMcpHandler(core)`; do not start a
+second core for the same workflow. The existing stdio entry `mcp.mjs` and
+all 25 default tool names remain compatible. No arbitrary-code execution
+tool, Deno/Node guest, dependency, new controller or PC permission is added.
+
+Prefer the existing combined `tester.testing.context({slots:[2,3,4,5]})`
+instead of separate profile, peer and evidence reads. Compose diagnostics,
+evidence, metadata and action previews locally and return only needed
+results. `tester.testing.probe({slot:2})` uses the same canonical volatile
+checkpoint as MCP; it may prepare a command but never dispatches it.
+Read-only inspection and historical archive use explicit SDK methods.
+The facade does not expose launch, image delivery, sampler start/stop,
+native reservations, restart, publication, writer leases or input dispatch.
+Those retain their existing explicitly admitted MCP paths; no fallback
+or automatic switch. Each facade permits up to 64 attempted calls,
+one in flight, 64 KiB input / 128 KiB result per call and 1 MiB aggregate
+result bytes; the trusted host must independently enforce script time,
+memory, output and OS permissions. A closed facade cannot authorize later
+calls; it is not native cancellation. Core shutdown remains host-owned.
+
+The stdio adapter negotiates the retained initialize-era revisions
+2025-06-18 and 2025-11-25; 2026-07-28 is not claimed until its stateless
+contract is implemented (see https://blog.modelcontextprotocol.io/posts/2026-07-28/).
+Capability inventory now derives from the same advertised descriptors;
+self-exclusion is retained, ordering follows tools/list. No runtime or
+protocol conformance tests executed.
+
 ## Choose the existing owner
 
 | Goal | Canonical route | Hard boundary |
 | --- | --- | --- |
-| Inspect or launch an owned profile | `mcp.mjs` → same-image `agent_cli.rs` → original Rust session controller | No second launcher or Minecraft session owner |
+| Inspect or launch an owned profile | `mcp.mjs` / trusted Code Mode read → `operation-core.mjs` → same-image `agent_cli.rs` → original Rust session controller | No second launcher or Minecraft session owner |
 | Observe a game window | `visual-capture.mjs` (CUA) or opt-in `gpu-frame-source.mjs`/native WGC worker | Exact PID/birth/session/HWND revalidation; no global desktop or game input |
 | Plan or check an action | `control-plan.mjs`, `input-timeline.mjs`, `input-route.mjs`, `input-delivery.mjs` | Plans and transport ACKs are not gameplay proof |
 | Read imported diagnostics | `diagnostics-local.mjs` through existing bounded MCP tools | Explicit local data only; no live log collector |

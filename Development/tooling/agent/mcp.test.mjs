@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {createOperationCore,createMcpHandler} from './mcp.mjs';
+import {createCodeModeClient} from './code-mode.mjs';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
   matchesNativeMultiClientBatchReceipt,
@@ -4998,4 +5000,77 @@ test('different native log identities remain independent across MC slots',async(
   assert.equal((await h.callTool('prepare_probe_qa',{slot:2})).status,'PREPARED_SOURCE_ONLY');
   assert.equal((await h.callTool('prepare_probe_qa',{slot:3})).status,'PREPARED_SOURCE_ONLY');
   h.shutdown();
+});
+
+test('Code Mode and MCP share the original operation core, one combined context read',async()=>{
+  let nativeCalls=0;
+  const core=createOperationCore(config(),{
+    native:async(_exe,operation)=>{nativeCalls++;assert.equal(operation,'inspect');return snapshot(operation);},
+  });
+  const mcp=createMcpHandler(core);
+  const code=createCodeModeClient(core);
+  try {
+    const context=await code.tester.testing.context({slots:[2]});
+    assert.equal(nativeCalls,1);
+    assert.equal(context.nativeProfiles.length,5);
+    assert.equal(context.gameControl,'INDEPENDENT_BACKGROUND_INPUT_NOT_VERIFIED');
+    const legacy=await mcp.handle({jsonrpc:'2.0',id:1,method:'tools/call',
+      params:{name:'get_test_context',arguments:{slots:[2]}}});
+    assert.equal(legacy.result.isError,false);
+    assert.equal(nativeCalls,2);
+    const list=await mcp.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
+    const capability=await code.tester.capabilities();
+    assert.deepEqual(capability.available,list.result.tools.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
+    code.close();
+    await assert.rejects(code.tester.profiles.inspect(),/CODE_MODE_CLOSED/);
+    assert.equal(core.isClosed(),false);
+    mcp.shutdown();
+    assert.equal(core.isClosed(),true);
+  } finally {code.close();core.shutdown();}
+});
+
+test('Code Mode rejects hidden mutation flags, private errors, oversize and closed calls',async()=>{
+  let calls=0;
+  const core=createOperationCore(config(),{
+    native:async()=>{calls++;throw new Error('private C:\\Accounts\\secret');},
+  });
+  const code=createCodeModeClient(core);
+  try {
+    assert.equal(code.tester.profiles.launch,undefined);
+    assert.equal(code.tester.input.execute,undefined);
+    await assert.rejects(code.tester.testing.probe({coordinateNative:true}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.testing.probe({restart:true}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.capabilities({publishToDesktop:true}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.testing.readArchived({}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.observation.state({slots:[1]}),/protected|details withheld|Invalid tool arguments/);
+    await assert.rejects(code.tester.diagnostics.overview({run:'x'.repeat(65536)}),/Invalid tool arguments/);
+    assert.equal(calls,0);
+    await assert.rejects(code.tester.profiles.inspect(),/Tool unavailable; details withheld/);
+    assert.equal(calls,1);
+    core.shutdown();
+    await assert.rejects(code.tester.capabilities(),/CODE_MODE_CLOSED/);
+  } finally {code.close();core.shutdown();}
+});
+
+test('Code Mode admits bounded serial composition, never an unbounded parallel queue',async()=>{
+  let release;
+  let calls=0;
+  const core={isClosed:()=>false,callTool:async()=>{calls++;await new Promise(resolve=>{release=resolve;});return {ok:true};}};
+  const code=createCodeModeClient(core);
+  const pending=code.tester.profiles.inspect();
+  await assert.rejects(code.tester.profiles.inspect(),/CODE_MODE_CALL_IN_PROGRESS/);
+  assert.equal(calls,1);
+  release();
+  assert.deepEqual(await pending,{ok:true});
+  code.close();
+});
+
+test('legacy MCP does not advertise unsupported stateless protocol through initialize',async()=>{
+  const h=createHandler(config());
+  try {
+    const init=await h.handle({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2026-07-28'}});
+    assert.equal(init.result.protocolVersion,'2025-06-18');
+    const discover=await h.handle({jsonrpc:'2.0',id:2,method:'server/discover'});
+    assert.equal(discover.error.code,-32601);
+  } finally {h.shutdown();}
 });
