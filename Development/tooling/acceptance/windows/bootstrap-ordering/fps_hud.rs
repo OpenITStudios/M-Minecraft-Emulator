@@ -76,6 +76,16 @@ impl Shared {
             lazytester_hud_selection(1,p[0].raw(),p[1].raw(),p[2].raw())!=0
         })
     }
+    // The existing selection level is manual-reset. Wait on it only
+    // while a bound HUD is not admitted and its producer is still live.
+    // Once selected, normal short checks detect reset/deselection.
+    fn pending_selection(&self,bound:bool,admitted:bool)->Handle {
+        if !bound || admitted {return ptr::null_mut();}
+        self.policy.as_ref().filter(|p| unsafe {
+            WaitForSingleObject(p[1].raw(),0)==TIMEOUT
+                && WaitForSingleObject(p[2].raw(),0)==TIMEOUT
+        }).map_or(ptr::null_mut(),|p|p[0].raw())
+    }
     fn signal(&self)->bool {unsafe {SetEvent(self.changed.raw())!=0}}
     fn unbind(&self) {
         let mut s=lock(&self.state);
@@ -135,10 +145,16 @@ unsafe fn run_inner(shared:&Shared)->bool {
             lazytester_hud_window_clear(host.0);window=ptr::null_mut();
             previous_owner=owner;previous_generation=generation;lazytester_hud_renderer_reset(draw.0);
         }
-        let reading=lock(&shared.state).meter.reading(now());
+        let admitted=shared.admitted();
+        // Present sampling and snapshots remain independent. A HUD that
+        // cannot compose does not need its worker to read the FPS meter.
+        let (milli,valid)=if bound && admitted {
+            let reading=lock(&shared.state).meter.reading(now());
+            (reading.milli_fps,reading.valid)
+        } else {(0,0)};
         let mut composed:Composition=std::mem::zeroed();
-        if lazytester_hud_renderer_update(draw.0,host.0,target,u32::from(bound),u32::from(shared.admitted()),
-            reading.milli_fps,reading.valid,&mut composed)==0 {return false;}
+        if lazytester_hud_renderer_update(draw.0,host.0,target,u32::from(bound),u32::from(admitted),
+            milli,valid,&mut composed)==0 {return false;}
         if !composed.window.is_null(){window=composed.window;}
         {
             let mut s=lock(&shared.state);
@@ -148,7 +164,8 @@ unsafe fn run_inner(shared:&Shared)->bool {
                 s.display.draws=s.display.draws.saturating_add(composed.drawn);
             }
         }
-        match lazytester_hud_window_wait(shared.stop.raw(),shared.changed.raw()) {0=>{},1=>return true,_=>return false}
+        let selection=shared.pending_selection(bound,admitted);
+        match lazytester_hud_window_wait(shared.stop.raw(),shared.changed.raw(),selection) {0=>{},1=>return true,_=>return false}
     }
 }
 impl Hud {
@@ -247,11 +264,24 @@ mod tests {
             }
             let managed = Hud::new(selected.raw(), stop.raw(), controller.raw()).unwrap();
             assert!(!managed.shared.admitted());
+            assert!(!managed.shared.pending_selection(true,false).is_null());
+            assert!(managed.shared.pending_selection(false,false).is_null());
+            assert!(unmanaged.shared.pending_selection(true,true).is_null());
+            assert!(!legacy.shared.pending_selection(true,false).is_null());
+            // A promotion racing the preceding sample must wake the wait;
+            // the next admission observes the current selection, not a cache.
+            let waiting=managed.shared.pending_selection(true,false);
             assert_ne!(SetEvent(selected.raw()), 0);
+            assert_eq!(WaitForSingleObject(waiting,0),0);
             assert!(managed.shared.admitted());
+            assert!(managed.shared.pending_selection(true,true).is_null());
             assert!(!legacy.shared.admitted());
+            assert_ne!(SetEvent(stop.raw()), 0);
+            assert!(!managed.shared.admitted());
+            assert!(managed.shared.pending_selection(true,false).is_null());
             assert_ne!(SetEvent(controller.raw()), 0);
             assert!(!managed.shared.admitted());
+            assert!(managed.shared.pending_selection(true,false).is_null());
             // Synthetic events only; no bind, window, thread or game launch.
             assert_eq!(managed.snapshot().active, 0);
         }

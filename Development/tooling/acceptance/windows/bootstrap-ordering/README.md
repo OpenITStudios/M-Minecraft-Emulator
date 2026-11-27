@@ -132,9 +132,15 @@ sample occurs under the read lock. This is accepted render-present FPS,
 
 The HUD uses a small 128×32 DIP owned layered window, 12 DIP inside the game's
 client top-right, with 17 DIP white text on a dark panel. A dedicated PMv2
-thread observes only own-process owner-window location events and checks
-geometry at most every 250 ms when otherwise idle. Bind/unbind reuses that
-worker and retains no native renderer object. Once the final swap-chain
+thread observes only own-process owner-window location events (window/self).
+A bound, unselected managed HUD waits on its existing manual-reset selection
+event plus worker stop/change and the message queue; its reconciliation
+timeout is one second instead of 250 ms. Promotion wakes that wait directly.
+Selected, unmanaged, unbound or stopped/dead-producer paths retain the
+250 ms fallback for deselection, retirement and other checks. Unselected
+owner/thread loss without a wake can take up to the longer fallback to
+observe (not a hard wall-clock bound). Bind/unbind reuses that worker and
+retains no native renderer object. Once the final swap-chain
 unbinds, a one-second grace period allows fast recreation; the HUD worker
 then retires even if the original game GUI thread/window remains alive.
 The private message loop processes at most 64 queued messages per wake so
@@ -145,8 +151,11 @@ Hidden HUDs retain their host and update geometry only on changed bounds,
 but skip raster and layered upload. Keeping placement preserves monitor DPI
 observation. The existing raster checkpoint is invalidated so reappearance
 paints current content before showing. FPS sampling and owner/selection/stop/
-controller checks are unchanged. The HUD's per-present addition is only a
-QPC/counter update; its GDI/window work stays on the worker.
+controller admission is still sampled before composition; the unadmitted
+worker skips the unused meter read, while Present sampling and snapshots
+remain independent. The HUD's per-present addition is only a QPC/counter
+update; its GDI/window work stays on the worker. DDR-02 selection-wait
+fixtures are authored, NOT_EXECUTED; no native latency or CPU claim.
 
 [Layered-window transparency](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features#layered-windows)
 and NOACTIVATE/TOOLWINDOW styles preserve input and owner z-order without a

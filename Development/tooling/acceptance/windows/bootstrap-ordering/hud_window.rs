@@ -39,8 +39,8 @@ thread_local! { static CALLBACK:Cell<Option<(*mut c_void,Notify)>>=const { Cell:
 unsafe extern "system" fn procedure(window:Handle,message:u32,w:usize,l:isize)->isize {
     match message { 0x84=>-1,0x21=>3,0x14=>1,_=>DefWindowProcW(window,message,w,l) }
 }
-unsafe extern "system" fn location(_:Handle,_:u32,window:Handle,object:i32,_:i32,_:u32,_:u32) {
-    if object==0 { CALLBACK.with(|c| { if let Some((context,notify))=c.get() { notify(context,window); } }); }
+unsafe extern "system" fn location(_:Handle,_:u32,window:Handle,object:i32,child:i32,_:u32,_:u32) {
+    if object==0 && child==0 { CALLBACK.with(|c| { if let Some((context,notify))=c.get() { notify(context,window); } }); }
 }
 pub struct WindowHost { previous:Handle,hook:Handle,instance:Handle,window:Handle }
 impl Drop for WindowHost {
@@ -83,10 +83,13 @@ pub(crate) unsafe fn lazytester_hud_window_host_destroy(host:*mut WindowHost) {
 pub(crate) unsafe fn lazytester_hud_window_clear(host:*mut WindowHost) {
     if let Some(h)=host.as_mut() { h.clear(); }
 }
-// 0 = continue, 1 = stop/quit, 2 = failure. Keep 250ms wake and 64-message bound.
-pub(crate) unsafe fn lazytester_hud_window_wait(stop:Handle,changed:Handle)->u32 {
-    let handles=[stop,changed];
-    match MsgWaitForMultipleObjectsEx(2,handles.as_ptr(),250,0x04ff,4) {
+// 0 = continue, 1 = stop/quit, 2 = failure. Selection is only included
+// while waiting for promotion. Keep a bounded reconciliation deadline for
+// missed window/owner changes, and the existing 64-message pump bound.
+pub(crate) unsafe fn lazytester_hud_window_wait(stop:Handle,changed:Handle,selection:Handle)->u32 {
+    let handles=[stop,changed,selection];
+    let (count,timeout)=if selection.is_null(){(2,250)}else{(3,1000)};
+    match MsgWaitForMultipleObjectsEx(count,handles.as_ptr(),timeout,0x04ff,4) {
         0=>return 1,u32::MAX=>return 2,_=>{}
     }
     let mut message:Message=std::mem::zeroed();

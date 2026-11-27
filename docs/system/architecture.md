@@ -134,6 +134,14 @@ abandoning the original controller. Manager lifetime participates only when
 no games remain; a queued authenticated request takes priority over
 idle detach and must still pass its own peer liveness check. Stale request
 signals consume no maintenance deadline and do not restart the wait.
+Window/focus hooks already use OS messages. Desktop placement/DWM and
+controller FPS policy are separate process-local owners; do not merge them
+through a new cross-process bus. Bound unselected HUDs wait on the existing
+selection level with a 1s reconciliation fallback; selected/unbound and
+failed-policy paths retain 250ms. The selected level is never waited on
+while admitted, so its manual-reset signal cannot spin the visible worker.
+Unadmitted HUD workers skip meter reads; Present and snapshot sampling
+remain independent.
 Native restore precedes managed normal game close; failed window destruction
 reuses the existing post-release recovery path.
 Audio maintenance retains its one-second discovery deadline and immediate
