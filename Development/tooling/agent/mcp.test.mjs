@@ -5238,3 +5238,113 @@ test('playtest is explicit and cannot attach to an experimental core',()=>{
     assert.throws(()=>createMcpHandler(core,'playtest'),/does not admit experimental input/);
   }finally{core.shutdown();}
 });
+
+test('playtest evidence window excludes historical and baseline partial lines, without native calls',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-playtest-evidence-'));
+  const filename=path.join(root,'MC02.log');
+  const row=(stage)=>'2026-11-28T00:00:00Z log [ANALYTICS]'+JSON.stringify({schema:1,type:'stage_attempt',stage})+'\n';
+  const h=createHandler({...config(),surface:'playtest',evidenceDirectory:root},{
+    native:async()=>{throw Error('Evidence must not call native');},
+  });
+  try {
+    await writeFile(filename,row('historic')+row('partial').slice(0,-1));
+    const missing=await h.callTool('summarize_test_evidence',{slots:[2],window:'read'});
+    assert.equal(missing.captureWindow.slots[0].status,'BASELINE_REQUIRED');
+    assert.equal(missing.records,0);
+    const started=await h.callTool('summarize_test_evidence',{slots:[2],window:'begin'});
+    assert.equal(started.captureWindow.slots[0].status,'BASELINE_READY');
+    assert.equal(started.captureWindow.slots[0].baselinePartialLineExcluded,true);
+    assert.equal(JSON.stringify(started).includes('anchorSha256'),false);
+    await appendFile(filename,'\n'+row('new')+row('unfinished').slice(0,-1));
+    const result=await h.callTool('summarize_test_evidence',{slots:[2],window:'read'});
+    assert.deepEqual(result.timeline.map(event=>event.stage),['new']);
+    assert.equal(result.captureWindow.slots[0].incompleteTrailingLineIgnored,true);
+    assert.equal(result.worldIdentity,'NOT_VERIFIED');
+    assert.equal(result.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
+    await appendFile(filename,'\n');
+    const later=await h.callTool('summarize_test_evidence',{slots:[2],window:'read'});
+    assert.deepEqual(later.timeline.map(event=>event.stage),['new','unfinished']);
+    await rename(filename,path.join(root,'old.log'));
+    await writeFile(filename,row('replacement'));
+    const changed=await h.callTool('summarize_test_evidence',{slots:[2],window:'read'});
+    assert.equal(changed.captureWindow.slots[0].status,'CAPTURE_FILE_UNSTABLE');
+    assert.equal(changed.records,0);
+    assert.deepEqual(changed.missingSlots,[2]);
+    const invalidated=await h.callTool('summarize_test_evidence',{slots:[2],window:'read'});
+    assert.equal(invalidated.captureWindow.slots[0].status,'BASELINE_REQUIRED');
+  }finally{h.shutdown();await rm(root,{recursive:true,force:true});}
+});
+
+test('appended evidence limit is explicit and baseline failures cannot reuse old cursors',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-playtest-window-limit-'));
+  const file=path.join(root,'MC02.log');
+  const row=(stage)=>'2026-11-28T00:00:00Z log [ANALYTICS]'+JSON.stringify({type:'stage_attempt',stage})+'\n';
+  const h=createHandler({...config(),surface:'playtest',evidenceDirectory:root});
+  try {
+    await writeFile(file,row('old'));
+    await h.callTool('summarize_test_evidence',{slots:[2],window:'begin'});
+    await appendFile(file,Array.from({length:21},(_,i)=>row('new-'+i)).join(''));
+    const result=await h.callTool('summarize_test_evidence',{slots:[2],window:'read'});
+    assert.equal(result.records,20);
+    assert.equal(result.captureWindow.slots[0].recordLimitReached,true);
+    assert.equal(result.sources[0].truncated,true);
+    assert.equal(result.timeline.some(event=>event.stage==='old'||event.stage==='new-0'),false);
+    await rm(file);
+    const failed=await h.callTool('summarize_test_evidence',{slots:[2],window:'begin'});
+    assert.equal(failed.captureWindow.slots[0].status,'NO_CAPTURE_FILE');
+    await writeFile(file,row('new-file'));
+    const missing=await h.callTool('summarize_test_evidence',{slots:[2],window:'read'});
+    assert.equal(missing.captureWindow.slots[0].status,'BASELINE_REQUIRED');
+    await assert.rejects(h.callTool('summarize_test_evidence',{window:'begin'}),/Invalid tool arguments/);
+  }finally{h.shutdown();await rm(root,{recursive:true,force:true});}
+});
+
+test('restricted Code Mode cannot start the playtest evidence window',async()=>{
+  const h=createHandler({...config(),surface:'code-mode'});
+  try {
+    const listing=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    const schema=listing.find(t=>t.name==='summarize_test_evidence').inputSchema;
+    assert.equal(Object.hasOwn(schema.properties,'window'),false);
+    assert.equal(Object.hasOwn(schema,'dependentRequired'),false);
+    await assert.rejects(h.callTool('summarize_test_evidence',{slots:[2],window:'begin'}),/Invalid tool arguments/);
+  }finally{h.shutdown();}
+});
+
+test('evidence baseline admission is serial and shutdown refuses late publication',async()=>{
+  let release;
+  const h=createHandler({...config(),surface:'playtest'},{
+    evidence:async()=>{await new Promise(resolve=>{release=resolve;});return {
+      slot:2,status:'CAPTURE_FILE_PRESENT',events:[],
+      captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1',fileIdentity:'a'.repeat(64),
+        byteOffset:0,anchorBytes:0,anchorSha256:'b'.repeat(64),completeLastLine:true},
+    };},
+  });
+  try {
+    const pending=h.callTool('summarize_test_evidence',{slots:[2],window:'begin'});
+    const wire=await h.handle({jsonrpc:'2.0',id:1,method:'tools/call',
+      params:{name:'summarize_test_evidence',arguments:{slots:[2],window:'read'}}});
+    assert.equal(wire.result.isError,true);
+    assert.equal(wire.result.content[0].text,'Evidence window operation in progress');
+    h.shutdown();
+    release();
+    await assert.rejects(pending,/MCP_CONNECTION_CLOSED/);
+  }finally{h.shutdown();}
+});
+
+test('appended evidence uses the original anchor and bounded byte window',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-evidence-anchor-'));
+  const file=path.join(root,'MC02.log');
+  try {
+    await writeFile(file,'old anchor\n');
+    const before=await readGameEvidence(root,2,20,{probeOnly:true});
+    await writeFile(file,'new anchor\n');
+    const rewrite=await readGameEvidence(root,2,20,{evidenceCheckpoint:before.captureCursor});
+    assert.equal(rewrite.status,'CAPTURE_FILE_UNSTABLE');
+    assert.equal(rewrite.reason,'EVIDENCE_CAPTURE_PREFIX_CHANGED');
+    const fresh=await readGameEvidence(root,2,20,{probeOnly:true});
+    await appendFile(file,'x'.repeat(256*1024+1));
+    const gap=await readGameEvidence(root,2,20,{evidenceCheckpoint:fresh.captureCursor});
+    assert.equal(gap.status,'CAPTURE_FILE_UNSTABLE');
+    assert.equal(gap.reason,'EVIDENCE_CAPTURE_TAIL_GAP');
+  }finally{await rm(root,{recursive:true,force:true});}
+});

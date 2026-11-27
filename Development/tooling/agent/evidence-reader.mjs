@@ -75,10 +75,44 @@ function unstableEvidence(slot,reason) {
     attribution:'UNVERIFIED',reason};
 }
 
+// Shared stable-file cursor validation. This attests file continuity only,
+// not the Minecraft world, player, or authenticity of appended records.
+export function validCaptureCursor(cp) {
+  return !!cp&&cp.kind==='STABLE_CAPTURE_CURSOR_V1'&&
+    /^[a-f0-9]{64}$/.test(cp.fileIdentity??'')&&
+    Number.isSafeInteger(cp.byteOffset)&&cp.byteOffset>=0&&
+    Number.isInteger(cp.anchorBytes)&&cp.anchorBytes>=0&&
+    cp.anchorBytes<=128&&cp.anchorBytes<=cp.byteOffset&&
+    /^[a-f0-9]{64}$/.test(cp.anchorSha256??'')&&
+    typeof cp.completeLastLine==='boolean';
+}
+
+// Reuse the same reverse scan for normal tails and appended evidence.
+// One extra valid record establishes a real coverage limit without parsing
+// every historical record.
+function recentCapturedRecords(data,limit,discardLeading,incompleteTail) {
+  const records=[];
+  let end=incompleteTail?data.lastIndexOf('\n'):data.length;
+  while(end>0 && records.length<limit) {
+    const newline=data.lastIndexOf('\n',end-1);
+    if(discardLeading && newline<0) break;
+    const event=parseCapturedLine(data.slice(newline+1,end).replace(/\r$/,''));
+    if(event) records.push(event);
+    end=newline;
+  }
+  return records.reverse();
+}
+
 export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,{
   lstatFile=lstat,openFile=open,probeCheckpoint=null,probeOnly=false,
+  evidenceCheckpoint=null,
 }={}) {
   slotOf(slot);
+  if(evidenceCheckpoint!==null&&(probeOnly||probeCheckpoint!==null)) {
+    throw new TypeError('Choose one capture checkpoint mode');
+  }
+  const checkpoint=probeCheckpoint??evidenceCheckpoint;
+  const prefix=evidenceCheckpoint!==null?'EVIDENCE':'PROBE';
   // The public read-only helper may be called outside the MCP allowlist.
   // A zero/negative/noninteger cap must not accidentally return the whole tail.
   if(!Number.isSafeInteger(maxRecords)||maxRecords<1) {
@@ -110,24 +144,21 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
         return unstableEvidence(slot,'FILE_OFFSET_UNREPRESENTABLE');
       }
       // Normal analytics queries retain their original bounded tail.
-      // QA preparation reads only the last 128-byte checkpoint anchor.
-      // QA result reads only the newly appended bytes plus that anchor.
+      // Baseline preparation reads only the last 128-byte checkpoint anchor.
+      // Probe or evidence-window reads reuse the appended bytes plus anchor.
       const size=Number(pinned.size);
       let bytes=Math.min(size,EVIDENCE_TAIL_BYTES);
-      if(probeCheckpoint!==null) {
-        const cp=probeCheckpoint;
-        if(!cp||cp.kind!=='STABLE_CAPTURE_CURSOR_V1'||
-           !Number.isSafeInteger(cp.byteOffset)||cp.byteOffset<0||
-           !Number.isSafeInteger(cp.anchorBytes)||cp.anchorBytes<0||
-           cp.anchorBytes>128||cp.anchorBytes>cp.byteOffset) {
-          return unstableEvidence(slot,'PROBE_CHECKPOINT_INVALID');
+      if(checkpoint!==null) {
+        const cp=checkpoint;
+        if(!validCaptureCursor(cp)) {
+          return unstableEvidence(slot,prefix+'_CHECKPOINT_INVALID');
         }
         if(cp.byteOffset>size) {
-          return unstableEvidence(slot,'PROBE_CAPTURE_TRUNCATED');
+          return unstableEvidence(slot,prefix+'_CAPTURE_TRUNCATED');
         }
         const appended=size-cp.byteOffset;
         if(appended+cp.anchorBytes>EVIDENCE_TAIL_BYTES) {
-          return unstableEvidence(slot,'PROBE_CAPTURE_TAIL_GAP');
+          return unstableEvidence(slot,prefix+'_CAPTURE_TAIL_GAP');
         }
         bytes=Math.min(size,Math.max(128,appended+cp.anchorBytes));
       } else if(probeOnly) {
@@ -152,30 +183,13 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
           !sameEvidenceSnapshot(pinned,namedAfter)) {
         return unstableEvidence(slot,'FILE_CHANGED_DURING_READ');
       }
-      // Do not parse unrelated [ANALYTICS]/[GAME_RESULTS] for QA-only calls.
-      const qaOnly=probeOnly||probeCheckpoint!==null;
-      // A complete UTF-8 line ends in the literal newline byte 0x0A.
-      // QA-only reads need the byte-accurate cursor, not a second 256 KiB
-      // decode of historical text before the appended Probe markers.
+      // Checkpoint reads decode only appended bytes after continuity checks.
       const incompleteTrailingLineIgnored=
         buffer.length>0 && buffer[buffer.length-1]!==10;
-      const data=qaOnly?'':buffer.toString('utf8');
-      // Only the LAST 20 valid team records can reach the MCP. Avoid
-      // splitting/parsing every old log line just to discard it afterwards.
-      // Preserve complete-line, partial-tail and truncated-prefix rules.
-      const records=[];
-      if(!qaOnly) {
-        let end=incompleteTrailingLineIgnored?data.lastIndexOf('\n'):data.length;
-        while(end>0 && records.length<recordLimit) {
-          const newline=data.lastIndexOf('\n',end-1);
-          if(start>0 && newline<0) break; // Discard partial leading line.
-          const line=data.slice(newline+1,end).replace(/\r$/,'');
-          const event=parseCapturedLine(line);
-          if(event) records.push(event);
-          end=newline;
-        }
-        records.reverse(); // Oldest-to-newest, identical to earlier slicing.
-      }
+      let records=probeOnly||checkpoint!==null?[]:
+        recentCapturedRecords(buffer.toString('utf8'),recordLimit,start>0,
+          incompleteTrailingLineIgnored);
+      let windowCoverage=null;
       // Exact stable-file checkpoint. File timestamps cannot establish that
       // a Probe result belongs to the run prepared by this MCP process.
       const fileIdentity=createHash('sha256')
@@ -191,34 +205,25 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
         completeLastLine:buffer.length===0||buffer[buffer.length-1]===10,
       };
       let probeEvents=[];
-      if(probeCheckpoint!==null) {
-        const cp=probeCheckpoint;
-        if(!cp||cp.kind!=='STABLE_CAPTURE_CURSOR_V1'||
-          !/^[a-f0-9]{64}$/.test(cp.fileIdentity??'')||
-          !Number.isSafeInteger(cp.byteOffset)||cp.byteOffset<0||
-          !Number.isInteger(cp.anchorBytes)||cp.anchorBytes<0||
-          cp.anchorBytes>128||cp.anchorBytes>cp.byteOffset||
-          !/^[a-f0-9]{64}$/.test(cp.anchorSha256??'')||
-          typeof cp.completeLastLine!=='boolean') {
-          return unstableEvidence(slot,'PROBE_CHECKPOINT_INVALID');
-        }
+      if(checkpoint!==null) {
+        const cp=checkpoint;
         if(cp.fileIdentity!==fileIdentity) {
-          return unstableEvidence(slot,'PROBE_CAPTURE_REPLACED');
+          return unstableEvidence(slot,prefix+'_CAPTURE_REPLACED');
         }
         if(cp.byteOffset>captureCursor.byteOffset) {
-          return unstableEvidence(slot,'PROBE_CAPTURE_TRUNCATED');
+          return unstableEvidence(slot,prefix+'_CAPTURE_TRUNCATED');
         }
         if(cp.byteOffset-cp.anchorBytes<start) {
-          return unstableEvidence(slot,'PROBE_CAPTURE_TAIL_GAP');
+          return unstableEvidence(slot,prefix+'_CAPTURE_TAIL_GAP');
         }
         const from=cp.byteOffset-start;
         const anchor=buffer.subarray(from-cp.anchorBytes,from);
         if(createHash('sha256').update(anchor).digest('hex')!==cp.anchorSha256) {
-          return unstableEvidence(slot,'PROBE_CAPTURE_PREFIX_CHANGED');
+          return unstableEvidence(slot,prefix+'_CAPTURE_PREFIX_CHANGED');
         }
         let added=buffer.subarray(from).toString('utf8');
         // A partial line present at preparation must never be completed
-        // later and then mistaken for a newly started Probe run.
+        // later and then mistaken for newly collected test evidence.
         if(!cp.completeLastLine) {
           const firstNewline=added.indexOf('\n');
           added=firstNewline<0?'':added.slice(firstNewline+1);
@@ -227,16 +232,26 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
         if(added && !added.endsWith('\n')) {
           added=added.slice(0,added.lastIndexOf('\n')+1);
         }
-        probeEvents=added.split(/\r?\n/).map(parseProbeCapturedLine).filter(Boolean);
-        if(probeEvents.length>200) {
-          return unstableEvidence(slot,'PROBE_MARKER_VOLUME_EXCEEDED');
+        if(evidenceCheckpoint!==null) {
+          const scanned=recentCapturedRecords(added,recordLimit+1,false,false);
+          const limited=scanned.length>recordLimit;
+          records=limited?scanned.slice(-recordLimit):scanned;
+          windowCoverage={recordLimitReached:limited,
+            baselinePartialLineExcluded:!cp.completeLastLine};
+        } else {
+          probeEvents=added.split(/\r?\n/).map(parseProbeCapturedLine).filter(Boolean);
+          if(probeEvents.length>200) {
+            return unstableEvidence(slot,'PROBE_MARKER_VOLUME_EXCEEDED');
+          }
         }
       }
       return {slot,status:'CAPTURE_FILE_PRESENT',
         events:records,
         captureCursor,probeEvents,
         attribution:'OPERATOR_NAMED_UNVERIFIED',
-        truncated:pinned.size>BigInt(EVIDENCE_TAIL_BYTES),
+        truncated:windowCoverage!==null?windowCoverage.recordLimitReached:
+          pinned.size>BigInt(EVIDENCE_TAIL_BYTES),
+        ...(windowCoverage!==null?{windowCoverage}:{}),
         incompleteTrailingLineIgnored,
         note:'Log markers are untrusted. Stable file bytes do not prove account, player, world or gameplay identity.'};
     } finally {await handle.close();}

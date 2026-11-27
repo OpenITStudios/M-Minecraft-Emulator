@@ -86,9 +86,21 @@ of autonomous play.
    until the full desktop recording/window release admission can be reused.
    Native product capture/recording approval is still held; existing CUA
    or WGC providers are optional and not runtime verified.
-4. Read evidence only for selected slots. Use original Probe only when
-   relevant; it prepares a command for an authorized human/admin and
-   reads original reported results, not map gameplay success.
+4. Before gameplay, call `summarize_test_evidence({slots:[2],window:'begin'})`
+   to record a bounded local capture baseline for the selected slots. After
+   play, call the same tool with `window:'read'`. Reuses the existing pinned
+   file cursor: baseline reads at most 128 bytes, then reads bounded appended
+   bytes plus the original anchor. No native query, polling or new tool.
+   Explicit begin replaces only the selected in-memory baselines; failed
+   begin clears them. Read never silently falls back to historical log tails.
+   Replacement, truncation, changed anchor or missing baseline reports
+   unavailable evidence. Definitive continuity failure invalidates that slot's
+   baseline; only a new explicit begin can establish another one. At most
+   20 records/slot, bounded summary timeline;
+   partial lines and record limits are explicit. Baseline is not verified
+   game-session identity. Use original Probe only when relevant; it prepares
+   a command for an authorized human/admin and reads original reported
+   results, not map gameplay success.
 5. Code Mode filters/compares bounded observations and writes the report
    in the host conversation. No new report database, background runner
    or second telemetry engine. Record map/revision (operator-confirmed),
@@ -96,9 +108,12 @@ of autonomous play.
    them, expected/observed result, issue and reproduction, relevant
    evidence/time/identity, coverage and blockers. Use PASS/FAIL only
    when independently supported; otherwise BLOCKED or NOT_TESTED.
-   Existing analytics/log tail remains operator-named and unverified;
-   compare before/after where useful, do not attribute old/unbound records
-   to this session or treat missing errors as PASS.
+   Existing analytics/log attribution remains operator-named and unverified;
+   even appended records may belong to another world/player. Do not treat
+   missing errors, bounded/truncated coverage or unbound records as PASS.
+   Without a window flag the prior tail summary is unchanged. Legacy may
+   use the additive read-only window option; restricted code-mode does not
+   advertise/admit it. Baselines are lost at core shutdown.
 
 Configured source flags are not proof of provider availability. The
 operator remains in control of manual app actions. Code Mode uses the

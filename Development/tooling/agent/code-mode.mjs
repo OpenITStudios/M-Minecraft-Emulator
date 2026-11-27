@@ -51,10 +51,12 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
     for(const [tool,keys] of PLAYTEST_EXTRA)allowedByTool.set(tool,new Set(keys));
     // Explicit new Probe attempt, not native reservation or command dispatch.
     allowedByTool.get('probe_qa').add('restart');
+    allowedByTool.get('summarize_test_evidence').add('window');
   }
   const tools=descriptors.filter(tool=>allowedByTool.has(tool.name)).map(tool=>{
     const allowed=allowedByTool.get(tool.name);
-    const schema=tool.inputSchema;
+    const {dependentRequired,...schema}=tool.inputSchema;
+    const dependencies=Object.entries(dependentRequired??{}).filter(([key])=>allowed.has(key));
     const properties=Object.fromEntries(Object.entries(schema.properties??{})
       .filter(([key])=>allowed.has(key)));
     for(const key of allowed) {
@@ -72,6 +74,8 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
       ...(tool.name==='agent_capabilities'?{description:'Read bounded local AI/QA capabilities and activity. No desktop publication or gameplay proof.'}:{}),
       inputSchema:{...schema,properties,
         ...(schema.required?{required:schema.required.filter(key=>allowed.has(key))}:{}),
+        ...(dependencies.length?{dependentRequired:Object.fromEntries(dependencies
+            .map(([key,required])=>[key,required.filter(member=>allowed.has(member))]))}:{}),
         ...(tool.name==='probe_qa'?{oneOf:[
           {not:{anyOf:[{required:['inspectRun']},{required:['archivedRunId']}]}},
           {required:['inspectRun'],not:{anyOf:[{required:['archivedRunId']},{required:['scope']},{required:['restart']}]}},

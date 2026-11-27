@@ -19,6 +19,7 @@ const PUBLIC_TOOL_ERRORS=new Set([
   'Unknown tool','Invalid tool arguments',
   'slot must be an integer from 1 to 5',
   'Native operation in progress; do not overlap requests',
+  'Evidence window operation in progress',
   'MC01 is reserved for the human host in hybrid mode',
   'MC01 human host is protected from AI visual observation',
   'MC01 human host is protected from AI computer-use targeting',
