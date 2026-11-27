@@ -690,14 +690,14 @@ pub enum SessionRequest {
     ConfirmSelectedWorlds { slot: u32, selections: Vec<SelectiveSelection>, #[serde(rename="confirmationToken")] confirmation_token: String },
     ConfirmSelectedPacks { slot: u32, selections: Vec<SelectiveSelection>, #[serde(rename="confirmationToken")] confirmation_token: String },
     OpenProfileFolder { slot: u32 },
-    ClearProfileCache { slot: u32 },
+    ClearProfileCache { slot: u32, #[serde(default, rename="selectedStorage", skip_serializing_if="Option::is_none")] selected_storage: Option<bool> },
     ClearProfileDownloadCache { slot: u32 },
-    ResetGameSettings { slot: u32 },
-    RestoreGameSettings { slot: u32 },
+    ResetGameSettings { slot: u32, #[serde(default, rename="selectedStorage", skip_serializing_if="Option::is_none")] selected_storage: Option<bool> },
+    RestoreGameSettings { slot: u32, #[serde(default, rename="selectedStorage", skip_serializing_if="Option::is_none")] selected_storage: Option<bool> },
     DisableImprovedInputResponse { slot: u32 },
     EnableTextureStreaming { slot: u32 },
     DisableTextureStreaming { slot: u32 },
-    ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String},
+    ClearProfileData {slot:u32, #[serde(rename="confirmationToken")] confirmation_token:String, #[serde(rename="confirmationName")] confirmation_name:String, #[serde(default, rename="selectedStorage", skip_serializing_if="Option::is_none")] selected_storage: Option<bool>},
     Launch { slot: u32 },
     #[cfg(feature="mc02-native-input")]
     LaunchMc02Experiment { slot: u32 },
@@ -1287,7 +1287,7 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
                 "Invalid agent activity report"));
         }
     }
-    if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name}=*request {
+    if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name,..}=*request {
         if !(1..=5).contains(&slot) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|byte|byte.is_ascii_hexdigit()) || *confirmation_name!=format!("Minecraft - {slot}") {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Confirm the exact launcher name before clearing all data"));
         }
@@ -1295,7 +1295,7 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot, .. } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot, .. } | SessionRequest::RestoreGameSettings { slot, .. } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -1989,7 +1989,7 @@ mod tests {
     #[test]
     fn recovery_rejects_out_of_range_slots_before_controller_or_storage_access() {
         for slot in [0,6,u32::MAX] {
-            for operation in [SessionRequest::ResetGameSettings {slot},SessionRequest::RestoreGameSettings {slot},SessionRequest::DisableImprovedInputResponse {slot},SessionRequest::EnableTextureStreaming {slot},SessionRequest::DisableTextureStreaming {slot},SessionRequest::CloseOne {slot}] {
+            for operation in [SessionRequest::ResetGameSettings {slot,selected_storage:None},SessionRequest::RestoreGameSettings {slot,selected_storage:None},SessionRequest::DisableImprovedInputResponse {slot},SessionRequest::EnableTextureStreaming {slot},SessionRequest::DisableTextureStreaming {slot},SessionRequest::CloseOne {slot}] {
                 assert_eq!(request(operation).unwrap_err().kind(),io::ErrorKind::InvalidInput);
             }
         }
@@ -1997,7 +1997,7 @@ mod tests {
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"CloseOne","slot":1,"pid":123}"#).is_err());
         assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"CloseOne","slot":3}"#),Ok(SessionRequest::CloseOne{slot:3})));
         for (slot,token,name) in [(0,"a".repeat(64),"Minecraft - 0"),(1,"bad".into(),"Minecraft - 1"),(1,"a".repeat(64),"Minecraft - 2")] {
-            assert_eq!(request(SessionRequest::ClearProfileData {slot,confirmation_token:token,confirmation_name:name.into()}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+            assert_eq!(request(SessionRequest::ClearProfileData {slot,confirmation_token:token,confirmation_name:name.into(),selected_storage:None}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
         }
     }
     #[cfg(windows)]
@@ -2015,6 +2015,32 @@ mod tests {
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectProfileStorage"}"#).is_err());
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectProfileStorage","slot":1,"path":"outside"}"#).is_err());
         assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectStorage"}"#),Ok(SessionRequest::InspectStorage)));
+    }
+    #[cfg(windows)]
+    #[test]
+    fn selected_mutation_storage_scope_is_optional_and_strict() {
+        for operation in ["ClearProfileCache","ResetGameSettings","RestoreGameSettings","ClearProfileData"] {
+            let mut legacy=serde_json::json!({"operation":operation,"slot":3});
+            if operation=="ClearProfileData" {
+                legacy["confirmationToken"]=serde_json::json!("a".repeat(64));
+                legacy["confirmationName"]=serde_json::json!("Minecraft - 3");
+            }
+            let request:SessionRequest=serde_json::from_value(legacy.clone()).unwrap();
+            assert!(validate_request(&request).is_ok());
+            assert_eq!(serde_json::to_value(request).unwrap(),legacy);
+            let mut selected=legacy.clone();
+            selected["selectedStorage"]=serde_json::json!(true);
+            let request:SessionRequest=serde_json::from_value(selected.clone()).unwrap();
+            assert!(validate_request(&request).is_ok());
+            assert_eq!(serde_json::to_value(request).unwrap(),selected);
+            selected["selectedStorage"]=serde_json::json!("true");
+            assert!(serde_json::from_value::<SessionRequest>(selected).is_err());
+            legacy["slot"]=serde_json::json!(6);
+            legacy["selectedStorage"]=serde_json::json!(true);
+            let invalid:SessionRequest=serde_json::from_value(legacy).unwrap();
+            assert_eq!(validate_request(&invalid).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+        }
+        assert!(serde_json::from_value::<SessionRequest>(serde_json::json!({"operation":"InspectProfileStorage","slot":3,"selectedStorage":true})).is_err());
     }
     #[test]
     fn settings_report_describes_the_reviewed_policy_without_starting_a_controller() {

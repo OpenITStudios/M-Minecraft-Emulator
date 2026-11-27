@@ -551,14 +551,17 @@ export const lazyTester = {
     if(!snapshot.storage)throw new TypeError('Download cache result unavailable');
     return snapshot;
   },
-  clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),
+  clearCache: async (slot: ProfileSlot) => {
+    if(!profileSlots.includes(slot))throw new TypeError('Unknown Minecraft profile');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot, selectedStorage:true}}),slot);
+  },
   recoverSettings: async (slot: ProfileSlot, action:'Reset'|'Restore') => {
     if(!profileSlots.includes(slot)||!['Reset','Restore'].includes(action))throw new TypeError('Invalid settings recovery request');
-    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:action==='Reset'?'ResetGameSettings':'RestoreGameSettings',slot}}));
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request:{operation:action==='Reset'?'ResetGameSettings':'RestoreGameSettings',slot,selectedStorage:true}}),slot);
   },
   clearData: async (slot:ProfileSlot,confirmationToken:string,confirmationName:string) => {
     if(!profileSlots.includes(slot)||!/^[0-9a-f]{64}$/.test(confirmationToken)||confirmationName!==`Minecraft - ${slot}`)throw new TypeError('Confirm the exact launcher name before clearing all data');
-    return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileData',slot,confirmationToken,confirmationName}}));
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileData',slot,confirmationToken,confirmationName,selectedStorage:true}}),slot);
   },
   present: (slot: ProfileSlot, rect: WorkspaceRectangle, pixelRatio=window.devicePixelRatio) => invokeRuntime<void>('lazy_tester_present', {
     slot, viewport: workspaceViewport(rect, pixelRatio),

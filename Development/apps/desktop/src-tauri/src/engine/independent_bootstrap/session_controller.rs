@@ -1024,11 +1024,11 @@ impl Sessions {
     }
 
     fn change_game_settings(
-        &mut self, slot: u32, change: fn(&File) -> io::Result<bool>,
+        &mut self, slot: u32, change: fn(&File) -> io::Result<bool>, selected_storage: Option<bool>,
     ) -> io::Result<Vec<ProfileStorage>> {
         self.admit_profile_mutation(slot)?;
         change(&self.store(slot)?.private)?;
-        self.inspect_storage(1..=5)
+        self.inspect_storage(mutation_storage_slots(slot, selected_storage))
     }
 
     fn owned_data_processes(&self) -> io::Result<Vec<(u32, u64)>> {
@@ -1104,6 +1104,11 @@ impl Sessions {
     }
 
 
+}
+
+// Reply scope only: mutation admission and the five-profile roster are unchanged.
+fn mutation_storage_slots(slot: u32, selected_storage: Option<bool>) -> std::ops::RangeInclusive<u32> {
+    if selected_storage == Some(true) { slot..=slot } else { 1..=5 }
 }
 
 // Reuse one observation for the read-only report, retaining per-slot admission
@@ -1968,26 +1973,26 @@ fn run() -> io::Result<()> {
                     profile_storage::clear_cache_target(&store.private,profile_storage::CacheTarget::Download,true).map_err(|error|error.to_string())?;
                     storage=Some(sessions.inspect_storage(1..=5).map_err(|error|error.to_string())?);
                 }
-                SessionRequest::ClearProfileCache { slot } => {
+                SessionRequest::ClearProfileCache { slot, selected_storage } => {
                     sessions
                         .clear_cache(slot)
                         .map_err(|error| error.to_string())?;
-                    storage = Some(sessions.inspect_storage(1..=5).map_err(|error| error.to_string())?);
+                    storage = Some(sessions.inspect_storage(mutation_storage_slots(slot, selected_storage)).map_err(|error| error.to_string())?);
                 }
-                SessionRequest::ResetGameSettings { slot } =>
-                    storage = Some(sessions.change_game_settings(slot, game_preset::reset_settings).map_err(|error|error.to_string())?),
-                SessionRequest::RestoreGameSettings { slot } =>
-                    storage = Some(sessions.change_game_settings(slot, game_preset::restore_settings).map_err(|error|error.to_string())?),
+                SessionRequest::ResetGameSettings { slot, selected_storage } =>
+                    storage = Some(sessions.change_game_settings(slot, game_preset::reset_settings, selected_storage).map_err(|error|error.to_string())?),
+                SessionRequest::RestoreGameSettings { slot, selected_storage } =>
+                    storage = Some(sessions.change_game_settings(slot, game_preset::restore_settings, selected_storage).map_err(|error|error.to_string())?),
                 SessionRequest::DisableImprovedInputResponse { slot } =>
-                    storage = Some(sessions.change_game_settings(slot, game_preset::disable_input_response).map_err(|error|error.to_string())?),
+                    storage = Some(sessions.change_game_settings(slot, game_preset::disable_input_response, None).map_err(|error|error.to_string())?),
                 SessionRequest::EnableTextureStreaming { slot } =>
-                    storage = Some(sessions.change_game_settings(slot, game_preset::enable_texture_streaming).map_err(|error|error.to_string())?),
+                    storage = Some(sessions.change_game_settings(slot, game_preset::enable_texture_streaming, None).map_err(|error|error.to_string())?),
                 SessionRequest::DisableTextureStreaming { slot } =>
-                    storage = Some(sessions.change_game_settings(slot, game_preset::disable_texture_streaming).map_err(|error|error.to_string())?),
-                SessionRequest::ClearProfileData {slot,confirmation_token,confirmation_name}=>{
+                    storage = Some(sessions.change_game_settings(slot, game_preset::disable_texture_streaming, None).map_err(|error|error.to_string())?),
+                SessionRequest::ClearProfileData {slot,confirmation_token,confirmation_name,selected_storage}=>{
                     if confirmation_name!=format!("Minecraft - {slot}") {return Err("Launcher confirmation does not match".into());}
                     sessions.clear_data(slot,&confirmation_token).map_err(|error|error.to_string())?;
-                    storage=Some(sessions.inspect_storage(1..=5).map_err(|error|error.to_string())?);
+                    storage=Some(sessions.inspect_storage(mutation_storage_slots(slot, selected_storage)).map_err(|error|error.to_string())?);
                 }
                 SessionRequest::OpenProfileFolder { slot } => sessions
                     .open_folder(slot)
@@ -2183,11 +2188,20 @@ mod tests {
             assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Receipt);
         }
         for request in [
-            SessionRequest::ClearProfileCache { slot: 1 },
-            SessionRequest::ResetGameSettings { slot: 2 },
+            SessionRequest::ClearProfileCache { slot: 1, selected_storage: None },
+            SessionRequest::ResetGameSettings { slot: 2, selected_storage: Some(true) },
             SessionRequest::ConfirmSelectedWorlds { slot: 3, selections: vec![], confirmation_token: String::new() },
         ] {
             assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Full);
+        }
+    }
+
+    #[test]
+    fn mutation_receipt_scope_defaults_to_full_and_selects_only_the_requested_slot() {
+        for slot in 1..=5 {
+            assert_eq!(mutation_storage_slots(slot,None),1..=5);
+            assert_eq!(mutation_storage_slots(slot,Some(false)),1..=5);
+            assert_eq!(mutation_storage_slots(slot,Some(true)),slot..=slot);
         }
     }
 

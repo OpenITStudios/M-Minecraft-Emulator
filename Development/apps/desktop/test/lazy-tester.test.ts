@@ -45,6 +45,19 @@ describe('Ordered desktop storage receipt admission',()=>{
     const otherActive={...selected,profiles:snapshot.profiles.map(p=>p.slot===1?running(1):p)};
     expect(parseSession(otherActive,3).storage?.[0]?.slot).toBe(3);
   });
+  it('requests exact-slot receipts only for the active desktop storage mutations',()=>{
+    const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
+    const mutations=bridge.slice(bridge.indexOf('  clearCache:'),bridge.indexOf('  present:'));
+    expect(mutations).toMatch(/operation: 'ClearProfileCache', slot, selectedStorage:true\}\}\),slot\)/);
+    expect(mutations).toMatch(/operation:action==='Reset'\?'ResetGameSettings':'RestoreGameSettings',slot,selectedStorage:true\}\}\),slot\)/);
+    expect(mutations).toMatch(/operation:'ClearProfileData',slot,confirmationToken,confirmationName,selectedStorage:true\}\}\),slot\)/);
+    const held=bridge.slice(bridge.indexOf('  confirmSelectedPacks:'),bridge.indexOf('  clearCache:'));
+    expect(held).not.toContain('selectedStorage:true');
+    const snapshot={...stopped(),storage:[storage[2]!]};
+    expect(parseSession(snapshot,3).storage?.[0]?.slot).toBe(3);
+    expect(()=>parseSession(snapshot,1)).toThrow();
+    expect(()=>parseSession({...snapshot,storage},3)).toThrow();
+  });
   it('refuses sparse rosters, coerced states and mismatched storage order',()=>{
     const snapshot=stopped();
     expect(()=>parseSession({...snapshot,profiles:new Array(5)})).toThrow('Invalid profile response');
