@@ -34,7 +34,7 @@ extern "system" {
     fn GetCurrentProcessId()->u32;
     fn GetLastError()->u32;
 }
-const NAME:[u16;21]=[77,105,118,117,98,105,77,101,97,115,117,114,101,100,70,112,115,72,117,100,0];
+const NAME:[u16;20]=[77,105,118,117,98,105,77,101,97,115,117,114,101,100,70,112,115,72,117,100,0];
 thread_local! { static CALLBACK:Cell<Option<(*mut c_void,Notify)>>=const { Cell::new(None) }; }
 unsafe extern "system" fn procedure(window:Handle,message:u32,w:usize,l:isize)->isize {
     match message { 0x84=>-1,0x21=>3,0x14=>1,_=>DefWindowProcW(window,message,w,l) }
@@ -109,4 +109,80 @@ pub unsafe extern "C" fn lazytester_hud_window_wait(stop:Handle,changed:Handle)-
         TranslateMessage(&message); DispatchMessageW(&message);
     }
     0
+}
+
+// Worker-local composition: retain one raster and redraw only on changed display state.
+use super::hud_canvas::{Rect, Size};
+use super::hud_canvas::windows::{Canvas, CanvasView, lazytester_hud_canvas_create,
+    lazytester_hud_canvas_destroy, lazytester_hud_canvas_paint, lazytester_hud_physical_client};
+use super::hud_canvas::lazytester_hud_placement;
+#[repr(C)]
+struct Blend { operation:u8, flags:u8, alpha:u8, format:u8 }
+#[link(name="user32")]
+extern "system" {
+    fn GetDpiForWindow(window:Handle)->u32;
+    fn IsWindowVisible(window:Handle)->i32;
+    fn IsIconic(window:Handle)->i32;
+    fn ShowWindow(window:Handle,command:i32)->i32;
+    fn SetWindowPos(window:Handle,after:Handle,x:i32,y:i32,cx:i32,cy:i32,flags:u32)->i32;
+    fn UpdateLayeredWindow(window:Handle,destination:Handle,position:*const Point,size:*const Size,
+        source:Handle,origin:*const Point,key:u32,blend:*const Blend,flags:u32)->i32;
+}
+#[repr(C)]
+pub struct Composition { window:Handle,bounds:Rect,dpi:u32,visible:u32,drawn:u32 }
+pub struct Renderer { canvas:*mut Canvas, previous_dpi:u32, previous_rate:u32, previous_valid:bool, previous_bounds:Rect }
+impl Drop for Renderer { fn drop(&mut self) { unsafe { lazytester_hud_canvas_destroy(self.canvas); } } }
+#[no_mangle]
+pub unsafe extern "C" fn lazytester_hud_renderer_create()->*mut Renderer {
+    let canvas=lazytester_hud_canvas_create();
+    if canvas.is_null() { return ptr::null_mut(); }
+    Box::into_raw(Box::new(Renderer {canvas,previous_dpi:0,previous_rate:u32::MAX,previous_valid:false,previous_bounds:Rect::default()}))
+}
+#[no_mangle]
+pub unsafe extern "C" fn lazytester_hud_renderer_destroy(renderer:*mut Renderer) {
+    if !renderer.is_null() { drop(Box::from_raw(renderer)); }
+}
+#[no_mangle]
+pub unsafe extern "C" fn lazytester_hud_renderer_reset(renderer:*mut Renderer) {
+    if let Some(r)=renderer.as_mut() { r.previous_dpi=0; }
+}
+#[no_mangle]
+pub unsafe extern "C" fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:*mut WindowHost,
+    target:Handle,bound:u32,admitted:u32,milli:u32,valid:u32,out:*mut Composition)->u32 {
+    let (Some(r),Some(h),Some(out))=(renderer.as_mut(),host.as_mut(),out.as_mut()) else { return 0; };
+    *out=Composition {window:ptr::null_mut(),bounds:Rect::default(),dpi:0,visible:0,drawn:0};
+    let mut client=Rect::default();
+    if bound==0 || lazytester_hud_physical_client(target,&mut client)==0 {
+        if !h.window.is_null() && IsWindowVisible(h.window)!=0 { ShowWindow(h.window,0); }
+        return 1;
+    }
+    if h.window.is_null() {
+        h.window=CreateWindowExW(0x080800a0,NAME.as_ptr(),[0u16].as_ptr(),0x80000000,
+            client.left,client.top,0,0,target,ptr::null_mut(),h.instance,ptr::null_mut());
+    }
+    if h.window.is_null() { return 0; }
+    let window=h.window;
+    let dpi=GetDpiForWindow(window);
+    let mut bounds=Rect::default();
+    lazytester_hud_placement(&client,dpi,&mut bounds);
+    let fits=bounds.right>bounds.left;
+    let visible=fits && admitted!=0 && IsWindowVisible(target)!=0 && IsIconic(target)==0;
+    if fits {
+        let rate=((u64::from(milli)+50)/100) as u32;
+        let redraw=dpi!=r.previous_dpi || (valid!=0)!=r.previous_valid || rate!=r.previous_rate;
+        if redraw {
+            let mut view:CanvasView=std::mem::zeroed();
+            if lazytester_hud_canvas_paint(r.canvas,milli,valid,dpi,&mut view)==0 { return 0; }
+            let position=Point{x:bounds.left,y:bounds.top};
+            let origin=Point{x:0,y:0};
+            let blend=Blend{operation:0,flags:0,alpha:240,format:1};
+            if UpdateLayeredWindow(window,ptr::null_mut(),&position,&view.size,view.dc,&origin,0,&blend,2)==0 { return 0; }
+            out.drawn=1;
+        } else if bounds!=r.previous_bounds {
+            if SetWindowPos(window,ptr::null_mut(),bounds.left,bounds.top,0,0,0x15)==0 { return 0; }
+        }
+        r.previous_dpi=dpi;r.previous_bounds=bounds;r.previous_rate=rate;r.previous_valid=valid!=0;
+    }
+    if (IsWindowVisible(window)!=0)!=visible { ShowWindow(window,if visible {4}else{0}); }
+    out.window=window;out.bounds=bounds;out.dpi=dpi;out.visible=u32::from(visible);1
 }

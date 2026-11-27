@@ -1,7 +1,7 @@
 //! HUD geometry and worker-owned GDI raster. No extra worker or pixel copy.
 #[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
-pub struct Rect { left: i32, top: i32, right: i32, bottom: i32 }
+pub struct Rect { pub left: i32, pub top: i32, pub right: i32, pub bottom: i32 }
 #[repr(C)]
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Size { cx: i32, cy: i32 }
@@ -29,7 +29,7 @@ pub unsafe extern "C" fn lazytester_hud_placement(client: *const Rect, dpi: u32,
 }
 
 #[cfg(windows)]
-mod windows {
+pub(crate) mod windows {
     use super::{extent, scale, Rect, Size};
     use std::{ffi::c_void, ptr, slice};
     type Handle = *mut c_void;
@@ -164,7 +164,7 @@ mod windows {
         fn drop(&mut self) { unsafe { self.release(); if !self.dc.is_null() { DeleteDC(self.dc); } } }
     }
     #[repr(C)]
-    pub struct CanvasView { dc:Handle,pixels:*const u32,size:Size }
+    pub struct CanvasView { pub dc:Handle,pixels:*const u32,pub size:Size }
     // Borrowed view valid only until next paint or destruction on owner thread.
     #[no_mangle]
     pub unsafe extern "C" fn lazytester_hud_canvas_create() -> *mut Canvas {

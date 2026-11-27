@@ -121,12 +121,10 @@ struct Hud::State {
         auto* host = lazytester_hud_window_host_create(this, location);
         try {
             if (!host) throw std::runtime_error("HUD window host unavailable");
-            // A single worker-owned DIB/font is repainted in place; size or
-            // DPI changes rebuild it, and worker exit releases every GDI handle.
-            Canvas upload;
-            unsigned previousGeneration = 0, previousRate = ~0U;
-            bool previousValid = false;
-            RECT previousBounds{}; UINT previousDpi = 0;
+            std::unique_ptr<LazyTesterHudRenderer, decltype(&lazytester_hud_renderer_destroy)> renderer(
+                lazytester_hud_renderer_create(), lazytester_hud_renderer_destroy);
+            if (!renderer) throw std::runtime_error("HUD renderer unavailable");
+            unsigned previousGeneration = 0;
             for (;;) {
                 AcquireSRWLockExclusive(&gate);
                 if (ownerLife && WaitForSingleObject(ownerLife, 0) == WAIT_OBJECT_0) {
@@ -136,7 +134,7 @@ struct Hud::State {
                 const HWND target = owner; const DWORD thread = ownerThread;
                 const unsigned version = generation; const ULONGLONG idleSince = unboundAt;
                 ReleaseSRWLockExclusive(&gate);
-                DWORD pid = 0; RECT client{};
+                DWORD pid = 0;
                 const bool bound = target && GetWindowThreadProcessId(target, &pid) == thread && pid == GetCurrentProcessId();
                 // The unbind path runs before the original Minecraft GUI
                 // thread/HWND necessarily exits. A process-global Policy must
@@ -159,42 +157,20 @@ struct Hud::State {
                 }
                 if (!bound || target != previousOwner || version != previousGeneration || (hud && !IsWindow(hud))) {
                     lazytester_hud_window_clear(host);
-                    hud = nullptr; previousOwner = target; previousGeneration = version; previousDpi = 0;
+                    hud = nullptr; previousOwner = target; previousGeneration = version;
+                    lazytester_hud_renderer_reset(renderer.get());
                 }
-                if (bound && physicalClient(target, client)) {
-                    if (!hud) hud = lazytester_hud_window_get(host, target, client.left, client.top);
-                    if (!hud) throw std::runtime_error("HUD window unavailable");
-                    const UINT dpi = GetDpiForWindow(hud);
-                    const RECT bounds = placement(client, dpi);
-                    const auto value = meter.read();
-                    const bool fits = bounds.right > bounds.left;
-                    const bool visible = fits && selectionAdmitted() && IsWindowVisible(target) && !IsIconic(target);
-                    if (fits) {
-                        const unsigned shownRate = (value.milliFps + 50) / 100;
-                        const bool redraw = dpi != previousDpi || value.valid != previousValid || shownRate != previousRate;
-                        if (redraw) {
-                            // Repaint the worker's existing upload DIB; no second
-                            // pixel vector, per-redraw GDI allocation or global cache.
-                            SIZE size{}; paint(upload, value, dpi, size);
-                            POINT position{bounds.left, bounds.top}, origin{};
-                            BLENDFUNCTION blend{AC_SRC_OVER, 0, 240, AC_SRC_ALPHA};
-                            if (!UpdateLayeredWindow(hud, nullptr, &position, &size, upload.dc, &origin, 0, &blend, ULW_ALPHA))
-                                throw std::runtime_error("HUD composition unavailable");
-                            AcquireSRWLockExclusive(&gate); ++display.draws; ReleaseSRWLockExclusive(&gate);
-                        } else if (memcmp(&bounds, &previousBounds, sizeof(bounds))) {
-                            if (!SetWindowPos(hud, nullptr, bounds.left, bounds.top, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE))
-                                throw std::runtime_error("HUD positioning failed");
-                        }
-                        previousDpi = dpi; previousBounds = bounds; previousValid = value.valid; previousRate = shownRate;
-                    }
-                    if ((IsWindowVisible(hud) != FALSE) != visible) ShowWindow(hud, visible ? SW_SHOWNOACTIVATE : SW_HIDE);
-                    AcquireSRWLockExclusive(&gate);
-                    display.window = hud; display.bounds = bounds; display.dpi = dpi; display.visible = visible;
-                    ReleaseSRWLockExclusive(&gate);
-                } else {
-                    if (hud && IsWindowVisible(hud)) ShowWindow(hud, SW_HIDE);
-                    AcquireSRWLockExclusive(&gate); display.window = nullptr; display.visible = false; ReleaseSRWLockExclusive(&gate);
-                }
+                const auto value = meter.read();
+                LazyTesterHudComposition composed{};
+                if (!lazytester_hud_renderer_update(renderer.get(), host, target, bound ? 1U : 0U,
+                    selectionAdmitted() ? 1U : 0U, value.milliFps, value.valid ? 1U : 0U, &composed))
+                    throw std::runtime_error("HUD composition unavailable");
+                if (composed.window) hud = composed.window;
+                AcquireSRWLockExclusive(&gate);
+                display.window = composed.window; display.visible = composed.visible != 0;
+                if (composed.window) { display.bounds = composed.bounds; display.dpi = composed.dpi; }
+                display.draws += composed.drawn;
+                ReleaseSRWLockExclusive(&gate);
                 const auto result = lazytester_hud_window_wait(stop, changed);
                 if (result == 1) break;
                 if (result != 0) throw std::runtime_error("HUD wait failed");
