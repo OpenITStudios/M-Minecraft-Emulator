@@ -797,6 +797,7 @@ impl Sessions {
                         io::Error::new(error.kind(), error.to_string())
                     })
                 };
+                let full_clear = product_profiles::clear::inspect(store, replay_admission());
                 let mut result = ProfileStorage {
                     slot,
                     bytes: 0,
@@ -817,8 +818,18 @@ impl Sessions {
                     resource_packs: admission.is_ok().then(||
                         resource_pack_inventory::inspect(&store.private, budget)),
                     game_settings: Some(game_preset::inspect_settings(&store.private, replay_admission())),
-                    full_clear: Some(product_profiles::clear::inspect(store, replay_admission())),
+                    full_clear: Some(full_clear),
                 };
+                // A pending full clear is exclusive with either cache action.
+                // Preserve observed size/partial metadata; only revoke admission.
+                if result.full_clear.as_ref().is_some_and(|report| report.pending) {
+                    for cache in std::iter::once(&mut result.cache).chain(result.download_cache.iter_mut()) {
+                        cache.can_clear = false;
+                        if !cache.partial {
+                            cache.issue = Some("Finish pending profile cleanup first".into());
+                        }
+                    }
+                }
                 profile_storage::scan_profile_size(&path, &mut result, budget);
                 Ok(result)
             })

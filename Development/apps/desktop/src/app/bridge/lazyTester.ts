@@ -308,6 +308,7 @@ export function parseSession(value: unknown): SessionSnapshot {
           !(full.confirmationToken===null||typeof full.confirmationToken==='string'&&/^[0-9a-f]{64}$/.test(full.confirmationToken))||
           !(full.issue===null||typeof full.issue==='string'&&full.issue.length<=8192)||
           full.canClear&&(full.confirmationToken===null||full.issue!==null||active))throw new TypeError('Invalid full-clear metadata');
+        if(full.pending&&(cache.canClear||(record(storage.downloadCache)&&storage.downloadCache.canClear===true)))throw new TypeError('Pending full clear conflicts with cache admission');
       }
     });
   }

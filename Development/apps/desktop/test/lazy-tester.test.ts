@@ -365,6 +365,27 @@ describe('Lazy Tester profile contract', () => {
     expect(parseSession(scoped).storage![1]!.cache.canClear).toBe(false);
     expect(parseSession({...active, storage: storage.map(item => ({...item, cache: {...item.cache, canClear: false, issue: 'Close Minecraft'}}))}).storage).toHaveLength(5);
   });
+  it('keeps pending full clear exclusive with both cache actions for that launcher',()=>{
+    const eligible={bytes:50,files:1,partial:false,canClear:true,issue:null};
+    const blocked={...eligible,canClear:false,issue:'Finish pending profile cleanup first'};
+    const fullClear={canClear:true,pending:true,confirmationToken:'a'.repeat(64),issue:null};
+    const storage=[1,2,3,4,5].map(slot=>({slot,bytes:100,files:2,partial:false,disk:null,
+      cache:eligible,downloadCache:eligible,fullClear:{...fullClear,pending:false}}));
+    const pending={...storage[0]!,fullClear,cache:blocked,downloadCache:blocked};
+    const snapshot={...stopped(),storage:[pending,...storage.slice(1)]};
+    const report=parseSession(snapshot).storage!;
+    expect(report[0]!.fullClear?.pending).toBe(true);
+    expect(report[0]!.cache.canClear).toBe(false);
+    expect(report[0]!.downloadCache?.canClear).toBe(false);
+    expect(report[1]!.cache.canClear).toBe(true);
+    expect(report[1]!.downloadCache?.canClear).toBe(true);
+    for(const invalid of [{...pending,cache:eligible},{...pending,downloadCache:eligible}]) {
+      expect(()=>parseSession({...snapshot,storage:[invalid,...storage.slice(1)]})).toThrow(/Pending full clear/);
+    }
+    // Legacy reports may omit download cache without granting new admission.
+    const {downloadCache: _omitted,...legacy}=pending;
+    expect(parseSession({...snapshot,storage:[legacy,...storage.slice(1)]}).storage![0]!.downloadCache).toBeUndefined();
+  });
   it('validates exactly the requested preview slots and keeps unavailable previews explicit',()=>{
     const report={schema:1,tiles:[{slot:2,registered:true,reason:null},{slot:5,registered:false,reason:'Window not available'}]};
     expect(parsePreviewReport(report,[2,5])).toEqual(report);
