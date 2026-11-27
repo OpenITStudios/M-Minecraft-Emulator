@@ -38,7 +38,7 @@ pub fn run() {
         for window in &mut context.config_mut().app.windows {window.create=false;window.data_directory=None;}
     }
     #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
-    if std::env::args_os().skip(1).eq([std::ffi::OsString::from("--lazy-tester-check-webview")]) {
+    if startup_diagnostic_mode() {
         check_webview_binding(context);
         return;
     }
@@ -129,7 +129,7 @@ pub fn run() {
                             let controller_present = {
                                 #[cfg(windows)]
                                 {crate::engine::native_clients_session::existing_controller_gate(
-                                    "Local\\MivubiEducationStartupObservation").unwrap_or(true)}
+                                    crate::engine::native_clients_session::CONTROLLER_GATE_NAME).unwrap_or(true)}
                                 #[cfg(not(windows))]
                                 {false}
                             };
@@ -224,7 +224,8 @@ fn check_webview_binding(mut context: tauri::Context<tauri::Wry>) {
         .setup(|app| {
             let window = create_main_window(app)?;
             fit_initial_window(&window)?;
-            workspace_foreground::start(window.as_ref().window())?;
+            // No presentation handlers exist in this diagnostic.
+            // Do not start the native workspace foreground hook.
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -235,7 +236,6 @@ fn check_webview_binding(mut context: tauri::Context<tauri::Wry>) {
             startup_diagnostic_result,
         ])
         .run(context).expect("WebView startup diagnostic failed");
-    workspace_foreground::shutdown();
 }
 
 #[cfg(windows)]

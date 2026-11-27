@@ -1,7 +1,7 @@
 //! Private binding metadata for the installed app; never profile/account copying.
 use super::*;
 use crate::engine::{
-    native_clients::ProfileBinding, native_clients_session::existing_controller_gate,
+    native_clients::ProfileBinding, native_clients_session::{existing_controller_gate, CONTROLLER_GATE_NAME},
 };
 use std::io::{Read, Write};
 use windows_sys::Win32::Storage::FileSystem::{
@@ -122,11 +122,13 @@ fn discover_reviewed(parent: &Path, expected: [u8; 32]) -> io::Result<Option<Vec
 fn connect_reviewed_existing() -> io::Result<ProfileBinding> {
     let existing = binding_path(false).and_then(|(path, _pins)| read_binding(&path));
     match existing {
-        Ok(_) => return Ok(status()), // Invalid existing bindings are preserved.
+        // Validate the exact just-read bytes; status() would reopen the same
+        // binding file before validating. Invalid bindings remain preserved.
+        Ok(bytes) => return Ok(binding_status(Ok(bytes), validate)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+    if existing_controller_gate(CONTROLLER_GATE_NAME)? {
         return Ok(status());
     }
     let expected =
@@ -136,7 +138,7 @@ fn connect_reviewed_existing() -> io::Result<ProfileBinding> {
         return Ok(status());
     };
     validate(&bytes)?; // Includes existing Roaming/Local/TEMP and HKCU validation.
-    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+    if existing_controller_gate(CONTROLLER_GATE_NAME)? {
         return Ok(status());
     }
     let (_, pins) = binding_path(true)?;
@@ -276,7 +278,7 @@ pub(crate) fn run(import: bool) -> io::Result<ProfileBinding> {
             "Product profiles already exist; previous-launcher import cannot replace them",
         ));
     }
-    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+    if existing_controller_gate(CONTROLLER_GATE_NAME)? {
         return Err(invalid(
             "Close all Minecraft sessions and the previous controller normally before connecting profiles",
         ));
@@ -290,7 +292,7 @@ pub(crate) fn run(import: bool) -> io::Result<ProfileBinding> {
     let source = folder.join("independent-bootstrap/replay-profile-five.bin");
     let bytes = read_binding(&source)?;
     validate(&bytes)?; // Existing reviewed IDs and existing HKCU stores; no fresh data.
-    if existing_controller_gate("Local\\MivubiEducationStartupObservation")? {
+    if existing_controller_gate(CONTROLLER_GATE_NAME)? {
         return Err(invalid(
             "The controller started; profile connection was cancelled without changing your data",
         ));

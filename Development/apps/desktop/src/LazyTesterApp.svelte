@@ -909,6 +909,12 @@
         queuedPage=null;queuedLaunch=null;queued=null;manualRefreshRequested=false;dirty=false;
         return;
       }
+      // Capture capability probes are cheap, but unsupported/unknown backends
+      // do not need them. Start only after native backend admission.
+      void lazyTester.screenshotAvailable().then(value=>{if(!disposed)screenshotAvailable=value;}).catch(()=>{});
+      void lazyTester.recordingAvailable().then(value=>{
+        if(!disposed&&value){recordingAvailable=true;void refreshRecordingStatus();}
+      }).catch(()=>{});
       // Retry the canonical Windows initializer before offering recovery.
       for(let attempt=0;attempt<3&&!disposed;attempt++){
         if(attempt)await new Promise(resolve=>setTimeout(resolve,attempt*1000));
@@ -923,7 +929,7 @@
     }finally{
       if(!disposed){
         initializing=false;await tick();
-        void lazyTester.reportStartup({
+        if (!disposed) void lazyTester.reportStartup({
           connection:sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available),
           issue:document.querySelector('.lazytester-binding p')?.textContent??'',
           cards:document.querySelectorAll('.lazytester-launcher-card').length,
@@ -933,8 +939,12 @@
     }
   }
   async function checkBinding(importProfiles = false) {
-    try { binding = await lazyTester.binding(importProfiles); bindingIssue = ''; }
-    catch (error) { binding = null; bindingIssue = userMessage('binding'); }
+    try {
+      const result = await lazyTester.binding(importProfiles);
+      if (!disposed) { binding = result; bindingIssue = ''; }
+    } catch (error) {
+      if (!disposed) { binding = null; bindingIssue = userMessage('binding'); }
+    }
   }
   async function loadLocation(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect') {
     if(activeOperation !== null||refreshing||resizing||disposed)return;
@@ -1085,11 +1095,7 @@
     try { workspaceLayout = window.localStorage.getItem(workspaceLayoutKey) === 'Right' ? 'Right' : 'Bottom'; }
     catch { layoutPersistenceIssue = 'Saved layout unavailable. Using Bottom.'; }
     managerVisible = !document.hidden;
-    mounted = true; void initializeLaunchers();
-    void lazyTester.screenshotAvailable().then(value=>{if(!disposed)screenshotAvailable=value;}).catch(()=>{});
-    void lazyTester.recordingAvailable().then(value=>{
-      if(!disposed&&value){recordingAvailable=true;void refreshRecordingStatus();}
-    }).catch(()=>{});
+    mounted = true;
     observer = new ResizeObserver(() => { dirty = true; });
     try { observer.observe(viewport, {box: 'device-pixel-content-box'}); }
     catch { observer.observe(viewport); } // Older WebView fallback; DPR listener below remains active.
@@ -1161,6 +1167,9 @@
     void listen<number>('lazy-tester-preview-select', event => {
       if ([1,2,3,4,5].includes(event.payload)) select(event.payload as ProfileSlot);
     }).then(retain).catch(error => { previewIssue = userMessage('preview'); });
+    // Register the mounted observation and cleanup paths before starting
+    // the asynchronous native initialization.
+    void initializeLaunchers();
     return () => {
       mounted = false; disposed = true; clearBackgroundObservation(); observer?.disconnect();stopDisplayScale();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
