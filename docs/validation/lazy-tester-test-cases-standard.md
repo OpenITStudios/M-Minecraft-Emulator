@@ -182,10 +182,10 @@ and the dormant native Saved Locations store do not expose replacement UI.
 | STD-SET-05 | P1 | Ukur measured FPS foreground dan background | Bedakan target 144/10 dengan actual |
 | STD-SET-06 | P1 | Audio Keep/Mute 2+ clients | Hanya owned sessions yang boleh berubah |
 | STD-SET-07 | P0 | **Disposable** audio device unavailable | Error aman, no foreign app mute |
-| STD-SET-08 | P1 | Pilih Preserve pada stopped MCxx | Tidak overwrite Minecraft option saat next launch |
-| STD-SET-09 | P1 | High/Low pada stopped MCxx | Preset slot tersebut saja, next launch |
-| STD-SET-10 | P0 | Apply preset ketika satu game berjalan | Refused, no live options.txt edit |
-| STD-SET-11 | P1 | Pilih preset MC01–MC05 satu per satu | Slot settings tidak tertukar |
+| STD-SET-08 | P1 | Periksa Settings: pilihan Preserve per-slot sudah retired | Tidak ada kontrol tersebut; legacy graphics.json tidak diubah oleh laporan Settings |
+| STD-SET-09 | P1 | Periksa Settings: High/Low per-slot sudah retired | Tidak ada kontrol tersebut; semua slot memakai satu preset Low yang direview |
+| STD-SET-10 | P0 | **FIXTURE ONLY** ApplyPreset kompatibilitas ketika satu game berjalan | Refused, no live options.txt edit; bukan kontrol desktop |
+| STD-SET-11 | P1 | Periksa preset global saat managed launch pada profile dummy | Satu kebijakan Low yang sama, hanya slot admitted yang dapat ditulis |
 | STD-SET-12 | P1 | RETIRED — Paste XYZ di UI desktop dihapus | NOT_APPLICABLE: tidak ada layar Paste XYZ |
 | STD-SET-13 | P1 | RETIRED — hasil chunk/blok pada UI Paste XYZ dihapus | NOT_APPLICABLE: fungsi koordinat murni bukan UI desktop |
 | STD-SET-14 | P1 | RETIRED — pilihan teks Paste XYZ dihapus | NOT_APPLICABLE: tidak ada aksi clipboard pada layar ini |
@@ -193,7 +193,7 @@ and the dormant native Saved Locations store do not expose replacement UI.
 | STD-SET-16 | P0 | RETIRED — transisi saat F3 Inspector terbuka | NOT_APPLICABLE: F3 desktop tidak ada; slot identity diuji di STD-UI/WIN |
 | STD-SET-17 | P1 | Missing/legacy options key | Tidak mengarang setting yang tidak dikenal |
 | STD-SET-18 | P2 | Save/refresh UI bersamaan | Tidak duplicate submit atau freeze |
-| STD-SET-19 | P1 | Reopen manager setelah audio/graphics/FPS changes | Last reported preferences benar dan no unapproved cross-slot writes |
+| STD-SET-19 | P1 | Reopen manager setelah audio/FPS changes | Last reported preferences benar; tidak ada perubahan graphics individual atau cross-slot writes tanpa izin |
 
 ## S7 — Data Storage, cache, settings recovery dan preservasi (T08)
 
@@ -215,8 +215,8 @@ reparse point, manipulated hive dan interrupted clear **fixture only**.
 | STD-DATA-09 | P1 | Clear recognized cache dummy stopped setelah izin | Hanya target cache, worlds/accounts dan 4 peer preserved |
 | STD-DATA-10 | P0 | Clear cache saat target aktif | Backend refuse |
 | STD-DATA-11 | P1 | Reset dan Restore game settings dummy | Backup diciptakan, reversible sesuai contract |
-| STD-DATA-12 | P1 | Enable/Disable Texture Streaming **hanya existing key** | Tidak mensintesis option baru |
-| STD-DATA-13 | P1 | Disable Improved Input Response dummy berhenti | Per-slot dan backup; RAM effect tetap unverified |
+| STD-DATA-12 | P1 | Periksa Data Storage: kontrol Texture Streaming retired; **FIXTURE ONLY** request desktop lama | Tidak ada toggle; request lama ditolak, tidak mengubah options.txt |
+| STD-DATA-13 | P1 | Periksa Data Storage: kontrol Improved Input Response retired; **FIXTURE ONLY** request desktop lama | Tidak ada toggle; request lama ditolak, tidak mengubah options.txt; RAM effect tetap unverified |
 | STD-DATA-14 | P0 | Review Full Clear lalu Cancel | Tidak ada profile/world deletion |
 | STD-DATA-15 | P0 | **Disposable-only** Full Clear dummy MCxx exact name/ack | Hanya target yang clear; peer lain utuh |
 | STD-DATA-16 | P0 | **FIXTURE ONLY** stale full-clear token | Rejected |
