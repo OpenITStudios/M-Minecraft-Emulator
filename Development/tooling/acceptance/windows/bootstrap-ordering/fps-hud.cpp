@@ -160,6 +160,12 @@ std::vector<DWORD> raster(Reading value, UINT dpi, SIZE& size) {
     Canvas canvas; paint(canvas, value, dpi, size);
     return {canvas.pixels, canvas.pixels + static_cast<size_t>(size.cx) * size.cy};
 }
+bool selectionAllowsHud(bool managed, HANDLE hudSelected, HANDLE policyStop, HANDLE controller) noexcept {
+    return !managed || (hudSelected && policyStop && controller
+        && WaitForSingleObject(hudSelected, 0) == WAIT_OBJECT_0
+        && WaitForSingleObject(policyStop, 0) == WAIT_TIMEOUT
+        && WaitForSingleObject(controller, 0) == WAIT_TIMEOUT);
+}
 struct Hud::State {
     Meter meter;
     SRWLOCK gate = SRWLOCK_INIT;
@@ -169,10 +175,7 @@ struct Hud::State {
     HANDLE hudSelected = nullptr, policyStop = nullptr, controller = nullptr;
     bool managed = false;
     bool selectionAdmitted() const noexcept {
-        return !managed || (hudSelected && policyStop && controller
-            && WaitForSingleObject(hudSelected, 0) == WAIT_OBJECT_0
-            && WaitForSingleObject(policyStop, 0) == WAIT_TIMEOUT
-            && WaitForSingleObject(controller, 0) == WAIT_TIMEOUT);
+        return selectionAllowsHud(managed, hudSelected, policyStop, controller);
     }
     std::atomic<bool> workerFinished{false};
     std::atomic<bool> workerActive{false};

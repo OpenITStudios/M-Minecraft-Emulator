@@ -211,7 +211,11 @@ independent of foreground pacing. The existing HUD worker checks selection,
 sticky stop and controller lifetime on its normal cycle. Legacy v2/v3 records
 retain 120 bytes; managed legacy HUDs remain hidden. Standalone HUD controls
 remain usable. No new worker or UI command. Native transition timing and
-payload validation remain NOT_EXECUTED.
+payload validation remain NOT_EXECUTED. The old approved DLL hashes are no
+longer active for ABI v4. The existing own-child control retains v2 coverage
+and adds v4 stop/death rounds plus five malformed selection capabilities.
+The hidden HUD control tests selection, deselection, stop and signaled producer
+wait-object admission without displaying a window.
 
 ## Private creation-to-pacing capability — 25 October 2026
 
@@ -241,7 +245,7 @@ with other Windows builds remains UNKNOWN. No third-party implementation is copi
 
 Own hidden D3D12 WARP controls exercise parent-to-child 10/144/10/144 policy,
 release/recreation, sticky stop and a distinct controller's normal exit.
-Thirty-four invalid presentation capabilities plus malformed mode and five
+The original thirty-four invalid presentation capabilities plus malformed mode and five
 invalid storage configurations refuse startup. Observe-only creation coverage
 and storage workflows remain regression controls. These are synthetic
 process-bound event updates. The existing Rust bootstrap owner now also has

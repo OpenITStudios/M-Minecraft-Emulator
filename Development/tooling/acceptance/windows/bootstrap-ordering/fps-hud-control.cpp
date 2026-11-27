@@ -23,6 +23,25 @@ template<class Test> void until(Test test) {
     const auto start = GetTickCount64();
     while (!test()) { check(GetTickCount64() - start < 3000); pump(); Sleep(5); }
 }
+void selectionAdmission() {
+    struct Event {
+        HANDLE value = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+        ~Event() { if (value) CloseHandle(value); }
+    } selected, stopped, producerLifetime;
+    check(selected.value && stopped.value && producerLifetime.value);
+    const auto admits = [&] { return fps_hud::selectionAllowsHud(true, selected.value, stopped.value, producerLifetime.value); };
+    check(fps_hud::selectionAllowsHud(false, nullptr, nullptr, nullptr));
+    check(!fps_hud::selectionAllowsHud(true, nullptr, stopped.value, producerLifetime.value));
+    check(!admits());
+    check(SetEvent(selected.value) && admits());
+    check(ResetEvent(selected.value) && !admits());
+    check(SetEvent(selected.value) && admits());
+    check(SetEvent(stopped.value) && !admits());
+    check(ResetEvent(stopped.value) && admits());
+    // Synthetic signaled wait object models an ended producer; the native
+    // enrollment decoder separately validates actual process identity.
+    check(SetEvent(producerLifetime.value) && !admits());
+}
 void meter() {
     fps_hud::Meter m(144000);
     m.record(1, S_OK, 0); check(!m.read(1).valid);
@@ -97,7 +116,7 @@ void preview() {
     check(out.good());
 }
 int run() {
-    meter(); preview(); rasterLifetimes();
+    selectionAdmission(); meter(); preview(); rasterLifetimes();
     const auto oldDpi = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2); check(oldDpi);
     WNDCLASSW type{}; type.lpfnWndProc = DefWindowProcW; type.hInstance = GetModuleHandleW(nullptr);
     type.lpszClassName = L"MivubiOwnHiddenHudControl"; check(RegisterClassW(&type));

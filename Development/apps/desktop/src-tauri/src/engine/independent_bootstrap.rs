@@ -636,17 +636,9 @@ impl PendingEducationBootstrap {
 
 // Fixed development bytes authorized for the explicit startup mode only, not packaging/admission.
 // Tests must never turn --include-ignored into game execution.
-#[cfg(test)]
+// Presentation ABI v4 requires a newly reviewed matching DLL pair. The
+// previous hashes are historical at 937e7f3; do not admit them for this ABI.
 const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;
-#[cfg(not(test))]
-const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {
-    enroller: [
-        0x51, 0x51, 0x75, 0x28, 0x88, 0x64, 0x83, 0xba, 0x89, 0xf1, 0xb9, 0x3b, 0x44, 0x8c, 0x1d, 0xdd, 0x34, 0x9f, 0x26, 0xf0, 0xe4, 0x8e, 0x53, 0x22, 0xdb, 0x43, 0x4c, 0xbf, 0xe9, 0xc4, 0xde, 0x99,
-    ],
-    compatibility: [
-        0xe9, 0x0b, 0x31, 0x2b, 0x3f, 0x12, 0x91, 0x50, 0x98, 0xa3, 0x57, 0x1a, 0x64, 0x70, 0x50, 0xd5, 0xe3, 0xa1, 0xd0, 0x82, 0xa0, 0xf8, 0x31, 0x24, 0x2d, 0x92, 0xff, 0xac, 0x55, 0x14, 0x65, 0x3f,
-    ],
-});
 // A feature-enabled AI controller must NOT adopt the ordinary reviewed
 // bootstrap-compat.dll: that production image intentionally omits optional
 // Win32 virtual input hooks. A standalone experimental C++ DLL changes its
@@ -712,7 +704,7 @@ impl BootstrapLibrary {
         #[cfg(not(feature="mc02-native-input"))]
         let (expected, missing) = (
             REVIEWED_EDUCATION_BOOTSTRAP,
-            "No reviewed Education bootstrap payload",
+            "No reviewed Education bootstrap payload for presentation ABI v4",
         );
         let digests = expected.ok_or_else(|| {
             io::Error::new(io::ErrorKind::Unsupported, missing)

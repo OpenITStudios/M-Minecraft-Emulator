@@ -1879,7 +1879,8 @@ struct ConfiguredChild {
     Handle policyLevel{CreateEventW(nullptr, TRUE, FALSE, nullptr)};
     Handle policyChanged{CreateEventW(nullptr, FALSE, FALSE, nullptr)};
     Handle policyStop{CreateEventW(nullptr, TRUE, FALSE, nullptr)};
-    Handle policyReaders[4];
+    Handle policySelected{CreateEventW(nullptr, TRUE, FALSE, nullptr)};
+    Handle policyReaders[5];
     Child controller;
     Handle readonly;
     Handle ready{sharedEvent()}, done{sharedEvent()};
@@ -1942,7 +1943,10 @@ struct ConfiguredChild {
         if (presentationControl) inherited.push_back(presentationRead.value);
         if (paced) {
             auto& policy = *presentation.value;
-            policy.creation.version = 2; policy.creation.bytes = presentation_enrollment::LegacyPolicyBytes;
+            const bool selectedAbi = round == 6 || round == 7 || invalid >= 40;
+            policy.creation.version = selectedAbi ? 4 : 2;
+            policy.creation.bytes = selectedAbi ? sizeof(policy) : presentation_enrollment::LegacyPolicyBytes;
+            if (selectedAbi) policy.reserved = 144 | (10 << 16);
             HANDLE controllerSource = current;
             if (round == 7) {
                 STARTUPINFOW startup{sizeof(startup)};
@@ -1957,15 +1961,18 @@ struct ConfiguredChild {
             Handle wrongLevel(CreateEventW(nullptr, FALSE, FALSE, nullptr));
             Handle wrongChanged(CreateEventW(nullptr, TRUE, FALSE, nullptr));
             Handle wrongStop(CreateEventW(nullptr, FALSE, FALSE, nullptr));
+            Handle wrongSelected(CreateEventW(nullptr, FALSE, FALSE, nullptr));
             const HANDLE source[]{invalid == 26 ? wrongLevel.value : policyLevel.value,
                 invalid == 27 ? wrongChanged.value : policyChanged.value,
-                invalid == 28 ? wrongStop.value : policyStop.value, controllerSource};
-            HANDLE* output[]{&policy.level, &policy.changed, &policy.stop, &policy.controller};
-            for (unsigned i = 0; i < 4; ++i) {
+                invalid == 28 ? wrongStop.value : policyStop.value, controllerSource,
+                invalid == 42 ? wrongSelected.value : policySelected.value};
+            HANDLE* output[]{&policy.level, &policy.changed, &policy.stop, &policy.controller, &policy.hudSelected};
+            for (unsigned i = 0; i < (selectedAbi ? 5U : 4U); ++i) {
                 DWORD access = SYNCHRONIZE | (i == 3 ? PROCESS_QUERY_LIMITED_INFORMATION : 1UL);
                 if (i == 0 && invalid == 29) access |= EVENT_MODIFY_STATE;
                 if (i == 0 && invalid == 37) access = SYNCHRONIZE;
                 if (i == 3 && invalid == 38) access |= PROCESS_VM_READ;
+                if (i == 4 && invalid == 43) access |= EVENT_MODIFY_STATE;
                 require(DuplicateHandle(current, source[i], current, &policyReaders[i].value, access, TRUE, 0));
                 *output[i] = policyReaders[i].value;
                 inherited.push_back(*output[i]);
@@ -1979,6 +1986,9 @@ struct ConfiguredChild {
             if (invalid == 35) policy.level = policy.controller;
             if (invalid == 36) require(SetEvent(policyStop.value));
             if (invalid == 39) policy.creation.version = 1;
+            if (invalid == 40) policy.hudSelected = nullptr;
+            if (invalid == 41) policy.hudSelected = policy.level;
+            if (invalid == 44) policy.creation.bytes = presentation_enrollment::LegacyPolicyBytes;
         }
         Attributes attributes(inherited.data(), inherited.size());
         auto env = environment(section.value, target.privateRoot);
@@ -2875,7 +2885,7 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         presentationControl = selectedMode;
     }
     const bool paced = presentationControl && wcscmp(presentationControl, L"pace") == 0;
-    for (DWORD invalid = 1; invalid <= (paced ? 39UL : presentationControl ? 24UL : 5UL); ++invalid) {
+    for (DWORD invalid = 1; invalid <= (paced ? 44UL : presentationControl ? 24UL : 5UL); ++invalid) {
         Handle go(sharedEvent()), finish(sharedEvent());
         ConfiguredChild rejected(1, 0, roots, stores[0].value, registry, name, go.value, finish.value,
             self, compatibility, invalid);
@@ -3080,7 +3090,7 @@ bool configuredStoragePair(const std::wstring& self, const std::string& compatib
         "\"presentationEnrollmentChecked\":%s,"
         "\"presentationInvalidCapabilitiesRejected\":%u,\"presentationCreationCoverage\":\"%s\","
         "\"singleton\":\"UNKNOWN\",\"singletonRemap\":false,\"helpers\":\"UNKNOWN\",\"securityBoundary\":false,"
-        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", presentationControl ? "true" : "false", paced ? 34U : presentationControl ? 19U : 0U,
+        "\"providerReady\":false,\"minecraft\":\"NOT_EXECUTED\"}\n", presentationControl ? "true" : "false", paced ? 39U : presentationControl ? 19U : 0U,
         presentationControl ? "STARTUP_RVA_40_CREATIONS" : "OFF");
     return true;
 }

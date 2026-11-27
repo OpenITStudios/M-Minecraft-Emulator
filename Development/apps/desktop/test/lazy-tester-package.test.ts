@@ -49,12 +49,14 @@ describe('Lazy Tester native package',()=>{
   });
   it('derives hashes from the exact runtime policy and refuses absent or malformed review',()=>{
     const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap.rs',import.meta.url),'utf8');
-    expect(reviewedDigests(source)).toEqual({
-      'bootstrap-compat.dll':'e90b312b3f12915098a3571a647050d5e3a1d082a0f831242d92ffac5514653f',
-      'bootstrap-enroll.dll':'51517528886483ba89f1b93b448c1ddd349f26f0e48e5322db434cbfe9c4de99',
+    expect(()=>reviewedDigests(source)).toThrow(/unavailable/); // v4 payload is not reviewed yet.
+    const fixture='const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {enroller: ['+
+      Array(32).fill('0x11').join(',')+'], compatibility: ['+Array(32).fill('0x22').join(',')+']});';
+    expect(reviewedDigests(fixture)).toEqual({
+      'bootstrap-compat.dll':'22'.repeat(32),
+      'bootstrap-enroll.dll':'11'.repeat(32),
     });
-    expect(()=>reviewedDigests('const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;')).toThrow();
-    expect(()=>reviewedDigests(source.replace(/enroller: \[\s*0x[0-9a-f]{2},/,'enroller: ['))).toThrow();
+    expect(()=>reviewedDigests(fixture.replace('0x11,',''))).toThrow(/Invalid/);
   });
   it('stages exactly two verified DLLs, refuses changed bytes and never copies adjacent profiles',()=>{
     const root=mkdtempSync(join(tmpdir(),'lazy-package-fixture-'));

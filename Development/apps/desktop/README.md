@@ -129,3 +129,11 @@ and Data Storage retain explicit inspection controls.
 Data Storage keeps pack counts inside the inventory disclosure and consolidates
 compatibility option status and guidance into their existing setting rows.
 No storage measurement, mutation, review token or backup contract is changed.
+
+### Native payload review gate
+
+The selected-only HUD source uses presentation ABI v4. The previously reviewed
+DLL pair is not approved for this ABI. Source packaging and new native launches
+remain blocked until a matching DLL pair is built and explicitly reviewed on the
+approved native validation surface. Existing installed files and profile data are
+not changed by this source gate.

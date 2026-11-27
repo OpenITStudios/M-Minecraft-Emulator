@@ -21,6 +21,8 @@ public:
 RECT placement(RECT physicalClient, UINT dpi) noexcept;
 bool physicalClient(HWND owner, RECT& result) noexcept;
 std::vector<DWORD> raster(Reading value, UINT dpi, SIZE& size);
+// Wait-only HUD admission; foreground pacing is deliberately not an input.
+bool selectionAllowsHud(bool managed, HANDLE hudSelected, HANDLE policyStop, HANDLE controller) noexcept;
 struct Snapshot {
     Reading reading;
     HWND window = nullptr;
