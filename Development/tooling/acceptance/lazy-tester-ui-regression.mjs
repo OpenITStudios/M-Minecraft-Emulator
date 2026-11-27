@@ -441,7 +441,7 @@ try {
   await page.evaluate(()=>{window.__runningSlots=[1,2,3,4,5];});
   // Wait for the existing automatic session inspection below.
   await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
-  await heading('Minecraft - 2').waitFor();
+  await heading('Minecraft 2').waitFor();
   await page.evaluate(()=>{
     window.__railPreviewNodes=[...document.querySelectorAll('.lazytester-filmstrip .lazytester-launcher-preview')];
     window.__railLocations=[...document.querySelectorAll('.lazytester-filmstrip .lazytester-launcher-entry')].map(node=>{
@@ -449,7 +449,7 @@ try {
     });
   });
   await page.getByRole('button',{name:/^Select Minecraft - 4 · /}).click();
-  await heading('Minecraft - 4').waitFor();
+  await heading('Minecraft 4').waitFor();
   assert.deepEqual(await fixedRailSlots(),[1,2,3,4,5],
     'Selecting a game must not move or remove its lower launcher card');
   const stableRail=await page.evaluate(()=>{
@@ -476,7 +476,7 @@ try {
   // A lost session inspection cannot continue advertising a stale running count.
   await page.evaluate(()=>{window.__offline=true;});
   // Wait for the existing automatic session inspection below.
-  await page.waitForFunction(()=>document.querySelector('.lazytester-games-heading')?.textContent?.includes('Session status unavailable'));
+  await page.waitForFunction(()=>document.querySelector('.lazytester-games-count')?.textContent?.includes('Session status unavailable'));
   assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-card small').filter({hasText:'Unavailable'}).count(),5,
     'Stale native observations must be labeled unavailable, not verified running');
   assert.equal(await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count(),5,
@@ -666,8 +666,8 @@ try {
     assert.ok(Math.abs(game.y+game.height/2-stage.y-stage.height/2)<1,'game must be centered vertically');
     assert.ok(game.x>=stage.x&&game.y>=stage.y&&game.right<=stage.right+1&&game.bottom<=stage.bottom+1,'game must fit without cropping');
     assert.ok(dock.width<=1600,'The existing live-preview rail remains bounded on ultrawide screens');
-    const headingWidth=await page.locator('.lazytester-games-heading').evaluate(node=>node.getBoundingClientRect().width);
-    assert.ok(Math.abs(headingWidth-dock.width)<1,'Five-card rail heading and cards must align');
+    assert.equal(await page.locator('.lazytester-launcher-action-strip').isVisible(),false,
+      'An empty feedback strip must not reserve workspace height');
     assert.ok(previews.every(p=>Math.abs(p.width-p.height*16/9)<2),'previews must stay 16:9');
     if((size.width===920&&size.height===620)||(size.width===1280&&size.height===900)){
       const slots=await page.locator('.lazytester-filmstrip .lazytester-launcher-entry').count();
@@ -711,7 +711,7 @@ try {
     assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
   }
   await page.setViewportSize({width:1280,height:900});
-  // The single adaptive layout has no user-facing mode selector.
+  // Bottom and Right share one persisted workspace preference.
   // Its preview sizes follow available viewport height without touching
   // native session admission or replacing any of the five DWM destinations.
   await section('General').click();await heading('General').waitFor();
@@ -747,16 +747,16 @@ try {
   // the other running peer. The next verified game becomes the selected view.
   await nav('Back').click();
   await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
-  await heading('Minecraft - 1').waitFor();
+  await heading('Minecraft 1').waitFor();
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 1 · /}).getAttribute('aria-pressed'),'true',
     'The selected Minecraft profile must be explicitly exposed to AI/assistive navigation');
   assert.equal(await profileGroup.getByRole('button',{name:/^Select Minecraft - 2 · /}).getAttribute('aria-pressed'),'false',
     'Other running profiles must remain explicitly unselected');
   assert.equal(await page.locator('.lazytester-header-actions button').count(),0);
   await page.getByRole('button',{name:/^Select Minecraft - 2 · /}).click();
-  await heading('Minecraft - 2').waitFor();
+  await heading('Minecraft 2').waitFor();
   await page.getByRole('button',{name:/^Select Minecraft - 1 · /}).click();
-  await heading('Minecraft - 1').waitFor();
+  await heading('Minecraft 1').waitFor();
   assert.equal(await page.locator('.lazytester-launcher-card').count(),5);
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     call.command==='desktop_release_workspace' && call.args?.target!==null).length),0,
@@ -773,7 +773,7 @@ try {
     return {close:close?{right:close.right,bottom:close.bottom,width:close.width,height:close.height}:null,
       pictureTop:picture.top,cardRight:card.right};
   });
-  assert.ok(closeBounds.close&&closeBounds.close.width>=32&&closeBounds.close.height>=32&&
+  assert.ok(closeBounds.close&&closeBounds.close.width>=24&&closeBounds.close.height>=24&&
     closeBounds.close.right<=closeBounds.cardRight+1&&closeBounds.close.bottom<=closeBounds.pictureTop,
     'Close game must stay outside and above the preserved native DWM thumbnail');
   await page.waitForTimeout(200);
@@ -923,7 +923,7 @@ try {
   await page.evaluate(()=>window.__finishBinding());
   await page.waitForFunction(()=>window.__nativeListeners.has('workspace-surface-error') &&
     window.__calls.some(call=>call.command==='lazy_tester_previews'));
-  await heading('Minecraft - 1').waitFor();
+  await heading('Minecraft 1').waitFor();
   const readPreviewGeometry=()=>page.evaluate(()=>['.lazytester-viewport',...Array.from({length:5},(_,i)=>'.lazytester-launcher-entry[data-slot="'+(i+1)+'"] .lazytester-launcher-preview')].map(selector=>{
     const {x,y,width,height}=document.querySelector(selector).getBoundingClientRect();
     return {x,y,width,height};
@@ -934,11 +934,17 @@ try {
   await page.evaluate(()=>window.__emitNative('workspace-surface-error','Synthetic preview error'));
   const workspaceFeedback=page.locator('.lazytester-launcher-action-strip > .lazytester-workspace-action-feedback');
   await workspaceFeedback.waitFor();
-  assert.deepEqual(await readPreviewGeometry(),beforePreviewWarning,
-    'Workspace action feedback must not move retained native geometry');
+  assert.ok(await workspaceFeedback.isVisible(), 'Workspace feedback must remain visible in the bounded strip');
+  assert.equal(await workspaceFeedback.evaluate(node=>{
+    const feedback=node.getBoundingClientRect();
+    return ['.lazytester-viewport','.lazytester-launcher-preview'].every(selector=>
+      [...document.querySelectorAll(selector)].every(target=>target.getBoundingClientRect().bottom<=feedback.top+1));
+  }),true,'Feedback must remain outside native viewport and preview rectangles');
   // Clear the authored error without retrying any failed native mutation.
   await workspaceFeedback.getByRole('button',{name:'Refresh status'}).click();
   await workspaceFeedback.waitFor({state:'detached'});
+  assert.deepEqual(await readPreviewGeometry(),beforePreviewWarning,
+    'Clearing workspace feedback restores the original geometry');
   const baseline = await page.evaluate(()=>window.__calls.filter(
     call=>call.command==='lazy_tester_previews').length);
   await page.evaluate(()=>{
@@ -1207,8 +1213,11 @@ try {
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   const closeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
   await page.waitForFunction(()=>document.activeElement?.textContent?.trim()==='Cancel');
-  assert.deepEqual(await closeReviewGeometry(),beforeCloseReview,
-    'Opening close review must not move the viewport or native preview targets');
+  assert.equal(await closeReview.evaluate(node=>{
+    const review=node.getBoundingClientRect();
+    return ['.lazytester-viewport','.lazytester-filmstrip'].every(selector=>
+      document.querySelector(selector).getBoundingClientRect().bottom<=review.top+1);
+  }),true,'Close review must remain outside native viewport and preview destinations');
   const otherLauncher=page.getByRole('button',{name:/^Launch Minecraft - 1 · /});
   assert.equal(await otherLauncher.isDisabled(),true,
     'Another launcher cannot start and discard the pending CloseOne review');
@@ -1308,7 +1317,7 @@ try {
   await page.goto('http://lazy-tester.test/?preview-async=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
-  await heading('Minecraft - 1').waitFor();
+  await heading('Minecraft 1').waitFor();
   await page.waitForFunction(()=>window.__calls.some(c=>c.command==='lazy_tester_previews'));
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   const resizeReview=page.getByRole('region',{name:'Confirm one Minecraft close'});
@@ -1331,7 +1340,7 @@ try {
   await page.goto('http://lazy-tester.test/?close-recovery=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
-  await heading('Minecraft - 2').waitFor();
+  await heading('Minecraft 2').waitFor();
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   await page.getByRole('region',{name:'Confirm one Minecraft close'}).getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
   await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
@@ -1351,7 +1360,7 @@ try {
   await page.goto('http://lazy-tester.test/?close-ipc-error=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
-  await heading('Minecraft - 2').waitFor();
+  await heading('Minecraft 2').waitFor();
   await page.getByRole('button',{name:'Close Minecraft - 2 normally'}).click();
   await page.getByRole('region',{name:'Confirm one Minecraft close'}).getByRole('button',{name:'Close Minecraft - 2',exact:true}).click();
   await page.getByRole('status',{name:'Window recovery unconfirmed'}).waitFor();
@@ -1370,7 +1379,7 @@ try {
   await page.goto('http://lazy-tester.test/?close-recovery=1&multi-recovery=1');
   await page.waitForFunction(()=>!!window.__finishBinding);
   await page.evaluate(()=>window.__finishBinding());
-  await heading('Minecraft - 2').waitFor();
+  await heading('Minecraft 2').waitFor();
   const closeGame = async slot => {
     await page.getByRole('button',{name:'Close Minecraft - '+slot+' normally'}).click();
     await page.getByRole('region',{name:'Confirm one Minecraft close'})

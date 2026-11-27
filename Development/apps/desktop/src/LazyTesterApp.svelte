@@ -165,7 +165,7 @@
     (page!=='workspace' || closeOneSlot!==null || closingOneSlot!==null || manualRefreshing || manualRefreshRequested ||
       (!initializing && (!available || !binding?.configured || issueKey!==null ||
         connectionIssueKey!==null || previewIssue!=='' || attentionCount>0 || !!closeFailure)));
-  // Local display failures must not resize a retained game surface.
+  // Local display failures reuse the bounded workspace feedback region.
   // Connection and restoration uncertainty retain their prominent global warnings.
   $: workspaceActionFeedback = page==='workspace' && nativeBackend==='WindowsNative' &&
     active!==null && !detached && available && !!binding?.configured &&
@@ -192,7 +192,7 @@
     const nextAction = nextPendingUiAction({
       mounted, nativeBackend, closeInProgress, closeReviewPending,
       selectedReviewGeometryOnly: closeOneSlot!==null && closingOneSlot===null &&
-        !nativeExitReview && page==='workspace' && active!==null && !detached && available,
+        !nativeExitReview && page==='workspace' && !detached && available,
       initializing, busy, refreshing, resizing,
       queuedAudio: queuedAudio !== null,
       queuedPerformance: queuedPerformance !== null,
@@ -655,10 +655,10 @@
   }
 
   async function syncSelectedReviewGeometry() {
-    // The existing update IPC only addresses the retained workspace lease.
-    // Do not inspect sessions, configure previews, or activate another game.
+    // Clear stale preview destinations even without a selected game.
+    // Update only an existing selected workspace lease; never adopt another game.
     if (closeOneSlot===null || closingOneSlot!==null || nativeExitReview ||
-        closeInProgress || page!=='workspace' || active===null || detached || !available) return;
+        closeInProgress || page!=='workspace' || detached || !available) return;
     const epoch = observationEpoch;
     dirty=false; resizing=true;
     try {
@@ -676,7 +676,7 @@
         dirty=true;
         return;
       }
-      await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
+      if (active !== null) await workspaceSurface.update(geometry.viewport,geometry.pixelRatio);
       if (!disposed && !sameWorkspaceGeometry(geometry,captureWorkspaceGeometry())) dirty=true;
     } catch {
       // Report through the existing feedback owner after review ends.
