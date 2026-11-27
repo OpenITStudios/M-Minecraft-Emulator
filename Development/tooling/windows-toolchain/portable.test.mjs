@@ -269,3 +269,12 @@ test('portable setup scripts parse in Windows PowerShell without running downloa
     assert.equal(result.status,0, name+' parser errors: '+(result.stderr||result.error));
   }
 });
+
+test('retired G0 refuses before developer environment initialization or build dispatch', () => {
+  const refusal = developer.match(/if \(\$Command -eq "g0"\) \{\s*throw "LEGACY_G0_RETIRED:[^"]+"\s*\}/);
+  assert.ok(refusal);
+  assert.ok(refusal.index < developer.indexOf('Set-LocalDeveloperEnvironment'));
+  assert.doesNotMatch(developer, /Invoke-G0SourcePackage|Assert-BuiltWindowsPackage|virtual-guest-agent\.exe|virtual-clients-x86_64-pc-windows-msvc\.exe/);
+  assert.match(developer, /"preflight"\s*\{ Invoke-NativeSourcePreflight \}/);
+  assert.match(developer, /"package"\s*\{ Invoke-RepositoryNpm -NpmArguments @\("run", "package:windows"\) \}/);
+});

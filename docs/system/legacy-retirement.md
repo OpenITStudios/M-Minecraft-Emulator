@@ -9,6 +9,10 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired executable VMware G0 route — 27 November 2026
+
+The documented blocked `DEV.cmd g0` still performed npm setup, full source verification and native packaging before checking obsolete Guest Agent/sidecar files. Remove that executable branch and obsolete output inspection; recognize the old command only to refuse it before developer environment initialization. Current `preflight` and `package` remain independent and unchanged. Historical source is available at [the pre-retirement revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/54b0aa9cd4023809c9770d24df63446f5e52cd6a/Development/tooling/windows-toolchain/dev.ps1). No user data, native package policy, MCP/AI or runtime controller changes. Fixture authored; NOT_EXECUTED.
+
 ## Retired unmounted desktop coordinate research — 26 November 2026
 
 Removed three TypeScript modules (coordinate formatting, unverified candidate

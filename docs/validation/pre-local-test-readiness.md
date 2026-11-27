@@ -12,6 +12,8 @@ lifecycle: HISTORICAL
 > **Superseded:** This is a historical VM gate, not the native Lazy Tester
 > packaging route. Current five-profile verification starts at
 > [validation routes](README.md); commands below are historical only.
+> Current `DEV.cmd g0` refuses before developer environment setup; native
+> `package:windows` is a different, separately gated candidate route.
 
 **Current selected-isolation clarification (2026-10-12):** This is the
 historical VMware NSIS release gate, **not** the current Minecraft Instance

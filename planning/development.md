@@ -9,6 +9,8 @@ Work: `non-mcp-simplification` — NMS-01. Condense the active handoff to satisf
 
 NMS-02: shared the existing handoff guard with structure/quick/full checks; Git change routing now disables rename detection consistently to retain both paths. No weaker validation or new task. Focused fixtures authored, not executed.
 
+NMS-03: retired the executable VMware G0 batch and obsolete package output inspection; old command now refuses before environment setup. Native preflight/package unchanged. Fixture authored, not run.
+
 Status: SOURCE_IN_PROGRESS / LOCAL_TEST_DEFERRED. SOURCE_REVIEWED for this documentation change; validation NOT_EXECUTED. Continue only with a source-proven independent non-MCP candidate; otherwise record the result and stop at the source proof ceiling.
 
 ## Unreleased — Rust-first integration
