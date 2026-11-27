@@ -38,7 +38,8 @@ if(NOT WIN32 OR NOT MSVC OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+# Match Rust MSVC staticlib CRT in every configuration (Debug still has debug symbols).
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
 set(DETOURS_ROOT "" CACHE PATH "Existing trusted Microsoft Detours checkout; never downloaded")
 find_package(Git REQUIRED)
 execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${DETOURS_ROOT}" rev-parse HEAD
@@ -65,17 +66,18 @@ target_include_directories(probe-detours PUBLIC "${DETOURS_ROOT}/src")
 target_compile_definitions(probe-detours PRIVATE DETOUR_DEBUG=0 WIN32_LEAN_AND_MEAN)
 target_compile_options(probe-detours PRIVATE /W4 /WX)
 
-# Dependency-free Rust measurement core, built once per configuration.
-# Use the already installed toolchain; no Cargo resolution or download.
+# One dependency-free Rust FPS library for measurement and pacing arithmetic.
+# Use the installed MSVC-target toolchain; no dependency resolution or download.
 find_program(LAZYTESTER_RUSTC rustc REQUIRED)
-set(fps_meter_lib "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/lazytester-fps-meter.lib")
-add_custom_command(OUTPUT "${fps_meter_lib}"
+set(native_fps_lib "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/lazytester-native-fps.lib")
+add_custom_command(OUTPUT "${native_fps_lib}"
   COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
-  COMMAND "${LAZYTESTER_RUSTC}" --edition=2021 --crate-name lazytester_fps_meter
+  COMMAND "${LAZYTESTER_RUSTC}" --edition=2021 --crate-name lazytester_native_fps
     --crate-type staticlib --target x86_64-pc-windows-msvc -C panic=abort -C opt-level=3
-    -C target-feature=+crt-static "${CMAKE_CURRENT_SOURCE_DIR}/fps-meter.rs" -o "${fps_meter_lib}"
-  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/fps-meter.rs" VERBATIM)
-add_custom_target(lazytester-fps-meter-build DEPENDS "${fps_meter_lib}")
+    -C target-feature=+crt-static "${CMAKE_CURRENT_SOURCE_DIR}/native-fps.rs" -o "${native_fps_lib}"
+  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/native-fps.rs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/fps-meter.rs" "${CMAKE_CURRENT_SOURCE_DIR}/frame-pacing.rs" VERBATIM)
+add_custom_target(lazytester-native-fps-build DEPENDS "${native_fps_lib}")
 
 add_library(bootstrap-dependency SHARED dependency.cpp)
 add_library(bootstrap-compat SHARED compat.cpp compat.def presentation-enrollment.cpp dxgi-pacing.cpp fps-hud.cpp graphics-warm-pools.cpp)
@@ -130,9 +132,9 @@ foreach(target education-slot-control bootstrap-ordering bootstrap-dependency bo
     _WIN32_WINNT=0x0A00)
   target_compile_options(${target} PRIVATE /W4 /WX /permissive- /EHsc)
 endforeach()
-# All existing Meter consumers link the same Rust implementation.
-foreach(target bootstrap-compat frame-pacing-control fps-hud-control hud-lifetime-control)
-  add_dependencies(${target} lazytester-fps-meter-build)
-  target_link_libraries(${target} PRIVATE "${fps_meter_lib}" advapi32 bcrypt kernel32 ntdll userenv ws2_32 dbghelp)
+# Meter, Pacer and enrollment consumers share the same Rust implementation.
+foreach(target bootstrap-compat bootstrap-enroll bootstrap-ordering frame-pacing-control fps-hud-control hud-lifetime-control)
+  add_dependencies(${target} lazytester-native-fps-build)
+  target_link_libraries(${target} PRIVATE "${native_fps_lib}" advapi32 bcrypt kernel32 ntdll userenv ws2_32 dbghelp)
 endforeach()
 # Deliberately no install, CTest registration, product dependency or automatic execution.

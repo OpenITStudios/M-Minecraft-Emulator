@@ -1,7 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <atomic>
-#include <limits>
+#include "frame-pacing-ffi.h"
 #include <stdexcept>
 
 // One rendering consumer, policy changes from another thread; join before destruction.
@@ -18,7 +18,7 @@ struct Permit {
 // the controller PROCESS handle. The consumer duplicates SYNCHRONIZE rights;
 // the capability decoder must establish object types/identity before handing off.
 inline bool validCeilings(unsigned active, unsigned background) noexcept {
-    return active >= 1 && active <= 1000 && background >= 1 && background <= active;
+    return lazytester_frame_pacing_valid_ceilings(active, background) != 0;
 }
 struct Input {
     HANDLE level = nullptr, changed = nullptr, stop = nullptr, controller = nullptr;
@@ -61,8 +61,7 @@ public:
                 }
             }
             LARGE_INTEGER frequency{};
-            if (!QueryPerformanceFrequency(&frequency) || frequency.QuadPart <= 0
-                || frequency.QuadPart > (std::numeric_limits<LONGLONG>::max)() / 20000000)
+            if (!QueryPerformanceFrequency(&frequency) || !lazytester_frame_pacing_valid_frequency(frequency.QuadPart))
                 throw std::runtime_error("Unsupported pacing clock");
             frequency_ = frequency.QuadPart;
             changed_ = CreateEventW(nullptr, FALSE, FALSE, nullptr);
@@ -108,18 +107,16 @@ public:
             }
             const unsigned ceiling = mode == Mode::Foreground ? activeFps_ : backgroundFps_;
             LARGE_INTEGER now{};
-            if (!QueryPerformanceCounter(&now) || now.QuadPart < previous_)
-                return {Outcome::Error, 0, 0};
-            const LONGLONG interval = (frequency_ + ceiling - 1) / ceiling;
-            const LONGLONG elapsed = now.QuadPart - previous_;
-            if (!previous_ || elapsed >= interval) {
+            if (!QueryPerformanceCounter(&now)) return {Outcome::Error, 0, 0};
+            const auto deadline = lazytester_frame_pacing_deadline(frequency_, previous_, now.QuadPart, ceiling);
+            if (deadline > 0) return {Outcome::Error, 0, 0};
+            if (deadline == 0) {
                 // Never repay missed deadlines with a catch-up burst.
                 previous_ = now.QuadPart;
                 return {Outcome::Frame, ceiling, previous_};
             }
-            const LONGLONG remaining = interval - elapsed;
             LARGE_INTEGER due{};
-            due.QuadPart = -(remaining * 10000000 + frequency_ - 1) / frequency_;
+            due.QuadPart = deadline;
             if (!SetWaitableTimerEx(timer_, &due, 0, nullptr, nullptr, nullptr, 0))
                 return {Outcome::Error, 0, 0};
             const DWORD count = external ? 5 : 2;

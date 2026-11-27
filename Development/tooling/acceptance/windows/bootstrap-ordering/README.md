@@ -203,7 +203,17 @@ retain empty reviewed game/replay policies even with ignored tests included.
 Canonical exact hashes, executed evidence and the integrated Education
 Host World/focus/resource acceptance next action stay in planning/development.md.
 
-## Rust FPS measurement core
+## Rust native FPS core
+
+`native-fps.rs` is the single static-library entrypoint. `frame-pacing.rs`
+owns FPS limit and clock validation, rounded intervals and relative timer
+deadlines; `frame-pacing-ffi.h` is its fixed-width native interface. Existing
+C++ `Pacer` retains Windows event/timer ownership, QPC sampling and sticky
+stop; its deadline arithmetic is no longer duplicated. Enrollment and all
+HUD/pacing consumers link the same library. The MSVC static CRT is consistent
+across configurations; native build/link remain NOT_EXECUTED.
+
+### Rust FPS measurement core
 
 `fps-meter.rs` is the sole accepted-Present rate implementation. The existing
 C++ Meter retains its inline state, SRWLOCK, HRESULT filtering and QPC sampling;

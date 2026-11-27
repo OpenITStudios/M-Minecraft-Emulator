@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Rust-first Frame Pacing migration: pure limit/clock validation and deadline arithmetic moved from C++ Pacer to Rust frame-pacing.rs, linked with fps-meter.rs through one native-fps.rs static library. Native Windows handles, wait loop, foreground policy and stop ownership unchanged. Six affected CMake consumers use one library; static CRT aligned across configurations. Rust deadline fixtures authored, NOT_EXECUTED; Windows linking/payload review held. No game changes.
+
 Rust-first FPS Meter migration: one Rust implementation owns accepted-Present arithmetic and freshness; native C++ adapter retains QPC/HRESULT/SRWLOCK and unchanged HUD snapshot ABI. Fixed-width inline state, no allocation or new worker; all four CMake consumers link one Rust static library. No game changes. Rust/C++ tests and Windows build/link NOT_EXECUTED; v4 payload review remains held. Next: source review build consumers, then assess frame pacing migration independently.
 
 Pack dependency review: typed dependency records refuse duplicate UUID fields, mixed UUID/module declarations, unsupported fields and missing/invalid versions; UUID comparison still ignores version for conservative reference detection. Positive/negative parser fixtures authored NOT_EXECUTED. No pack deletion authorization; native global activation/path coverage remains unknown.
