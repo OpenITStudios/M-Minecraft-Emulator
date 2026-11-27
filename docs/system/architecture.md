@@ -139,7 +139,15 @@ Full five-slot storage reports are requested on Storage entry, explicit
 Refresh and mutation receipts. Category inventory is on demand.
 Within a read-only report or review, reuse verified handle metadata
 and pinned directory chains; never carry mutation permission across
-requests. The complete five-slot wire contract remains unchanged.
+requests. The approximate profile-size traversal reuses the current
+Windows directory-entry metadata (no separate per-file path stat);
+each entered directory is still freshly opened and verified, reparse
+entries are excluded, and the shared budget/partial bounds are unchanged.
+File sizes reflect enumeration time, not an atomic snapshot. Cache and
+selective-data review/disposition retain their separate handle-based proof;
+disk space is still queried on the individual verified path. No persistent
+size cache, background traversal, or new watcher. The complete five-slot
+wire contract remains unchanged.
 
 A selected workspace presentation uses one verified path and retains
 original recovery checkpoints where possible. Passive placement skips

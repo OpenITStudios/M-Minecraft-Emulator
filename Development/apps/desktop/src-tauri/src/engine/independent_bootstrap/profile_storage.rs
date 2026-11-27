@@ -160,18 +160,21 @@ fn scan_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget,
             result.partial = true;
             continue;
         };
-        let entry_path = entry.path();
-        let Ok(metadata) = std::fs::symlink_metadata(&entry_path) else {
+        // Windows directory enumeration already supplies non-following
+        // metadata. Reuse it only for this approximate read-only size
+        // observation; do not allocate a full path for ordinary files.
+        // Every directory entered below still requires a fresh ordinary-
+        // directory pin (no reparse point or delete sharing).
+        let Ok(metadata) = entry.metadata() else {
             result.partial = true;
             continue;
         };
-        use std::os::windows::fs::MetadataExt;
         if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
             result.partial = true;
             continue;
         }
         if metadata.is_dir() {
-            scan_size(&entry_path, result, budget, depth + 1);
+            scan_size(&entry.path(), result, budget, depth + 1);
         } else if metadata.is_file() {
             result.bytes = result.bytes.saturating_add(metadata.len());
             result.files += 1;
@@ -898,6 +901,32 @@ mod size_tests {
         expired.partial = false;
         scan_size(&directory, &mut expired, InspectionBudget::new(Duration::ZERO), 0);
         assert_eq!((expired.bytes, expired.files, expired.partial), (0, 0, true));
+
+        // A subsequent on-demand observation must read new enumeration
+        // metadata, not a previous result or cached size.
+        std::fs::write(directory.join("a.bin"), [0u8; 31]).unwrap();
+        let mut fresh = expired.clone();
+        fresh.partial = false;
+        scan_size(&directory, &mut fresh, InspectionBudget::new(Duration::from_secs(2)), 0);
+        assert_eq!((fresh.bytes, fresh.files, fresh.partial), (54, 2, false));
+
+        // A junction to the ordinary nested folder must not count its
+        // contents twice or become a path traversed by the size estimate.
+        // Same disposable mklink fixture technique as the cache tests.
+        let link = directory.join("linked");
+        let status = std::process::Command::new("cmd.exe")
+            .args(["/c", "mklink", "/J"])
+            .arg(&link)
+            .arg(directory.join("nested"))
+            .output()
+            .unwrap();
+        assert!(status.status.success());
+        let mut linked = expired.clone();
+        linked.partial = false;
+        scan_size(&directory, &mut linked, InspectionBudget::new(Duration::from_secs(2)), 0);
+        // Remove only the disposable junction, not its target.
+        std::fs::remove_dir(&link).unwrap();
+        assert_eq!((linked.bytes, linked.files, linked.partial), (54, 2, true));
         // Only the unique, create-new disposable fixture directory created above.
         assert_eq!(directory.parent(), Some(std::env::temp_dir().as_path()));
         std::fs::remove_dir_all(directory).unwrap();
