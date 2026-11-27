@@ -1,5 +1,6 @@
 #include "fps-hud.h"
 #include "hud-canvas-ffi.h"
+#include "hud-window-ffi.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -45,14 +46,7 @@ struct Canvas {
     ~Canvas() { lazytester_hud_canvas_destroy(state); }
 };
 LONGLONG now() noexcept { LARGE_INTEGER value{}; return QueryPerformanceCounter(&value) ? value.QuadPart : 0; }
-LRESULT CALLBACK windowProcedure(HWND window, UINT message, WPARAM w, LPARAM l) {
-    if (message == WM_NCHITTEST) return HTTRANSPARENT;
-    if (message == WM_MOUSEACTIVATE) return MA_NOACTIVATE;
-    if (message == WM_ERASEBKGND) return 1;
-    return DefWindowProcW(window, message, w, l);
-}
 void moduleAnchor() {}
-constexpr wchar_t ClassName[] = L"MivubiMeasuredFpsHud";
 void paint(Canvas& canvas, Reading value, UINT dpi, SIZE& size) {
     LazyTesterHudCanvasView view{};
     if (!lazytester_hud_canvas_paint(canvas.state, value.milliFps, value.valid ? 1U : 0U, dpi, &view))
@@ -116,31 +110,17 @@ struct Hud::State {
         CloseHandle(changed); CloseHandle(stop);
     }
     void fail() noexcept { AcquireSRWLockExclusive(&gate); ++display.failures; ReleaseSRWLockExclusive(&gate); }
-    static thread_local State* callbackOwner;
-    static void CALLBACK location(HWINEVENTHOOK, DWORD, HWND window, LONG object, LONG, DWORD, DWORD) {
-        auto* state = callbackOwner;
-        if (!state || object != OBJID_WINDOW) return;
+    static void location(void* context, HWND window) noexcept {
+        auto* state = static_cast<State*>(context);
         AcquireSRWLockShared(&state->gate); const bool own = window == state->owner; ReleaseSRWLockShared(&state->gate);
         if (own) SetEvent(state->changed);
     }
     void run() noexcept {
         HWND hud = nullptr, previousOwner = nullptr;
         workerActive.store(true, std::memory_order_release);
-        callbackOwner = this;
-        const auto dpiContext = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-        HWINEVENTHOOK hook = nullptr;
+        auto* host = lazytester_hud_window_host_create(this, location);
         try {
-            if (!dpiContext) throw std::runtime_error("HUD DPI context unavailable");
-            WNDCLASSW type{}; type.lpfnWndProc = windowProcedure;
-            type.hInstance = GetModuleHandleW(nullptr); type.lpszClassName = ClassName;
-            if (!RegisterClassW(&type)) {
-                WNDCLASSW existing{};
-                if (GetLastError() != ERROR_CLASS_ALREADY_EXISTS || !GetClassInfoW(type.hInstance, ClassName, &existing)
-                    || existing.lpfnWndProc != windowProcedure) throw std::runtime_error("HUD class unavailable");
-            }
-            hook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE, nullptr,
-                location, GetCurrentProcessId(), 0, WINEVENT_OUTOFCONTEXT);
-            if (!hook) throw std::runtime_error("HUD location hook unavailable");
+            if (!host) throw std::runtime_error("HUD window host unavailable");
             // A single worker-owned DIB/font is repainted in place; size or
             // DPI changes rebuild it, and worker exit releases every GDI handle.
             Canvas upload;
@@ -178,12 +158,11 @@ struct Hud::State {
                     continue;
                 }
                 if (!bound || target != previousOwner || version != previousGeneration || (hud && !IsWindow(hud))) {
-                    if (hud && IsWindow(hud)) DestroyWindow(hud);
+                    lazytester_hud_window_clear(host);
                     hud = nullptr; previousOwner = target; previousGeneration = version; previousDpi = 0;
                 }
                 if (bound && physicalClient(target, client)) {
-                    if (!hud) hud = CreateWindowExW(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-                        ClassName, L"", WS_POPUP, client.left, client.top, 0, 0, target, nullptr, type.hInstance, nullptr);
+                    if (!hud) hud = lazytester_hud_window_get(host, target, client.left, client.top);
                     if (!hud) throw std::runtime_error("HUD window unavailable");
                     const UINT dpi = GetDpiForWindow(hud);
                     const RECT bounds = placement(client, dpi);
@@ -216,30 +195,12 @@ struct Hud::State {
                     if (hud && IsWindowVisible(hud)) ShowWindow(hud, SW_HIDE);
                     AcquireSRWLockExclusive(&gate); display.window = nullptr; display.visible = false; ReleaseSRWLockExclusive(&gate);
                 }
-                HANDLE waits[]{stop, changed};
-                const DWORD result = MsgWaitForMultipleObjectsEx(2, waits, 250, QS_ALLINPUT, MWMO_INPUTAVAILABLE);
-                if (result == WAIT_OBJECT_0) break;
-                if (result == WAIT_FAILED) throw std::runtime_error("HUD wait failed");
-                // In-process location updates can keep this thread's queue
-                // populated continuously. Draining it without a bound would
-                // starve the owner-thread/STOP/unbind checks above precisely
-                // when Minecraft is removing or rearranging its game HWND.
-                constexpr unsigned MaxMessagesPerWake = 64;
-                bool quit = false;
-                MSG message{};
-                for (unsigned handled = 0; handled < MaxMessagesPerWake
-                    && PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE); ++handled) {
-                    if (message.message == WM_QUIT) { quit = true; break; }
-                    TranslateMessage(&message);
-                    DispatchMessageW(&message);
-                }
-                if (quit) break;
+                const auto result = lazytester_hud_window_wait(stop, changed);
+                if (result == 1) break;
+                if (result != 0) throw std::runtime_error("HUD wait failed");
             }
         } catch (...) { fail(); }
-        if (hud && IsWindow(hud)) DestroyWindow(hud);
-        if (hook) UnhookWinEvent(hook);
-        callbackOwner = nullptr;
-        if (dpiContext) SetThreadDpiAwarenessContext(dpiContext);
+        lazytester_hud_window_host_destroy(host);
         AcquireSRWLockExclusive(&gate);
         display.window = nullptr; display.visible = false;
         // Every worker exit path (owner exited, owner HWND destroyed,
@@ -249,7 +210,6 @@ struct Hud::State {
         ReleaseSRWLockExclusive(&gate);
     }
 };
-thread_local Hud::State* Hud::State::callbackOwner = nullptr;
 Hud::Hud(HANDLE hudSelected, HANDLE policyStop, HANDLE controller) : state_(std::make_unique<State>(hudSelected, policyStop, controller)) {}
 Hud::~Hud() = default;
 bool Hud::bind(HWND owner, DWORD thread) noexcept {

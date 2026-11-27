@@ -205,6 +205,8 @@ Host World/focus/resource acceptance next action stay in planning/development.md
 
 ## Rust native FPS core
 
+`hud_window.rs` owns the thread-local native window host, location hook, DPI context and bounded message pump. The existing HUD worker invokes that host; worker state, visibility and composition remain C++ pending FPS-06 completion. No extra thread.
+
 `hud_canvas.rs` owns DPI geometry, physical client conversion and GDI canvas resources (DIB, font, DC). The existing C++ HUD worker borrows the raster view on its own thread; no pixel copy on the live path. Native controls remain NOT_EXECUTED.
 
 `native-fps.rs` is the single static-library entrypoint. `frame-pacing.rs`

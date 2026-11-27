@@ -16,7 +16,7 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 06 Integration | INT-01 naming; INT-02 ABI; INT-03 build; INT-04 fixtures; INT-05 docs/Unreleased; INT-06 readiness | Open |
 | 07 Native validation | VAL-01 compile/link; VAL-02 DLL/payload; VAL-03 five sessions; VAL-04 storage safety; VAL-05 performance; VAL-06 installer | Held for separately authorized PC-local phase |
 
-Next active: FPS-06. FPS-04/05 move geometry, DPI conversion and GDI raster ownership to hud_canvas.rs; one borrowed raster view; existing worker retained. Existing native raster and lifetime controls plus authored Rust geometry fixture NOT_EXECUTED.
+Next active: FPS-06 (partial: Rust owns native window creation/destruction, DPI context, location hook and bounded message pump; C++ still owns worker scheduling, state and visibility/composition). FPS-04/05 move geometry, DPI conversion and GDI raster ownership to hud_canvas.rs; one borrowed raster view; existing worker retained. Existing native raster and lifetime controls plus authored Rust geometry fixture NOT_EXECUTED.
 
 ## Desktop UI refinement — 27 November 2026
 
