@@ -72,7 +72,7 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
     'package-resources/lazy-tester/bootstrap-compat.dll':'independent-bootstrap/bootstrap-compat.dll',
     'package-resources/lazy-tester/bootstrap-enroll.dll':'independent-bootstrap/bootstrap-enroll.dll',
     '../../../engine/distribution/lazy-tester-package.json':'distribution/lazy-tester-package.json',
-    ...Object.fromEntries(roleMuiNames.map(name=>['package-resources/lazy-tester/'+name,name])),
+    'package-resources/lazy-tester/en-US/':'en-US/',
   };
   fail(JSON.stringify(Object.entries(config.bundle.resources).sort())===JSON.stringify(Object.entries(allowed).sort()),'Unexpected or missing native payload');
   fail(config.build.beforeBundleCommand==='node scripts/prepare-process-roles.mjs','Process role metadata hook required');
@@ -100,7 +100,8 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
   const scripts=JSON.parse(read('package.json')).scripts;
   fail(scripts['build:frontend']==='vite build && node scripts/check-lazy-tester-package.mjs --frontend',
     'Frontend build must verify generated output before native compilation');
-  fail(JSON.stringify([...Object.values(allowed),'lazy-tester.exe',...processRoles.map(role=>role.file)].sort())===JSON.stringify([...policy.requiredFiles].sort()),
+  const installedResources=Object.values(allowed).flatMap(name=>name==='en-US/'?roleMuiNames:[name]);
+  fail(JSON.stringify([...installedResources,'lazy-tester.exe',...processRoles.map(role=>role.file)].sort())===JSON.stringify([...policy.requiredFiles].sort()),
     'Runtime file allowlist differs from distribution contract');
   fail(scripts['build:app']==='npm run build:lazy-tester'&&scripts['build:lazy-tester'].includes('prepare:lazy-payload')&&scripts['build:lazy-tester'].includes('check:lazy-package')&&scripts['build:lazy-tester'].includes('--features lazy-tester-package')&&scripts['build:lazy-tester'].includes('--config src-tauri/tauri.lazy-tester.conf.json')&&scripts['build:lazy-tester'].includes('-- --locked'),'Native build route required');
   fail(scripts['dev:app']==='npm run dev:lazy-tester'&&scripts['dev:lazy-tester']===scripts['build:lazy-tester'].replace('tauri build --target x86_64-pc-windows-msvc --bundles nsis','tauri dev --target x86_64-pc-windows-msvc'),'Development must use the same reviewed native configuration, feature and payload as the product build');

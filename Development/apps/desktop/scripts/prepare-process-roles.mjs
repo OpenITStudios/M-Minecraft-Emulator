@@ -16,9 +16,31 @@ export function roleResource(bytes,description) {
 }
 function ordinary(path) {
   for(let dir=resolve(path);;dir=dirname(dir)) {
-    if(existsSync(dir)){const info=lstatSync(dir);if(info.isSymbolicLink()||!info.isDirectory())throw new Error('Role output ancestors must be ordinary directories');}
+    try {
+      const info=lstatSync(dir);
+      if(info.isSymbolicLink()||!info.isDirectory())throw new Error('Role output ancestors must be ordinary directories');
+    } catch(error) {
+      if(error?.code!=='ENOENT')throw error;
+    }
     if(dirname(dir)===dir)break;
   }
+}
+// Tauri build copies resources before the bundler creates MUI files.
+// An empty/partial known locale is valid before compilation; only the exact
+// completed set is allowed immediately before NSIS bundling.
+export function verifyRoleResources(locale, complete=false) {
+  ordinary(locale);
+  const expected=roleMuiNames.map(name=>name.slice('en-US/'.length));
+  let names;
+  try { names=readdirSync(locale); }
+  catch(error) { if(!complete&&error?.code==='ENOENT')return; throw error; }
+  for(const name of names){
+    if(!expected.includes(name))throw new Error('Unexpected generated locale file; preserve it for review');
+    const info=lstatSync(resolve(locale,name));
+    if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1||info.size<1||info.size>16*1024*1024)
+      throw new Error('Generated role resource must be a bounded independent ordinary file');
+  }
+  if(complete&&names.length!==expected.length)throw new Error('Complete role resources are required for bundling');
 }
 function main() {
   if(process.platform!=='win32'||process.argv.length!==2)throw new Error('Windows role packaging accepts no arguments');
@@ -33,8 +55,7 @@ function main() {
   if(!tool)throw new Error('Windows SDK MUI resource tool is required');
   const output=resolve(desktop,'src-tauri/package-resources/lazy-tester');ordinary(output);mkdirSync(output,{recursive:true});
   const locale=resolve(output,'en-US');ordinary(locale);mkdirSync(locale,{recursive:true});
-  const expected=roleMuiNames.map(n=>n.slice('en-US/'.length));
-  for(const name of readdirSync(locale))if(!expected.includes(name))throw new Error('Unexpected generated locale file; preserve it for review');
+  verifyRoleResources(locale);
   function safeWrite(path,bytes) {
     if(existsSync(path)){const info=lstatSync(path);if(!info.isFile()||info.isSymbolicLink()||info.nlink!==1)throw new Error('Generated role resource must be an independent ordinary file');}
     writeFileSync(path,bytes);
@@ -53,6 +74,7 @@ function main() {
   } else if(dump.status!==0||!report.includes('UltimateFallbackLanguage'))throw new Error('Unrecognized executable resource layout');
   const original=readFileSync(base);
   for(const role of processRoles)safeWrite(resolve(locale,role.file+'.mui'),roleResource(original,role.description));
+  verifyRoleResources(locale,true);
   ordinary(resolve(release,'en-US'));
   mkdirSync(resolve(release,'en-US'),{recursive:true});
   for(const name of roleMuiNames)safeWrite(resolve(release,name),readFileSync(resolve(output,name)));

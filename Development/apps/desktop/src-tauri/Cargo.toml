@@ -40,9 +40,14 @@ lazy-tester-package = ["native-workspace-preview"]
 mc02-native-input = []
 multi-client-native-input = ["mc02-native-input"]
 
+# Production distribution excludes debug information without requesting
+# removal of all symbols needed for useful crash diagnostics.
+[profile.release]
+debug = false
+strip = "debuginfo"
+
 # Lean daily Rust builds: retain panic backtrace line tables, not full symbols.
 # Incremental compilation remains enabled for fast source iteration.
-# Packaging uses profile.release and is intentionally unaffected.
 [profile.dev]
 debug = "line-tables-only"
 incremental = true

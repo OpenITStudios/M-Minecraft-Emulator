@@ -32,9 +32,20 @@ unexpected files, links, nested asset directories, source-map directives and
 missing JS/CSS refuse the build. This is a bounded build-output check, not
 proof that permitted compiled assets contain no sensitive content. Intentional
 new asset classes and required legal notices must be reviewed explicitly.
-The NSIS overlay maps each MUI file individually (no recursive locale-folder
-resource), and the existing JS/Rust package checks agree with that mapping.
-Native DLL hash admission is unchanged. Direct Cargo or altered build tooling
+Tauri copies bundle resources during native compilation, before
+beforeBundleCommand generates MUI files. The locale directory mapping is
+therefore retained; the same exact three-file validator runs before native
+compilation (missing/partial allowed) and immediately before bundling
+(complete required). Extra entries, links, directories and invalid files
+are refused. The original role-generation and DLL digest gates are preserved.
+No placeholder MUI or second compilation is necessary.
+
+Production Vite explicitly disables source maps and uses the existing Oxc
+minifier. The desktop Cargo release profile disables debug information and
+uses debuginfo stripping; full symbol stripping is not required. Native
+C++/Rust DLL build flags and developer/debug profiles are unchanged.
+PDBs, MAP files and other private symbols are not admitted to distribution.
+This is not an anti-reverse-engineering guarantee or a measured size gain. Direct Cargo or altered build tooling
 is not a certified release route; final extracted-payload verification remains held.
 
 The native bundler consumes

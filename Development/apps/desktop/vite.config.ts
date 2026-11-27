@@ -11,5 +11,5 @@ export default defineConfig({
     // Rust build output can contain locked PDB files on Windows.
     watch: { ignored: ["**/src-tauri/target/**"] }
   },
-  build: { outDir: "dist", emptyOutDir: true }
+  build: { outDir: "dist", emptyOutDir: true, sourcemap: false, minify: "oxc" }
 });

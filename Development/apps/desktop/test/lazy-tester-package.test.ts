@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
 import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload} from '../scripts/check-lazy-tester-package.mjs';
 import {reviewedDigests,stageNativePayload} from '../scripts/prepare-native-payload.mjs';
-import {processRoles,roleMuiNames} from '../scripts/prepare-process-roles.mjs';
+import {processRoles,roleMuiNames,verifyRoleResources} from '../scripts/prepare-process-roles.mjs';
 
 describe('Lazy Tester native package',()=>{
   it('validates native DLL admission before startup can mutate product profiles',()=>{
@@ -26,8 +26,7 @@ describe('Lazy Tester native package',()=>{
     expect(config.productName).toBe('Lazy Tester');
     expect(config.identifier).toBe('com.mivubi.lazytester');
     expect(config.bundle.externalBin).toEqual([]);
-    const packaged=Object.values(config.bundle.resources);
-    expect(packaged.filter(name=>name.startsWith('en-US/')).sort()).toEqual([...roleMuiNames].sort());
+    const packaged=Object.values(config.bundle.resources).flatMap(name=>name==='en-US/'?roleMuiNames:[name]);
     expect([...packaged,'lazy-tester.exe',...processRoles.map(r=>r.file)].sort()).toEqual([...policy.requiredFiles].sort());
     expect(policy.migration.installerMayDeleteData).toBe(false);
     expect(policy.runtime.defaultDataRelativePath).toBe('Data');
@@ -45,7 +44,7 @@ describe('Lazy Tester native package',()=>{
     extra.bundle.resources['private/replay-profile-five.bin']='independent-bootstrap/replay-profile-five.bin';
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Unexpected/);
     extra.bundle.resources=structuredClone(config.bundle.resources);
-    extra.bundle.resources['package-resources/lazy-tester/en-US/']='en-US/';
+    extra.bundle.resources['package-resources/lazy-tester/']='';
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Unexpected/);
     extra.bundle.resources=structuredClone(config.bundle.resources);
     extra.build.frontendDist='../src';
@@ -53,6 +52,27 @@ describe('Lazy Tester native package',()=>{
     delete extra.build.frontendDist;
     extra.identifier=policy.migration.previousIdentifier;
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Identity/);
+  });
+  it('admits an empty locale before compilation and requires the exact complete set before bundling',()=>{
+    const dir=mkdtempSync(join(tmpdir(),'lazy-role-fixture-'));
+    try{
+      const locale=join(dir,'en-US');
+      expect(()=>verifyRoleResources(locale)).not.toThrow();
+      mkdirSync(locale);
+      expect(()=>verifyRoleResources(locale)).not.toThrow();
+      expect(()=>verifyRoleResources(locale,true)).toThrow(/Complete role resources/);
+      for(const name of roleMuiNames)writeFileSync(join(dir,name),'fixture');
+      expect(()=>verifyRoleResources(locale,true)).not.toThrow();
+      const extra=join(locale,'source.rs');writeFileSync(extra,'preserve');
+      expect(()=>verifyRoleResources(locale)).toThrow(/Unexpected/);
+      expect(()=>verifyRoleResources(locale,true)).toThrow(/Unexpected/);
+      expect(readFileSync(extra,'utf8')).toBe('preserve');rmSync(extra);
+      const missing=join(dir,roleMuiNames[0]);rmSync(missing);
+      expect(()=>verifyRoleResources(locale)).not.toThrow();
+      expect(()=>verifyRoleResources(locale,true)).toThrow(/Complete role resources/);
+      mkdirSync(missing);
+      expect(()=>verifyRoleResources(locale)).toThrow(/ordinary file/);
+    }finally{rmSync(dir,{recursive:true});}
   });
   it('admits only the generated frontend layout and refuses extra files or embedded source maps',()=>{
     const dir=mkdtempSync(join(tmpdir(),'lazy-frontend-fixture-'));

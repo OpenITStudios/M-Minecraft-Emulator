@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {lstatSync, readFileSync, mkdirSync, writeFileSync, existsSync} from 'node:fs';
 import {resolve, dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {verifyRoleResources} from './prepare-process-roles.mjs';
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 export function reviewedDigests(source) {
@@ -60,8 +61,11 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const source = process.argv[2] ?? process.env.LAZY_TESTER_NATIVE_PAYLOAD_DIR;
   if (!source) throw new Error('Set LAZY_TESTER_NATIVE_PAYLOAD_DIR to the reviewed native DLL directory');
   const policy = reviewedDigests(readFileSync(resolve(root,'src-tauri/src/engine/independent_bootstrap.rs'),'utf8'));
-  const result = stageNativePayload(resolve(source),resolve(root,'src-tauri/package-resources/lazy-tester'),policy);
-  mkdirSync(resolve(root,'src-tauri/package-resources/lazy-tester/en-US'),{recursive:true});
+  const destination=resolve(root,'src-tauri/package-resources/lazy-tester');
+  const locale=resolve(destination,'en-US');
+  verifyRoleResources(locale);
+  const result = stageNativePayload(resolve(source),destination,policy);
+  mkdirSync(locale,{recursive:true});
   process.stdout.write(JSON.stringify({staged:result,profileCapabilitiesIncluded:false}) + '\n');
 }
 
