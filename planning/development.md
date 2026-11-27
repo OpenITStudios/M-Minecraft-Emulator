@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective confirmation fingerprint checkpoint: domain-separated SHA-256 binds slot, profile native identity, canonical selected category/root/name and item native identities. Selection order is immaterial; warning-bearing reviews refuse a fingerprint (pack coverage remains held). Authored identity replacement, slot, order and warning fixtures NOT_EXECUTED. Internal fingerprint only, not a bearer capability; controller receipt, inventory identity continuity, fresh confirmation and file-tree mutation preflight remain pending. No deletion enabled; capture held.
+
 Selective review checkpoint: exact category/root/name selections are resolved only against fresh bounded inventory, duplicate native identities and unknown selections refused, retained profile identity captured. Pack reviews collect world, cross-pack and candidate global references, compare UUID conservatively regardless of version, and explicitly flag unverified coverage. Internal read-only review only; no confirmation token or deletion authority, UI/IPC review consumer pending. Fixture authored NOT_EXECUTED; capture held.
 
 Pack dependency evidence checkpoint: on-demand bounded manifest reads for both installed/development pack categories, directory identity recheck, normalized header UUID/version and cross-pack UUID references. Known built-in script module names are distinguished from pack UUIDs; unknown dependency shapes refuse review. Conventional global_resource_packs.json reader preserves missing metadata as unknown. Global path coverage, full dependency admission, review token, UI and deletion remain pending; no deletion enabled. Fixture authored NOT_EXECUTED; capture held.

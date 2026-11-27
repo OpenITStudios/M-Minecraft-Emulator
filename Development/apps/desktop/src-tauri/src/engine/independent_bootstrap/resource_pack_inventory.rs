@@ -376,6 +376,45 @@ pub(super) struct SelectiveReview {
     pub(super) warnings: Vec<String>,
 }
 
+// Domain-separated review fingerprint, not a bearer capability. The caller
+// must still perform fresh controller admission and filesystem preflight.
+// Pack warnings remain blocking until native dependency coverage is verified.
+impl SelectiveReview {
+    pub(super) fn confirmation_token(&self, slot: u32) -> io::Result<String> {
+        use sha2::{Digest, Sha256};
+        if !(1..=5).contains(&slot) || self.items.is_empty() || !self.warnings.is_empty() {
+            return Err(io::Error::other("Selective review is not eligible for confirmation"));
+        }
+        let mut hash = Sha256::new();
+        hash.update(b"LazyTester/selective-review/v1");
+        hash.update(slot.to_le_bytes());
+        fn identity(hash: &mut Sha256, id: &windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO) {
+            hash.update(id.VolumeSerialNumber.to_le_bytes());
+            hash.update(id.FileId.Identifier);
+        }
+        fn field(hash: &mut Sha256, value: &str) {
+            hash.update((value.len() as u64).to_le_bytes());
+            hash.update(value.as_bytes());
+        }
+        identity(&mut hash, &self.profile_identity);
+        // Canonical ordering makes checkbox order irrelevant.
+        let mut items: Vec<_> = self.items.iter().collect();
+        items.sort_by(|a,b| a.root.cmp(b.root).then_with(|| a.name.cmp(&b.name)));
+        hash.update((items.len() as u64).to_le_bytes());
+        for item in items {
+            hash.update([match item.category {
+                InventoryCategory::Worlds => 1u8,
+                InventoryCategory::ResourcePacks => 2,
+                InventoryCategory::BehaviorPacks => 3,
+            }]);
+            field(&mut hash, item.root);
+            field(&mut hash, &item.name);
+            identity(&mut hash, &item.identity);
+        }
+        Ok(hash.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<Vec<_>>().join(""))
+    }
+}
+
 pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
     budget: InspectionBudget) -> io::Result<SelectiveReview> {
     if selections.is_empty() || selections.len() > 128 || budget.exhausted() {
@@ -548,6 +587,40 @@ mod tests {
         assert_eq!(dependency_uuids(&manifest).unwrap(), vec!["bbbbbbbb-2222-3333-4444-555555555555".to_string()]);
         let unknown: PackManifest = serde_json::from_str(r#"{"header":{"uuid":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]},"dependencies":[{"unknown":true}]}"#).unwrap();
         assert!(dependency_uuids(&unknown).is_err());
+    }
+
+    #[test]
+    fn confirmation_fingerprint_binds_slot_profile_and_selection() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let root = parent.join("Roaming/Minecraft Education Edition/games/com.mojang/minecraftWorlds");
+        for name in ["one", "two"] {
+            let world = root.join(name);
+            fs::create_dir_all(&world).unwrap();
+            fs::write(world.join("level.dat"), b"fixture").unwrap();
+        }
+        let select = |name: &str| ReviewSelection {
+            category: InventoryCategory::Worlds, root: "minecraftWorlds".into(), name: name.into(),
+        };
+        let budget = || InspectionBudget::new(Duration::from_secs(2));
+        let mut review = review_selection(&private, &[select("one"), select("two")], budget()).unwrap();
+        let token = review.confirmation_token(1).unwrap();
+        assert_eq!(token.len(), 64);
+        assert_ne!(token, review.confirmation_token(2).unwrap());
+        assert!(review.confirmation_token(0).is_err());
+        review.items.reverse();
+        assert_eq!(token, review.confirmation_token(1).unwrap());
+        assert_ne!(token, review_selection(&private, &[select("one")], budget()).unwrap().confirmation_token(1).unwrap());
+        // Preserve the old directory so the filesystem cannot reuse its ID.
+        fs::rename(root.join("one"), root.join("old")).unwrap();
+        fs::create_dir(root.join("one")).unwrap();
+        fs::write(root.join("one/level.dat"), b"fixture").unwrap();
+        let changed = review_selection(&private, &[select("one"), select("two")], budget()).unwrap();
+        assert_ne!(token, changed.confirmation_token(1).unwrap());
+        review.warnings.push("Incomplete dependency coverage".into());
+        assert!(review.confirmation_token(1).is_err());
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
     }
 
     #[test]
