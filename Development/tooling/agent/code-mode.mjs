@@ -1,7 +1,7 @@
 // For an independently trusted local execution host only. This is NOT a
 // sandbox, generic tool dispatcher, new MCP session, or permission grant.
 // The host creates ONE operation core, and attaches this facade to it.
-import {REQUEST_LIMIT,boundedMcpText,publicToolError} from './agent-contract.mjs';
+import {REQUEST_LIMIT,boundedMcpText,publicToolError,assertAgentSurface} from './agent-contract.mjs';
 
 // Fixed composition routes: one declaration for SDK methods and compact MCP.
 // The original operation core remains the only dispatch/validation authority.
@@ -24,12 +24,33 @@ const ROUTES = [
 ];
 const METHODS=Object.freeze(ROUTES.map(([method])=>method));
 
-export function createCodeModeSurface(descriptors,callTool) {
+// Product playtesting adds existing real operations, not another execution core.
+// Keep the prior SDK and read/plan wire profile unchanged for existing clients.
+const PLAYTEST_EXCLUDE=new Set(['get_test_context','plan_player_actions','assess_input_route']);
+const PLAYTEST_EXTRA=[
+  ['launch_profile',['slot']],
+  ['observe_client',['slot']],
+  ['inspect_client_ui',['slot']],
+  ['start_visual_observation',['slots','intervalMs','durationMs']],
+  ['read_visual_observation',['slot','afterSequence','includeImage']],
+  ['stop_visual_observation',['slots']],
+];
+
+export function createCodeModeSurface(descriptors,callTool,surface='code-mode') {
+  assertAgentSurface(surface,descriptors.some(tool=>tool.name.includes('experimental')));
+  if(surface==='legacy')throw new Error('Unknown agent surface');
+  const playtest=surface==='playtest';
   const allowedByTool=new Map();
   for(const [,tool,allowed,forced={}] of ROUTES) {
+    if(playtest&&PLAYTEST_EXCLUDE.has(tool))continue;
     const keys=allowedByTool.get(tool)??new Set();
     for(const key of [...allowed,...Object.keys(forced)])keys.add(key);
     allowedByTool.set(tool,keys);
+  }
+  if(playtest) {
+    for(const [tool,keys] of PLAYTEST_EXTRA)allowedByTool.set(tool,new Set(keys));
+    // Explicit new Probe attempt, not native reservation or command dispatch.
+    allowedByTool.get('probe_qa').add('restart');
   }
   const tools=descriptors.filter(tool=>allowedByTool.has(tool.name)).map(tool=>{
     const allowed=allowedByTool.get(tool.name);
@@ -45,14 +66,16 @@ export function createCodeModeSurface(descriptors,callTool) {
       properties.inspectRun={const:true,type:'boolean'};
     }
     return {...tool,
-      ...(tool.name==='probe_qa'?{description:'Canonical source-only Probe preparation/status, inspectRun=true or explicit archivedRunId. No restart, publication, reservation or game command dispatch.'}:{}),
+      ...(tool.name==='probe_qa'?{description:playtest?
+        'Canonical source-only Probe preparation/status, explicit restart, inspectRun=true or explicit archivedRunId. No publication, reservation or game command dispatch.':
+        'Canonical source-only Probe preparation/status, inspectRun=true or explicit archivedRunId. No restart, publication, reservation or game command dispatch.'}:{}),
       ...(tool.name==='agent_capabilities'?{description:'Read bounded local AI/QA capabilities and activity. No desktop publication or gameplay proof.'}:{}),
       inputSchema:{...schema,properties,
         ...(schema.required?{required:schema.required.filter(key=>allowed.has(key))}:{}),
         ...(tool.name==='probe_qa'?{oneOf:[
           {not:{anyOf:[{required:['inspectRun']},{required:['archivedRunId']}]}},
-          {required:['inspectRun'],not:{anyOf:[{required:['archivedRunId']},{required:['scope']}]}},
-          {required:['archivedRunId'],not:{anyOf:[{required:['slot']},{required:['scope']},{required:['inspectRun']}]}},
+          {required:['inspectRun'],not:{anyOf:[{required:['archivedRunId']},{required:['scope']},{required:['restart']}]}},
+          {required:['archivedRunId'],not:{anyOf:[{required:['slot']},{required:['scope']},{required:['inspectRun']},{required:['restart']}]}},
         ]}:{}),
         additionalProperties:false}};
   });
@@ -68,7 +91,14 @@ export function createCodeModeSurface(descriptors,callTool) {
         throw new Error('Invalid tool arguments');
       }
       const result=await callTool(name,{...args});
-      return name==='agent_capabilities'?{...result,available:[...names]}:result;
+      return name==='agent_capabilities'?{...result,available:[...names],
+        ...(playtest?{playtest:{
+          surface:'playtest',
+          autonomousGameplay:'BLOCKED_NO_VERIFIED_INPUT_BACKEND',
+          close:'NOT_EXPOSED_DESKTOP_ADMISSION_REQUIRED',
+          nativeCapture:'APP_CAPTURE_BINARY_APPROVAL_HELD',
+          evidenceAttribution:'OPERATOR_NAMED_UNVERIFIED',
+        }}:{})}:result;
     },
   };
 }

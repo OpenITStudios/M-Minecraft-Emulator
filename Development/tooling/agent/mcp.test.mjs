@@ -5167,3 +5167,74 @@ test('native receipt seam still rejects invalid injected targets and strips priv
     await assert.rejects(core.callTool('get_computer_use_target',{slot:2}),/target is not verified/);
   }finally{code.close();core.shutdown();}
 });
+
+test('playtest uses the same native launch, bounded image and evidence operations',async()=>{
+  const calls=[];
+  const cfg={...config(),surface:'playtest',cuaExecutable:path.resolve('cua-driver.exe')};
+  const h=createHandler(cfg,{
+    native:async(_exe,op,slot)=>{
+      calls.push([op,slot]);
+      if(op!=='target')return snapshot(op);
+      return {schema:1,ok:true,operation:'target',slot,pid:400+slot,
+        windowId:1000+slot,createdFileTime:'134000000000000001',sessionId:1,
+        foreground:false,visible:true,minimized:false,
+        verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+    },
+    capture:async()=>({mimeType:'image/png',imageBase64:'iVBORw0KGgo=',width:800,height:600}),
+  });
+  try {
+    const listed=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    assert.equal(listed.length,16);
+    assert.deepEqual(listed.map(t=>t.name),[
+      'start_visual_observation','get_multi_client_visual_state','read_visual_observation',
+      'stop_visual_observation','inspect_client_ui','observe_client','agent_capabilities',
+      'inspect_profiles','launch_profile','summarize_test_evidence','read_game_evidence',
+      'probe_qa','get_diagnostics_overview','list_issue_candidates','get_issue_details',
+      'query_diagnostic_evidence']);
+    assert.ok(!Object.hasOwn(listed.find(t=>t.name==='read_visual_observation').inputSchema.properties,'screenReview'));
+    assert.equal(listed.find(t=>t.name==='probe_qa').inputSchema.properties.restart.type,'boolean');
+    const caps=await h.callTool('agent_capabilities',{});
+    assert.equal(caps.playtest.autonomousGameplay,'BLOCKED_NO_VERIFIED_INPUT_BACKEND');
+    assert.equal(caps.configuredSources.visual,'CUA');
+    assert.deepEqual(caps.available,listed.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
+    for(const [name,args] of [
+      ['launch_profile',{slot:1}],['observe_client',{slot:1}],
+      ['close_profile',{slot:2}],['plan_player_actions',{actions:[]}],
+      ['assess_input_route',{actions:[]}],['get_test_context',{}],
+      ['prepare_probe_qa',{slot:2}],['get_computer_use_target',{slot:2}],
+      ['run_experimental_multi_client_actions',{actions:[]}],
+      ['probe_qa',{slot:2,coordinateNative:true}],
+      ['probe_qa',{inspectRun:true,restart:true}],
+      ['read_visual_observation',{slot:2,screenReview:{}}],
+    ]) {
+      const result=await h.handle({jsonrpc:'2.0',id:name,method:'tools/call',params:{name,arguments:args}});
+      assert.equal(result.result.isError,true,name);
+    }
+    assert.equal(calls.length,0);
+    const launch=await h.callTool('launch_profile',{slot:2});
+    assert.equal(launch.operation,'launch');
+    const image=await h.handle({jsonrpc:'2.0',id:2,method:'tools/call',params:{
+      name:'observe_client',arguments:{slot:2}}});
+    assert.equal(image.result.isError,false);
+    assert.equal(image.result.content[1].type,'image');
+    assert.deepEqual(calls,[['launch',2],['target',2],['target',2]]);
+    const evidence=await h.callTool('summarize_test_evidence',{slots:[2]});
+    assert.equal(evidence.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
+    assert.equal(evidence.worldIdentity,'NOT_VERIFIED');
+    assert.equal(evidence.sources[0].status,'NOT_CONFIGURED');
+    assert.equal(calls.length,3);
+  }finally{h.shutdown();}
+});
+
+test('playtest is explicit and cannot attach to an experimental core',()=>{
+  assert.equal(parseConfiguration(['--surface','playtest'],{}).surface,'playtest');
+  assert.equal(parseConfiguration([],{}).surface,'legacy');
+  assert.throws(()=>parseConfiguration(['--surface','playtest','--multi-client-input-experimental','on'],{}),
+    /does not admit experimental input/);
+  assert.throws(()=>createHandler({...config(),surface:'playtest',experimentalMc02InputEnabled:true}),
+    /does not admit experimental input/);
+  const core=createOperationCore({...config(),experimentalMc02InputEnabled:true});
+  try {
+    assert.throws(()=>createMcpHandler(core,'playtest'),/does not admit experimental input/);
+  }finally{core.shutdown();}
+});

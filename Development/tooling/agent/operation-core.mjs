@@ -27,7 +27,7 @@ import {readPinnedProbeCatalogCached,probeSourceRevisionStatus,
 import {readMapTestContractCached,mapContractSourceStatus,planMapTests,
   compactMapTestPlan,composeMapQaReport} from './map-test-plan.mjs';
 
-import {slotOf,keysExactly} from './agent-contract.mjs';
+import {slotOf,keysExactly,assertAgentSurface} from './agent-contract.mjs';
 import {validateNativeWindowTarget,
   sameNativeVisualTarget,
   validateNativeReport,
@@ -93,7 +93,7 @@ export function parseConfiguration(argv, env = process.env) {
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
     if (!['--surface','--mode','--exe','--evidence-dir','--diagnostics-dir','--testing-archive-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: [--surface legacy|code-mode] --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <project|Data/Diagnostics>] [--testing-archive-dir <project|Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
+      throw new Error('Accepted arguments: [--surface legacy|code-mode|playtest] --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <project|Data/Diagnostics>] [--testing-archive-dir <project|Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
@@ -115,10 +115,7 @@ export function parseConfiguration(argv, env = process.env) {
       experimentalMultiClientInputEnabled=true;
     }
   }
-  if(!['legacy','code-mode'].includes(surface)) throw new Error('Unknown agent surface');
-  if(surface==='code-mode'&&(experimentalMc02InputEnabled||experimentalMultiClientInputEnabled)) {
-    throw new Error('Code Mode surface does not admit experimental input');
-  }
+  assertAgentSurface(surface,experimentalMc02InputEnabled||experimentalMultiClientInputEnabled);
   if(experimentalMc02InputEnabled&&experimentalMultiClientInputEnabled) {
     throw new Error('Select only one experimental native input mode');
   }
@@ -1951,7 +1948,18 @@ export function createOperationCore(config,{
         visualSamplers:typeof visualObserver.activity==='function'?
           visualObserver.activity():[],
       });
-      const result={...capabilities(config.mode,mc02Enabled,multiEnabled),activity};
+      const result={...capabilities(config.mode,mc02Enabled,multiEnabled),activity,
+        // Configuration is not provider liveness, runtime proof, or approval.
+        configuredSources:{
+          native:!!config.executable,
+          visual:gpuSource?'WGC':config.cuaExecutable?'CUA':'NOT_CONFIGURED',
+          semanticUi:!!config.cuaExecutable,
+          evidence:!!config.evidenceDirectory,
+          diagnostics:!!config.diagnosticsDirectory,
+          probe:!!config.probeZip,
+          mapContract:!!config.mapContractPath,
+          testingArchive:!!config.testingArchiveDirectory,
+        }};
       if(args.publishToDesktop!==true)return result;
       try {
         const delivery=await publishActivity(config.executable,activity);

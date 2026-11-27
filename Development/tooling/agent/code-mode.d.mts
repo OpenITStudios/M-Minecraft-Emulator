@@ -43,4 +43,5 @@ export interface CodeModeToolDescriptor {
 export function createCodeModeSurface(
   descriptors:CodeModeToolDescriptor[],
   callTool:(name:string,args:Record<string,unknown>)=>Promise<unknown>,
+  surface?:'code-mode'|'playtest',
 ):{listTools():CodeModeToolDescriptor[];callTool(name:string,args?:Record<string,unknown>):Promise<unknown>};

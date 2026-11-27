@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Compatibility adapter only; the same core is usable by a trusted Code Mode host.
+// Single stdio adapter for playtesting and retained compatibility profiles.
 import {pathToFileURL} from 'node:url';
 import readline from 'node:readline';
 import {createOperationCore,REQUEST_LIMIT,MAX_MCP_IMAGE_CHARS,boundedMcpText,publicToolError,parseConfiguration} from './operation-core.mjs';
 import {createCodeModeSurface} from './code-mode.mjs';
+import {assertAgentSurface} from './agent-contract.mjs';
 export * from './operation-core.mjs';
 
 // The 2026-07-28 protocol removes initialize and requires per-request
@@ -11,8 +12,8 @@ export * from './operation-core.mjs';
 const SUPPORTED_PROTOCOLS = new Set(['2025-06-18','2025-11-25']);
 
 export function createMcpHandler(core,surface='legacy') {
-  if(!['legacy','code-mode'].includes(surface))throw new Error('Unknown agent surface');
-  const route=surface==='code-mode'?createCodeModeSurface(core.listTools(),core.callTool):core;
+  assertAgentSurface(surface);
+  const route=surface==='legacy'?core:createCodeModeSurface(core.listTools(),core.callTool,surface);
   async function handle(message) {
     if(core.isClosed())return null;
     if (!message || message.jsonrpc!=='2.0' || typeof message.method!=='string') return null;
@@ -59,11 +60,8 @@ export function createMcpHandler(core,surface='legacy') {
 }
 
 export function createHandler(config,dependencies) {
-  const surface=config.surface??'legacy';
-  if(!['legacy','code-mode'].includes(surface))throw new Error('Unknown agent surface');
-  if(surface==='code-mode'&&(config.experimentalMc02InputEnabled||config.experimentalMultiClientInputEnabled)) {
-    throw new Error('Code Mode surface does not admit experimental input');
-  }
+  const surface=assertAgentSurface(config.surface??'legacy',
+    config.experimentalMc02InputEnabled||config.experimentalMultiClientInputEnabled);
   return createMcpHandler(createOperationCore(config,dependencies),surface);
 }
 

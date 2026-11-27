@@ -14,16 +14,20 @@ was archived without deleting the technical notes. Use the
 [single current handoff](../../../planning/development.md) for status and
 one next action; old archived "Next" entries are not authorization.
 
-## Code Mode-first composition (Unreleased, source-only)
+## Playtest-first operation (Unreleased, source-only)
 
-### Codex local host: one MCP connection, compact Code Mode surface
+Lazy Tester remains a manual Windows application. A separately authorized
+local Code Mode host can use the SAME existing session controller and
+observation/evidence owners through one stdio MCP connection. The product
+goal is Launch -> Play -> Observe -> Report, not a separate AI game engine.
 
-The preferred Codex integration is the existing local stdio MCP entry with
-`--surface code-mode`. Codex's own Code Mode host composes calls through its
-connected MCP tools; Lazy Tester does not run arbitrary JavaScript, spawn a
-second server, install a sandbox or require an extra runtime dependency.
-The operator selects this surface explicitly. The standard `legacy` surface
-remains the default for compatibility and full explicit observation/control.
+### Recommended local connection
+
+Select `--surface playtest` explicitly for new playtesting workflows. The
+existing `legacy` default and restricted `code-mode` surface remain
+compatibility profiles; do not run them alongside playtest or silently
+upgrade the old read/plan permissions. Codex's existing Code Mode host
+composes the selected MCP tools. No new server, sandbox or dependency.
 
 Example for a separately authorized PC-local Codex configuration (replace
 all illustrative paths with reviewed absolute local paths):
@@ -31,32 +35,76 @@ all illustrative paths with reviewed absolute local paths):
 ```toml
 [mcp_servers.lazy_tester]
 command = 'C:\Tools\node.exe'
-args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'code-mode', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe']
+args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'playtest', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe']
 default_tools_approval_mode = 'prompt'
 ```
 
-Add only the explicitly selected evidence/diagnostic/Probe/archive options
-as required. Do not register another legacy server for the same workflow.
-Use the installed Codex host's supported Code Mode setting, if actually
-available; do not force remote execution, global feature flags or permission
-changes. Upstream reference: https://github.com/openai/codex/blob/main/codex-rs/features/src/lib.rs
-and https://github.com/openai/codex/blob/main/codex-rs/core/config.schema.json.
-No configuration has been installed or tested on a user PC.
+Configure only the explicitly selected capture, evidence, diagnostic,
+Probe or map-contract paths needed for the session. No automatic startup,
+credentials, account signin, map import, world join or command dispatch.
+Use the installed Codex host's supported Code Mode setting if available;
+do not change global features or permissions automatically. No configuration
+has been installed or tested on a user PC.
 
-The compact surface exposes 13 canonical MCP tools, derived from the same
-15 SDK method routes (three Probe SDK methods share `probe_qa`). It refuses
-unlisted names and disallowed arguments at ingress, including legacy QA
-aliases, launch, screenshot/sampler operations, restart, native reservation,
-status publication and experimental input. It is intended for read/plan/QA
-composition, not native gameplay control. To use the existing explicit image
-or control operations, select the full legacy surface for that session;
-never switch a live core or start a second connection to bypass its limits.
-Both profiles use one operation core. Compact stdio cannot start a sampler;
-visual metadata is only useful if the same core already has a sampler via an
-independently admitted trusted embedded host, otherwise no frames are available.
-Capability responses describe the selected public surface; direct SDK capability
-names are SDK method paths. The 13/25 count is a catalog reduction, not a measured
-token, process, latency or memory saving.
+### One product catalog, existing operations only
+
+| Task | Public playtest tool |
+| --- | --- |
+| Discover configured sources and available operations | agent_capabilities |
+| Inspect / explicitly launch an AI-owned profile | inspect_profiles, launch_profile |
+| Observe on demand / semantic UI | observe_client, inspect_client_ui |
+| Optional bounded monitoring | start_visual_observation, get_multi_client_visual_state, read_visual_observation, stop_visual_observation |
+| Prepare/review original Probe, explicit restart or read historical result | probe_qa |
+| Read bounded analytics / game results | summarize_test_evidence, read_game_evidence |
+| Query imported issue evidence when needed | get_diagnostics_overview, list_issue_candidates, get_issue_details, query_diagnostic_evidence |
+
+All 16 names are existing operations with existing native admission.
+The same descriptor catalog and projection serve both standard MCP and
+Codex Code Mode on this connection. The independent trusted Node SDK
+below stays read/plan-only; it does not transport images or grant writes.
+The old 13-tool restricted profile is retained unchanged. No public
+planning, duplicate context, old Probe aliases, low-level HWND targeting,
+screen-text review, native reservation, status publication or input
+experiment in playtest. Experimental core attachment is refused.
+MC01 stays protected in hybrid mode. `five-ai` is a slot policy, not proof
+of autonomous play.
+
+### Minimal playtest / report workflow
+
+1. Read capabilities once and inspect profiles when needed. Launch only
+   explicitly selected AI slots with the existing launch operation, reuse
+   the returned roster, and wait for observed readiness without tight
+   polling. A launch receipt is not a game/world/login receipt.
+2. Prefer one on-demand CUA screenshot for a concrete observation.
+   If WGC is explicitly selected, start its bounded sampler before reading
+   frames; stop it when done. Fetch metadata first for repeated monitoring
+   and retrieve pixels only for relevant fresh observations. Never assume
+   a changed image hash proves a game action.
+3. Actual gameplay input is BLOCKED_NO_VERIFIED_INPUT_BACKEND. A human can
+   play using the normal app; do not turn a planned action into executed
+   evidence or enable experiments to fill the gap. Close remains manual
+   until the full desktop recording/window release admission can be reused.
+   Native product capture/recording approval is still held; existing CUA
+   or WGC providers are optional and not runtime verified.
+4. Read evidence only for selected slots. Use original Probe only when
+   relevant; it prepares a command for an authorized human/admin and
+   reads original reported results, not map gameplay success.
+5. Code Mode filters/compares bounded observations and writes the report
+   in the host conversation. No new report database, background runner
+   or second telemetry engine. Record map/revision (operator-confirmed),
+   slots, test objective, actions actually performed and who performed
+   them, expected/observed result, issue and reproduction, relevant
+   evidence/time/identity, coverage and blockers. Use PASS/FAIL only
+   when independently supported; otherwise BLOCKED or NOT_TESTED.
+   Existing analytics/log tail remains operator-named and unverified;
+   compare before/after where useful, do not attribute old/unbound records
+   to this session or treat missing errors as PASS.
+
+Configured source flags are not proof of provider availability. The
+operator remains in control of manual app actions. Code Mode uses the
+same MCP request/result bounds; no additional native ownership or
+execution privilege is granted. Tool count is not measured latency,
+CPU, memory or token savings.
 
 ### Direct SDK for independently trusted hosts
 
@@ -65,7 +113,8 @@ For a separately authorized trusted PC-local host, create one
 `createCodeModeClient(core)` from `code-mode.mjs` per script; the trusted
 host passes only the fixed `tester` facade to its own permission-controlled
 execution environment and closes the facade in finally. If MCP is also
-needed inside that host, attach `createMcpHandler(core)`; do not start a
+needed inside that host, attach `createMcpHandler(core,'code-mode')` for the
+same restricted read/plan contract; do not start a
 second core for the same workflow. The existing stdio entry `mcp.mjs` and
 all 25 default legacy tool names remain compatible. No arbitrary-code execution
 tool, Deno/Node guest, dependency, new controller or PC permission is added.
@@ -82,7 +131,8 @@ Read-only inspection and historical archive use explicit SDK methods.
 The facade does not expose launch, image delivery, sampler start/stop,
 native reservations, restart, publication, writer leases or input dispatch.
 Those retain their existing explicitly admitted MCP paths; no fallback
-or automatic switch. Each facade permits up to 64 attempted calls,
+or automatic switch. The preferred playtest connection above uses MCP
+for launch and images without widening this independent SDK. Each facade permits up to 64 attempted calls,
 one in flight, 64 KiB input / 128 KiB result per call and 1 MiB aggregate
 result bytes; the trusted host must independently enforce script time,
 memory, output and OS permissions. A closed facade cannot authorize later
@@ -100,7 +150,8 @@ protocol conformance tests executed.
 - `operation-core.mjs` is the single coordinator for session-bound
   state, admission, QA checkpoints and recovery.
 - `tool-catalog.mjs` owns the one descriptor inventory. `code-mode.mjs`
-  declares the shared SDK routes and derives the compact MCP subset from it.
+  declares the shared SDK routes and projects the playtest/compatibility subsets
+  from the original descriptor catalog.
 - The canonical native transport already validates its receipts. The core
   selects it once or validates injected provider results at the same seam;
   fresh target reads, independent consumer validation and native gates remain.

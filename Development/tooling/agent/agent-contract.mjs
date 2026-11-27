@@ -2,6 +2,15 @@
 export const REQUEST_LIMIT = 64 * 1024;
 const MAX_MCP_TEXT_BYTES = 128 * 1024;
 
+// An explicit opt-in is required to widen an old read/plan connection.
+export function assertAgentSurface(surface,experimental=false) {
+  if(!['legacy','code-mode','playtest'].includes(surface))throw new Error('Unknown agent surface');
+  if(surface!=='legacy'&&experimental) {
+    throw new Error('Code Mode surface does not admit experimental input');
+  }
+  return surface;
+}
+
 // Only fixed application errors are exposed over MCP. Filesystem and
 // provider messages may contain account paths, native diagnostics or
 // untrusted log text. Internal direct callTool() errors remain available

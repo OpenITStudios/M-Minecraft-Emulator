@@ -23,7 +23,7 @@ The new [capture/recording source workstream](planning/development.md#capture-an
 | Review current desktop navigation safely | Open Play → Settings → General / Data Storage; inspect read-only status, without changing game data | [Current workspace](docs/product/unified-workspace.md) |
 | Review retired coordinate HUD research | Git history only | [Retirement register](docs/system/legacy-retirement.md) |
 | Develop or package locally **when explicitly authorized** | `DEV.cmd` | [Developer controller](Development/tooling/developer/README.md), [distribution](Development/engine/distribution/README.md) |
-| Inspect or launch profiles through an external model | Optional `Development/tooling/agent/mcp.mjs` | [MCP bridge](Development/tooling/agent/README.md) |
+| Manual or AI-assisted map playtest | Desktop or optional `Development/tooling/agent/mcp.mjs --surface playtest` via trusted local Code Mode | [Playtest workflow and proof limits](Development/tooling/agent/README.md) |
 | Review the original team's Skills Probe results | Existing MCP tool `probe_qa` | [Map-Aware Probe QA](docs/system/map-aware-probe-qa.md) |
 | Check map-specific requirements **without executing them** | Optional approved map contract + `probe_qa` | [Contract and scope](docs/system/map-aware-probe-qa.md) |
 | Compare new team/Probe ZIP snapshots | Explicit offline `team:update:inspect` | [Team source review](docs/system/education-team-source-updates.md) |
@@ -42,6 +42,10 @@ Minecraft itself owns accounts, rendering, worlds, gameplay and networking.
 A process or preview is not evidence of a signed-in playable world.
 
 **MCP:** the optional local stdio bridge reuses that same controller.
+New playtesting workflows select `--surface playtest` explicitly; manual
+desktop operation remains independent. Code Mode composes launch, observation
+and evidence using existing MCP operations; actual autonomous gameplay
+input is not verified.
 Normal tools inspect profiles, explicitly request launches, plan actions,
 read bounded evidence, and optionally capture windows. Independent
 keyboard/mouse AI input is an **OFF-by-default, not runtime-verified**
