@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Pack dependency review: typed dependency records refuse duplicate UUID fields, mixed UUID/module declarations, unsupported fields and missing/invalid versions; UUID comparison still ignores version for conservative reference detection. Positive/negative parser fixtures authored NOT_EXECUTED. No pack deletion authorization; native global activation/path coverage remains unknown.
+
 Selective tree aggregate bounds: read-only review and exclusive preflight now share the same file, directory and entry limits; a cross-category selection cannot receive a successful review solely because each individual tree fits separately. Existing two-second deadline, logical bytes and identity fingerprint retained. Boundary fixture authored, NOT_EXECUTED. No mutation enabled; native path and disposition evidence still held.
 
 Selective Cleanup review usability: show exact cross-category targets in a collapsible reviewed-items list, distinguish missing inventory from verified empty inventory, and correct malformed category-switch fixture. Read-only review remains unchanged at native boundary; no deletion command. Tests NOT_EXECUTED.

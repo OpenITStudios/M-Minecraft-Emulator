@@ -282,7 +282,17 @@ struct PackHeader {
 struct PackManifest {
     header: PackHeader,
     #[serde(default)]
-    dependencies: Vec<serde_json::Value>,
+    dependencies: Vec<ManifestDependency>,
+}
+
+// Typed fields reject duplicate keys instead of silently retaining the last
+// UUID. Only the two currently understood dependency shapes are admitted.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestDependency {
+    uuid: Option<String>,
+    module_name: Option<String>,
+    version: serde_json::Value,
 }
 
 pub(super) struct PackDependencyEvidence {
@@ -319,16 +329,22 @@ fn read_manifest(path: &Path) -> io::Result<PackManifest> {
 fn dependency_uuids(manifest: &PackManifest) -> io::Result<Vec<String>> {
     let mut result = Vec::new();
     for entry in &manifest.dependencies {
-        let object = entry.as_object().ok_or_else(|| io::Error::other("Invalid pack dependency"))?;
-        if let Some(uuid) = object.get("uuid") {
-            let uuid = uuid.as_str().filter(|uuid| valid_uuid(uuid))
-                .ok_or_else(|| io::Error::other("Invalid dependency UUID"))?;
-            result.push(uuid.to_ascii_lowercase());
-        } else if object.get("module_name").and_then(|name| name.as_str())
-            .is_some_and(|name| !name.is_empty() && name.starts_with("@minecraft/")) {
-            // Built-in script API module, not an installed pack UUID.
-        } else {
-            return Err(io::Error::other("Unknown pack dependency shape"));
+        match (&entry.uuid, &entry.module_name) {
+            (Some(uuid), None) if valid_uuid(uuid) => {
+                let version: [u32; 3] = serde_json::from_value(entry.version.clone())
+                    .map_err(|_| io::Error::other("Invalid pack dependency version"))?;
+                if version.iter().any(|v| *v > 65535) {
+                    return Err(io::Error::other("Invalid pack dependency version"));
+                }
+                result.push(uuid.to_ascii_lowercase());
+            }
+            (None, Some(module)) if module.starts_with("@minecraft/")
+                && module.len() > "@minecraft/".len()
+                && entry.version.as_str().is_some_and(|v| !v.trim().is_empty()) => {
+                // Script module declaration, not an installed pack UUID.
+                // This classification does not establish runtime support.
+            }
+            _ => return Err(io::Error::other("Unknown or ambiguous pack dependency shape")),
         }
     }
     Ok(result)
@@ -626,8 +642,20 @@ mod tests {
     fn manifest_dependency_review_distinguishes_pack_uuid_and_builtin_module() {
         let manifest: PackManifest = serde_json::from_str(r#"{"header":{"uuid":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]},"dependencies":[{"uuid":"BBBBBBBB-2222-3333-4444-555555555555","version":[1,0,0]},{"module_name":"@minecraft/server","version":"1.0.0"}]}"#).unwrap();
         assert_eq!(dependency_uuids(&manifest).unwrap(), vec!["bbbbbbbb-2222-3333-4444-555555555555".to_string()]);
-        let unknown: PackManifest = serde_json::from_str(r#"{"header":{"uuid":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]},"dependencies":[{"unknown":true}]}"#).unwrap();
-        assert!(dependency_uuids(&unknown).is_err());
+        let header = r#"{"header":{"uuid":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]},"dependencies":["#;
+        for dependency in [
+            r#"{"unknown":true}"#,
+            r#"{"uuid":"BBBBBBBB-2222-3333-4444-555555555555"}"#,
+            r#"{"uuid":"BBBBBBBB-2222-3333-4444-555555555555","uuid":"CCCCCCCC-2222-3333-4444-555555555555","version":[1,0,0]}"#,
+            r#"{"uuid":"BBBBBBBB-2222-3333-4444-555555555555","module_name":"@minecraft/server","version":[1,0,0]}"#,
+            r#"{"uuid":"BBBBBBBB-2222-3333-4444-555555555555","version":[65536,0,0]}"#,
+            r#"{"module_name":"@minecraft/","version":"1.0.0"}"#,
+            r#"{"module_name":"@minecraft/server","version":""}"#,
+        ] {
+            let json = format!("{header}{dependency}]}}");
+            assert!(serde_json::from_str::<PackManifest>(&json)
+                .map_or(true, |manifest| dependency_uuids(&manifest).is_err()));
+        }
     }
 
     #[test]
