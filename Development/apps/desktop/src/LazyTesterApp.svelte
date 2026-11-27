@@ -290,7 +290,7 @@
     refreshing = true;
     lastInspectionStartedAt = performance.now();
     try {
-      const snapshot = page === 'settings' ? await lazyTester.settings() : await lazyTester.inspect();
+      const snapshot = page === 'settings' || page === 'storage' ? await lazyTester.settings() : await lazyTester.inspect();
       // A close review starting mid-request invalidates this old snapshot.
       if (!isCurrentObservation(issued)) return;
       const profilesChanged = !sameProfileObservation(profiles, snapshot.profiles);

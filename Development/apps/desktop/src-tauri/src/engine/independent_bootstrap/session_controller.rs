@@ -1572,6 +1572,12 @@ impl ReplySnapshot {
     }
 }
 
+// The existing request channel wakes immediately for incoming requests.
+// Only the fully inactive controller may use a longer maintenance timeout.
+fn maintenance_interval(running: bool, pending_storage: bool, audio_present: bool) -> Duration {
+    Duration::from_millis(if running || pending_storage || audio_present {250} else {1000})
+}
+
 fn run() -> io::Result<()> {
     crate::engine::workspace_surface::verify_same_executable_parent()?;
     crate::engine::dpi::configure()?;
@@ -1608,12 +1614,14 @@ fn run() -> io::Result<()> {
         // A queued CloseOne/CloseAll should not wait behind journal sync_all
         // or COM audio discovery for an unrelated, already-exited game.
         // Native I/O is still unpreemptible once idle maintenance begins.
+        let cadence=maintenance_interval(sessions.running.iter().any(Option::is_some),
+            sessions.pending_storage_maintenance.iter().any(|pending|*pending),audio.is_some());
         let pending = receive_before_maintenance(
             &server.requests,
-            Duration::from_millis(250),
+            cadence,
             || {
-                // An original game exit is still observed within the same
-                // 250 ms idle policy. Audio does not gate or replace reaping.
+                // Live games, outstanding audio leases and queued storage keep
+                // the original 250 ms policy. Only fully inactive state slows.
                 sessions.reap();
                 sessions.maintain_storage();
                 let roster = audio_roster(&sessions);
@@ -2101,6 +2109,19 @@ mod tests {
             "No owned process and no audio lease needs no COM startup");
     }
 
+    #[test]
+    fn idle_controller_cadence_preserves_active_and_pending_work() {
+        assert_eq!(maintenance_interval(false,false,false),Duration::from_secs(1));
+        for running in [false,true] {
+            for storage in [false,true] {
+                for audio in [false,true] {
+                    if running||storage||audio {
+                        assert_eq!(maintenance_interval(running,storage,audio),Duration::from_millis(250));
+                    }
+                }
+            }
+        }
+    }
     #[test]
     fn queued_close_admission_precedes_idle_journal_maintenance() {
         use std::sync::mpsc::{self, RecvTimeoutError};

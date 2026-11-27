@@ -20,7 +20,8 @@ export function observeDisplayScale(host: Pick<Window,'matchMedia'|'devicePixelR
   function arm():void {
     query?.removeEventListener('change',changed);
     const scale=host.devicePixelRatio;
-    query=Number.isFinite(scale)&&scale>0?host.matchMedia(`(resolution: ${scale}dppx)`):undefined;
+    query=Number.isFinite(scale)&&scale>0&&typeof host.matchMedia==='function'?host.matchMedia(`(resolution: ${scale}dppx)`):undefined;
+    if(query&&typeof query.addEventListener!=='function')query=undefined;
     query?.addEventListener('change',changed);
   }
   arm();

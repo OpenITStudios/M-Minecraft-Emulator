@@ -74,3 +74,10 @@ it('rounds native viewport edges consistently instead of independent dimensions'
   expect(native).toContain('((viewport.x + viewport.width) * scale).round() as i32 - x');
   expect(native).toContain('((viewport.y + viewport.height) * scale).round() as i32 - y');
 });
+
+
+it('keeps resize observation available when resolution media queries are unsupported',()=>{
+  const host={devicePixelRatio:1,matchMedia:undefined} as unknown as Pick<Window,'matchMedia'|'devicePixelRatio'>;
+  const stop=observeDisplayScale(host,()=>{throw new Error('unexpected change');});
+  expect(()=>stop()).not.toThrow();
+});
