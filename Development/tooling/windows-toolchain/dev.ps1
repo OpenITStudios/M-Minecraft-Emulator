@@ -1,6 +1,6 @@
 param(
     [Parameter(Position=0)]
-    [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "check:quick", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package", "storage", "help")]
+    [ValidateSet("setup", "doctor", "lock", "g0", "preflight", "check", "check:quick", "check:repository-tests", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package", "storage", "help")]
     [string]$Command = "help",
     [Parameter(Position=1)]
     [ValidateSet("report", "explain", "plan", "cargo")]
@@ -421,7 +421,7 @@ try {
     }
     # Any command that may install dependencies, build or launch the desktop
     # must prove pinned local binaries first; "doctor" is not an optional guard.
-    if ($Command -in @("setup", "check", "check:quick", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package")) {
+    if ($Command -in @("setup", "check", "check:quick", "check:repository-tests", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package")) {
         Test-DeveloperToolchain
     }
     switch ($Command) {
@@ -460,6 +460,7 @@ try {
             }
             Write-Host "QUICK SOURCE SCREEN PASSED for $sha (not full source, Windows, Minecraft or release acceptance)."
         }
+        "check:repository-tests" { Invoke-RepositoryNpm -NpmArguments @("run", "test:repository") }
         "check:frontend" { Invoke-RepositoryNpm -NpmArguments @("run", "check:frontend") }
         "check:rust"     { Invoke-RepositoryNpm -NpmArguments @("run", "check:rust") }
         "bench:frontend" { Invoke-SourceBenchmark -Scope "frontend" }
@@ -479,6 +480,7 @@ try {
             Write-Host "  DEV.cmd setup    # install pinned npm dependencies"
             Write-Host "  DEV.cmd check    # full source verification"
             Write-Host "  DEV.cmd check:quick # scoped first-run screen, not full preflight"
+            Write-Host "  DEV.cmd check:repository-tests # existing repository and dependency fixture suite"
             Write-Host "  DEV.cmd check:frontend  # Svelte/TypeScript and Vitest, no Rust compile"
             Write-Host "  DEV.cmd check:rust      # existing desktop and runtime-core Cargo checks"
             Write-Host "  DEV.cmd bench:frontend  # two opt-in frontend check timings; reuse cache"

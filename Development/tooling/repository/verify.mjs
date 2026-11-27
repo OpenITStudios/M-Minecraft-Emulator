@@ -196,7 +196,7 @@ function filesBelow(root,path) {
     return entry.isDirectory()?filesBelow(root,name):[name];
   });
 }
-export function verifyRepository(root,g0=false) {
+export function verifyRepository(root,requireCommittedDesktopLock=false) {
   const read=path=>readFileSync(resolve(root,path),'utf8');
   const json=path=>JSON.parse(read(path));
   for(const path of ['AGENTS.md','GITHUB_RULES.md','CONTEXT.md','planning/development.md',
@@ -498,7 +498,7 @@ export function verifyRepository(root,g0=false) {
     'Data/profiles.json','App/data-location.json','Logs/session.log']) {
     execFileSync('git',['check-ignore','--no-index','-q','--',path],{cwd:root});
   }
-  if(g0)assert.equal(execFileSync('git',['ls-tree','-r','--name-only','HEAD','--','Development/apps/desktop/src-tauri/Cargo.lock'],{cwd:root,encoding:'utf8'}).trim(),'Development/apps/desktop/src-tauri/Cargo.lock');
+  if(requireCommittedDesktopLock)assert.equal(execFileSync('git',['ls-tree','-r','--name-only','HEAD','--','Development/apps/desktop/src-tauri/Cargo.lock'],{cwd:root,encoding:'utf8'}).trim(),'Development/apps/desktop/src-tauri/Cargo.lock');
   console.log('Lazy Tester repository contract: PASS ('+reached.length+' reachable frontend files; source/layout evidence only)');
 }
-if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))verifyRepository(resolve(dirname(fileURLToPath(import.meta.url)),'../../..'),process.argv.includes('--g0'));
+if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))verifyRepository(resolve(dirname(fileURLToPath(import.meta.url)),'../../..'),process.argv.includes('--require-committed-desktop-lock') || process.argv.includes('--g0'));

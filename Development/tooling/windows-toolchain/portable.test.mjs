@@ -126,7 +126,7 @@ test('developer commands isolate HOME/cache/temp, require local runtime and pres
   assert.match(developer,/workspace\/toolchains\/node\/npm\.cmd/);
   assert.match(developer, /resolves outside workspace\/toolchains/);
   assert.match(developer,/& \$LocalNpm @NpmArguments/);
-  assert.match(developer,/if \(\$Command -in @\("setup", "check", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev"\)\)/);
+  assert.match(developer,/if \(\$Command -in @\("setup", "check", "check:quick", "check:repository-tests", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package"\)\)/);
   assert.match(developer,/if \(\$Command -in @[\s\S]*?Test-DeveloperToolchain[\s\S]*?switch \(\$Command\)/);
   for(const snippet of [
     '$env:CARGO_HOME', '$env:RUSTUP_HOME', '$env:NPM_CONFIG_CACHE',
@@ -190,6 +190,7 @@ test('scoped frontend and native source checks avoid accidental full verificatio
   const desktopManifest=JSON.parse(read('apps/desktop/package.json'));
   const rootScripts=rootManifest.scripts, desktopScripts=desktopManifest.scripts;
   assert.equal(rootScripts['check:frontend'], 'npm --prefix apps/desktop run check:frontend');
+  assert.match(developer,/"check:repository-tests" \{ Invoke-RepositoryNpm -NpmArguments @\("run", "test:repository"\) \}/);
   assert.equal(desktopScripts['check:frontend'], 'npm run typecheck && npm run test');
   assert.doesNotMatch(desktopScripts['check:frontend'], /cargo|tauri|build:frontend|verify:source/i);
   assert.equal(rootScripts['check:rust'],
@@ -201,7 +202,7 @@ test('scoped frontend and native source checks avoid accidental full verificatio
   assert.ok(desktopScripts['test:rust'].includes('cargo test --all-targets --locked --target x86_64-pc-windows-msvc'));
   assert.ok(rootScripts['check:runtime'].includes('cargo check --locked --all-targets --target x86_64-pc-windows-msvc'));
   assert.ok(rootScripts['test:runtime'].includes('cargo test --locked --all-targets --target x86_64-pc-windows-msvc'));
-  assert.ok(rootScripts['verify:source'].startsWith('npm run verify:repository -- --g0 && '));
+  assert.ok(rootScripts['verify:source'].startsWith('npm run verify:repository -- --require-committed-desktop-lock && '));
   assert.doesNotMatch(rootScripts['verify:source'], /npm run check:(?:structure|dependencies)(?:\s|$)/);
   assert.ok(rootScripts['verify:quick'].includes('npm run check:structure && npm run check:dependencies'));
   assert.ok(rootScripts['verify:source'].includes('npm run check:desktop'));

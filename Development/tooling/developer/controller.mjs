@@ -22,6 +22,7 @@ const POLICY = Object.freeze({
   'setup': {risk:'dependency-write', approval:true},
   'lock': {risk:'source-write', approval:true},
   'repository-structure': {risk:'read', approval:false},
+  'check:repository-tests': {risk:'build', approval:false},
   'check:frontend': {risk:'build', approval:false},
   'check:rust': {risk:'build', approval:false},
   'check': {risk:'build', approval:false},
@@ -119,7 +120,7 @@ export function classifyPath(path) {
      isAbsolute(path) || path.startsWith('/') || path.includes('\0')) return 'unknown';
   const clean=posix.normalize(path);
   if(clean!==path || clean==='..' || clean.startsWith('../') || path.startsWith('-')) return 'unknown';
-  if(/^(?:Data|App|workspace|\.git)(?:\/|$)/i.test(path)) return 'protected';
+  if(/^(?:Data|App|Logs|workspace|\.git)(?:\/|$)/i.test(path)) return 'protected';
   // Markdown guides and skill instructions are not compiled inputs, even when
   // stored beside native source. Do not downgrade executable or unknown files
   // simply because they live beneath docs/, planning/, or Archive/.
@@ -132,10 +133,13 @@ export function classifyPath(path) {
   if(/(?:^|\/)(?:Cargo\.toml|Cargo\.lock|build\.rs|rust-toolchain(?:\.toml)?)$/.test(path) ||
      path.includes('/.cargo/config') || path.startsWith('.cargo/')) return 'unknown';
   if(path.startsWith('Development/tooling/acceptance/windows/bootstrap-ordering/')) return 'native';
-  if(path.startsWith('Development/apps/desktop/src-tauri/src/') ||
-     path.startsWith('Development/engine/runtime-core/src/')) return 'rust';
-  if(path.startsWith('Development/apps/desktop/src/') ||
-     path.startsWith('Development/apps/desktop/test/')) return 'frontend';
+  // Only fixture files in the existing repository suite may use its smaller route.
+  // Implementation, configuration and mixed source changes keep full verification.
+  if(/^Development\/tooling\/(?:repository|dependencies)\/[^/]+\.test\.mjs$/.test(path)) return 'repository-tests';
+  if(/\.rs$/.test(path) && (path.startsWith('Development/apps/desktop/src-tauri/src/') ||
+     path.startsWith('Development/engine/runtime-core/src/'))) return 'rust';
+  if(/\.(?:ts|svelte|css)$/.test(path) && (path.startsWith('Development/apps/desktop/src/') ||
+     path.startsWith('Development/apps/desktop/test/'))) return 'frontend';
   return 'unknown';
 }
 
@@ -154,6 +158,8 @@ export function planForPaths(paths,revision) {
   const executableScopes=kinds.filter(scope=>scope!=='docs');
   if(executableScopes.length===0) return {status:'READY',sourceSha:revision,
     changedCount:paths.length,scopes:kinds,taskIds:['repository.validate'],reason:'Documentation-only structural validation.'};
+  if(executableScopes.length===1 && executableScopes[0]==='repository-tests') return {status:'READY',sourceSha:revision,
+    changedCount:paths.length,scopes:kinds,taskIds:['repository.tests'],reason:'Repository/dependency fixture-only iteration; full verification remains required for candidate acceptance.'};
   if(executableScopes.length===1 && executableScopes[0]==='frontend') return {status:'READY',sourceSha:revision,
     changedCount:paths.length,scopes:kinds,taskIds:['frontend.validate'],reason:'Frontend and documentation validation; no Rust check.'};
   if(executableScopes.length===1 && executableScopes[0]==='rust') return {status:'READY',sourceSha:revision,

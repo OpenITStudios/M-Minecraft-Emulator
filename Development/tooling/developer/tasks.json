@@ -26,6 +26,12 @@
       "scope": "repository"
     },
     {
+      "id": "repository.tests",
+      "description": "Run existing repository and dependency fixtures without native compilation",
+      "command": "check:repository-tests",
+      "scope": "repository"
+    },
+    {
       "id": "frontend.validate",
       "description": "Run Svelte typecheck and frontend tests without Cargo",
       "command": "check:frontend",

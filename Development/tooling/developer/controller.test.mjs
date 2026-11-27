@@ -121,6 +121,26 @@ test('source routing uses minimum relevant checks, but unknown and mixed fail wi
   assert.deepEqual(planForPaths(['Development/toolchain.json'],SHA).taskIds,['source.validate']);
 });
 
+test('repository fixture-only changes use the existing suite; mixed or unknown paths fail wide',()=>{
+  const fixture='Development/tooling/repository/verify.test.mjs';
+  const dependency='Development/tooling/dependencies/maintenance.test.mjs';
+  assert.deepEqual(planForPaths([fixture,dependency,'planning/development.md'],SHA).taskIds,['repository.tests']);
+  for(const path of ['Development/tooling/repository/verify.mjs','Development/tooling/developer/controller.test.mjs',
+    'Development/apps/desktop/src/App.svelte','Development/engine/runtime-core/src/lib.rs']) {
+    assert.deepEqual(planForPaths([fixture,path],SHA).taskIds,['source.validate'],path);
+  }
+  for(const path of ['Development/apps/desktop/src/helper.mjs','Development/engine/runtime-core/src/config.json',
+    'Development/apps/desktop/test/helper.exe','Development/tooling/repository/nested/example.test.mjs']) {
+    assert.equal(classifyPath(path),'unknown',path);
+    assert.deepEqual(planForPaths([path],SHA).taskIds,['source.validate']);
+  }
+  assert.equal(planForPaths(['Logs/session.log',fixture],SHA).status,'BLOCKED');
+  const task=tasks.find(t=>t.id==='repository.tests');
+  assert.equal(task.requiresApproval,false);
+  assert.equal(task.risk,'build');
+  assert.equal(legacyArgs(task).args.at(-1),'check:repository-tests');
+});
+
 test('docs accompanying frontend or Rust source do not force redundant full checks',()=>{
   assert.deepEqual(planForPaths(['planning/development.md','Development/apps/desktop/src/App.svelte'],SHA).taskIds,['frontend.validate']);
   assert.deepEqual(planForPaths(['docs/system/architecture.md','Development/engine/runtime-core/src/lib.rs'],SHA).taskIds,['rust.validate']);
