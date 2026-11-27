@@ -3,7 +3,7 @@ import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
-import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance} from '../src/app/presentation/sessionHealth.js';
+import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
@@ -34,6 +34,7 @@ describe('Desktop operation ownership', () => {
     const script=app.split('</script>')[0]!;
     expect(script).toContain('let activeOperation: UiOperation | null = null');
     expect(script).toContain('$: busy = activeOperation !== null');
+    expect(script).toContain('initializing, busy: activeOperation !== null, refreshing, resizing,');
     expect(script).toContain("$: savingPerformance = activeOperation === 'savePerformance'");
     expect(script).toContain("$: screenshotBusy = activeOperation === 'screenshot'");
     expect(script).toContain("$: clearingData = activeOperation === 'clearData'");
@@ -670,6 +671,23 @@ describe('Lazy Tester minimal session health projection',()=>{
     expect(projectSessionHealth(sample({profiles:stale,observed:false}))).toEqual([]);
     expect(projectSessionHealth(sample({profiles:active,
       previewStatuses:[{slot:2,registered:false,reason:null}]}))).toEqual([]);
+  });
+  it('reuses unchanged launch receipts and copies only on an observed transition',()=>{
+    const empty = new Map<ProfileSlot,'unverified'|'observed'>();
+    expect(reconcileLaunchReceipts(empty, normal)).toBe(empty);
+    const pending = new Map<ProfileSlot,'unverified'|'observed'>([[2,'unverified'],[4,'observed']]);
+    expect(reconcileLaunchReceipts(pending, [])).toBe(pending);
+    const observed = reconcileLaunchReceipts(pending, normal);
+    expect(observed).not.toBe(pending);
+    expect(observed.get(2)).toBe('observed');
+    expect(observed.get(4)).toBe('observed');
+    expect(pending.get(2)).toBe('unverified');
+    expect(reconcileLaunchReceipts(observed, normal)).toBe(observed);
+    const runningTwo = normal.map(profile=>profile.slot===2?running(2) as ProfileSession:profile);
+    const reconciled = reconcileLaunchReceipts(observed, runningTwo);
+    expect(reconciled.has(2)).toBe(false);
+    expect(reconciled.get(4)).toBe('observed');
+    expect(observed.has(2)).toBe(true);
   });
   it('scopes launch receipt uncertainty to the affected slot',()=>{
     const launchFailures=new Map<ProfileSlot,'unverified'|'observed'>([[4,'unverified']]);

@@ -5,6 +5,25 @@ import {userMessage} from './sessionFeedback.js';
 
 export type LaunchReceiptState = 'unverified' | 'observed';
 
+// Keep the original immutable observation when no launch receipt changes.
+// A missing profile cannot reconcile uncertainty; only a fresh observation
+// of that slot can mark it observed or remove it on RUNNING.
+export function reconcileLaunchReceipts(
+  failures: ReadonlyMap<ProfileSlot, LaunchReceiptState>,
+  profiles: readonly ProfileSession[],
+): ReadonlyMap<ProfileSlot, LaunchReceiptState> {
+  let next: Map<ProfileSlot, LaunchReceiptState> | undefined;
+  for (const [slot, state] of failures) {
+    const profile = profiles.find(item => item.slot === slot);
+    if (profile?.state === 'RUNNING') {
+      (next ??= new Map(failures)).delete(slot);
+    } else if (profile && state === 'unverified') {
+      (next ??= new Map(failures)).set(slot, 'observed');
+    }
+  }
+  return next ?? failures;
+}
+
 // Shared UI admission only. Native launch still independently validates the slot.
 export function canRequestProfileLaunch(
   profile: ProfileSession | undefined,

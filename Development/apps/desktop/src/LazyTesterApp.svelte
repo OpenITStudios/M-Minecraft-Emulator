@@ -10,7 +10,7 @@
   import {presentAgentActivity} from './app/presentation/agentActivity.js';
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
-  import {canRequestProfileLaunch, projectSessionHealth, type LaunchReceiptState, type SessionHealthAction} from './app/presentation/sessionHealth.js';
+  import {canRequestProfileLaunch, projectSessionHealth, reconcileLaunchReceipts, type LaunchReceiptState, type SessionHealthAction} from './app/presentation/sessionHealth.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
@@ -176,19 +176,16 @@
   // UI warning only; native presentation authority remains in workspace_surface.
   let uncertainWindowSlots = new Set<ProfileSlot>();
   // UI receipt uncertainty only; native session admission remains authoritative.
-  let launchFailures = new Map<ProfileSlot, LaunchReceiptState>();
+  let launchFailures: ReadonlyMap<ProfileSlot, LaunchReceiptState> = new Map();
   function recordLaunchFailure(slot: ProfileSlot, state: LaunchReceiptState) {
-    launchFailures = new Map(launchFailures).set(slot,state);
+    if (launchFailures.get(slot) !== state)
+      launchFailures = new Map(launchFailures).set(slot,state);
   }
-  function reconcileLaunchFailures(observedProfiles: ProfileSession[]) {
-    if (!launchFailures.size) return;
+  function clearLaunchFailure(slot: ProfileSlot) {
+    if (!launchFailures.has(slot)) return;
     const next = new Map(launchFailures);
-    for (const [slot,state] of next) {
-      const profile = observedProfiles.find(item=>item.slot===slot);
-      if (profile?.state==='RUNNING') next.delete(slot);
-      else if (profile && state==='unverified') next.set(slot,'observed');
-    }
-    if ([...next].some(([slot,state])=>launchFailures.get(slot)!==state) || next.size!==launchFailures.size) launchFailures=next;
+    next.delete(slot);
+    launchFailures = next;
   }
   let previewStatuses: PreviewStatus[] = [];
   // Read-only UI observations. A DWM failure does not own the game or
@@ -268,7 +265,7 @@
       mounted, nativeBackend, closeInProgress, closeReviewPending,
       selectedReviewGeometryOnly: closeOneSlot!==null && closingOneSlot===null &&
         !nativeExitReview && page==='workspace' && !detached && available,
-      initializing, busy, refreshing, resizing,
+      initializing, busy: activeOperation !== null, refreshing, resizing,
       queuedAudio: queuedAudio !== null,
       queuedPerformance: queuedPerformance !== null,
       queuedPage: queuedPage !== null,
@@ -373,7 +370,8 @@
         !sameProfileLayout(profiles, snapshot.profiles));
       if (profilesChanged) profiles = snapshot.profiles;
       available = true; connectionIssueKey=null;
-      reconcileLaunchFailures(snapshot.profiles);
+      const nextFailures = reconcileLaunchReceipts(launchFailures, snapshot.profiles);
+      if (nextFailures !== launchFailures) launchFailures = nextFailures;
       const incomingActivity = snapshot.agentActivity ?? null;
       if (!sameAgentObservation(agentActivity, incomingActivity)) agentActivity = incomingActivity;
       // STOPPED only confirms a session observation, not restoration of
@@ -425,7 +423,7 @@
         !canRequestProfileLaunch(profiles.find(profile => profile.slot === slot),launchFailures)) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
     activeOperation = 'launch'; issueKey=null; requested = slot;
-    launchFailures = new Map([...launchFailures].filter(([failedSlot])=>failedSlot!==slot));
+    clearLaunchFailure(slot);
     try {
       publishProfiles((await lazyTester.launch(slot)).profiles); storage = null; available = true;
       detached = false; page = 'workspace'; dirty = true;
