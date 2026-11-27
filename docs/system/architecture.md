@@ -127,8 +127,8 @@ only positively empty retained workspace state; DWM and native process
 liveness/recovery remain independent. The native controller waits directly
 on original retained game process handles, an unnamed request-ready event
 and its existing pipe worker. A live game alone no longer schedules 250ms
-exit scans; ordinary bounded 1s waits do not reap. Audio/pending storage and
-exit-observation retry retain 250ms deadlines. A failed native wait degrades
+exit scans; ordinary bounded 1s waits do not reap. Pending storage and
+exit-observation retry retain 250ms deadlines; audio uses its own budget. A failed native wait degrades
 to the existing bounded channel/maintenance path without replacing or
 abandoning the original controller. Manager lifetime participates only when
 no games remain; a queued authenticated request takes priority over
@@ -144,9 +144,16 @@ Unadmitted HUD workers skip meter reads; Present and snapshot sampling
 remain independent.
 Native restore precedes managed normal game close; failed window destruction
 reuses the existing post-release recovery path.
-Audio maintenance retains its one-second discovery deadline and immediate
-next-tick response to owned foreground/roster changes. Unrelated foreground
-changes do not trigger COM sync. Policy application on untouched foreground
+Audio maintenance retains its one-second discovery deadline. When audio
+is needed and the existing policy foreground observer is available, a
+process-local coalesced event hints an owned focus change; the actor rechecks
+actual foreground and native identities before COM. The event is manual-reset
+so request priority does not lose it; reset precedes observation. Stable
+successful observations wait for the remaining discovery deadline, with 250ms
+fallback when the hint is unavailable, roster changed, or a sync failed.
+Missed focus hints may wait until reconciliation (nominal 1s). Unrelated
+foreground changes do not trigger COM sync. Per-endpoint/per-session COM
+subscriptions remain deferred; no callback list or second audio owner. Policy application on untouched foreground
 leases skips GetMute; discovery still reads original mute, active enforcement
 retains live identity checks, and restoration uses the original COM lease.
 Stable target storage is reused; native caption checks use a fixed UTF-16

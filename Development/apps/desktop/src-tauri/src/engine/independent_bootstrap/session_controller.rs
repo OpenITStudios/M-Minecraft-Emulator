@@ -1494,9 +1494,9 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
     valid_retained_window(&process).then_some(process)
 }
 
-// Audio COM reads are separate from process exit. Active audio maintenance
-// retains its 250 ms cadence; stable audio uses its 1-second discovery
-// deadline. A change of owned foreground or exact roster bypasses it.
+// Audio COM reads are separate from process exit. Stable audio uses its
+// 1-second discovery deadline; a process-local focus hint can wake it early.
+// Keep the short deadline when the hint or prior observation is unavailable.
 const AUDIO_IDLE_RESYNC: Duration = Duration::from_secs(1);
 type AudioRoster = [Option<(u32, u64)>; 5];
 fn audio_roster(sessions: &Sessions) -> AudioRoster {
@@ -1532,6 +1532,14 @@ impl AudioIdleGate {
         // A failed COM sync is retried on the next existing idle tick, not
         // suppressed by a previously successful cadence checkpoint.
         self.last_success = None;
+    }
+    fn wait_budget(&self, now: Instant, roster: AudioRoster, focus_ready: bool) -> Duration {
+        let short=Duration::from_millis(250);
+        let Some(last)=self.last_success.filter(|_| self.roster==Some(roster)) else {
+            return short;
+        };
+        let remaining=AUDIO_IDLE_RESYNC.saturating_sub(now.saturating_duration_since(last));
+        if focus_ready {remaining} else {remaining.min(short)}
     }
 }
 fn audio_maintenance_needed(
@@ -1635,6 +1643,8 @@ fn run() -> io::Result<()> {
     // Audio keeps its existing bounded maintenance; game exit has its own
     // retained-handle wake and does not need periodic process scanning.
     let mut audio_idle = AudioIdleGate::default();
+    let mut audio_focus = None;
+    let mut audio_focus_failed = false;
     // No audio failure observed before the first idle maintenance cycle.
     let mut audio_issue: Option<String> = None;
     let server = Server::start(Endpoint::current()?)?;
@@ -1654,9 +1664,28 @@ fn run() -> io::Result<()> {
         // Native I/O is still unpreemptible once idle maintenance begins.
         let running = sessions.running.iter().any(Option::is_some);
         let pending_storage = sessions.pending_storage_maintenance.iter().any(|pending|*pending);
-        let audio_needed = audio_maintenance_needed(audio_mode, audio.is_some(), audio_roster(&sessions));
-        let cadence = maintenance_interval(pending_storage, audio_needed,
+        let roster = audio_roster(&sessions);
+        let audio_needed = audio_maintenance_needed(audio_mode, audio.is_some(), roster);
+        if !audio_needed {
+            audio_focus = None;
+            audio_focus_failed = false;
+        } else if audio_focus.is_none() && !audio_focus_failed && !native_wait_failed {
+            match instance_focus_events::AudioFocusWake::subscribe() {
+                Ok(wake) => audio_focus=Some(wake),
+                Err(error) => {
+                    eprintln!("Audio focus hint unavailable: {error}");
+                    audio_focus_failed=true;
+                }
+            }
+        }
+        let focus_ready = !native_wait_failed && !exit_retry &&
+            audio_focus.as_ref().is_some_and(|wake|wake.observer_active()) &&
+            sessions.running.iter().flatten().all(|started|started.children[0].policy.is_some());
+        let cadence = maintenance_interval(pending_storage, audio_needed && !focus_ready,
             exit_retry || native_wait_failed && running);
+        let cadence = if audio_needed {
+            cadence.min(audio_idle.wait_budget(Instant::now(),roster,focus_ready))
+        } else {cadence};
         // Direct wait on the original actor's handles. A dead manager cannot
         // repeatedly wake a controller that still owns games; it is relevant
         // to detach only when no game remains.
@@ -1664,18 +1693,21 @@ fn run() -> io::Result<()> {
             let lifetimes = sessions.running.iter().flatten()
                 .map(|started| started.children[0].process.as_handle())
                 .chain(manager.as_ref().filter(|_| !running).map(Peer::wait_handle));
-            match server.wait_for_activity(lifetimes, cadence) {
+            let hint = audio_focus.as_ref().filter(|_|focus_ready).map(|wake|wake.handle());
+            match server.wait_for_activity(lifetimes, hint, cadence) {
                 Ok(activity) => Some(activity),
                 Err(error) => {
                     // Actual native wait failure: preserve ownership and the
                     // original bounded maintenance for this controller lifetime.
                     eprintln!("Session lifetime wait unavailable: {error}");
                     native_wait_failed = true;
+                    audio_focus = None;
                     None
                 }
             }
         } else { None };
         let activity = activity.unwrap_or_else(|| {
+            let cadence=if audio_needed || running {cadence.min(Duration::from_millis(250))} else {cadence};
             match server.requests.recv_timeout(cadence) {
                 Ok(envelope) => Activity::Request(envelope),
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => Activity::Lifetime,
@@ -1688,7 +1720,7 @@ fn run() -> io::Result<()> {
             Activity::Request(envelope) => envelope,
             idle => {
                 let disconnected = matches!(idle, Activity::Disconnected);
-                if !matches!(idle, Activity::Deadline) {
+                if matches!(idle, Activity::Lifetime | Activity::Disconnected) {
                     exit_retry = sessions.reap();
                 }
                 // A successful ordinary timeout performs no per-game exit
@@ -1699,6 +1731,15 @@ fn run() -> io::Result<()> {
                     audio_issue = None;
                     audio_idle.invalidate();
                 } else {
+                    // Clear before fresh observation. A focus change during
+                    // COM work remains pending; a queued request cannot consume it.
+                    if let Some(wake)=audio_focus.as_ref() {
+                        if let Err(error)=wake.clear() {
+                            eprintln!("Audio focus hint reset unavailable: {error}");
+                            audio_focus_failed=true;
+                            audio_focus=None;
+                        }
+                    }
                     let foreground = super::session_audio::foreground();
                     let now = Instant::now();
                     if audio_idle.due(now, foreground, roster) {
@@ -2193,6 +2234,25 @@ mod tests {
         assert!(gate.due(later, Some(102), replaced));
         gate.invalidate();
         assert!(gate.due(later, Some(102), roster));
+    }
+
+    #[test]
+    fn audio_deadline_uses_hint_only_after_success_for_same_roster() {
+        let start=Instant::now();
+        let roster:AudioRoster=[Some((102,1)),None,None,None,None];
+        let mut gate=AudioIdleGate::default();
+        assert_eq!(gate.wait_budget(start,roster,true),Duration::from_millis(250));
+        gate.success(start,Some(102),roster);
+        assert_eq!(gate.wait_budget(start,roster,true),AUDIO_IDLE_RESYNC);
+        assert_eq!(gate.wait_budget(start,roster,false),Duration::from_millis(250));
+        let later=start+Duration::from_millis(900);
+        assert_eq!(gate.wait_budget(later,roster,true),Duration::from_millis(100));
+        assert_eq!(gate.wait_budget(later,roster,false),Duration::from_millis(100));
+        assert_eq!(gate.wait_budget(start+AUDIO_IDLE_RESYNC,roster,true),Duration::ZERO);
+        let mut changed=roster;changed[0]=Some((102,2));
+        assert_eq!(gate.wait_budget(start,changed,true),Duration::from_millis(250));
+        gate.invalidate();
+        assert_eq!(gate.wait_budget(start,roster,true),Duration::from_millis(250));
     }
 
     #[test]

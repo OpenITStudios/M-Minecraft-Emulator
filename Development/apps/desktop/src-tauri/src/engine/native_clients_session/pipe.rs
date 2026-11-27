@@ -451,6 +451,7 @@ pub(crate) struct Envelope {
 pub(crate) enum Activity {
     Request(Envelope),
     Lifetime,
+    AudioHint,
     Deadline,
     Disconnected,
 }
@@ -505,7 +506,8 @@ impl Server {
     // replace them during this synchronous wait. The pipe worker is also
     // waited on: a failed notification cannot strand a queued request.
     pub(crate) fn wait_for_activity<'a>(
-        &self, lifetimes: impl Iterator<Item=BorrowedHandle<'a>>, timeout: Duration,
+        &self, lifetimes: impl Iterator<Item=BorrowedHandle<'a>>,
+        audio_hint: Option<BorrowedHandle<'_>>, timeout: Duration,
     ) -> io::Result<Activity> {
         use mpsc::TryRecvError;
         match self.requests.try_recv() {
@@ -514,18 +516,25 @@ impl Server {
             Err(TryRecvError::Empty) => {},
         }
         let worker = self.worker.as_ref().ok_or_else(|| io::Error::other("Session pipe stopped"))?;
-        // Request first, worker second, at most five games and one peer.
-        let mut handles = [ptr::null_mut(); 8];
+        // Request first, worker second, original lifetimes before the optional
+        // manual-reset audio hint. No new source of request authority.
+        let mut handles = [ptr::null_mut(); 9];
         handles[0] = raw(&self.request_ready);
         handles[1] = worker.as_raw_handle() as HANDLE;
         let mut count = 2;
         for handle in lifetimes {
-            if count == handles.len() {
+            if count == 8 {
                 return Err(io::Error::other("Controller lifetime wait exceeds its bound"));
             }
             handles[count] = handle.as_raw_handle() as HANDLE;
             count += 1;
         }
+        let hint_index = audio_hint.map(|hint| {
+            let index=count;
+            handles[index]=hint.as_raw_handle() as HANDLE;
+            count+=1;
+            WAIT_OBJECT_0+index as u32
+        });
         let started = Instant::now();
         loop {
             let remaining = timeout.saturating_sub(started.elapsed());
@@ -545,6 +554,7 @@ impl Server {
                 Err(TryRecvError::Empty) if wake == WAIT_OBJECT_0 + 1 => return Ok(Activity::Disconnected),
                 Err(TryRecvError::Empty) if wake == WAIT_TIMEOUT => return Ok(Activity::Deadline),
                 Err(TryRecvError::Empty) if wake == WAIT_OBJECT_0 => continue,
+                Err(TryRecvError::Empty) if hint_index==Some(wake) => return Ok(Activity::AudioHint),
                 Err(TryRecvError::Empty) => return Ok(Activity::Lifetime),
             }
         }
@@ -849,30 +859,39 @@ mod tests {
         let (endpoint, client) = endpoints();
         let mut server = Server::start(endpoint).unwrap();
         let lifetime = own(unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) }).unwrap();
-        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+        let hint = own(unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) }).unwrap();
+        assert_ne!(unsafe { SetEvent(raw(&hint)) }, 0);
+        for _ in 0..2 {
+            assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()),
+                Some(hint.as_handle()), Duration::ZERO).unwrap(), Activity::AudioHint));
+        }
+        assert_ne!(unsafe { ResetEvent(raw(&hint)) }, 0);
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), None, Duration::ZERO).unwrap(),
             Activity::Deadline));
         assert_ne!(unsafe { SetEvent(raw(&server.request_ready)) }, 0);
-        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), None, Duration::ZERO).unwrap(),
             Activity::Deadline));
         assert_ne!(unsafe { SetEvent(raw(&server.request_ready)) }, 0);
         assert_ne!(unsafe { SetEvent(raw(&lifetime)) }, 0);
-        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), None, Duration::ZERO).unwrap(),
             Activity::Lifetime));
         let caller = thread::spawn(move || exchange(&client, client.connect().unwrap(), &SessionRequest::CloseOne { slot: 2 }));
         // Force the queue and lifetime to be ready together, including the
         // case where the notification was consumed before the actor looked.
         assert_eq!(unsafe { WaitForSingleObject(raw(&server.request_ready), 5000) }, WAIT_OBJECT_0);
+        assert_ne!(unsafe { SetEvent(raw(&hint)) }, 0);
         let Activity::Request(envelope) = server.wait_for_activity(
-            std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap() else {
+            std::iter::once(lifetime.as_handle()), Some(hint.as_handle()), Duration::ZERO).unwrap() else {
             panic!("queued request must precede maintenance");
         };
         assert!(matches!(envelope.request, SessionRequest::CloseOne { slot: 2 }));
         envelope.reply.send(Ok(SessionSnapshot::stopped())).unwrap();
         assert!(caller.join().unwrap().unwrap().is_ok());
-        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Duration::ZERO).unwrap(),
+        assert!(matches!(server.wait_for_activity(std::iter::once(lifetime.as_handle()), Some(hint.as_handle()), Duration::ZERO).unwrap(),
             Activity::Lifetime));
+        assert_eq!(unsafe { WaitForSingleObject(raw(&hint), 0) }, WAIT_OBJECT_0);
         assert!(server.stop());
-        assert!(matches!(server.wait_for_activity(std::iter::empty(), Duration::ZERO).unwrap(),
+        assert!(matches!(server.wait_for_activity(std::iter::empty(), None, Duration::ZERO).unwrap(),
             Activity::Disconnected));
     }
 
@@ -884,7 +903,7 @@ mod tests {
         let actor = thread::spawn(move || {
             for _ in 0..3 {
                 let Activity::Request(envelope) = server.wait_for_activity(
-                    std::iter::empty(), Duration::from_secs(5)).unwrap() else {
+                    std::iter::empty(), None, Duration::from_secs(5)).unwrap() else {
                     panic!("authenticated request must wake the controller");
                 };
                 assert!(matches!(envelope.request, SessionRequest::Inspect));
@@ -980,7 +999,7 @@ mod tests {
             for _ in 0..2 {
                 let pid = identities.recv_timeout(Duration::from_secs(5)).unwrap();
                 let Activity::Request(envelope) = server.wait_for_activity(
-                    std::iter::empty(), Duration::from_secs(5)).unwrap() else {
+                    std::iter::empty(), None, Duration::from_secs(5)).unwrap() else {
                     panic!("verified child request did not wake the controller");
                 };
                 assert_eq!(unsafe { GetProcessId(raw(&envelope.peer.process)) }, pid);
@@ -988,7 +1007,7 @@ mod tests {
                 envelope.reply.send(Ok(SessionSnapshot::stopped())).unwrap();
                 // The original verified child handle stays pinned after reply.
                 assert!(matches!(server.wait_for_activity(
-                    std::iter::once(envelope.peer.wait_handle()), Duration::from_secs(5)).unwrap(),
+                    std::iter::once(envelope.peer.wait_handle()), None, Duration::from_secs(5)).unwrap(),
                     Activity::Lifetime));
                 assert!(!envelope.peer.alive());
                 observed_exit.send(pid).unwrap();

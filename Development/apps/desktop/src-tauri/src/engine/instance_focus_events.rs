@@ -32,7 +32,7 @@ mod windows {
         ptr,
         sync::{
             atomic::{AtomicBool, AtomicU64, Ordering},
-            mpsc, Arc, Mutex,
+            mpsc, Arc, Mutex, Weak,
         },
         thread::{self, JoinHandle},
         time::Duration,
@@ -111,6 +111,50 @@ mod windows {
     }
     fn event(manual: bool) -> io::Result<OwnedHandle> {
         owned(unsafe { CreateEventW(ptr::null(), manual as i32, 0, ptr::null()) })
+    }
+    // Optional process-local wake for the original audio owner. It carries
+    // no process authority and never starts a foreground worker.
+    pub(crate) struct AudioFocusWake {
+        handle: OwnedHandle,
+        last: Mutex<Option<Option<u32>>>,
+    }
+    static AUDIO_FOCUS: Mutex<Weak<AudioFocusWake>> = Mutex::new(Weak::new());
+    impl AudioFocusWake {
+        pub(crate) fn subscribe() -> io::Result<Arc<Self>> {
+            let mut slot = AUDIO_FOCUS.lock().map_err(|_| io::Error::other("Audio focus subscription unavailable"))?;
+            if slot.upgrade().is_some() {
+                return Err(io::Error::other("Audio focus subscription already exists"));
+            }
+            let wake = Arc::new(Self {handle:event(true)?,last:Mutex::new(None)});
+            *slot = Arc::downgrade(&wake);
+            Ok(wake)
+        }
+        pub(crate) fn handle(&self) -> BorrowedHandle<'_> { self.handle.as_handle() }
+        pub(crate) fn clear(&self) -> io::Result<()> {
+            if unsafe { ResetEvent(self.handle.as_raw_handle() as _) } == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        }
+        pub(crate) fn observer_active(&self) -> bool {
+            WORKER.try_lock().ok().is_some_and(|owner| owner.as_ref().is_some_and(|worker|
+                worker.thread_id != 0 && !worker.stop_requested
+                    && worker.alive.load(Ordering::Acquire) && !worker.join.is_finished()))
+        }
+        fn notify(&self, selected: Option<u32>) {
+            // Never perform COM work or block the foreground callback.
+            if let Ok(mut last)=self.last.try_lock() {
+                if *last != Some(selected) && unsafe { SetEvent(self.handle.as_raw_handle() as _) } != 0 {
+                    *last=Some(selected);
+                }
+            }
+        }
+    }
+    fn notify_audio_focus(selected: Option<u32>, bindings: &[Arc<Binding>]) {
+        let wake=AUDIO_FOCUS.try_lock().ok().and_then(|slot|slot.upgrade());
+        if let Some(wake)=wake {
+            wake.notify(selected.filter(|pid|bindings.iter().any(|binding| binding.pid==*pid)));
+        }
     }
     fn birth(process: &OwnedHandle) -> io::Result<u64> {
         crate::engine::windows_process_time::creation_filetime(process.as_raw_handle() as _)
@@ -298,6 +342,8 @@ mod windows {
                 && unsafe { GetForegroundWindow() } == window;
             stable.then_some(pid)
         });
+        // Actual foreground only, never the FPS presentation fallback.
+        notify_audio_focus(selected, &bindings);
         // This read-only projection uses the original SURFACE lease. Its
         // try_lock refusal demotes conservatively during an in-flight switch;
         // the completing workspace operation queues another refresh.
@@ -714,6 +760,25 @@ mod windows {
                 },
             },
         };
+        #[test]
+        fn audio_focus_hint_coalesces_and_rearms_without_starting_hook() {
+            let wake=AudioFocusWake {handle:event(true).unwrap(),last:Mutex::new(None)};
+            let ready=||unsafe {WaitForSingleObject(wake.handle.as_raw_handle() as _,0)};
+            assert_eq!(ready(),WAIT_TIMEOUT);
+            wake.notify(None);
+            assert_eq!(ready(),WAIT_OBJECT_0);
+            wake.clear().unwrap();
+            wake.notify(None);
+            assert_eq!(ready(),WAIT_TIMEOUT);
+            wake.notify(Some(102));
+            wake.notify(Some(103));
+            assert_eq!(ready(),WAIT_OBJECT_0);
+            wake.clear().unwrap();
+            wake.notify(Some(103));
+            assert_eq!(ready(),WAIT_TIMEOUT);
+            wake.notify(None);
+            assert_eq!(ready(),WAIT_OBJECT_0);
+        }
         struct Child {
             process: OwnedHandle,
             _thread: OwnedHandle,
@@ -959,7 +1024,7 @@ mod windows {
 
 #[cfg(windows)]
 #[allow(unused_imports)]
-pub(crate) use windows::{register_policy, PolicyChannel};
+pub(crate) use windows::{register_policy, AudioFocusWake, PolicyChannel};
 #[cfg(windows)]
 pub(crate) fn request_policy_refresh() -> io::Result<()> {
     windows::request_policy_refresh()
