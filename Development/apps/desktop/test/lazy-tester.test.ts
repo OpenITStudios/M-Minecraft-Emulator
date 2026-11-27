@@ -107,11 +107,14 @@ describe('Storage on-demand boundary', () => {
     expect(refresh).toContain("page === 'settings' || page === 'storage'");
     expect(refresh).toContain('? await lazyTester.settings()');
     expect(refresh).toContain('passiveIdle ? await lazyTester.inspectIdle() : await lazyTester.inspect()');
-    expect(refresh).not.toContain('lazyTester.storage(');
-    expect(selection).toContain('lazyTester.storage(slot)');
+    expect(refresh).not.toContain('inspectSelectedStorage(');
+    expect(selection).toContain('await inspectSelectedStorage(issued)');
     expect(selection).toContain('storage=null');
-    expect(selection).toContain('!isCurrentObservation(issued)||selectedSlot!==slot');
-    expect(app.match(/lazyTester\.storage\(/g)).toHaveLength(3);
+    const selectedRead=app.split('async function inspectSelectedStorage(')[1]!.split('async function loadBinding(')[0]!;
+    expect(selectedRead).toContain('lazyTester.inspectProfileStorage(slot)');
+    expect(selectedRead).toContain('!isCurrentObservation(issued)||selectedSlot!==slot');
+    expect(app.match(/lazyTester\.inspectProfileStorage\(/g)).toHaveLength(1);
+    expect(app.match(/await inspectSelectedStorage\(issued\)/g)).toHaveLength(3);
     expect(app).toContain("if(next==='storage'&&binding?.configured)");
     const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
     expect(bridge).toContain('value.storage.length !== (selectedStorageSlot === undefined ? 5 : 1)');

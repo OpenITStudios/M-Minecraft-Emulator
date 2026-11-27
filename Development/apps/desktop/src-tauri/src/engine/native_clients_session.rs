@@ -2000,6 +2000,7 @@ mod tests {
             assert_eq!(request(SessionRequest::ClearProfileData {slot,confirmation_token:token,confirmation_name:name.into()}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
         }
     }
+    #[cfg(windows)]
     #[test]
     fn selected_storage_request_is_exact_and_bounded() {
         for slot in 1..=5 {

@@ -518,7 +518,7 @@ export const lazyTester = {
     if (!profileSlots.includes(slot)) throw new TypeError('Unknown Minecraft profile');
     return parseSelectedClose(await invokeRuntime<unknown>('lazy_tester_close_one', {slot}));
   },
-  storage: async (slot:ProfileSlot) => {
+  inspectProfileStorage: async (slot:ProfileSlot) => {
     if (!profileSlots.includes(slot)) throw new TypeError('Invalid storage slot');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectProfileStorage', slot}}),slot);
   },

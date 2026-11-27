@@ -1011,10 +1011,12 @@ try {
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true})
     .evaluate(node=>document.activeElement===node),true,
     'Cancel must still return focus to the original cache review trigger');
+  await storageProfilePicker.focus();
   await storageProfilePicker.selectOption('2');
   await page.waitForFunction(()=>window.__calls.some(c=>c.args?.request?.operation==='InspectProfileStorage'&&c.args.request.slot===2));
   await page.waitForFunction(()=>!document.querySelector('select[aria-label="Choose Minecraft launcher"]').disabled);
   assert.equal(await storageProfilePicker.inputValue(),'2');
+  await page.waitForFunction(()=>document.activeElement===document.querySelector('select[aria-label="Choose Minecraft launcher"]'));
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'Switching to MC02 must display its own cache admission, not MC01 status');
   await storageProfilePicker.selectOption('1');

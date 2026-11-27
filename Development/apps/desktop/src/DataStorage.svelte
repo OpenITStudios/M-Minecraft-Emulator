@@ -37,7 +37,7 @@
   export let locationIssue: string;
   export let runningCount: number;
 
-  export let onChooseSlot: (slot: ProfileSlot) => void;
+  export let onChooseSlot: (slot: ProfileSlot) => Promise<void>;
   export let onInspectSelective: (slot: ProfileSlot, category: SelectiveCategory) => Promise<SelectiveInventory>;
   export let onReviewSelective: (slot: ProfileSlot, selections: SelectiveSelection[]) => Promise<SelectiveReviewReceipt>;
   export let onConfirmDownloadCache: (slot:ProfileSlot)=>Promise<void>;
@@ -87,6 +87,16 @@
     fullName !== `Minecraft - ${fullReview.slot}`;
 
   $: if(clearSlot!==null) maintenanceOpen=true;
+
+  async function chooseStorageProfile(picker:HTMLSelectElement):Promise<void> {
+    const restoreFocus=document.hasFocus()&&document.activeElement===picker;
+    await onChooseSlot(Number(picker.value) as ProfileSlot);
+    // The selected read temporarily disables the picker. Restore only lost
+    // focus, never a later Tab/click target or a disconnected page.
+    await tick();
+    if(restoreFocus&&document.hasFocus()&&document.activeElement===document.body&&
+      picker.isConnected&&!picker.disabled)picker.focus({preventScroll:true});
+  }
 
   function showCacheReview(trigger: HTMLButtonElement): void {
     if (storageReviewOpen || busy || refreshing || resizing) return;
@@ -197,7 +207,7 @@
           <section class="lazytester-group" aria-labelledby="lazytester-storage-overview-section">
             <div class="lazytester-profile-management-heading">
               <h2 id="lazytester-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Profile Management</h2>
-              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||refreshing||resizing||storageReviewOpen||nativeClosePending} aria-label="Choose Minecraft launcher" aria-describedby={storageReviewOpen?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||refreshing||resizing||storageReviewOpen||nativeClosePending} aria-label="Choose Minecraft launcher" aria-describedby={storageReviewOpen?'lazytester-storage-review-guidance':undefined} on:change={event=>void chooseStorageProfile(event.currentTarget)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
             </div>
           {#if storageReviewOpen}<p id="lazytester-storage-review-guidance" class="lazytester-help" role="status">Finish or cancel this review before switching profiles.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}

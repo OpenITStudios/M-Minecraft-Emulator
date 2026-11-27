@@ -38,7 +38,9 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
   it('retains all original data-operation guards while keeping profile review local',()=>{
     const app=load('LazyTesterApp.svelte');
     const storage=load('DataStorage.svelte');
-    expect(storage).toContain('disabled={busy||storageReviewOpen}');
+    expect(storage).toContain('disabled={busy||refreshing||resizing||storageReviewOpen||nativeClosePending}');
+    expect(storage).toContain('document.activeElement===document.body&&');
+    expect(storage).toContain('picker.isConnected&&!picker.disabled)picker.focus({preventScroll:true})');
     expect(chooseGuard(app)).toContain('selectiveOpen');
     expect(storage).toContain("aria-describedby={storageReviewOpen?'lazytester-storage-review-guidance':undefined}");
     expect(storage).toContain('Finish or cancel this review before switching profiles.');

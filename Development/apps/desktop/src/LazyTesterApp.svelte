@@ -41,10 +41,7 @@
     const issued=observationEpoch;
     activeOperation='refreshStorage';issueKey=null;
     try {
-      const snapshot=await lazyTester.storage(slot);
-      if(!isCurrentObservation(issued)||selectedSlot!==slot)return;
-      applyStorageSnapshot(snapshot);
-      available=true;connectionIssueKey=null;
+      await inspectSelectedStorage(issued);
     } catch(error) {
       if(isCurrentObservation(issued)){issueKey='storage';storage=null;}
     } finally {activeOperation=null;}
@@ -539,9 +536,7 @@
       }
       if(next==='storage'&&binding?.configured) {
         storage=null;
-        const snapshot=await lazyTester.storage(selectedSlot);
-        if (!current()) return;
-        applyStorageSnapshot(snapshot);
+        if (!await inspectSelectedStorage(issued)) return;
       }
       if (current()) dirty = true;
     } catch (error) {
@@ -592,10 +587,7 @@
           storage=null;storageNotice='';issueKey='binding';
           return;
         }
-        const snapshot=await lazyTester.storage(selectedSlot);
-        if (!current()) return;
-        applyStorageSnapshot(snapshot);
-        available=true;connectionIssueKey=null;
+        if (!await inspectSelectedStorage(issued)) return;
       }catch(error){
         if (current()) {issueKey='storage';storage=null;}
       }
@@ -913,6 +905,16 @@
     publishProfiles(snapshot.profiles);
     storage = snapshot.storage;
     storageReportReceivedAt = storageReportReceivedTime();
+  }
+  // The three explicit Storage read paths share one request/publication fence.
+  // Callers keep the existing operation admission and page-specific feedback.
+  async function inspectSelectedStorage(issued:number):Promise<boolean> {
+    const slot=selectedSlot;
+    const snapshot=await lazyTester.inspectProfileStorage(slot);
+    if(!isCurrentObservation(issued)||selectedSlot!==slot)return false;
+    applyStorageSnapshot(snapshot);
+    available=true;connectionIssueKey=null;
+    return true;
   }
   async function loadBinding(importProfiles = false) {
     if (nativeBackend !== 'WindowsNative' || activeOperation !== null || refreshing || resizing || disposed) return;
