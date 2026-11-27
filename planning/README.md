@@ -7,6 +7,8 @@
 **Local-test plan:** [Computer Use Windows local-test guide](../docs/validation/ai-computer-use-localtest.md)
 (separate authorization required before running any checks or games).
 
+The [complete handoff through 27 November 2026](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/9b285c2110b7cdf91eda7e26c315a0b850eab82c/planning/development.md) is preserved at its original Git revision, including all prior Work IDs, evidence and relative links. It is historical only; its Next fields are not current instructions.
+
 The full 5 November P1–P46 source continuation was preserved as a
 **historical-only snapshot** before condensing the single current handoff:
 [Source handoff through 5 November 2026](history/source-handoff-through-2026-11-05.md).
