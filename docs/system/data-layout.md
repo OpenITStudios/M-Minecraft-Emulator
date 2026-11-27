@@ -201,8 +201,7 @@ directory, counting declared resource-pack references and worlds with
 declarations. The world database, level.dat, accounts, and assets are never
 opened. Directories and metadata are checked against reparse points; each
 source has an entry/time/size limit, and an incomplete result is UNKNOWN
-rather than a false zero. One cooperative two-second deadline is shared
-across all five profiles' storage scans. When it is exhausted, resource-pack
+rather than a false zero. One cooperative two-second deadline bounds the selected profile's storage scan, or is shared across all five rows on a legacy full report or mutation receipt. When it is exhausted, resource-pack
 inspection skips additional directory opens and returns partial/UNKNOWN,
 not an authoritative zero. Final directory operations and missing-root probes
 also recheck the deadline before claiming completion. The profile-size scan

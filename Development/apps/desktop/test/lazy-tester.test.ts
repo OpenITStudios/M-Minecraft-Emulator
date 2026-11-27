@@ -31,6 +31,20 @@ describe('Ordered desktop storage receipt admission',()=>{
       }
     }
   });
+  it('binds selected storage to the requested slot and retains full roster admission',()=>{
+    const snapshot=stopped();
+    const selected={...snapshot,storage:[storage[2]!]};
+    expect(parseSession(selected,3).storage).toEqual([storage[2]]);
+    expect(()=>parseSession(selected)).toThrow('Invalid storage response');
+    expect(()=>parseSession(selected,2)).toThrow('Invalid storage metadata');
+    expect(()=>parseSession({...snapshot,storage},3)).toThrow('Invalid storage response');
+    expect(()=>parseSession(snapshot,3)).toThrow('Missing selected storage response');
+    expect(()=>parseSession({...snapshot,storage:new Array(1)},3)).toThrow('Invalid storage metadata');
+    const active={...selected,profiles:snapshot.profiles.map(p=>p.slot===3?running(3):p)};
+    expect(()=>parseSession(active,3)).toThrow('Invalid cache metadata');
+    const otherActive={...selected,profiles:snapshot.profiles.map(p=>p.slot===1?running(1):p)};
+    expect(parseSession(otherActive,3).storage?.[0]?.slot).toBe(3);
+  });
   it('refuses sparse rosters, coerced states and mismatched storage order',()=>{
     const snapshot=stopped();
     expect(()=>parseSession({...snapshot,profiles:new Array(5)})).toThrow('Invalid profile response');
@@ -86,7 +100,7 @@ describe('Passive idle observation boundary',()=>{
   });
 });
 describe('Storage on-demand boundary', () => {
-  it('keeps complete storage scans out of startup, periodic observation and slot selection', () => {
+  it('inspects only selected storage on demand, never in startup or periodic observation', () => {
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
     const refresh=app.split('async function refresh(passiveIdle = false)')[1]!.split('async function launch(')[0]!;
     const selection=app.split('function chooseSlot(')[1]!.split('let queuedPerformance:')[0]!;
@@ -94,11 +108,14 @@ describe('Storage on-demand boundary', () => {
     expect(refresh).toContain('? await lazyTester.settings()');
     expect(refresh).toContain('passiveIdle ? await lazyTester.inspectIdle() : await lazyTester.inspect()');
     expect(refresh).not.toContain('lazyTester.storage(');
-    expect(selection).not.toContain('lazyTester.');
-    expect(app.match(/lazyTester\.storage\(/g)).toHaveLength(2);
+    expect(selection).toContain('lazyTester.storage(slot)');
+    expect(selection).toContain('storage=null');
+    expect(selection).toContain('!isCurrentObservation(issued)||selectedSlot!==slot');
+    expect(app.match(/lazyTester\.storage\(/g)).toHaveLength(3);
     expect(app).toContain("if(next==='storage'&&binding?.configured)");
     const bridge=readFileSync(new URL('../src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
-    expect(bridge).toContain('value.storage.length !== 5');
+    expect(bridge).toContain('value.storage.length !== (selectedStorageSlot === undefined ? 5 : 1)');
+    expect(bridge).toContain("operation: 'InspectProfileStorage', slot");
   });
 });
 describe('Desktop operation ownership', () => {

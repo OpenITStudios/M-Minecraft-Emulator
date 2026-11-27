@@ -684,6 +684,7 @@ pub enum SessionRequest {
     SaveAudio {mode:super::manager_settings::BackgroundAudio},
     SaveStoragePreferences { preferences: super::manager_settings::StoragePreferences },
     InspectStorage,
+    InspectProfileStorage { slot: u32 },
     InspectSelectiveInventory { slot: u32, category: SelectiveCategory },
     ReviewSelectiveInventory { slot: u32, selections: Vec<SelectiveSelection> },
     ConfirmSelectedWorlds { slot: u32, selections: Vec<SelectiveSelection>, #[serde(rename="confirmationToken")] confirmation_token: String },
@@ -1294,7 +1295,7 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -1877,6 +1878,7 @@ mod tests {
         assert!(can_reconcile_pending_transport(&SessionRequest::Inspect));
         assert!(!can_reconcile_pending_transport(&SessionRequest::InspectSettings));
         assert!(!can_reconcile_pending_transport(&SessionRequest::InspectStorage));
+        assert!(!can_reconcile_pending_transport(&SessionRequest::InspectProfileStorage {slot:1}));
         assert!(!can_reconcile_pending_transport(&SessionRequest::CloseOne{slot:2}));
         assert!(!can_reconcile_pending_transport(&SessionRequest::CloseAll));
         #[cfg(feature="mc02-native-input")]
@@ -1997,6 +1999,21 @@ mod tests {
         for (slot,token,name) in [(0,"a".repeat(64),"Minecraft - 0"),(1,"bad".into(),"Minecraft - 1"),(1,"a".repeat(64),"Minecraft - 2")] {
             assert_eq!(request(SessionRequest::ClearProfileData {slot,confirmation_token:token,confirmation_name:name.into()}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
         }
+    }
+    #[test]
+    fn selected_storage_request_is_exact_and_bounded() {
+        for slot in 1..=5 {
+            let request=SessionRequest::InspectProfileStorage {slot};
+            assert!(validate_request(&request).is_ok());
+            assert!(matches!(serde_json::from_value::<SessionRequest>(serde_json::to_value(request).unwrap()),
+                Ok(SessionRequest::InspectProfileStorage {slot: observed}) if observed==slot));
+        }
+        for slot in [0,6,u32::MAX] {
+            assert_eq!(validate_request(&SessionRequest::InspectProfileStorage {slot}).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+        }
+        assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectProfileStorage"}"#).is_err());
+        assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectProfileStorage","slot":1,"path":"outside"}"#).is_err());
+        assert!(matches!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectStorage"}"#),Ok(SessionRequest::InspectStorage)));
     }
     #[test]
     fn settings_report_describes_the_reviewed_policy_without_starting_a_controller() {

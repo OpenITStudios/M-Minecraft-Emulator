@@ -85,8 +85,8 @@ describe("Emulator source verification routing", () => {
     expect(refresh).toContain("const location=await lazyTester.dataLocation()");
     expect(refresh).toContain("if(!binding?.configured){");
     expect(refresh).toContain("storage=null;storageNotice='';issueKey='binding';");
-    expect(refresh).toContain("const snapshot=await lazyTester.storage();");
-    expect(refresh).not.toContain("if(binding?.configured){const snapshot=await lazyTester.storage();");
+    expect(refresh).toContain("const snapshot=await lazyTester.storage(selectedSlot);");
+    expect(refresh).not.toContain("if(binding?.configured){const snapshot=await lazyTester.storage(selectedSlot);");
     // An unavailable session status is never presented as a ready-to-launch
     // Play heading; availability and the confirmed binding remain distinct.
     expect(ui).toContain("!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable'");

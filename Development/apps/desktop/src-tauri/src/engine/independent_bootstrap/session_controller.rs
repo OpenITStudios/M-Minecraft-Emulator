@@ -782,7 +782,7 @@ impl Sessions {
             .ok_or_else(|| invalid("Profile storage is unavailable"))
     }
 
-    fn storage(&self) -> io::Result<Vec<ProfileStorage>> {
+    fn storage(&self, slots: std::ops::RangeInclusive<u32>) -> io::Result<Vec<ProfileStorage>> {
         // One cooperative traversal budget for this *entire* read-only request,
         // not two seconds independently for each of five profiles and caches.
         // Native OS calls and the separate clear-confirmation inspection can
@@ -792,7 +792,7 @@ impl Sessions {
         // One report-local observation of the original retained handles.
         // Do not carry this result into a later request or mutation.
         let owned = self.owned_data_processes();
-        (1..=5)
+        slots
             .map(|slot| {
                 let store = self.store(slot)?;
                 let path = directory_path(&store.private)?;
@@ -1028,7 +1028,7 @@ impl Sessions {
     ) -> io::Result<Vec<ProfileStorage>> {
         self.admit_profile_mutation(slot)?;
         change(&self.store(slot)?.private)?;
-        self.storage()
+        self.storage(1..=5)
     }
 
     fn owned_data_processes(&self) -> io::Result<Vec<(u32, u64)>> {
@@ -1923,7 +1923,10 @@ fn run() -> io::Result<()> {
                 SessionRequest::CloseAll => sessions.close_all().map_err(|error|error.to_string())?,
                 SessionRequest::CloseOne {slot} => sessions.close_one(slot).map_err(|error|error.to_string())?,
                 SessionRequest::InspectStorage => {
-                    storage = Some(sessions.storage().map_err(|error| error.to_string())?)
+                    storage = Some(sessions.storage(1..=5).map_err(|error| error.to_string())?)
+                }
+                SessionRequest::InspectProfileStorage { slot } => {
+                    storage = Some(sessions.storage(slot..=slot).map_err(|error| error.to_string())?)
                 }
                 SessionRequest::InspectSelectiveInventory { slot, category } => {
                     selective_inventory = Some(sessions.selective_inventory(slot, category).map_err(|error| error.to_string())?);
@@ -1938,7 +1941,7 @@ fn run() -> io::Result<()> {
                         return Err("Pack deletion is held for native dependency and filesystem validation".into());
                     }
                     sessions.confirm_selected_data(slot,&selections,&confirmation_token,true).map_err(|error|error.to_string())?;
-                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
+                    storage=Some(sessions.storage(1..=5).map_err(|error|error.to_string())?);
                 }
                 SessionRequest::ConfirmSelectedWorlds { slot, selections, confirmation_token } => {
                     // Source integration only: the existing native disposition hold remains.
@@ -1946,7 +1949,7 @@ fn run() -> io::Result<()> {
                         return Err("World deletion is held for native filesystem validation".into());
                     }
                     sessions.confirm_selected_worlds(slot, &selections, &confirmation_token).map_err(|error| error.to_string())?;
-                    storage = Some(sessions.storage().map_err(|error| error.to_string())?);
+                    storage = Some(sessions.storage(1..=5).map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ClearProfileDownloadCache { slot } => {
                     if !crate::engine::manager_settings::DOWNLOAD_CACHE_REVIEWED {
@@ -1959,13 +1962,13 @@ fn run() -> io::Result<()> {
                         return Err("Finish pending profile cleanup first".into());
                     }
                     profile_storage::clear_cache_target(&store.private,profile_storage::CacheTarget::Download,true).map_err(|error|error.to_string())?;
-                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
+                    storage=Some(sessions.storage(1..=5).map_err(|error|error.to_string())?);
                 }
                 SessionRequest::ClearProfileCache { slot } => {
                     sessions
                         .clear_cache(slot)
                         .map_err(|error| error.to_string())?;
-                    storage = Some(sessions.storage().map_err(|error| error.to_string())?);
+                    storage = Some(sessions.storage(1..=5).map_err(|error| error.to_string())?);
                 }
                 SessionRequest::ResetGameSettings { slot } =>
                     storage = Some(sessions.change_game_settings(slot, game_preset::reset_settings).map_err(|error|error.to_string())?),
@@ -1980,7 +1983,7 @@ fn run() -> io::Result<()> {
                 SessionRequest::ClearProfileData {slot,confirmation_token,confirmation_name}=>{
                     if confirmation_name!=format!("Minecraft - {slot}") {return Err("Launcher confirmation does not match".into());}
                     sessions.clear_data(slot,&confirmation_token).map_err(|error|error.to_string())?;
-                    storage=Some(sessions.storage().map_err(|error|error.to_string())?);
+                    storage=Some(sessions.storage(1..=5).map_err(|error|error.to_string())?);
                 }
                 SessionRequest::OpenProfileFolder { slot } => sessions
                     .open_folder(slot)
@@ -2191,6 +2194,7 @@ mod tests {
             SessionRequest::Inspect,
             SessionRequest::InspectSettings,
             SessionRequest::InspectStorage,
+            SessionRequest::InspectProfileStorage { slot: 3 },
             SessionRequest::Launch { slot: 2 },
         ] {
             assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Full);

@@ -197,7 +197,7 @@
           <section class="lazytester-group" aria-labelledby="lazytester-storage-overview-section">
             <div class="lazytester-profile-management-heading">
               <h2 id="lazytester-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Profile Management</h2>
-              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||storageReviewOpen} aria-label="Choose Minecraft launcher" aria-describedby={storageReviewOpen?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||refreshing||resizing||storageReviewOpen||nativeClosePending} aria-label="Choose Minecraft launcher" aria-describedby={storageReviewOpen?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
             </div>
           {#if storageReviewOpen}<p id="lazytester-storage-review-guidance" class="lazytester-help" role="status">Finish or cancel this review before switching profiles.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}

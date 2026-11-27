@@ -190,11 +190,12 @@ try {
           return {...snapshot(),selectiveReview:{slot,items:selections,bytes:1024,files:1,
             warnings:packs?['Pack dependency coverage unavailable']:[],confirmationToken:packs?null:'d'.repeat(64)}};
         }
-        if (operation === 'InspectStorage') {
+        if (operation === 'InspectProfileStorage') {
+          if(![1,2,3,4,5].includes(args.request.slot))throw new Error('Invalid storage slot');
           if (window.__holdStorage) await new Promise(resolve => {
             window.__finishStorage = () => {window.__finishStorage=null;resolve();};
           });
-          return {...snapshot(), storage: profiles.map(profile => ({
+          return {...snapshot(), storage: profiles.filter(profile=>profile.slot===args.request.slot).map(profile => ({
           slot: profile.slot, bytes: window.__storageBytes ?? 1048576, files: 1, partial: true, disk: null,
           cache: {
             bytes: window.__dataReviewFixture && profile.slot === 1 ? 512 : 0,
@@ -324,7 +325,7 @@ try {
     idleInspectCount+1,{timeout:2500});
   assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='Inspect').at(-1)?.args.passiveIdle===true),false);
   assert.equal(await page.evaluate(()=>window.__calls.some(
-    call=>call.args?.request?.operation==='InspectStorage')),false,'Background observation must not scan Storage');
+    call=>call.args?.request?.operation==='InspectProfileStorage')),false,'Background observation must not scan Storage');
 
   // The native activity indicator is sparse and never claims game control.
   await page.goto('http://lazy-tester.test/?agent-status=1');
@@ -1011,10 +1012,14 @@ try {
     .evaluate(node=>document.activeElement===node),true,
     'Cancel must still return focus to the original cache review trigger');
   await storageProfilePicker.selectOption('2');
+  await page.waitForFunction(()=>window.__calls.some(c=>c.args?.request?.operation==='InspectProfileStorage'&&c.args.request.slot===2));
+  await page.waitForFunction(()=>!document.querySelector('select[aria-label="Choose Minecraft launcher"]').disabled);
   assert.equal(await storageProfilePicker.inputValue(),'2');
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'Switching to MC02 must display its own cache admission, not MC01 status');
   await storageProfilePicker.selectOption('1');
+  await page.waitForFunction(()=>!document.querySelector('select[aria-label="Choose Minecraft launcher"]').disabled);
+  assert.equal(await page.evaluate(()=>window.__calls.filter(c=>c.args?.request?.operation==='InspectProfileStorage').at(-1)?.args.request.slot),1);
   await page.locator('.lazytester-advanced summary').click();
   await section('General').click();
   await section('Data Storage').click();
@@ -1601,8 +1606,8 @@ try {
   await page.getByText('Launcher profiles not verified',{exact:true}).waitFor();
   await page.getByText('Storage unavailable. Refresh to inspect again. Unknown does not mean empty.',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
-    call.args?.request?.operation==='InspectStorage').length),0,
-    'Failed profile binding must never issue InspectStorage or reuse a previous report');
+    call.args?.request?.operation==='InspectProfileStorage').length),0,
+    'Failed profile binding must never issue selected storage inspection or reuse a previous report');
   await page.locator('details.lazytester-storage-maintenance summary').click();
   assert.equal(await page.getByRole('button',{name:'Clear cache…',exact:true}).isDisabled(),true,
     'No storage mutation may be enabled from an unverified profile binding');
@@ -1615,7 +1620,7 @@ try {
   await page.getByRole('button',{name:'Refresh',exact:true}).click();
   await page.getByText(/Last storage report received:/).waitFor();
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
-    call.args?.request?.operation==='InspectStorage')),true,
+    call.args?.request?.operation==='InspectProfileStorage')),true,
     'A newly verified binding may use the original read-only Storage inspection');
   assert.equal(await page.evaluate(()=>window.__calls.some(c=>c.args?.action==='Choose'||['Launch','ClearProfileCache'].includes(c.args?.request?.operation))),false);
   // Native close review can begin during an already-issued navigation.

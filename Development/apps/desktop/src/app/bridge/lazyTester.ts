@@ -222,7 +222,8 @@ export function parseProfileBinding(value: unknown): ProfileBinding {
   return value as unknown as ProfileBinding;
 }
 
-export function parseSession(value: unknown): SessionSnapshot {
+export function parseSession(value: unknown, selectedStorageSlot?: ProfileSlot): SessionSnapshot {
+  if (selectedStorageSlot !== undefined && !profileSlots.includes(selectedStorageSlot)) throw new TypeError('Invalid storage slot');
   if (!record(value) || !exact(value, ['schema','profiles','storage',
      ...(Object.hasOwn(value,'settings')?['settings']:[]),
      ...(Object.hasOwn(value,'selectiveInventory')?['selectiveInventory']:[]),
@@ -244,17 +245,19 @@ export function parseSession(value: unknown): SessionSnapshot {
       if (profile.state === 'RUNNING' && (!process.responding || BigInt(process.windowHandle) === 0n)) throw new TypeError('Invalid running game');
     } else if (profile.state === 'RUNNING') throw new TypeError('Running game has no process');
   }
+  if (selectedStorageSlot !== undefined && value.storage === null) throw new TypeError('Missing selected storage response');
   if (value.storage !== null) {
-    if (!Array.isArray(value.storage) || value.storage.length !== 5) throw new TypeError('Invalid storage response');
+    if (!Array.isArray(value.storage) || value.storage.length !== (selectedStorageSlot === undefined ? 5 : 1)) throw new TypeError('Invalid storage response');
     for (let index = 0; index < value.storage.length; index++) {
       const storage: unknown = value.storage[index];
-      if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'downloadCache')?['downloadCache']:[]),...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'resourcePacks')?['resourcePacks']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== index + 1 ||
+      const expectedSlot = selectedStorageSlot ?? index + 1;
+      if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'downloadCache')?['downloadCache']:[]),...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'resourcePacks')?['resourcePacks']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== expectedSlot ||
           !Number.isSafeInteger(storage.bytes) || Number(storage.bytes) < 0 || !Number.isInteger(storage.files) ||
           Number(storage.files) < 0 || Number(storage.files) > 100000 || typeof storage.partial !== 'boolean') throw new TypeError('Invalid storage metadata');
       const {disk, cache} = storage;
-      // Both rosters require slot === index + 1. Reuse this request-local
-      // observation for all four admission checks, never a persistent cache.
-      const state = (value.profiles as ProfileSession[])[index]!.state;
+      // The full roster is ordered; a selected report must bind its exact slot.
+      // Reuse this observation for all four admission checks, never a cache.
+      const state = (value.profiles as ProfileSession[])[expectedSlot - 1]!.state;
       const active = state === 'STARTING' || state === 'RUNNING' || state === 'NOT_RESPONDING';
       if (disk !== null && (!record(disk) || !exact(disk, ['availableBytes', 'totalBytes']) ||
           !Number.isSafeInteger(disk.availableBytes) || Number(disk.availableBytes) < 0 ||
@@ -515,7 +518,10 @@ export const lazyTester = {
     if (!profileSlots.includes(slot)) throw new TypeError('Unknown Minecraft profile');
     return parseSelectedClose(await invokeRuntime<unknown>('lazy_tester_close_one', {slot}));
   },
-  storage: async () => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectStorage'}})),
+  storage: async (slot:ProfileSlot) => {
+    if (!profileSlots.includes(slot)) throw new TypeError('Invalid storage slot');
+    return parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'InspectProfileStorage', slot}}),slot);
+  },
   selectiveInventory: async (slot: ProfileSlot, category: SelectiveCategory): Promise<SelectiveInventory> => {
     const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSelectiveInventory',slot,category}}));
     const inventory=snapshot.selectiveInventory;

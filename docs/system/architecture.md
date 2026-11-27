@@ -141,8 +141,7 @@ Geometry-only resize/DPI events outside Play do not schedule
 preview cleanup; navigation, visibility transitions, failed preview recovery
 and native safety admission retain their original paths.
 
-Full five-slot storage reports are requested on Storage entry, explicit
-Refresh and mutation receipts. Category inventory is on demand.
+Desktop Storage entry, explicit Refresh and launcher selection request only the selected profile's storage report. The five-slot lifecycle roster is unchanged; legacy full reports and mutation receipts still return all five storage rows. Category inventory is on demand.
 Within a read-only report or review, reuse verified handle metadata
 and pinned directory chains; never carry mutation permission across
 requests. The approximate profile-size traversal reuses the current
@@ -152,8 +151,7 @@ entries are excluded, and the shared budget/partial bounds are unchanged.
 File sizes reflect enumeration time, not an atomic snapshot. Cache and
 selective-data review/disposition retain their separate handle-based proof;
 disk space is still queried on the individual verified path. No persistent
-size cache, background traversal, or new watcher. The complete five-slot
-wire contract remains unchanged.
+size cache, background traversal, or new watcher. The selected read requires one exact requested storage row; full report/mutation consumers still require five ordered rows.
 
 A selected workspace presentation uses one verified path and retains
 original recovery checkpoints where possible. Passive placement skips

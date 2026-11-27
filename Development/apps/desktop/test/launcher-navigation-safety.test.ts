@@ -58,9 +58,9 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     }
     expect(app).toContain('return !disposed && observationStillCurrent(issued, observationEpoch, reviewState());');
     expect(navigation).toContain("const snapshot=await lazyTester.settings();\n        if (!current()) return;");
-    expect(navigation).toContain("const snapshot=await lazyTester.storage();\n        if (!current()) return;");
+    expect(navigation).toContain("const snapshot=await lazyTester.storage(selectedSlot);\n        if (!current()) return;");
     expect(navigation).toContain("if (current()) {issueKey='workspace';dirty=true;}");
-    expect(refresh).toContain("const snapshot=await lazyTester.storage();\n        if (!current()) return;");
+    expect(refresh).toContain("const snapshot=await lazyTester.storage(selectedSlot);\n        if (!current()) return;");
     expect(refresh).toContain("if (current()) {issueKey='storage';storage=null;}");
     expect(navigate).toContain('manualRefreshRequested = false;');
     expect(navigate).toContain('headerRefreshFocusPage = null;');

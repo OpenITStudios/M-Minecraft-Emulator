@@ -29,15 +29,25 @@
   $: selectedStorage=storage?.find(item=>item.slot===selectedSlot);
   $: selectedProfile=profiles.find(item=>item.slot===selectedSlot);
   $: selectedPath=dataLocation?.profiles.find(item=>item.slot===selectedSlot)?.path;
-  function chooseSlot(slot:ProfileSlot){
-    // A profile switch is display-only. It must never silently dismiss
-    // an active CloseOne/Storage confirmation or an in-flight mutation.
+  async function chooseSlot(slot:ProfileSlot){
+    // A profile switch cannot dismiss a review or race a native operation.
     if (slot===selectedSlot || activeOperation !== null || selectiveOpen ||
+        refreshing || resizing || disposed || !profileSlots.includes(slot) ||
         closeReviewActive(reviewState()) || storageReview!==null) return;
     selectedSlot=slot;
-    // Per-profile success receipts are not native session or storage truth.
-    // Do not show the prior slot's receipt under the newly selected slot.
-    settingsNotice='';storageNotice='';
+    // Never display another slot's receipt while the selected read is pending.
+    settingsNotice='';storageNotice='';storage=null;
+    if(page!=='storage'||nativeBackend!=='WindowsNative'||!binding?.configured)return;
+    const issued=observationEpoch;
+    activeOperation='refreshStorage';issueKey=null;
+    try {
+      const snapshot=await lazyTester.storage(slot);
+      if(!isCurrentObservation(issued)||selectedSlot!==slot)return;
+      applyStorageSnapshot(snapshot);
+      available=true;connectionIssueKey=null;
+    } catch(error) {
+      if(isCurrentObservation(issued)){issueKey='storage';storage=null;}
+    } finally {activeOperation=null;}
   }
   let queuedPerformance:{active:number;background:number}|null=null;
   let activeFps:number|undefined=144,backgroundFps:number|undefined=10,performanceNotice='';
@@ -528,7 +538,8 @@
         }
       }
       if(next==='storage'&&binding?.configured) {
-        const snapshot=await lazyTester.storage();
+        storage=null;
+        const snapshot=await lazyTester.storage(selectedSlot);
         if (!current()) return;
         applyStorageSnapshot(snapshot);
       }
@@ -581,7 +592,7 @@
           storage=null;storageNotice='';issueKey='binding';
           return;
         }
-        const snapshot=await lazyTester.storage();
+        const snapshot=await lazyTester.storage(selectedSlot);
         if (!current()) return;
         applyStorageSnapshot(snapshot);
         available=true;connectionIssueKey=null;
