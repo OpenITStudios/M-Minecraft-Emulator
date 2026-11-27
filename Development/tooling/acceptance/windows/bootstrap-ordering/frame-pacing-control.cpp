@@ -217,7 +217,20 @@ void externalPolicyChecks() {
     Sleep(5); check(SetEvent(stop.value));
     stopping.join();
     check(stopped.outcome == Outcome::Stopped && pacer.wait_for_frame().outcome == Outcome::Stopped);
+    // Terminal signals must also win on first entry, when no timer is armed.
+    presentation_pacing::Pacer preStopped({level.value, changed.value, stop.value, controller.process.hProcess});
+    check(SetEvent(level.value) && SetEvent(changed.value));
+    check(preStopped.wait_for_frame().outcome == Outcome::Stopped);
+    check(preStopped.wait_for_frame().outcome == Outcome::Stopped);
     controller.finish();
+
+    Event deadLevel, deadChange(false), deadStop;
+    presentation_pacing::Pacer preExited({deadLevel.value, deadChange.value, deadStop.value, controller.process.hProcess});
+    check(SetEvent(deadLevel.value) && SetEvent(deadChange.value));
+    check(preExited.wait_for_frame().outcome == Outcome::Stopped);
+    check(preExited.wait_for_frame().outcome == Outcome::Stopped);
+    presentation_pacing::Pacer bothTerminal({level.value, changed.value, stop.value, controller.process.hProcess});
+    check(bothTerminal.wait_for_frame().outcome == Outcome::Stopped);
 
     OwnController exiting;
     Event secondLevel, secondChange(false), secondStop, waitingForExit;

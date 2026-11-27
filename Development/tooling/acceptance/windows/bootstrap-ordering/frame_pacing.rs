@@ -166,12 +166,12 @@ mod windows {
                 let mut mode = self.mode.load(Ordering::Acquire);
                 if mode == STOPPED { return FramePermit::stopped(); }
                 if external {
-                    for handle in &waits[..2] {
-                        match unsafe { WaitForSingleObject(*handle, 0) } {
-                            0 => { self.stop(); return FramePermit::stopped(); }
-                            WAIT_TIMEOUT => {}
-                            _ => return FramePermit::error(),
-                        }
+                    // Both retained terminal signals are non-consuming; test
+                    // them together without waiting or consuming the change event.
+                    match unsafe { WaitForMultipleObjects(2, waits.as_ptr(), 0, 0) } {
+                        0 | 1 => { self.stop(); return FramePermit::stopped(); }
+                        WAIT_TIMEOUT => {}
+                        _ => return FramePermit::error(),
                     }
                     mode = match unsafe { WaitForSingleObject(self.external[0].0, 0) } {
                         0 => FOREGROUND,
