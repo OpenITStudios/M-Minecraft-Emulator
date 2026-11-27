@@ -292,6 +292,13 @@ impl CachePlan {
         } else {
             open_directory(path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?
         };
+        self.visit_pinned_tree(path, root, depth, directory)
+    }
+    // A verified read-only root may be supplied directly. Recursive and
+    // exclusive mutation traversal still opens its original handles above.
+    fn visit_pinned_tree(&mut self, path: &Path, root: &Path, depth: usize,
+        directory: File) -> io::Result<()> {
+        self.bounded(depth)?;
         if self.selected_tree {
             self.record_tree_entry(path, root, &directory, true)?;
         }
@@ -398,7 +405,7 @@ pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
     }
     let mut plan = CachePlan::new(false, budget);
     plan.selected_tree = true;
-    plan.visit(path, 0)?;
+    plan.visit_pinned_tree(path, path, 0, pin)?;
     plan.bounded(0)?;
     let digest = plan.tree_digest(0);
     Ok((SelectedTreeExtent { bytes: plan.bytes, files: plan.files.len() as u32,
@@ -840,6 +847,28 @@ mod tests {
 #[cfg(test)]
 mod size_tests {
     use super::*;
+
+    #[test]
+    fn selected_tree_reuses_verified_root_and_preserves_extent_and_digest() {
+        let directory = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        std::fs::create_dir(directory.join("nested")).unwrap();
+        std::fs::write(directory.join("nested/data"), b"fixture").unwrap();
+        let pin = open_directory(&directory, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let expected = super::super::directory_id(&pin).unwrap();
+        let budget = || InspectionBudget::new(Duration::from_secs(2));
+        let (extent, digest) = inspect_selected_tree(&directory, &expected, budget()).unwrap();
+        let mut reference = CachePlan::new(false, budget());
+        reference.selected_tree = true;
+        reference.visit(&directory, 0).unwrap();
+        reference.bounded(0).unwrap();
+        assert_eq!((extent.bytes, extent.files, extent.directories, extent.entries),
+            (7, 1, 2, 2));
+        assert_eq!(digest, reference.tree_digest(0));
+        assert!(inspect_selected_tree(&directory, &expected, InspectionBudget::new(Duration::ZERO)).is_err());
+        drop(reference);
+        drop(pin);
+        std::fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn selected_review_uses_same_aggregate_bounds_as_preflight() {

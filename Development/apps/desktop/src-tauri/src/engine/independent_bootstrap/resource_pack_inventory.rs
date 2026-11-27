@@ -55,6 +55,13 @@ pub(super) fn individual_inventory(private: &File, category: InventoryCategory,
         if budget.exhausted() { return Err(io::Error::other("Inventory deadline exceeded")); }
         return Ok(Vec::new());
     };
+    inventory_at(&base, category, budget)
+}
+
+// The caller retains the already verified base ancestor pins for the
+// entire enumeration. Each category and item still obtains its own pin.
+fn inventory_at(base: &Path, category: InventoryCategory,
+    budget: InspectionBudget) -> io::Result<Vec<InventoryItem>> {
     let (roots, marker, limit): (&[&'static str], &str, u32) = match category {
         InventoryCategory::Worlds => (&["minecraftWorlds"], "level.dat", MAX_WORLD_ENTRIES),
         InventoryCategory::ResourcePacks => (&["resource_packs", "development_resource_packs"], "manifest.json", MAX_PACK_ENTRIES),
@@ -359,7 +366,7 @@ pub(super) fn pack_dependency_evidence(private: &File, budget: InspectionBudget)
     let mut evidence = Vec::new();
     let mut total_dependencies = 0;
     for category in [InventoryCategory::ResourcePacks, InventoryCategory::BehaviorPacks] {
-        for item in individual_inventory(private, category, budget)? {
+        for item in inventory_at(&base, category, budget)? {
             if budget.exhausted() { return Err(io::Error::other("Dependency review deadline exceeded")); }
             let root = base.join(item.root);
             let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
@@ -462,10 +469,14 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
         return Err(io::Error::other("Invalid or expired selective review"));
     }
     let profile_identity = directory_id(private)?;
+    // One base chain for selection enumeration and selected-tree observation.
+    // Keep the independent dependency/reference census and mutation preflight.
+    let (base, _pins) = base_path(private, budget)?
+        .ok_or_else(|| io::Error::other("Selection no longer matches inventory"))?;
     let mut items = Vec::new();
     for category in [InventoryCategory::Worlds, InventoryCategory::ResourcePacks, InventoryCategory::BehaviorPacks] {
         if !selections.iter().any(|s| s.category == category) { continue; }
-        let inventory = individual_inventory(private, category, budget)?;
+        let inventory = inventory_at(&base, category, budget)?;
         for selection in selections.iter().filter(|s| s.category == category) {
             let item = inventory.iter().find(|item| item.root == selection.root.as_str()
                 && item.name == selection.name)
@@ -510,8 +521,6 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
     if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
     // One deadline across the entire review, including selected tree sizes.
     // No partial total is returned on failure; no file contents are read.
-    let (base, _pins) = base_path(private, budget)?
-        .ok_or_else(|| io::Error::other("Selected profile data disappeared"))?;
     let mut extent = super::profile_storage::SelectedTreeExtent::default();
     let mut tree_digests = Vec::new();
     for item in &items {
@@ -808,6 +817,33 @@ mod tests {
         assert!(review_selection(&private, &[unknown], budget()).is_err());
         assert!(review_selection(&private, &[], budget()).is_err());
         assert!(review_selection(&private, &[selection()], InspectionBudget::new(Duration::ZERO)).is_err());
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn shared_inventory_base_preserves_category_identity_and_deadline() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let root = parent.join("Roaming/Minecraft Education Edition/games/com.mojang");
+        for (category, marker) in [("minecraftWorlds", "level.dat"),
+            ("resource_packs", "manifest.json"), ("behavior_packs", "manifest.json")] {
+            let path = root.join(category).join("one");
+            fs::create_dir_all(&path).unwrap();
+            fs::write(path.join(marker), b"fixture").unwrap();
+        }
+        let budget = InspectionBudget::new(Duration::from_secs(2));
+        let (base, pins) = base_path(&private, budget).unwrap().unwrap();
+        for category in [InventoryCategory::Worlds, InventoryCategory::ResourcePacks, InventoryCategory::BehaviorPacks] {
+            let shared = inventory_at(&base, category, budget).unwrap();
+            let direct = individual_inventory(&private, category, budget).unwrap();
+            assert_eq!(shared.len(), 1);
+            assert_eq!(direct.len(), 1);
+            assert_eq!((shared[0].root, &shared[0].name), (direct[0].root, &direct[0].name));
+            assert!(super::super::same_image(&shared[0].identity, &direct[0].identity));
+        }
+        assert!(inventory_at(&base, InventoryCategory::Worlds, InspectionBudget::new(Duration::ZERO)).is_err());
+        drop(pins);
         drop(private);
         fs::remove_dir_all(parent).unwrap();
     }
