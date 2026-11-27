@@ -901,7 +901,7 @@ impl Sessions {
         Ok(SelectiveInventory { slot, category, items })
     }
 
-    fn review_selective_inventory(&mut self, slot: u32, selections: Vec<SelectiveSelection>) -> io::Result<SelectiveReviewReceipt> {
+    fn resolve_selective_review(&mut self, slot: u32, selections: &[SelectiveSelection], budget: InspectionBudget) -> io::Result<resource_pack_inventory::SelectiveReview> {
         self.admit_profile_mutation(slot)?;
         let store = self.store(slot)?;
         #[cfg(feature="lazy-tester-package")]
@@ -918,8 +918,8 @@ impl Sessions {
             root: s.root.clone(), name: s.name.clone(),
         }).collect();
         let review = resource_pack_inventory::review_selection(&store.private, &native,
-            InspectionBudget::new(Duration::from_secs(2)))?;
-        for (selection, requested) in native.iter().zip(&selections) {
+            budget)?;
+        for (selection, requested) in native.iter().zip(selections) {
             let item = review.items.iter().find(|i| i.category == selection.category &&
                 i.root == selection.root.as_str() && i.name == selection.name)
                 .ok_or_else(|| invalid("Selection no longer matches inventory"))?;
@@ -927,8 +927,46 @@ impl Sessions {
                 return Err(invalid("Inventory changed; refresh selection"));
             }
         }
+        if budget.exhausted() { return Err(invalid("Selective review deadline exceeded")); }
+        Ok(review)
+    }
+
+    fn review_selective_inventory(&mut self, slot: u32, selections: Vec<SelectiveSelection>) -> io::Result<SelectiveReviewReceipt> {
+        let review = self.resolve_selective_review(slot, &selections, InspectionBudget::new(Duration::from_secs(2)))?;
         let confirmation_token = if review.warnings.is_empty() { Some(review.confirmation_token(slot)?) } else { None };
         Ok(SelectiveReviewReceipt { slot, bytes: review.bytes, files: review.files, items: selections, warnings: review.warnings, confirmation_token })
+    }
+
+    // Internal only: public mutation admission stays held until native
+    // directory sharing/disposition evidence and wire consumer review exist.
+    // The fingerprint is not authorization; repeat the original admission,
+    // selection identity review and exclusive preflight before disposition.
+    fn confirm_selected_worlds(&mut self, slot: u32, selections: &[SelectiveSelection],
+        confirmation_token: &str) -> io::Result<()> {
+        if selections.is_empty() || selections.len() > 128 ||
+            selections.iter().any(|s| s.category != SelectiveCategory::Worlds) ||
+            confirmation_token.len() != 64 ||
+            !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err(invalid("Invalid selected-world confirmation"));
+        }
+        let budget = InspectionBudget::new(Duration::from_secs(2));
+        let review = self.resolve_selective_review(slot, selections, budget)?;
+        if review.confirmation_token(slot)? != confirmation_token {
+            return Err(invalid("Selected data changed; review again"));
+        }
+        self.admit_profile_mutation(slot)?;
+        let store = self.store(slot)?;
+        #[cfg(feature="lazy-tester-package")]
+        if product_profiles::clear::pending(store)? {
+            return Err(invalid("Finish pending profile cleanup first"));
+        }
+        let plan = profile_storage::preflight_selected_worlds(&store.private, &review, budget)?;
+        // Keep every deletion candidate pinned while checking native
+        // ownership once more; never call a path-based fallback.
+        let observed = super::super::inspect_native_workspace()?.processes;
+        self.data_admission(slot, &observed)?;
+        if budget.exhausted() { return Err(invalid("Selected world confirmation deadline exceeded")); }
+        plan.dispose()
     }
 
     fn clear_cache(&mut self, slot: u32) -> io::Result<()> {
