@@ -153,12 +153,15 @@ fn count_manifested(base: &Path, budget: InspectionBudget) -> io::Result<u32> {
             if visited > MAX_PACK_ENTRIES || budget.exhausted() {
                 return Err(io::Error::other("Resource pack inventory exceeded its entry/time limit"));
             }
-            let path = entry?.path();
-            let meta = fs::symlink_metadata(&path)?;
+            let entry = entry?;
+            // Display-only count: Windows already supplies these attributes
+            // in read_dir. Actual directory/marker checks remain fresh.
+            let meta = entry.metadata()?;
             if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
                 return Err(io::Error::other("Resource pack inventory contains a link"));
             }
             if !meta.is_dir() { continue; }
+            let path = entry.path();
             // Check ordinary directory identity, never follow junctions.
             let _pin = open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
             match fs::symlink_metadata(path.join("manifest.json")) {
@@ -231,12 +234,9 @@ pub(super) struct WorldPackReference {
     pub(super) version: [u32; 3],
 }
 
-pub(super) fn world_pack_references(private: &File, budget: InspectionBudget)
+// Caller keeps the verified base ancestor pins for the whole census.
+fn world_pack_references(base: &Path, budget: InspectionBudget)
     -> io::Result<Vec<WorldPackReference>> {
-    let Some((base, _pins)) = base_path(private, budget)? else {
-        if budget.exhausted() { return Err(io::Error::other("Reference review deadline exceeded")); }
-        return Ok(Vec::new());
-    };
     let root = base.join("minecraftWorlds");
     if budget.exhausted() { return Err(io::Error::other("Reference review deadline exceeded")); }
     let _root_pin = match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
@@ -368,16 +368,13 @@ fn dependency_uuids(manifest: &PackManifest) -> io::Result<Vec<String>> {
     Ok(result)
 }
 
-pub(super) fn pack_dependency_evidence(private: &File, budget: InspectionBudget)
+// Reuse the caller's pinned base, not a cached manifest/item observation.
+fn pack_dependency_evidence(base: &Path, budget: InspectionBudget)
     -> io::Result<Vec<PackDependencyEvidence>> {
-    let Some((base, _pins)) = base_path(private, budget)? else {
-        if budget.exhausted() { return Err(io::Error::other("Dependency review deadline exceeded")); }
-        return Ok(Vec::new());
-    };
     let mut evidence = Vec::new();
     let mut total_dependencies = 0;
     for category in [InventoryCategory::ResourcePacks, InventoryCategory::BehaviorPacks] {
-        for item in inventory_at(&base, category, budget)? {
+        for item in inventory_at(base, category, budget)? {
             if budget.exhausted() { return Err(io::Error::other("Dependency review deadline exceeded")); }
             let root = base.join(item.root);
             let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
@@ -404,11 +401,8 @@ pub(super) fn pack_dependency_evidence(private: &File, budget: InspectionBudget)
 
 // This conventional metadata path is a candidate only: absence is not
 // proof that no global pack activation exists on the target installation.
-pub(super) fn global_pack_references(private: &File, budget: InspectionBudget)
+fn global_pack_references(base: &Path, budget: InspectionBudget)
     -> io::Result<Option<Vec<String>>> {
-    let Some((base, _pins)) = base_path(private, budget)? else {
-        return Ok(None);
-    };
     if budget.exhausted() { return Err(io::Error::other("Global reference deadline exceeded")); }
     let refs = read_pack_references(&base.join("global_resource_packs.json"))?;
     if budget.exhausted() { return Err(io::Error::other("Global reference deadline exceeded")); }
@@ -480,8 +474,8 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
         return Err(io::Error::other("Invalid or expired selective review"));
     }
     let profile_identity = directory_id(private)?;
-    // One base chain for selection enumeration and selected-tree observation.
-    // Keep the independent dependency/reference census and mutation preflight.
+    // One retained base chain for selection, independent dependency/reference
+    // censuses and selected-tree observation. Mutation preflight stays separate.
     let (base, _pins) = base_path(private, budget)?
         .ok_or_else(|| io::Error::other("Selection no longer matches inventory"))?;
     let mut items = Vec::new();
@@ -502,9 +496,9 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
     }
     let mut warnings = Vec::new();
     if items.iter().any(|item| item.category != InventoryCategory::Worlds) {
-        let packs = pack_dependency_evidence(private, budget)?;
-        let worlds = world_pack_references(private, budget)?;
-        let global = global_pack_references(private, budget)?;
+        let packs = pack_dependency_evidence(&base, budget)?;
+        let worlds = world_pack_references(&base, budget)?;
+        let global = global_pack_references(&base, budget)?;
         for item in items.iter().filter(|item| item.category != InventoryCategory::Worlds) {
             let pack = packs.iter().find(|pack| super::same_image(&item.identity, &pack.item.identity))
                 .ok_or_else(|| io::Error::other("Selected pack identity changed during review"))?;
@@ -579,12 +573,15 @@ fn scan_world_declarations(base: &Path, budget: InspectionBudget) -> io::Result<
         if visited > MAX_WORLD_ENTRIES || budget.exhausted() {
             return Err(io::Error::other("World resource-pack inventory exceeded its entry/time limit"));
         }
-        let path = entry?.path();
-        let metadata = fs::symlink_metadata(&path)?;
+        let entry = entry?;
+        // Display-only count; selection/reference admission still performs
+        // its independent path and handle checks.
+        let metadata = entry.metadata()?;
         if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
             return Err(io::Error::other("World resource-pack inventory contains a link"));
         }
         if !metadata.is_dir() { continue; }
+        let path = entry.path();
         let _pin = open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
         scanned += 1;
         if let Some(count) = read_world_declarations(&path.join("world_resource_packs.json"))? {
@@ -916,7 +913,8 @@ mod tests {
         let behavior = world.join("world_behavior_packs.json");
         fs::write(&resource, br#"[{"pack_id":"AAAAAAAA-2222-3333-4444-555555555555","version":[1,0,0]}]"#).unwrap();
         fs::write(&behavior, br#"[{"pack_id":"BBBBBBBB-2222-3333-4444-555555555555","version":[2,0,0]}]"#).unwrap();
-        let refs = world_pack_references(&private, InspectionBudget::new(Duration::from_secs(2))).unwrap();
+        let (base, pins) = base_path(&private, InspectionBudget::new(Duration::from_secs(2))).unwrap().unwrap();
+        let refs = world_pack_references(&base, InspectionBudget::new(Duration::from_secs(2))).unwrap();
         assert_eq!(refs.len(), 2);
         assert_eq!(refs[0].category, InventoryCategory::ResourcePacks);
         assert_eq!(refs[0].uuid, "aaaaaaaa-2222-3333-4444-555555555555");
@@ -924,8 +922,46 @@ mod tests {
         assert_eq!(refs[1].version, [2,0,0]);
         assert_eq!(refs[1].world, "one");
         fs::write(&behavior, b"invalid").unwrap();
-        assert!(world_pack_references(&private, InspectionBudget::new(Duration::from_secs(2))).is_err());
-        assert!(world_pack_references(&private, InspectionBudget::new(Duration::ZERO)).is_err());
+        assert!(world_pack_references(&base, InspectionBudget::new(Duration::from_secs(2))).is_err());
+        assert!(world_pack_references(&base, InspectionBudget::new(Duration::ZERO)).is_err());
+        drop(pins);
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn pack_review_shares_pinned_base_but_keeps_independent_reference_warnings() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let base = parent.join("Roaming/Minecraft Education Edition/games/com.mojang");
+        let pack = base.join("resource_packs/one");
+        let world = base.join("minecraftWorlds/unclassified");
+        fs::create_dir_all(&pack).unwrap();
+        fs::create_dir_all(&world).unwrap();
+        fs::write(pack.join("manifest.json"),
+            br#"{"header":{"uuid":"11111111-2222-3333-4444-555555555555","version":[1,0,0]}}"#).unwrap();
+        let refs = br#"[{"pack_id":"11111111-2222-3333-4444-555555555555","version":[1,0,0]}]"#;
+        fs::write(world.join("world_resource_packs.json"), refs).unwrap();
+        fs::write(base.join("global_resource_packs.json"), refs).unwrap();
+        // Unclassified worlds still participate in the independent census.
+        let selection = ReviewSelection { category: InventoryCategory::ResourcePacks,
+            root: "resource_packs".into(), name: "one".into() };
+        let budget = || InspectionBudget::new(Duration::from_secs(2));
+        let review = review_selection(&private, &[selection], budget()).unwrap();
+        assert!(review.warnings.iter().any(|warning| warning.contains("referenced by a world")));
+        assert!(review.warnings.iter().any(|warning| warning.contains("globally referenced")));
+        assert!(review.warnings.iter().any(|warning| warning.contains("not native-verified")));
+        assert!(review.confirmation_token(1).is_err());
+        let (base, pins) = base_path(&private, budget()).unwrap().unwrap();
+        assert!(fs::rename(&base, base.with_file_name("renamed")).is_err());
+        assert_eq!(pack_dependency_evidence(&base, budget()).unwrap().len(), 1);
+        assert_eq!(world_pack_references(&base, budget()).unwrap().len(), 1);
+        assert_eq!(global_pack_references(&base, budget()).unwrap().unwrap().len(), 1);
+        let expired = InspectionBudget::new(Duration::ZERO);
+        assert!(pack_dependency_evidence(&base, expired).is_err());
+        assert!(world_pack_references(&base, expired).is_err());
+        assert!(global_pack_references(&base, expired).is_err());
+        drop(pins);
         drop(private);
         fs::remove_dir_all(parent).unwrap();
     }
@@ -1035,6 +1071,9 @@ mod tests {
         let worlds = base.join("minecraftWorlds");
         fs::create_dir_all(worlds.join("one/db")).unwrap();
         fs::create_dir_all(worlds.join("two")).unwrap();
+        // Ordinary non-directory entries must not count as packs or worlds.
+        fs::write(packs.join("not-a-pack"), b"ignore").unwrap();
+        fs::write(worlds.join("not-a-world"), b"ignore").unwrap();
         fs::write(worlds.join("one/db/untouched"), b"keep original bytes").unwrap();
         fs::write(worlds.join("one/world_resource_packs.json"),
             br#"[{"pack_id":"11111111-2222-3333-4444-555555555555","version":[1,2,3]}]"#).unwrap();
