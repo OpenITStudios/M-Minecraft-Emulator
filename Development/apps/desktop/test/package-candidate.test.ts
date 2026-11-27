@@ -2,13 +2,39 @@ import {describe,expect,it} from 'vitest';
 import fs from 'node:fs';
 import {syncBuiltinESMExports} from 'node:module';
 import {execFileSync} from 'node:child_process';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,readdirSync,rmSync,linkSync,lstatSync,existsSync,symlinkSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join,resolve} from 'node:path';
-import {assembleCandidate,sourceRevision,stageLocalApp,verifyDesktopStartup} from '../scripts/package-lazy-tester.mjs';
+import {assembleCandidate,sourceRevision,stageLocalApp,verifyDesktopStartup,packageBuildEnvironment} from '../scripts/package-lazy-tester.mjs';
 import {processRoles,roleMuiNames,roleResource} from '../scripts/prepare-process-roles.mjs';
 
 describe('Development source and distribution candidates',()=>{
+  it('shares the canonical DEV Cargo target and scopes packaging caches without creating files',()=>{
+    const root=mkdtempSync(join(tmpdir(),'lazy-package-paths-'));
+    try {
+      const target=join(root,'workspace/builds/desktop/target');
+      const keys=['CARGO_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR'];
+      const env={TEMP:join(root,'old-temp'),NPM_CONFIG_CACHE:join(root,'old-cache')};
+      const locations=packageBuildEnvironment(root,env);
+      for(const key of keys)expect(locations[key]).toBe(target);
+      expect(locations.TEMP).toBe(join(root,'workspace/tmp'));
+      expect(locations.TMP).toBe(locations.TEMP);
+      expect(locations.NPM_CONFIG_CACHE).toBe(join(root,'workspace/cache/npm'));
+      expect(locations.NUGET_PACKAGES).toBe(join(root,'workspace/cache/nuget'));
+      expect(env.TEMP).toBe(join(root,'old-temp'));
+      for(const key of keys) {
+        expect(packageBuildEnvironment(root,{[key]:target})[key]).toBe(target);
+        for(const value of ['relative-target',join(root,'other-target'),join(dirname(root),'external-target')])
+          expect(()=>packageBuildEnvironment(root,{[key]:value})).toThrow(key);
+      }
+      expect(readdirSync(root)).toEqual([]);
+      mkdirSync(join(root,'outside'));
+      mkdirSync(join(root,'workspace'));
+      symlinkSync(join(root,'outside'),join(root,'workspace/cache'),process.platform==='win32'?'junction':'dir');
+      expect(()=>packageBuildEnvironment(root,{})).toThrow(/traverse links/);
+      expect(readdirSync(join(root,'outside'))).toEqual([]);
+    } finally {rmSync(root,{recursive:true});}
+  });
   it('changes only the fixed Windows description string and rejects an unexpected resource',()=>{
     const source=Buffer.concat([Buffer.alloc(16),Buffer.from('FileDescription\0','utf16le'),Buffer.alloc(2),Buffer.from('Lazy Tester\0','utf16le'),Buffer.alloc(16)]);
     const result=roleResource(source,'LT Sessions');

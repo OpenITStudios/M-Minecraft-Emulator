@@ -2,7 +2,7 @@
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {copyFileSync, constants, existsSync, lstatSync, linkSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync} from 'node:fs';
-import {basename, dirname, isAbsolute, relative, resolve, sep} from 'node:path';
+import {basename, dirname, isAbsolute, relative, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
 import {buildRootLauncher} from './build-root-launcher.mjs';
@@ -28,14 +28,37 @@ export function sourceRevision(cwd) {
 
 function ordinaryDirectories(path) {
   for (let current = resolve(path);;) {
-    if (existsSync(current)) {
+    try {
       const info = lstatSync(current);
       if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Package paths must not traverse links');
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
     }
     const parent = dirname(current);
     if (parent === current) break;
     current = parent;
   }
+}
+
+// The supported package entrypoint must match DEV.cmd's compiler/cache/temp layout.
+// Validate before creating any directories; no migration or cleanup of alternate roots.
+export function packageBuildEnvironment(cwd, env = process.env) {
+  const target = resolve(cwd,'workspace/builds/desktop/target');
+  const cargoKeys = ['CARGO_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR'];
+  for (const key of cargoKeys) {
+    const value = env[key];
+    if (value?.trim() && (!isAbsolute(value) || relative(target,value) !== '')) {
+      throw new Error('Packaging requires workspace/builds/desktop/target; conflicting '+key+' is refused');
+    }
+  }
+  const cache = resolve(cwd,'workspace/cache/npm');
+  const nuget = resolve(cwd,'workspace/cache/nuget');
+  const temp = resolve(cwd,'workspace/tmp');
+  for (const directory of [target,cache,nuget,temp]) ordinaryDirectories(directory);
+  return {
+    CARGO_TARGET_DIR:target, CARGO_BUILD_TARGET_DIR:target, CARGO_BUILD_BUILD_DIR:target,
+    NPM_CONFIG_CACHE:cache, NUGET_PACKAGES:nuget, TEMP:temp, TMP:temp,
+  };
 }
 
 export function assembleCandidate(cwd, installer, sha, version, stamp) {
@@ -162,19 +185,20 @@ function main() {
   if (process.versions.node !== toolchain.node.version) throw new Error('Use the declared workspace Node version');
   const npm = process.env.npm_execpath;
   if (!npm || !isAbsolute(npm) || !existsSync(npm)) throw new Error('Run npm --prefix Development run package:windows from the checkout root');
+  const locations = packageBuildEnvironment(root);
+  for (const directory of [locations.NPM_CONFIG_CACHE,locations.NUGET_PACKAGES,locations.TEMP]) {
+    mkdirSync(directory,{recursive:true});
+    ordinaryDirectories(directory);
+  }
+  // Process-local only: all existing packaging children inherit these paths,
+  // including npm, the root-launcher compiler and the startup check.
+  Object.assign(process.env,locations);
   const npmVersion = execFileSync(process.execPath,[npm,'--version'],{encoding:'utf8'}).trim();
   if (npmVersion !== toolchain.npm.version) throw new Error('Use the declared workspace npm version');
-  const configuredTarget = process.env.CARGO_TARGET_DIR;
-  if (configuredTarget && !isAbsolute(configuredTarget)) throw new Error('CARGO_TARGET_DIR must be absolute when provided');
-  const target = configuredTarget ?? resolve(root,'workspace/builds/desktop/target');
-  const localTarget = relative(root,target);
-  if (!localTarget || localTarget === '..' || localTarget.startsWith('..'+sep) || isAbsolute(localTarget)) {
-    throw new Error('Build output must stay inside this checkout');
-  }
-  ordinaryDirectories(target);
+  const target = locations.CARGO_TARGET_DIR;
   const version = readFileSync(resolve(developmentRoot,'VERSION'),'utf8').trim();
   const stamp = new Date().toISOString().replace(/[-:.]/g,'');
-  execFileSync(process.execPath,[npm,'--prefix',resolve(developmentRoot,'apps/desktop'),'run','build:app'], {cwd:developmentRoot, stdio:'inherit', env:{...process.env,CARGO_TARGET_DIR:target}});
+  execFileSync(process.execPath,[npm,'--prefix',resolve(developmentRoot,'apps/desktop'),'run','build:app'], {cwd:developmentRoot, stdio:'inherit'});
   buildRootLauncher(root,resolve(target,'x86_64-pc-windows-msvc/release'));
   if (sourceRevision(root) !== sha) throw new Error('Source changed during the build; no candidate exported');
   const installer = resolve(target,'x86_64-pc-windows-msvc/release/bundle/nsis',`Lazy Tester_${version}_x64-setup.exe`);

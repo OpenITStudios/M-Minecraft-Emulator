@@ -42,7 +42,10 @@ Sandboxie Plus, Windows application profiles or protected account data.
 No tool may silently move/install/activate any of those components.
 
 The active Lazy Tester has an unsigned installer candidate, not an approved public
-release. Root `npm --prefix Development run package:windows` builds from clean committed Local source
+release. Root `npm --prefix Development run package:windows` shares the canonical
+Cargo target and scopes its child caches/temp as described in the
+[storage policy](../docs/system/artifact-storage.md#lazy-tester-development-candidate-and-installed-data).
+It builds from clean committed Local source
 and exports only the installer, SHA256SUMS.txt and package-manifest.json. A partial
 folder without its completion manifest is not a completed candidate. Use the
 separately authorized `DEV.cmd preflight` and `DEV.cmd dev` routes for development;

@@ -220,8 +220,16 @@ Root `npm --prefix Development run package:windows` is owned by
 source (a detached worktree must match Local exactly), declared Node/npm versions,
 and the reviewed native payload. It runs the existing desktop build:app, then
 rechecks the source revision/cleanliness before exporting. A build failure or
-source change produces no completed export. Relative/external compiler-output
-overrides and linked output directories are refused.
+source change produces no completed export. Both DEV.cmd and direct
+`package:windows` use the same `workspace/builds/desktop/target` for
+`CARGO_TARGET_DIR`, `CARGO_BUILD_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`;
+any conflicting inherited value (including another in-checkout target)
+is refused before cache initialization. The packaging process and its children
+use `workspace/cache/npm`, `workspace/cache/nuget` and `workspace/tmp`.
+Existing directories and ancestors must be ordinary, not links or junctions.
+This does not relocate toolchains, user/app data or old outputs; the npm
+process that starts packaging and unrelated direct tool invocations are
+outside this process-local scope. Use DEV.cmd for the full portable environment.
 
 Each export is a new ignored
 `workspace/packages/lazy-tester/<version>-<12-character-SHA>-<UTC>/` directory.
