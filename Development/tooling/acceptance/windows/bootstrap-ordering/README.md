@@ -239,13 +239,13 @@ Presentation capability admission now lives in `presentation_policy.rs`: exact g
 
 `fps_hud.rs` owns HUD session, binding, worker, synchronization and retirement. `fps-hud.cpp` is now a compatibility and diagnostic adapter; native controls remain NOT_EXECUTED.
 
-`hud_window.rs` owns the thread-local native window host, location hook, DPI context and bounded message pump. The existing HUD worker invokes that host; worker state, visibility and composition remain C++ pending FPS-06 completion. No extra thread.
+`hud_window.rs` owns the thread-local native window host, location hook, DPI context, bounded message pump and worker-local composition. The Rust HUD worker in `fps_hud.rs` invokes that host; C++ no longer owns worker state or visibility. No extra thread.
 
-`hud_canvas.rs` owns DPI geometry, physical client conversion and GDI canvas resources (DIB, font, DC). The existing C++ HUD worker borrows the raster view on its own thread; no pixel copy on the live path. Native controls remain NOT_EXECUTED.
+`hud_canvas.rs` owns DPI geometry, physical client conversion and GDI canvas resources (DIB, font, DC). The Rust renderer borrows the raster view on its own worker thread; the C++ raster adapter remains for diagnostic controls. No pixel copy on the live path. Native controls remain NOT_EXECUTED.
 
 `native_fps.rs` is the single static-library entrypoint. `frame_pacing.rs`
 owns FPS limit and clock validation, rounded intervals and relative timer
-deadlines; `frame-pacing-ffi.h` is its fixed-width native interface. Rust now also owns Windows event/timer lifetime, QPC sampling, foreground state,
+deadlines; `frame-pacing-ffi.h` forwards to the canonical `native_fps_ffi.h` interface. Rust now also owns Windows event/timer lifetime, QPC sampling, foreground state,
 sticky stop and the native wait loop. C++ `Pacer` is a thin opaque ABI adapter. Enrollment and all
 HUD/pacing consumers link the same library. The MSVC static CRT is consistent
 across configurations; native build/link remain NOT_EXECUTED.
@@ -254,11 +254,24 @@ across configurations; native build/link remain NOT_EXECUTED.
 
 `fps_meter.rs` is the sole accepted-Present rate implementation. The existing
 C++ Meter retains its inline state, SRWLOCK, HRESULT filtering and QPC sampling;
-`fps-meter-ffi.h` defines the fixed-width C ABI. All four existing HUD consumers
-link the same dependency-free Rust static library built by the existing CMake
-project using installed MSVC-target rustc. No game source, worker, allocator
-ownership or pacing behavior changes. Rust and existing C++ fixtures are
-AUTHORED_NOT_EXECUTED; Windows build/link and payload review remain held.
+`native_fps_ffi.h` defines the fixed-width C ABI; `fps-meter-ffi.h` forwards to it.
+All six native FPS/presentation consumers link the same dependency-free Rust
+static library built by the existing CMake project using installed MSVC-target
+rustc. Rust and existing C++ fixtures are AUTHORED_NOT_EXECUTED; Windows
+build/link and payload review remain held.
+
+### Native Rust fixture build (held)
+
+`native_fps.rs` is a standalone rustc crate, not a Cargo package. The existing
+CMake project exposes `lazytester-native-fps-fixtures-build` as an explicit
+build-only target. It uses the same source dependency list, x64 MSVC target
+and static CRT as the production static library, with the Rust test harness
+instead of the product panic-abort configuration. It produces
+`<build-dir>/<config>/lazytester-native-fps-fixtures.exe` and does not execute it.
+The target is not part of the default build, Tauri package or CTest. Only in a
+separately authorized PC-local validation phase may it be built and run; it
+contains the existing meter, deadline, HUD geometry, policy, PE and mapping
+parser fixtures. No DLL digest is changed or admitted by this target.
 
 ## Selected-only HUD capability (v4)
 

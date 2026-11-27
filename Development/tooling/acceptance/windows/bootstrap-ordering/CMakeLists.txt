@@ -69,21 +69,35 @@ target_compile_options(probe-detours PRIVATE /W4 /WX)
 # One dependency-free Rust library for native FPS and presentation admission.
 # Use the installed MSVC-target toolchain; no dependency resolution or download.
 find_program(LAZYTESTER_RUSTC rustc REQUIRED)
+set(native_fps_root "${CMAKE_CURRENT_SOURCE_DIR}/native_fps.rs")
+set(native_fps_sources "${native_fps_root}"
+  "${CMAKE_CURRENT_SOURCE_DIR}/fps_meter.rs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/frame_pacing.rs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/hud_canvas.rs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/hud_window.rs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/fps_hud.rs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/presentation_policy.rs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/presentation_image.rs"
+  "${CMAKE_CURRENT_SOURCE_DIR}/presentation_transport.rs")
 set(native_fps_lib "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/lazytester-native-fps.lib")
 add_custom_command(OUTPUT "${native_fps_lib}"
   COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
   COMMAND "${LAZYTESTER_RUSTC}" --edition=2021 --crate-name lazytester_native_fps
     --crate-type staticlib --target x86_64-pc-windows-msvc -C panic=abort -C opt-level=3
-    -C target-feature=+crt-static "${CMAKE_CURRENT_SOURCE_DIR}/native_fps.rs" -o "${native_fps_lib}"
-  DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/native_fps.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/fps_meter.rs" "${CMAKE_CURRENT_SOURCE_DIR}/frame_pacing.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hud_canvas.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/hud_window.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/fps_hud.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/presentation_policy.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/presentation_image.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/presentation_transport.rs" VERBATIM)
+    -C target-feature=+crt-static "${native_fps_root}" -o "${native_fps_lib}"
+  DEPENDS ${native_fps_sources} VERBATIM)
 add_custom_target(lazytester-native-fps-build DEPENDS "${native_fps_lib}")
+
+# Existing Rust unit fixtures are outside Cargo. Explicit build only: no ALL,
+# product dependency, CTest registration or automatic execution.
+set(native_fps_fixtures "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/lazytester-native-fps-fixtures.exe")
+add_custom_command(OUTPUT "${native_fps_fixtures}"
+  COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
+  COMMAND "${LAZYTESTER_RUSTC}" --edition=2021 --crate-name lazytester_native_fps
+    --test --target x86_64-pc-windows-msvc -C target-feature=+crt-static
+    "${native_fps_root}" -o "${native_fps_fixtures}"
+  DEPENDS ${native_fps_sources} VERBATIM)
+add_custom_target(lazytester-native-fps-fixtures-build DEPENDS "${native_fps_fixtures}")
 
 add_library(bootstrap-dependency SHARED dependency.cpp)
 add_library(bootstrap-compat SHARED compat.cpp compat.def presentation-enrollment.cpp dxgi-pacing.cpp fps-hud.cpp graphics-warm-pools.cpp)
