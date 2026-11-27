@@ -1,7 +1,7 @@
 //! Read-only, bounded Minecraft Education profile resource-pack metadata.
 //! A file on disk or a declaration in a world is NOT proof of loaded textures,
 //! current world selection, GPU residency or reclaimable RAM.
-use super::{directory_path, image_id, open_directory};
+use super::{directory_id, directory_path, image_id, open_directory};
 use crate::engine::native_clients_session::{ResourcePackStorage, WorldPackDeclarations};
 use std::{
     fs::{self, File, OpenOptions}, io::{self, Read},
@@ -17,6 +17,65 @@ const MAX_PACK_ENTRIES: u32 = 128;
 const MAX_WORLD_ENTRIES: u32 = 128;
 const MAX_WORLD_PACK_REFS: u32 = 256;
 const MAX_DECLARATIONS_BYTES: usize = 32 * 1024;
+
+// Selective inventory is read-only and on demand. A directory identity is
+// evidence for a future review, not deletion authorization.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum InventoryCategory { Worlds, ResourcePacks }
+
+pub(super) struct InventoryItem {
+    pub(super) category: InventoryCategory,
+    pub(super) root: &'static str,
+    pub(super) name: String,
+    pub(super) identity: windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
+}
+
+pub(super) fn individual_inventory(private: &File, category: InventoryCategory,
+    budget: InspectionBudget) -> io::Result<Vec<InventoryItem>> {
+    let Some((base, _pins)) = base_path(private, budget)? else {
+        if budget.exhausted() { return Err(io::Error::other("Inventory deadline exceeded")); }
+        return Ok(Vec::new());
+    };
+    let (roots, marker, limit): (&[&'static str], &str, u32) = match category {
+        InventoryCategory::Worlds => (&["minecraftWorlds"], "level.dat", MAX_WORLD_ENTRIES),
+        InventoryCategory::ResourcePacks => (&["resource_packs", "development_resource_packs"], "manifest.json", MAX_PACK_ENTRIES),
+    };
+    let mut items = Vec::new();
+    let mut visited = 0;
+    for &root_name in roots {
+        if budget.exhausted() { return Err(io::Error::other("Inventory deadline exceeded")); }
+        let root = base.join(root_name);
+        let _root_pin = match open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY) {
+            Ok(pin) => pin,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error),
+        };
+        for entry in fs::read_dir(&root)? {
+            visited += 1;
+            if visited > limit || budget.exhausted() { return Err(io::Error::other("Inventory limit exceeded")); }
+            let entry = entry?;
+            let path = entry.path();
+            let metadata = fs::symlink_metadata(&path)?;
+            if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+                return Err(io::Error::other("Linked inventory entry"));
+            }
+            if !metadata.is_dir() { continue; }
+            let pin = open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+            match fs::symlink_metadata(path.join(marker)) {
+                Ok(meta) if meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 => return Err(io::Error::other("Linked inventory marker")),
+                Ok(meta) if meta.is_file() => {},
+                Ok(_) => continue,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error),
+            }
+            let name = entry.file_name().into_string().map_err(|_| io::Error::other("Unsupported inventory name"))?;
+            items.push(InventoryItem { category, root: root_name, name, identity: directory_id(&pin)? });
+        }
+    }
+    if budget.exhausted() { return Err(io::Error::other("Inventory deadline exceeded")); }
+    items.sort_by(|a,b| a.root.cmp(b.root).then_with(|| a.name.cmp(&b.name)));
+    Ok(items)
+}
 
 // Hold every verified ancestor for the entire read-only inventory. A path
 // returned without its pins is not a stable basis for a later cleanup review.
@@ -233,6 +292,33 @@ pub(super) fn inspect(private: &File, budget: InspectionBudget) -> ResourcePackS
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn individual_inventory_classifies_only_marked_directories_and_retains_identity() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let base = parent.join("Roaming/Minecraft Education Edition/games/com.mojang");
+        let world = base.join("minecraftWorlds/one");
+        let pack = base.join("resource_packs/one");
+        fs::create_dir_all(&world).unwrap();
+        fs::create_dir_all(&pack).unwrap();
+        fs::create_dir_all(base.join("minecraftWorlds/unclassified")).unwrap();
+        fs::write(world.join("level.dat"), b"fixture").unwrap();
+        fs::write(pack.join("manifest.json"), b"{}").unwrap();
+        let worlds = individual_inventory(&private, InventoryCategory::Worlds, InspectionBudget::new(Duration::from_secs(2))).unwrap();
+        let packs = individual_inventory(&private, InventoryCategory::ResourcePacks, InspectionBudget::new(Duration::from_secs(2))).unwrap();
+        assert_eq!(worlds.len(), 1);
+        assert_eq!(packs.len(), 1);
+        assert_eq!(worlds[0].name, "one");
+        assert_eq!(worlds[0].category, InventoryCategory::Worlds);
+        let world_pin = open_directory(&world, FILE_READ_ATTRIBUTES).unwrap();
+        assert!(super::super::same_image(&worlds[0].identity, &directory_id(&world_pin).unwrap()));
+        assert!(!super::super::same_image(&worlds[0].identity, &packs[0].identity));
+        assert!(individual_inventory(&private, InventoryCategory::Worlds, InspectionBudget::new(Duration::ZERO)).is_err());
+        drop(world_pin);
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
 
     #[test]
     fn inventory_ancestor_chain_is_retained_until_report_finishes() {

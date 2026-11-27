@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective inventory source checkpoint: existing inventory owner now exposes a bounded read-only per-category list of marked world and resource-pack directories with native directory identity, root category and exact name. No recursive size scan or automatic deletion; no IPC/UI consumer yet. Marker presence is classification only, not proof of valid content or safe deletion. Behavior packs, dependency analysis, review tokens and deletion admission remain pending. Fixture authored NOT_EXECUTED; capture held.
+
 Selective Cleanup inventory foundation: existing read-only resource-pack/world declaration scan retains ordinary directory handles for the complete ancestor and category traversal, with budget checks before each ancestor and after the last open. This fixes prematurely dropped pins without expanding the existing report or adding deletion authority. Fixture authored, NOT_EXECUTED. Individual selection inventory, stable review tokens and safe deletion remain pending; capture held.
 
 HTTP cache lifecycle source checkpoint: successful exit code and successful journal save queue one optional cleanup per retained profile. Existing idle maintenance consumes at most one candidate after queued requests; fresh native data admission and pending full-clear check are required. Relaunch/manual clear/full clear supersede pending cache work. Terminal CloseAll skips optional work; no new worker or timer. Native filesystem calls already underway can still delay subsequent requests, and failed cleanup is not retried. No new deletion categories. Tests NOT_EXECUTED; capture held.
