@@ -911,13 +911,17 @@
   }
   async function initializeLaunchers() {
     initializing=true;
+    let diagnostic=false;
     try {
-      // Read a non-mutating capability from Rust. Unsupported platforms do
+      // Read non-mutating capabilities from Rust. Unsupported platforms do
       // not retry Windows profile discovery or request game/session IPC.
       try {
-        const backend = await lazyTester.backendSupport();
+        const capabilities = await lazyTester.startupCapabilities();
         if (disposed) return;
-        nativeBackend = backend;
+        nativeBackend = capabilities.backend;
+        diagnostic = capabilities.diagnostic;
+        screenshotAvailable = capabilities.screenshot;
+        recordingAvailable = capabilities.recording;
       } catch (error) {
         if (!disposed) {binding=null;bindingIssue=userMessage('backend');}
         return;
@@ -929,12 +933,8 @@
         queuedPage=null;queuedLaunch=null;queued=null;manualRefreshRequested=false;dirty=false;
         return;
       }
-      // Capture capability probes are cheap, but unsupported/unknown backends
-      // do not need them. Start only after native backend admission.
-      void lazyTester.screenshotAvailable().then(value=>{if(!disposed)screenshotAvailable=value;}).catch(()=>{});
-      void lazyTester.recordingAvailable().then(value=>{
-        if(!disposed&&value){recordingAvailable=true;void refreshRecordingStatus();}
-      }).catch(()=>{});
+      // Capture status is needed only when the native approval gate is open.
+      if(recordingAvailable) void refreshRecordingStatus();
       // Retry the canonical Windows initializer before offering recovery.
       for(let attempt=0;attempt<3&&!disposed;attempt++){
         if(attempt)await new Promise(resolve=>setTimeout(resolve,attempt*1000));
@@ -948,13 +948,16 @@
       if(!disposed)await refresh();
     }finally{
       if(!disposed){
-        initializing=false;await tick();
-        if (!disposed) void lazyTester.reportStartup({
-          connection:sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available),
-          issue:document.querySelector('.lazytester-binding p')?.textContent??'',
-          cards:document.querySelectorAll('.lazytester-launcher-card').length,
-          enabled:document.querySelectorAll('.lazytester-launcher-card:not(:disabled)').length,
-        }).catch(error=>console.warn('Startup observation unavailable'));
+        initializing=false;
+        if (diagnostic) {
+          await tick();
+          if (!disposed) void lazyTester.reportStartup({
+            connection:sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available),
+            issue:document.querySelector('.lazytester-binding p')?.textContent??'',
+            cards:document.querySelectorAll('.lazytester-launcher-card').length,
+            enabled:document.querySelectorAll('.lazytester-launcher-card:not(:disabled)').length,
+          }).catch(()=>console.warn('Startup observation unavailable'));
+        }
       }
     }
   }

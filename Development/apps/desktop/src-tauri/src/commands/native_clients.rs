@@ -7,11 +7,28 @@ use std::{io, sync::Mutex};
 // This limits manager-created CPU/RAM peaks, not Minecraft CPU or GPU usage.
 static MANAGER_RESOURCE_LOCK: Mutex<()> = Mutex::new(());
 
-// Compile-time OS backend presence, not game readiness or installation proof.
+// Compile-time backend and approved capture capabilities, not game readiness.
 // No lifecycle lock, worker, disk access, process discovery or credentials.
+#[derive(serde::Serialize)]
+#[serde(rename_all="camelCase")]
+pub struct StartupCapabilities {
+    backend: native_clients::NativeBackendSupport,
+    diagnostic: bool,
+    screenshot: bool,
+    recording: bool,
+}
+
 #[tauri::command]
-pub fn lazy_tester_backend_support() -> native_clients::NativeBackendSupport {
-    native_clients::native_backend_support()
+pub fn lazy_tester_startup_capabilities() -> StartupCapabilities {
+    let backend = native_clients::native_backend_support();
+    let diagnostic = cfg!(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))
+        && crate::app_bootstrap::startup_diagnostic_mode();
+    let capture_allowed = backend == native_clients::NativeBackendSupport::WindowsNative && !diagnostic;
+    StartupCapabilities {
+        backend, diagnostic,
+        screenshot: capture_allowed && crate::engine::capture::screenshot_available(),
+        recording: capture_allowed && crate::engine::capture::recording_available(),
+    }
 }
 
 #[tauri::command]
@@ -173,11 +190,6 @@ pub async fn lazy_tester_close_one(
 }
 
 #[tauri::command]
-pub fn lazy_tester_screenshot_available()->bool{
-    !crate::app_bootstrap::startup_diagnostic_mode()&&crate::engine::capture::screenshot_available()
-}
-
-#[tauri::command]
 pub async fn lazy_tester_screenshot(slot:u32,expected:crate::engine::process_identity::OwnedProcess)
     ->Result<Option<crate::engine::capture::ScreenshotReceipt>,String>{
     if crate::app_bootstrap::startup_diagnostic_mode(){return Err("Startup diagnostic cannot capture games".into());}
@@ -186,10 +198,6 @@ pub async fn lazy_tester_screenshot(slot:u32,expected:crate::engine::process_ide
         .map_err(|error|error.to_string())
 }
 
-#[tauri::command]
-pub fn lazy_tester_recording_available()->bool{
-    !crate::app_bootstrap::startup_diagnostic_mode()&&crate::engine::capture::recording_available()
-}
 #[tauri::command]
 pub fn lazy_tester_recording_status()->Result<Vec<crate::engine::capture::RecordingReceipt>,String>{
     crate::engine::capture::recording_status().map_err(|e|e.to_string())

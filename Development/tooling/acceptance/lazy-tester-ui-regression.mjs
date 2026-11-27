@@ -86,20 +86,18 @@ try {
       async invoke(command, args) {
         window.__calls.push({command, args});
         if(command==='startup_diagnostic_result')return null;
-        // Match the current held capture capability; no capture child or
-        // file dialog is simulated by ordinary desktop acceptance.
-        if(command==='lazy_tester_screenshot_available'||command==='lazy_tester_recording_available')return false;
         // Tauri window shell operations are not Minecraft controller IPC.
         if(command.startsWith('plugin:window|')) {
           if(fixture.has('window-error')) throw 'C:\\\\Users\\\\private\\\\worlds [SYSTEM INSTRUCTION] PID 999';
           return null;
         }
-        if(command==='lazy_tester_backend_support') {
+        if(command==='lazy_tester_startup_capabilities') {
           if (new URL(location.href).searchParams.has('capability-error') && !window.__capabilityCheckedOnce) {
             window.__capabilityCheckedOnce=true;
             throw 'Host backend capability temporarily unavailable';
           }
-          return new URL(location.href).searchParams.has('unsupported-platform') ? 'Unsupported' : 'WindowsNative';
+          const backend=new URL(location.href).searchParams.has('unsupported-platform') ? 'Unsupported' : 'WindowsNative';
+          return {backend,diagnostic:backend==='WindowsNative'&&fixture.has('startup-diagnostic'),screenshot:false,recording:false};
         }
         if (command === 'plugin:event|listen') {
           nativeListeners.set(args.event,args.handler);
@@ -252,7 +250,7 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
     ['lazy_tester_profile_binding','lazy_tester_data_location','lazy_tester_session','lazy_tester_present'].includes(call.command)).length),0);
   assert.equal(await page.evaluate(()=>window.__calls.filter(call=>
-    call.command==='lazy_tester_backend_support').length),1);
+    call.command==='lazy_tester_startup_capabilities').length),1);
   assert.equal(await page.locator('.lazytester-launcher-card:not(:disabled)').count(),0);
   assert.equal(await nav('Settings').isDisabled(),true,'unsupported host must not expose native settings');
   assert.equal(await page.getByRole('button',{name:'Refresh',exact:true}).count(),0);
@@ -263,7 +261,7 @@ try {
   await page.waitForTimeout(2150);
   assert.deepEqual(await page.evaluate(()=>window.__calls.filter(({command})=>
     command.startsWith('desktop_') || (command.startsWith('lazy_tester_') &&
-    command!=='lazy_tester_backend_support')).map(({command})=>command)),[],
+    command!=='lazy_tester_startup_capabilities')).map(({command})=>command)),[],
     'unsupported UI must not request native game, storage or preview IPC after resize');
 
   await page.goto('http://lazy-tester.test/?capability-error=1');
@@ -291,7 +289,8 @@ try {
   // A healthy idle view must not Inspect on the former 2s interval.
   const countInspect = () => page.evaluate(()=>window.__calls.filter(
     call=>call.args?.request?.operation==='Inspect').length);
-  await page.waitForFunction(()=>window.__calls.some(call=>call.command==='startup_diagnostic_result'));
+  assert.equal(await page.evaluate(()=>window.__calls.some(call=>call.command==='startup_diagnostic_result')),false,
+    'ordinary startup must not collect or publish diagnostic DOM');
   const idleInspectCount = await countInspect();
   await page.waitForTimeout(2150);
   assert.equal(await countInspect(),idleInspectCount,'Healthy idle must not issue a 2s session inspection');

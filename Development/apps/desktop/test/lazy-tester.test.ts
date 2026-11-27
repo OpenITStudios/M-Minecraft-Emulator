@@ -1,7 +1,7 @@
 import {sameWorkspaceGeometry, type WorkspaceGeometry} from '../src/app/workspaceGeometry.js';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, parseStartupCapabilities, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -218,6 +218,16 @@ describe('Lazy Tester profile contract', () => {
     for (const forged of [true,false,null,undefined,0,'macos','MacNative','Ready',{},['WindowsNative']]) {
       expect(()=>parseNativeBackendSupport(forged)).toThrow('Invalid native backend capability');
     }
+  });
+  it('accepts one exact startup capability report and rejects capture in unsupported or diagnostic mode',()=>{
+    const normal={backend:'WindowsNative',diagnostic:false,screenshot:false,recording:false};
+    expect(parseStartupCapabilities(normal)).toEqual(normal);
+    expect(parseStartupCapabilities({...normal,screenshot:true,recording:true})).toEqual({...normal,screenshot:true,recording:true});
+    expect(parseStartupCapabilities({...normal,diagnostic:true}).diagnostic).toBe(true);
+    expect(parseStartupCapabilities({...normal,backend:'Unsupported'}).backend).toBe('Unsupported');
+    for(const value of ['WindowsNative',null,{...normal,recording:1},{...normal,extra:true},
+      {...normal,diagnostic:true,screenshot:true},{...normal,backend:'Unsupported',recording:true},
+      {...normal,backend:'Unsupported',diagnostic:true}])expect(()=>parseStartupCapabilities(value)).toThrow();
   });
   it('schedules 10s idle, 5s settled live Play and 2s recovery deadlines', () => {
     for (const page of ['settings', 'storage'] as const) {

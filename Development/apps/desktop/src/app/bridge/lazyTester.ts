@@ -33,6 +33,16 @@ export function parseNativeBackendSupport(value: unknown): NativeBackendSupport 
   }
   return value;
 }
+export interface StartupCapabilities {backend:NativeBackendSupport; diagnostic:boolean; screenshot:boolean; recording:boolean}
+export function parseStartupCapabilities(value: unknown): StartupCapabilities {
+  if (!record(value) || !exact(value, ['backend','diagnostic','screenshot','recording']) ||
+      typeof value.diagnostic !== 'boolean' || typeof value.screenshot !== 'boolean' || typeof value.recording !== 'boolean')
+    throw new TypeError('Invalid startup capabilities');
+  const backend = parseNativeBackendSupport(value.backend);
+  if ((backend === 'Unsupported' || value.diagnostic) && (value.screenshot || value.recording) ||
+      backend === 'Unsupported' && value.diagnostic) throw new TypeError('Inconsistent startup capabilities');
+  return {backend,diagnostic:value.diagnostic,screenshot:value.screenshot,recording:value.recording};
+}
 export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
 export interface StoragePreferences {autoClearWebCache:boolean; autoClearDownloadCache?:boolean; autoClearOldLogs?:boolean}
@@ -464,7 +474,6 @@ export function parseRecordingStatus(value:unknown):RecordingReceipt[] {
   });
 }
 export const lazyTester = {
-  recordingAvailable:async()=>await invokeRuntime<unknown>('lazy_tester_recording_available')===true,
   recordingStatus:async()=>parseRecordingStatus(await invokeRuntime<unknown>('lazy_tester_recording_status')),
   startRecording:async(slot:ProfileSlot,expected:OwnedProcess)=>{
     const result=await invokeRuntime<unknown>('lazy_tester_start_recording',{slot,expected});
@@ -472,7 +481,6 @@ export const lazyTester = {
     return result;
   },
   stopRecording:async(slot:ProfileSlot)=>{await invokeRuntime<void>('lazy_tester_stop_recording',{slot});},
-  screenshotAvailable:async()=>await invokeRuntime<unknown>('lazy_tester_screenshot_available')===true,
   screenshot:async(slot:ProfileSlot,expected:OwnedProcess)=>parseScreenshotReceipt(
     await invokeRuntime<unknown>('lazy_tester_screenshot',{slot,expected}),slot),
   saveStoragePreferences:async(preferences:StoragePreferences)=>{
@@ -487,7 +495,7 @@ export const lazyTester = {
     return settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'SaveAudio',mode}}));
   },
   reportStartup:(report:{connection:string;issue:string;cards:number;enabled:number})=>invokeRuntime<void>('startup_diagnostic_result',report),
-  backendSupport:async()=>parseNativeBackendSupport(await invokeRuntime<unknown>('lazy_tester_backend_support')),
+  startupCapabilities:async()=>parseStartupCapabilities(await invokeRuntime<unknown>('lazy_tester_startup_capabilities')),
   settings:async()=>settingsSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'InspectSettings'}})),
   savePerformance:async(activeFps:number,backgroundFps:number)=>{
     if(!validFpsLimits(activeFps,backgroundFps))throw new TypeError('Use whole FPS limits from 5 to 1000. Background FPS must not exceed active FPS.');

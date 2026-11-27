@@ -83,17 +83,14 @@ pub fn run() {
         // Dormant Sandboxie/VMware and developer inspection handlers are not
         // reachable through Tauri until independently reviewed and reauthorized.
         .invoke_handler(tauri::generate_handler![
-            startup_diagnostic_result,
-            commands::native_clients::lazy_tester_backend_support,
+            commands::native_clients::lazy_tester_startup_capabilities,
             commands::native_clients::lazy_tester_session,
             commands::native_clients::lazy_tester_close_one,
             commands::native_clients::lazy_tester_profile_binding,
             commands::native_clients::lazy_tester_data_location,
             commands::native_clients::lazy_tester_coordinate_bookmarks,
             commands::native_clients::lazy_tester_present,
-            commands::native_clients::lazy_tester_screenshot_available,
             commands::native_clients::lazy_tester_screenshot,
-            commands::native_clients::lazy_tester_recording_available,
             commands::native_clients::lazy_tester_recording_status,
             commands::native_clients::lazy_tester_start_recording,
             commands::native_clients::lazy_tester_stop_recording,
@@ -231,7 +228,7 @@ fn check_webview_binding(mut context: tauri::Context<tauri::Wry>) {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            commands::native_clients::lazy_tester_backend_support,
+            commands::native_clients::lazy_tester_startup_capabilities,
             commands::native_clients::lazy_tester_profile_binding,
             commands::native_clients::lazy_tester_data_location,
             commands::native_clients::lazy_tester_session,
@@ -260,12 +257,13 @@ pub(crate) fn startup_diagnostic_mode() -> bool {
 
 #[tauri::command]
 fn startup_diagnostic_result(app: tauri::AppHandle, connection: String, issue: String, cards: u32, enabled: u32) -> Result<(), String> {
+    if !startup_diagnostic_mode() { return Err("Startup diagnostic is not active".into()); }
     if connection.len()>128 || issue.len()>8192 || cards>5 || enabled>cards {
         return Err("Invalid startup diagnostic".into());
     }
     use std::io::Write;
     writeln!(std::io::stdout(), "{}", serde_json::json!({"event":"startup-observation","processId":std::process::id(),"connection":connection,"issue":issue,"cards":cards,"enabled":enabled,"diagnosticOnly":true})).map_err(|error|error.to_string())?;
-    if startup_diagnostic_mode() {app.exit(if connection=="Profile data verified" && cards==5 && enabled==5 {0}else{2});}
+    app.exit(if connection=="Profile data verified" && cards==5 && enabled==5 {0}else{2});
     Ok(())
 }
 

@@ -231,7 +231,7 @@ export function verifyRepository(root,g0=false) {
     && /#\[cfg\(windows\)\]\s*let _ = crate::engine::workspace_surface::release\(\);/.test(bootstrap)
     && /#\[cfg\(windows\)\]\s*crate::engine::instance_focus_events::shutdown\(\);/.test(bootstrap),
     'Non-Windows Tauri exit must not send CloseAll or invoke native workspace recovery');
-  for(const name of ['lazy_tester_backend_support','lazy_tester_session','lazy_tester_profile_binding','lazy_tester_present','lazy_tester_previews'])assert.ok(bootstrap.includes('commands::native_clients::'+name+','),name);
+  for(const name of ['lazy_tester_startup_capabilities','lazy_tester_session','lazy_tester_profile_binding','lazy_tester_present','lazy_tester_previews'])assert.ok(bootstrap.includes('commands::native_clients::'+name+','),name);
   assert.ok(!/commands::virtual_clients::|commands::setup_tools::|commands::window_arrangement::/.test(bootstrap),'Legacy handlers must remain unregistered');
   assert.ok(/#\[cfg\(not\(windows\)\)\][\s\S]*?app\.get_webview_window\("main"\)\.is_none\(\)/.test(bootstrap),
     'Non-Windows startup must verify the Tauri-created main window');
@@ -285,8 +285,10 @@ export function verifyRepository(root,g0=false) {
   const invoked=bootstrap.split('.invoke_handler(tauri::generate_handler![')[1]?.split('])')[0]??'';
   const exposed=[...invoked.matchAll(/commands::native_clients::([a-z_]+),/g)].map(m=>m[1]);
   assert.deepEqual(exposed,[
-    'lazy_tester_backend_support','lazy_tester_session','lazy_tester_close_one','lazy_tester_profile_binding',
-    'lazy_tester_data_location','lazy_tester_coordinate_bookmarks','lazy_tester_present','lazy_tester_previews',
+    'lazy_tester_startup_capabilities','lazy_tester_session','lazy_tester_close_one','lazy_tester_profile_binding',
+    'lazy_tester_data_location','lazy_tester_coordinate_bookmarks','lazy_tester_present',
+    'lazy_tester_screenshot','lazy_tester_recording_status','lazy_tester_start_recording','lazy_tester_stop_recording',
+    'lazy_tester_previews',
     'lazy_tester_clear_previews','desktop_update_workspace',
     'desktop_release_workspace','desktop_suspend_workspace',
   ],'Only reviewed Lazy Tester handlers, including retained bookmark compatibility, may be exposed; retired provider IPC forbidden');

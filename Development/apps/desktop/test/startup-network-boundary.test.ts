@@ -2,15 +2,21 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 describe("Active native-first startup boundary", () => {
-  it("starts capture probes only after native backend admission and avoids late startup publication", () => {
+  it("uses one native capability request and reports DOM only in diagnostic mode", () => {
     const active = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
     const startup = active.split("async function initializeLaunchers() {")[1]!.split("async function checkBinding(")[0]!;
-    expect(startup.indexOf("nativeBackend === 'Unsupported'")).toBeLessThan(startup.indexOf("lazyTester.screenshotAvailable()"));
-    expect(startup.indexOf("nativeBackend === 'Unsupported'")).toBeLessThan(startup.indexOf("lazyTester.recordingAvailable()"));
-    expect(active.match(/lazyTester\.screenshotAvailable\(/g)).toHaveLength(1);
-    expect(active.match(/lazyTester\.recordingAvailable\(/g)).toHaveLength(1);
-    expect(startup).toContain("if (disposed) return;\n        nativeBackend = backend;");
-    expect(startup).toContain("if (!disposed) void lazyTester.reportStartup(");
+    expect(active.match(/lazyTester\.startupCapabilities\(/g)).toHaveLength(1);
+    expect(active).not.toMatch(/lazyTester\.(?:screenshotAvailable|recordingAvailable|backendSupport)\(/);
+    expect(startup).toContain("if (disposed) return;\n        nativeBackend = capabilities.backend;");
+    expect(startup.indexOf("nativeBackend === 'Unsupported'")).toBeLessThan(startup.indexOf("if(recordingAvailable) void refreshRecordingStatus()"));
+    expect(startup).toContain("if (diagnostic) {\n          await tick();\n          if (!disposed) void lazyTester.reportStartup(");
+    const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
+    const normal = bootstrap.split(".invoke_handler(tauri::generate_handler![")[1]!.split("])")[0]!;
+    const diagnostic = bootstrap.split(".invoke_handler(tauri::generate_handler![")[2]!.split("])")[0]!;
+    expect(normal).not.toContain("startup_diagnostic_result");
+    expect(diagnostic).toContain("startup_diagnostic_result");
+    expect(normal).not.toMatch(/lazy_tester_(?:screenshot|recording)_available/);
+    expect(bootstrap).toContain('if !startup_diagnostic_mode() { return Err("Startup diagnostic is not active".into()); }');
     expect(active).toContain("if (!disposed) { binding = result; bindingIssue = ''; }");
     const mount = active.split("onMount(() => {")[1]!.split("</script>")[0]!;
     expect(mount.indexOf("lazy-tester-close-review")).toBeLessThan(mount.indexOf("void initializeLaunchers()"));
