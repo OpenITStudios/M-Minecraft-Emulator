@@ -1076,7 +1076,9 @@
     const timer = window.setTimeout(() => {
       if (observationTimer !== timer || disposed) return;
       observationTimer = undefined;
-      if (document.hidden) return;
+      // Visibility can change before its event is delivered. Publish the
+      // observed hidden state so the next visible event rearms this deadline.
+      if (document.hidden) { managerVisible = false; return; }
       const now = performance.now();
       // A timer that fires early must not lose either original deadline.
       if (now < due) {

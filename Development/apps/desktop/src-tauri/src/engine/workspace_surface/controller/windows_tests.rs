@@ -629,6 +629,15 @@ fn actual_surface_helper_restores_on_release_pipe_loss_and_helper_crash() {
     let (_sixth_fixture, sixth) = fixture();
     assert!(present(manager as usize as u64, viewport, sixth).is_err(),
         "A sixth surface must not replace an existing five-profile lease");
+    let helper_roster = || {
+        let state = SURFACE.lock().unwrap();
+        let mut roster: Vec<_> = state.active.iter().chain(state.parked.iter())
+            .map(|lease| (lease.requested.pid, lease.child.id())).collect();
+        roster.sort_unstable();
+        roster
+    };
+    let original_helpers = helper_roster();
+    assert_eq!(original_helpers.len(), tabs.len());
     let mut timings = Vec::new();
     for turn in 0..40 {
         let selected = turn % tabs.len();
@@ -641,15 +650,16 @@ fn actual_surface_helper_restores_on_release_pipe_loss_and_helper_crash() {
             format!("{:02}", selected + 1)
         )
         .unwrap();
-        // The product path must reuse the five original helpers, not
-        // prepare a replacement checkpoint on each switch.
+        timings.push(start.elapsed().as_millis());
+        // Count alone cannot distinguish a reused helper from a replacement.
+        // Check the original per-game helper PID roster on every switch.
+        assert_eq!(helper_roster(), original_helpers);
         {
             let state = SURFACE.lock().unwrap();
             assert_eq!(state.parked.len(), tabs.len() - 1);
             assert_eq!(state.active.as_ref().unwrap().authority.as_ref().unwrap().1,
                 format!("{:02}", selected + 1));
         }
-        timings.push(start.elapsed().as_millis());
         for (index, tab) in tabs.iter().enumerate() {
             native::capture(tab.clone()).unwrap();
             let handle = u64::from_str_radix(tab.window_handle.trim_start_matches("0x"), 16)

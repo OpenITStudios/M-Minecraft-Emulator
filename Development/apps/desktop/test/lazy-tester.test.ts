@@ -196,7 +196,7 @@ describe('Lazy Tester profile contract', () => {
     expect(mounted).toContain('const due = nextBackgroundDeadline(sessionDue, recordingDue)');
     expect(mounted).toContain('if (due === null || disposed) return;');
     expect(mounted).toContain('if (observationTimer !== timer || disposed) return;');
-    expect(mounted).toContain('if (document.hidden) return;');
+    expect(mounted).toContain('if (document.hidden) { managerVisible = false; return; }');
     expect(mounted).toContain('sessionDue <= now && sessionObservationEnabled');
     expect(mounted).toContain('recordingDue <= now && recordingObservationEnabled');
     expect(mounted).toContain('managerVisible = !document.hidden;');

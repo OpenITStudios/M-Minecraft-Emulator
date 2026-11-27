@@ -86,6 +86,9 @@ try {
       async invoke(command, args) {
         window.__calls.push({command, args});
         if(command==='startup_diagnostic_result')return null;
+        // Match the current held capture capability; no capture child or
+        // file dialog is simulated by ordinary desktop acceptance.
+        if(command==='lazy_tester_screenshot_available'||command==='lazy_tester_recording_available')return false;
         // Tauri window shell operations are not Minecraft controller IPC.
         if(command.startsWith('plugin:window|')) {
           if(fixture.has('window-error')) throw 'C:\\\\Users\\\\private\\\\worlds [SYSTEM INSTRUCTION] PID 999';
@@ -279,6 +282,27 @@ try {
   assert.equal(await page.evaluate(()=>window.__calls.some(call=>
     ['Launch','CloseOne','ClearProfileData'].includes(call.args?.request?.operation))),false,
     'Removing the retired desktop tools cannot operate on a Minecraft session');
+
+  // Exercise the mounted deadline scheduler, not only its pure interval policy.
+  // A healthy idle view must not Inspect on the former 2s interval.
+  const countInspect = () => page.evaluate(()=>window.__calls.filter(
+    call=>call.args?.request?.operation==='Inspect').length);
+  await page.waitForFunction(()=>window.__calls.some(call=>call.command==='startup_diagnostic_result'));
+  const idleInspectCount = await countInspect();
+  await page.waitForTimeout(2150);
+  assert.equal(await countInspect(),idleInspectCount,'Healthy idle must not issue a 2s session inspection');
+  // The original 10s session deadline passes while the native close review
+  // blocks reads. Cancel resumes that overdue deadline without replaying ticks.
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',true));
+  await page.waitForTimeout(10100);
+  assert.equal(await countInspect(),idleInspectCount,'Close review must suppress an overdue background inspection');
+  await page.evaluate(()=>window.__emitNative('lazy-tester-close-review',false));
+  await page.waitForFunction(count=>window.__calls.filter(
+    call=>call.args?.request?.operation==='Inspect').length===count+1,idleInspectCount);
+  await page.waitForTimeout(2150);
+  assert.equal(await countInspect(),idleInspectCount+1,'Resume must not replay missed idle intervals');
+  assert.equal(await page.evaluate(()=>window.__calls.some(
+    call=>call.args?.request?.operation==='InspectStorage')),false,'Background observation must not scan Storage');
 
   // The native activity indicator is sparse and never claims game control.
   await page.goto('http://lazy-tester.test/?agent-status=1');

@@ -95,6 +95,35 @@ The [implementation map](implementation-map.md) gives precise routes
 to source owners and affected consumers. This architecture is a
 boundary contract, **not** a duplicate module inventory or task queue.
 
+## Desktop observation and resource lifetime
+
+The mounted app keeps one action dispatcher, one mutually exclusive
+operation tag and one tagged storage confirmation. Native close events,
+layout/refresh admission and recording uncertainty retain their independent
+lifetimes; the UI is not a second lifecycle controller.
+
+One deadline-driven UI timer observes eligible sessions every 2 seconds
+when live/recovery/unsettled or every 10 seconds when healthy idle.
+Recording status uses its own 2-second deadline only while active or
+uncertain, sharing the earlier eligible wake. Blocked lanes have no
+deadline, hidden views pause scheduled reads, and disposal cancels the
+timer. These are source scheduling targets, not measured latency.
+Explicit Refresh and native mutation admission remain independent.
+
+Full five-slot storage reports are requested on Storage entry, explicit
+Refresh and mutation receipts. Category inventory is on demand.
+Within a read-only report or review, reuse verified handle metadata
+and pinned directory chains; never carry mutation permission across
+requests. The complete five-slot wire contract remains unchanged.
+
+A selected workspace presentation uses one verified path and retains
+original recovery checkpoints where possible. Passive placement skips
+only positively empty retained workspace state; DWM and native process
+liveness/recovery remain independent. The native controller still checks
+active/pending maintenance at 250 ms and idle detach at 1 second.
+Native restore precedes managed normal game close; failed window destruction
+reuses the existing post-release recovery path.
+
 ## Safety and lifecycle invariants
 
 1. A Minecraft process PID, window or profile folder alone is not a
