@@ -28,14 +28,15 @@ struct Session {
 }
 impl Session {
     fn apply(&mut self, background: bool) -> io::Result<()> {
+        // An untouched foreground session belongs to the user. There is
+        // no policy write or restoration to perform, regardless of its mute.
+        if !background && !self.changed {
+            return Ok(());
+        }
         // Never unmute a session that was already muted before this lease.
         let desired = self.original_mute || background;
         let current = unsafe { self.volume.GetMute() }.map_err(error)?.as_bool();
         if current != desired {
-            // A foreground session never changed by us keeps any later user mute.
-            if !background && !self.changed {
-                return Ok(());
-            }
             unsafe { self.volume.SetMute(desired, &CONTEXT) }.map_err(error)?;
             self.changed = desired != self.original_mute;
         }
@@ -108,7 +109,10 @@ impl Audio {
                 .is_none_or(|last| last.elapsed() >= Duration::from_secs(1))
         {
             self.discover(targets, &valid)?;
-            self.targets = targets.to_vec();
+            if targets != self.targets {
+                self.targets.clear();
+                self.targets.extend_from_slice(targets);
+            }
             self.scanned = Some(Instant::now());
         }
         for session in &mut self.sessions {
@@ -157,13 +161,15 @@ impl Audio {
                         &mut pid,
                     )
                 };
-                if result.0 != 0 || unsafe { control.IsSystemSoundsSession() }.0 != 1 {
+                if result.0 != 0 {
                     continue;
                 }
                 let Some((_, born)) = targets.iter().find(|(owned, _)| *owned == pid) else {
                     continue;
                 };
-                if !valid(pid, *born) {
+                // Do not query system-sound status for unrelated processes.
+                // Owned candidates still require both COM and live identity admission.
+                if unsafe { control.IsSystemSoundsSession() }.0 != 1 || !valid(pid, *born) {
                     continue;
                 }
                 let instance =
@@ -315,12 +321,21 @@ mod tests {
         );
         audio.scanned = None;
         audio
-            .sync(&targets, None, |p, b| p == pid && b == 123)
+            .sync(&targets, Some(pid), |p, b| p == pid && b == 123)
             .unwrap();
         assert!(
             audio.sessions.len() >= 2,
             "Synthetic sessions must actually be discovered"
         );
+        // An untouched foreground session keeps both original mute states.
+        assert!(!unsafe { volumes[0].GetMute() }.unwrap().as_bool());
+        assert!(unsafe { volumes[1].GetMute() }.unwrap().as_bool());
+        unsafe { volumes[0].SetMute(true, &CONTEXT) }.unwrap();
+        audio.scanned = None; // Same-roster discovery must keep user mute.
+        audio.sync(&targets, Some(pid), |p, b| p == pid && b == 123).unwrap();
+        assert!(unsafe { volumes[0].GetMute() }.unwrap().as_bool());
+        unsafe { volumes[0].SetMute(false, &CONTEXT) }.unwrap();
+        audio.sync(&targets, None, |p, b| p == pid && b == 123).unwrap();
         assert!(unsafe { volumes[0].GetMute() }.unwrap().as_bool());
         assert!(unsafe { volumes[1].GetMute() }.unwrap().as_bool());
         audio

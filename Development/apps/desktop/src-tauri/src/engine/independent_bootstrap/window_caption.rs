@@ -1,12 +1,17 @@
 //! Stable captions for verified owned Minecraft root windows.
-use super::{invalid, wide, MAX_EDUCATION_SLOTS};
-use std::{ffi::OsStr, io};
+use super::{invalid, MAX_EDUCATION_SLOTS};
+use std::io;
 
-fn slot_caption(slot: u32) -> io::Result<Vec<u16>> {
+// Current slots are single-digit; fail compilation if that contract expands.
+const _: () = assert!(MAX_EDUCATION_SLOTS <= 9);
+
+fn slot_caption(slot: u32) -> io::Result<[u16; 14]> {
     if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
         return Err(invalid("Invalid Minecraft window slot"));
     }
-    wide(OsStr::new(&format!("Minecraft - {slot}")))
+    let mut caption = (*b"Minecraft - 0\0").map(u16::from);
+    caption[12] = u16::from(b'0') + slot as u16;
+    Ok(caption)
 }
 
 pub(super) fn label_slot_window(
@@ -49,7 +54,8 @@ pub(super) fn label_slot_window(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::ptr;
+    use super::super::wide;
+    use std::{ffi::OsStr, ptr};
     use windows_sys::Win32::System::Threading::GetCurrentProcessId;
 
     #[test]
@@ -64,7 +70,8 @@ mod tests {
             );
         }
         assert!(slot_caption(0).is_err());
-        assert!(slot_caption(6).is_err());
+        assert!(slot_caption(MAX_EDUCATION_SLOTS + 1).is_err());
+        assert!(slot_caption(u32::MAX).is_err());
         let class = wide(OsStr::new("STATIC")).unwrap();
         let title = wide(OsStr::new("Owned caption control")).unwrap();
         let hwnd = unsafe {

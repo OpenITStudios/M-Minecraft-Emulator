@@ -123,6 +123,13 @@ liveness/recovery remain independent. The native controller still checks
 active/pending maintenance at 250 ms and idle detach at 1 second.
 Native restore precedes managed normal game close; failed window destruction
 reuses the existing post-release recovery path.
+Audio maintenance retains its one-second discovery deadline and immediate
+next-tick response to owned foreground/roster changes. Unrelated foreground
+changes do not trigger COM sync. Policy application on untouched foreground
+leases skips GetMute; discovery still reads original mute, active enforcement
+retains live identity checks, and restoration uses the original COM lease.
+Stable target storage is reused; native caption checks use a fixed UTF-16
+buffer without changing HWND admission or repair.
 
 ## Safety and lifecycle invariants
 

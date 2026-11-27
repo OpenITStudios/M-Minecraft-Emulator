@@ -1489,10 +1489,9 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
     valid_retained_window(&process).then_some(process)
 }
 
-// Audio COM reads are separate from process reaping. The existing
-// controller still reaps every idle 250 ms; stable audio needs no repeated
-// COM GetMute call until its 1-second discovery deadline. Focus or an exact
-// retained game process change bypasses that interval immediately.
+// Audio COM reads are separate from process reaping. Active maintenance
+// retains its 250 ms cadence; stable audio uses its 1-second discovery
+// deadline. A change of owned foreground or exact roster bypasses it.
 const AUDIO_IDLE_RESYNC: Duration = Duration::from_secs(1);
 type AudioRoster = [Option<(u32, u64)>; 5];
 fn audio_roster(sessions: &Sessions) -> AudioRoster {
@@ -1501,6 +1500,11 @@ fn audio_roster(sessions: &Sessions) -> AudioRoster {
     std::array::from_fn(|index| sessions.running[index].as_ref()
         .map(|running| (running.children[0].pid, running.children[0].created)))
 }
+// All non-owned foreground windows imply the same mute policy.
+fn owned_audio_foreground(foreground: Option<u32>, roster: &AudioRoster) -> Option<u32> {
+    foreground.filter(|pid| roster.iter().flatten().any(|(owned, _)| owned == pid))
+}
+
 #[derive(Default)]
 struct AudioIdleGate {
     last_success: Option<Instant>,
@@ -1511,12 +1515,12 @@ impl AudioIdleGate {
     fn due(&self, now: Instant, foreground: Option<u32>, roster: AudioRoster) -> bool {
         self.last_success.is_none_or(|last|
             now.saturating_duration_since(last) >= AUDIO_IDLE_RESYNC)
-            || self.foreground != Some(foreground)
+            || self.foreground != Some(owned_audio_foreground(foreground, &roster))
             || self.roster != Some(roster)
     }
     fn success(&mut self, now: Instant, foreground: Option<u32>, roster: AudioRoster) {
         self.last_success = Some(now);
-        self.foreground = Some(foreground);
+        self.foreground = Some(owned_audio_foreground(foreground, &roster));
         self.roster = Some(roster);
     }
     fn invalidate(&mut self) {
@@ -2149,6 +2153,29 @@ mod tests {
             "An outstanding mute lease must still be restored");
         assert!(!audio_maintenance_needed(BackgroundAudio::Mute, false, [None; 5]),
             "No owned process and no audio lease needs no COM startup");
+    }
+
+    #[test]
+    fn unrelated_foreground_changes_do_not_repeat_audio_policy() {
+        let start = Instant::now();
+        let roster: AudioRoster = [Some((102, 1)), Some((103, 2)), None, None, None];
+        let next = start + Duration::from_millis(250);
+        let mut gate = AudioIdleGate::default();
+        gate.success(start, Some(900), roster);
+        assert!(!gate.due(next, Some(901), roster));
+        assert!(!gate.due(next, None, roster));
+        assert!(gate.due(next, Some(102), roster));
+        assert!(gate.due(start + AUDIO_IDLE_RESYNC, Some(901), roster));
+        gate.success(next, Some(102), roster);
+        let later = next + Duration::from_millis(250);
+        assert!(!gate.due(later, Some(102), roster));
+        assert!(gate.due(later, Some(103), roster));
+        assert!(gate.due(later, Some(900), roster));
+        let mut replaced = roster;
+        replaced[0] = Some((102, 3));
+        assert!(gate.due(later, Some(102), replaced));
+        gate.invalidate();
+        assert!(gate.due(later, Some(102), roster));
     }
 
     #[test]
