@@ -23,6 +23,14 @@ describe('Selective Cleanup lifecycle source contract',()=>{
     expect(dialog).toContain('on:cancel|preventDefault={close}');
     expect(dialog).not.toContain('clearData(');
   });
+  it('clears an old review when switching to a cached category',()=>{
+    const dialog=source('SelectiveCleanup.svelte');
+    const switchStart=dialog.indexOf('async function load(next: SelectiveCategory');
+    const switchEnd=dialog.indexOf('function toggle(',switchStart);
+    const load=dialog.slice(switchStart,switchEnd);
+    expect(load).toMatch(/category=next;\\s*\\/\\/[^\\n]*\\n\\s*receipt=null;\\s*issue='';/);
+    expect(load.indexOf('receipt=null;')).toBeLessThan(load.indexOf('if(inventories[next]&&!refresh)return;'));
+  });
   it('shares navigation guard and restores focus to a persistent heading if trigger is unavailable',()=>{
     const storage=source('DataStorage.svelte');
     const app=source('LazyTesterApp.svelte');

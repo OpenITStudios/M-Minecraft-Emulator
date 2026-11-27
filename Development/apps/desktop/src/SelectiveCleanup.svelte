@@ -45,6 +45,8 @@
   async function load(next: SelectiveCategory, refresh=false): Promise<void> {
     if(closed||loading)return;
     category=next;
+    // Review totals belong to the exact selection, not the visible category.
+    receipt=null;
     issue='';
     if(inventories[next]&&!refresh)return;
     const request=++generation;
