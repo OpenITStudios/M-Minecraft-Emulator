@@ -570,6 +570,8 @@ pub struct SelectiveSelection {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SelectiveReviewReceipt {
     pub slot: u32,
+    pub bytes: u64,
+    pub files: u32,
     pub items: Vec<SelectiveSelection>,
     pub warnings: Vec<String>,
     pub confirmation_token: Option<String>,

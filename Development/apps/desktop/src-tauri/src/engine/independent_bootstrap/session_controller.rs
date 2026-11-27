@@ -928,7 +928,7 @@ impl Sessions {
             }
         }
         let confirmation_token = if review.warnings.is_empty() { Some(review.confirmation_token(slot)?) } else { None };
-        Ok(SelectiveReviewReceipt { slot, items: selections, warnings: review.warnings, confirmation_token })
+        Ok(SelectiveReviewReceipt { slot, bytes: review.bytes, files: review.files, items: selections, warnings: review.warnings, confirmation_token })
     }
 
     fn clear_cache(&mut self, slot: u32) -> io::Result<()> {

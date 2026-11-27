@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective review tree inspection checkpoint: reuse existing bounded read-only handle traversal for exact selected identities, reject linked files and incomplete traversal; aggregate logical bytes and file count under one shared deadline and 2048-file selection limit. Review receipt and bridge expose totals; fingerprint v2 includes totals. These are conservative review limits, not a hard latency guarantee or mutation preflight. Same-size content changes are not detected by the fingerprint. No deletion enabled; exclusive mutation plan and directory disposition remain pending. Fixture extended NOT_EXECUTED; capture held.
+
 Selective review integration: inventory receipts now carry opaque profile/slot/item identity fingerprints. Explicit review request validates bounded selections against fresh inventory and original display identity, rejects replaced directories, returns warnings and optional confirmation fingerprint through typed bridge. Existing controller admission and pending-clear guard reused. No deletion command, UI or byte totals yet. Full wire consumer audit and fixtures remain pending; NOT_EXECUTED. Capture held.
 
 Selective confirmation fingerprint checkpoint: domain-separated SHA-256 binds slot, profile native identity, canonical selected category/root/name and item native identities. Selection order is immaterial; warning-bearing reviews refuse a fingerprint (pack coverage remains held). Authored identity replacement, slot, order and warning fixtures NOT_EXECUTED. Internal fingerprint only, not a bearer capability; controller receipt, inventory identity continuity, fresh confirmation and file-tree mutation preflight remain pending. No deletion enabled; capture held.

@@ -393,6 +393,8 @@ pub(super) struct SelectiveReview {
     pub(super) profile_identity: windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
     pub(super) items: Vec<InventoryItem>,
     pub(super) warnings: Vec<String>,
+    pub(super) bytes: u64,
+    pub(super) files: u32,
 }
 
 // Domain-separated review fingerprint, not a bearer capability. The caller
@@ -405,7 +407,9 @@ impl SelectiveReview {
             return Err(io::Error::other("Selective review is not eligible for confirmation"));
         }
         let mut hash = Sha256::new();
-        hash.update(b"LazyTester/selective-review/v1");
+        hash.update(b"LazyTester/selective-review/v2");
+        hash.update(self.bytes.to_le_bytes());
+        hash.update(self.files.to_le_bytes());
         hash.update(slot.to_le_bytes());
         fn identity(hash: &mut Sha256, id: &windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO) {
             hash.update(id.VolumeSerialNumber.to_le_bytes());
@@ -483,7 +487,24 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
         warnings.push("Pack dependency coverage is not native-verified".into());
     }
     if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
-    Ok(SelectiveReview { profile_identity, items, warnings })
+    // One deadline across the entire review, including selected tree sizes.
+    // No partial total is returned on failure; no file contents are read.
+    let (base, _pins) = base_path(private, budget)?
+        .ok_or_else(|| io::Error::other("Selected profile data disappeared"))?;
+    let mut bytes = 0u64;
+    let mut files = 0u32;
+    for item in &items {
+        if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
+        let root = base.join(item.root);
+        let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+        let (item_bytes, item_files) = super::profile_storage::inspect_selected_tree(
+            &root.join(&item.name), &item.identity, budget)?;
+        bytes = bytes.checked_add(item_bytes).ok_or_else(|| io::Error::other("Selection size overflow"))?;
+        files = files.checked_add(item_files).ok_or_else(|| io::Error::other("Selection file count overflow"))?;
+        if files > 2048 { return Err(io::Error::other("Selection file limit exceeded")); }
+    }
+    if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
+    Ok(SelectiveReview { profile_identity, items, warnings, bytes, files })
 }
 
 fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
@@ -656,6 +677,10 @@ mod tests {
         let review = review_selection(&private, &[selection()], budget()).unwrap();
         assert_eq!(review.items.len(), 1);
         assert!(review.warnings.is_empty());
+        assert_eq!((review.bytes, review.files), (7, 1));
+        fs::hard_link(world.join("level.dat"), parent.join("outside")).unwrap();
+        assert!(review_selection(&private, &[selection()], budget()).is_err());
+        fs::remove_file(parent.join("outside")).unwrap();
         assert!(super::super::same_image(&review.profile_identity, &directory_id(&private).unwrap()));
         assert!(review_selection(&private, &[selection(), selection()], budget()).is_err());
         let unknown = ReviewSelection { name: "../outside".into(), ..selection() };

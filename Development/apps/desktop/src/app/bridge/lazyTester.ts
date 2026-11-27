@@ -38,7 +38,7 @@ export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:s
 export type SelectiveCategory = 'Worlds' | 'ResourcePacks' | 'BehaviorPacks';
 export interface SelectiveInventory {slot: ProfileSlot; category: SelectiveCategory; items: {root: string; name: string; identity: string}[]}
 export interface SelectiveSelection {category: SelectiveCategory; root: string; name: string; identity: string}
-export interface SelectiveReviewReceipt {slot: ProfileSlot; items: SelectiveSelection[]; warnings: string[]; confirmationToken: string|null}
+export interface SelectiveReviewReceipt {slot: ProfileSlot; bytes: number; files: number; items: SelectiveSelection[]; warnings: string[]; confirmationToken: string|null}
 export interface SessionSnapshot {selectiveReview?: SelectiveReviewReceipt; selectiveInventory?: SelectiveInventory; schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport; agentActivity?:AgentActivityReport}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
@@ -333,7 +333,9 @@ export function parseSession(value: unknown): SessionSnapshot {
   }
   if(Object.hasOwn(value,'selectiveReview')) {
     const review=value.selectiveReview;
-    if(!record(review)||!exact(review,['slot','items','warnings','confirmationToken'])||
+    if(!record(review)||!exact(review,['slot','items','warnings','confirmationToken','bytes','files'])||
+      !Number.isSafeInteger(review.bytes)||Number(review.bytes)<0||
+      !Number.isInteger(review.files)||Number(review.files)<0||Number(review.files)>2048||
       !profileSlots.includes(review.slot as ProfileSlot)||
       (value.profiles as ProfileSession[]).some(p=>p.slot===review.slot&&p.state!=='STOPPED')||
       !Array.isArray(review.items)||!review.items.length||review.items.length>128||

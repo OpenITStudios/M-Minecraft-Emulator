@@ -189,6 +189,21 @@ impl CachePlan {
     }
 }
 
+// Reuse the existing bounded handle traversal for a read-only selected tree.
+// The caller must retain the verified ancestor chain and exact item pin.
+// Never pass user-supplied paths directly; this does not grant DELETE access.
+pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
+    budget: InspectionBudget) -> io::Result<(u64, u32)> {
+    let pin = open_directory(path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+    if !super::same_image(expected, &super::directory_id(&pin)?) {
+        return Err(invalid("Selected directory changed before tree inspection"));
+    }
+    let mut plan = CachePlan::new(false, budget);
+    plan.visit(path, 0)?;
+    plan.bounded(0)?;
+    Ok((plan.bytes, plan.files.len() as u32))
+}
+
 fn plan(private: &File, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {
     let mut plan = CachePlan::new(deleting, budget);
     // Both observation and deletion preflight must finish within their budget.
