@@ -15,11 +15,11 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
   it('keeps profile-specific Storage receipts and pending reviews scoped to the original slot',()=>{
     const app=load('LazyTesterApp.svelte');
     const choose=app.split('function chooseSlot(slot:ProfileSlot){')[1]
-      ?.split('  let savingPerformance=')[0] ?? '';
+      ?.split('  let queuedPerformance:')[0] ?? '';
     // The parent rejects unexpected selector events even if the child
     // controls were disabled before the pending review began.
-    expect(choose).toContain("closeReviewActive(reviewState()) || activeOperation === 'clearData' ||");
-    expect(choose).toContain("activeOperation === 'clearData' || storageReview!==null) return;");
+    expect(choose).toContain('activeOperation !== null || selectiveOpen ||');
+    expect(choose).toContain('closeReviewActive(reviewState()) || storageReview!==null) return;');
     expect(choose).not.toMatch(/storageReview\s*=\s*null/);
     expect(choose).toContain("settingsNotice='';storageNotice='';");
   });

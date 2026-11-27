@@ -33,7 +33,7 @@
     // A profile switch is display-only. It must never silently dismiss
     // an active CloseOne/Storage confirmation or an in-flight mutation.
     if (slot===selectedSlot || activeOperation !== null || selectiveOpen ||
-        closeReviewActive(reviewState()) || activeOperation === 'clearData' || storageReview!==null) return;
+        closeReviewActive(reviewState()) || storageReview!==null) return;
     selectedSlot=slot;
     // Per-profile success receipts are not native session or storage truth.
     // Do not show the prior slot's receipt under the newly selected slot.
