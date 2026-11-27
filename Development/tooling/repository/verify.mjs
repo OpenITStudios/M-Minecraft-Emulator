@@ -234,7 +234,7 @@ export function verifyRepository(root,g0=false) {
     mountedUI.includes("profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null)") &&
     mountedUI.includes('active === null && requested === null && queued === null && queuedLaunch === null') &&
     mountedUI.includes("previewIssue === '' && !closeFailure && agentActivity === null") &&
-    mountedUI.includes('!busy && !refreshing && !resizing && !initializing') &&
+    mountedUI.includes('activeOperation === null && !refreshing && !resizing && !initializing') &&
     mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState())") &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative') return;") &&

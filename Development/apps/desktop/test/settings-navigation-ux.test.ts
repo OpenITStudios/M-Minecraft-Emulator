@@ -18,8 +18,8 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
       ?.split('  let savingPerformance=')[0] ?? '';
     // The parent rejects unexpected selector events even if the child
     // controls were disabled before the pending review began.
-    expect(choose).toContain('closeReviewActive(reviewState()) || clearingData ||');
-    expect(choose).toContain('clearingData || storageReview!==null) return;');
+    expect(choose).toContain("closeReviewActive(reviewState()) || activeOperation === 'clearData' ||");
+    expect(choose).toContain("activeOperation === 'clearData' || storageReview!==null) return;");
     expect(choose).not.toMatch(/storageReview\s*=\s*null/);
     expect(choose).toContain("settingsNotice='';storageNotice='';");
   });
@@ -30,7 +30,7 @@ describe('General / Data Storage navigation UX — source contracts',()=>{
     expect(app).toContain('pageHeading.focus({preventScroll:true})');
     expect(app).toContain('<h1 bind:this={pageHeading} tabindex="-1">');
     expect(app).toContain('loadingPage = next;');
-    expect(app).toContain('finally { loadingPage = null; busy = false; }');
+    expect(app).toContain('finally { loadingPage = null; activeOperation = null; }');
     expect(app).toContain('Checking saved profile storage…');
     expect(app).toContain('Checking current settings…');
     expect(app).toContain('role="status" aria-live="polite"');

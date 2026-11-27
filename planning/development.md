@@ -8,6 +8,8 @@ SIM-01 source checkpoint complete: layout comparison now directly uses the exist
 ## SIM-02 — Application state
 First source checkpoint: cache, settings recovery and full-clear confirmation share one tagged `StorageReview` value in the existing app. DataStorage receives that one value and derives presentation aliases; cancel is kind-scoped, commit requires the corresponding kind plus existing slot/token/ack/status gates. Selective Cleanup keeps its existing dialog owner, binding and exclusion gates. Removed unused checkingStorage flag (busy and manualRefreshing still govern the operation). No new store, queue, native request, dependency or MCP change. Existing focus and admission fixtures reconciled; NOT_EXECUTED. Next: finish application state review, then SIM-03.
 
+SIM-02 operation checkpoint: one synchronous `activeOperation` tag owns the former busy gate and specific screenshot/FPS/full-clear indicators. All imperative callers read the tag directly, not a delayed Svelte projection. Existing independent refresh, resize, manual-refresh focus, navigation target and external close events remain separate. Settings reports share one field-wise publication function; passive reads preserve unsaved FPS drafts, explicit FPS save still adopts its confirmed receipt, uncertain storage preference remains explicitly unknown. No native command, MCP, queue priority, store or dependency changes. Source fixtures reconciled; NOT_EXECUTED. Next: final application state review and SIM-03.
+
 ## Active implementation roadmap — Rust-first
 
 Status means source availability, not runtime acceptance. Preserve existing contracts and user data; no tests/CI or release during source phase.

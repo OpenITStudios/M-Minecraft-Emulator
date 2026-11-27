@@ -28,6 +28,33 @@ describe('Selective inventory wire contract',()=>{
     expect(()=>parseSession({...stopped(),profiles:[running(1),...stopped().profiles.slice(1)],selectiveInventory:inventory})).toThrow();
   });
 });
+describe('Desktop operation ownership', () => {
+  it('uses a synchronous operation tag and derives display-only activity flags', () => {
+    const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const script=app.split('</script>')[0]!;
+    expect(script).toContain('let activeOperation: UiOperation | null = null');
+    expect(script).toContain('$: busy = activeOperation !== null');
+    expect(script).toContain("$: savingPerformance = activeOperation === 'savePerformance'");
+    expect(script).toContain("$: screenshotBusy = activeOperation === 'screenshot'");
+    expect(script).toContain("$: clearingData = activeOperation === 'clearData'");
+    expect(script).not.toMatch(/\bbusy\s*=\s*(true|false)\b/);
+    for (const action of ['savePerformance','screenshot','clearData','launch','closeOne','navigate']) {
+      expect(script).toContain("activeOperation = '"+action+"'");
+    }
+    const screenshot=script.slice(script.indexOf('async function saveScreenshot()'),script.indexOf('let manualRefreshRequested'));
+    expect(screenshot).toContain('activeOperation !== null');
+    expect(screenshot).toContain('finally{activeOperation = null;}');
+  });
+  it('shares settings publication while leaving FPS drafts to their existing owners', () => {
+    const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    expect(app).toContain('if (!sameSettingsObservation(settings, incoming)) settings = incoming;');
+    expect(app).toContain('observeSettings(snapshot.settings)');
+    expect(app).toContain('if (!performanceDirty) {');
+    expect(app).toContain('publishProfiles(snapshot.profiles);publishSettings(snapshot.settings);');
+    expect(app).toContain('activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;');
+    expect(app).not.toContain('settings=snapshot.settings');
+  });
+});
 describe('Lazy Tester profile contract', () => {
   it('compares all profile observation fields before suppressing redundant UI updates', () => {
     const base = parseSession({...stopped(), profiles: [running(1), ...stopped().profiles.slice(1)]}).profiles;

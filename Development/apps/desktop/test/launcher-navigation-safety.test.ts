@@ -31,8 +31,8 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     const app=source('LazyTesterApp.svelte');
     const storage=source('DataStorage.svelte');
     expect(app).toContain('$: navigationReviewOpen = selectiveOpen || closeReviewPending || clearingData || storageReview !== null;');
-    expect(app).toContain('selectiveOpen || clearingData || storageReview !== null) return;');
-    expect(app).toContain('closeReviewActive(reviewState()) || clearingData || storageReview!==null) return;');
+    expect(app).toContain("selectiveOpen || activeOperation === 'clearData' || storageReview !== null) return;");
+    expect(app).toContain("closeReviewActive(reviewState()) || activeOperation === 'clearData' || storageReview!==null) return;");
     expect(app).toContain('onCancelReview={cancelStorageReview}');
     expect(app).toContain('disabled={navigationReviewOpen} on:click={()=>navigate(\'workspace\')}>Back</button>');
     expect(app).toContain('disabled={navigationReviewOpen||nativeBackend!==\'WindowsNative\'}');

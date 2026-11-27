@@ -54,7 +54,7 @@ describe('Lazy Tester transient control focus and original native admission — 
     expect(block).toContain("document.getElementById('lazytester-clear-data-heading')?.focus({preventScroll:true})");
     expect(block).toContain('await lazyTester.clearData(pending.slot,pending.token,fullName)');
     expect(block.indexOf("document.getElementById('lazytester-clear-data-heading')?.focus")).toBeLessThan(
-      block.indexOf('busy=true;clearingData=true;'));
+      block.indexOf("activeOperation = 'clearData';"));
     expect(storage).toContain('id="lazytester-clear-data-heading" tabindex="-1"');
     expect(storage).toContain('confirmationToken!==fullReview.token');
     expect(storage).toContain('on:submit|preventDefault={onClearAllData}');

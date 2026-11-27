@@ -8,7 +8,7 @@ const browser=()=>readFileSync(new URL('../../../tooling/acceptance/lazy-tester-
 describe('Pre-localtest interaction admission and storage review safety',()=>{
   it('never drops an open CloseOne review through another launcher action',()=>{
     const app=ui('LazyTesterApp.svelte'),rail=ui('LauncherRail.svelte');
-    expect(app).toContain('if (closeReviewActive(reviewState()) || navigationReviewOpen || busy ||');
+    expect(app).toContain('if (closeReviewActive(reviewState()) || navigationReviewOpen || activeOperation !== null ||');
     expect(app).toContain('reviewPending={closeReviewPending}');
     expect(app).toContain('queuedLaunch=null;queued=null;queuedPage=null;');
     expect(rail).toContain('disabled={busy||reviewPending||!observedSlot');

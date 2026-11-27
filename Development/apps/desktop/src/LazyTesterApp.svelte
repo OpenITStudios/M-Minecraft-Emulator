@@ -32,20 +32,19 @@
   function chooseSlot(slot:ProfileSlot){
     // A profile switch is display-only. It must never silently dismiss
     // an active CloseOne/Storage confirmation or an in-flight mutation.
-    if (slot===selectedSlot || busy || selectiveOpen ||
-        closeReviewActive(reviewState()) || clearingData || storageReview!==null) return;
+    if (slot===selectedSlot || activeOperation !== null || selectiveOpen ||
+        closeReviewActive(reviewState()) || activeOperation === 'clearData' || storageReview!==null) return;
     selectedSlot=slot;
     // Per-profile success receipts are not native session or storage truth.
     // Do not show the prior slot's receipt under the newly selected slot.
     settingsNotice='';storageNotice='';
   }
-  let savingPerformance=false;
   let queuedPerformance:{active:number;background:number}|null=null;
   let activeFps:number|undefined=144,backgroundFps:number|undefined=10,performanceNotice='';
   $: performanceDirty=settings!==null&&(activeFps!==settings.activeFps||backgroundFps!==settings.backgroundFps);
   $: performanceValid=validFpsLimits(activeFps,backgroundFps);
   let storageReview: StorageReview | null = null, storageNotice = '';
-  let fullName='',fullAck=false,clearingData=false;
+  let fullName='',fullAck=false;
   type Page = 'workspace' | 'storage' | 'settings';
   let page: Page = 'workspace';
   let queuedPage: Page | null = null;
@@ -74,8 +73,20 @@
     try { window.localStorage.setItem(workspaceLayoutKey, value); layoutPersistenceIssue = ''; }
     catch { layoutPersistenceIssue = 'Layout applied for this session only. Preference could not be saved.'; }
   }
-  let busy = false, refreshing = false, resizing = false, available = false;
-  let screenshotAvailable=false, screenshotBusy=false;
+  // One synchronous admission owner for mutually exclusive UI actions.
+  // Reactive flags below are presentation only; handlers read activeOperation.
+  type UiOperation = 'recording' | 'screenshot' | 'select' | 'launch' |
+    'navigate' | 'refreshStorage' | 'saveStoragePreferences' | 'saveAudio' |
+    'savePerformance' | 'closeOne' | 'binding' | 'dataLocation' | 'openFolder' |
+    'confirmSelectedData' | 'clearDownloadCache' | 'clearCache' |
+    'recoverSettings' | 'clearData';
+  let activeOperation: UiOperation | null = null;
+  $: busy = activeOperation !== null;
+  $: savingPerformance = activeOperation === 'savePerformance';
+  $: screenshotBusy = activeOperation === 'screenshot';
+  $: clearingData = activeOperation === 'clearData';
+  let refreshing = false, resizing = false, available = false;
+  let screenshotAvailable=false;
   let recordingAvailable=false, recordingStatusKnown=false, recordingStatusPending=false, recordingWatch=false;
   let recordingSlot:ProfileSlot=1;
   let recordings:RecordingReceipt[]=[];
@@ -101,7 +112,7 @@
     }finally{recordingStatusPending=false;}
   }
   async function recordingAction(){
-    if(!recordingAvailable||busy||refreshing||resizing||recordingStatusPending||
+    if(!recordingAvailable||activeOperation !== null||refreshing||resizing||recordingStatusPending||
       closeReviewPending||navigationReviewOpen||(!recordingStatusKnown&&!recordingWatch))return;
     const slot=recordingSlot;
     const receipt=recordings.find(r=>r.slot===slot);
@@ -109,7 +120,7 @@
     if(recordingStatusKnown&&receipt?.state==='Stopping')return;
     const stop=!recordingStatusKnown||recordingActive(receipt);
     if(!stop&&(!target?.responding||page!=='workspace'||!available||!binding?.configured))return;
-    busy=true;recordingNotice=null;recordingWatch=true;
+    activeOperation = 'recording';recordingNotice=null;recordingWatch=true;
     try{
       if(stop)await lazyTester.stopRecording(slot);
       else if(target)await lazyTester.startRecording(slot,target);
@@ -117,7 +128,7 @@
       if(!disposed)recordingNotice={slot,message:stop?'Stop request failed':'Recording start failed'};
     }finally{
       await refreshRecordingStatus();
-      busy=false;
+      activeOperation = null;
     }
   }
   function recordingLabel(slot:ProfileSlot,receipts:RecordingReceipt[],known:boolean,notice:typeof recordingNotice){
@@ -131,15 +142,15 @@
   async function saveScreenshot(){
     const slot=active;
     const target=profiles.find(p=>p.slot===slot&&p.state==='RUNNING')?.process;
-    if(!screenshotAvailable||slot===null||!target?.responding||busy||refreshing||resizing||
+    if(!screenshotAvailable||slot===null||!target?.responding||activeOperation !== null||refreshing||resizing||
       closeReviewPending||navigationReviewOpen||detached||page!=='workspace')return;
-    busy=true;screenshotBusy=true;screenshotNotice=null;
+    activeOperation = 'screenshot';screenshotNotice=null;
     try{
       const receipt=await lazyTester.screenshot(slot,target);
       if(receipt&&!disposed)screenshotNotice={slot,message:`Screenshot saved · ${receipt.width} × ${receipt.height}`};
     }catch{
       if(!disposed)screenshotNotice={slot,message:'Screenshot unavailable. No successful save was confirmed.'};
-    }finally{busy=false;screenshotBusy=false;}
+    }finally{activeOperation = null;}
   }
   let manualRefreshRequested=false, manualRefreshing=false;
   // One clock for the same Inspect/InspectSettings path, including startup
@@ -328,27 +339,27 @@
   function select(slot: ProfileSlot) {
     // Only explicit Cancel ends a game/storage confirmation. Card selection
     // must not silently discard a pending review or replace navigation.
-    if (closeReviewActive(reviewState()) || navigationReviewOpen || busy ||
+    if (closeReviewActive(reviewState()) || navigationReviewOpen || activeOperation !== null ||
         queuedPage !== null) return;
     requested = null; queued = slot;
   }
   async function consumeSelection() {
     const slot = queued; queued = null;
     if (slot === null || !available || profiles.find(profile => profile.slot === slot)?.state !== 'RUNNING') return;
-    busy = true; issueKey=null;
+    activeOperation = 'select'; issueKey=null;
     try {
       page = 'workspace'; await tick();
       await presentCurrentViewport(slot);
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
     } catch (error) { issueKey='selection'; dirty = true; }
-    finally { busy = false; }
+    finally { activeOperation = null; }
   }
   function isCurrentObservation(issued: number): boolean {
     return !disposed && observationStillCurrent(issued, observationEpoch, reviewState());
   }
   async function refresh() {
-    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || busy || refreshing || resizing || disposed) return;
+    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || activeOperation !== null || refreshing || resizing || disposed) return;
     const issued = observationEpoch;
     refreshing = true;
     lastInspectionStartedAt = performance.now();
@@ -369,8 +380,7 @@
       // the original HWND/helper checkpoint. Only a positive selected-close
       // presentation receipt below may clear the uncertainty warning.
       if(snapshot.settings){
-        if(!performanceDirty){activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;}
-        if (!sameSettingsObservation(settings, snapshot.settings)) settings=snapshot.settings;
+        observeSettings(snapshot.settings);
       }
       if (active !== null && selectedIdentity !== identity(profiles.find(profile => profile.slot === active))) {
         const released = {slot: active, identity: selectedIdentity};
@@ -411,10 +421,10 @@
   async function launch(slot: ProfileSlot) {
     // Read the current observed slot again; queued or stale card clicks do
     // not grant permission to launch an ATTENTION/uncertain profile.
-    if (closeInProgress || navigationReviewOpen || busy || !available || !binding?.configured ||
+    if (closeInProgress || navigationReviewOpen || activeOperation !== null || !available || !binding?.configured ||
         !canRequestProfileLaunch(profiles.find(profile => profile.slot === slot),launchFailures)) return;
     if(refreshing||resizing){queuedLaunch=slot;return;}
-    busy = true; issueKey=null; requested = slot;
+    activeOperation = 'launch'; issueKey=null; requested = slot;
     launchFailures = new Map([...launchFailures].filter(([failedSlot])=>failedSlot!==slot));
     try {
       publishProfiles((await lazyTester.launch(slot)).profiles); storage = null; available = true;
@@ -426,12 +436,12 @@
         catch { issueKey='selection'; }
       }
     } catch (error) { recordLaunchFailure(slot,'unverified'); requested = null; }
-    finally { busy = false; }
+    finally { activeOperation = null; }
   }
   function navigate(next: typeof page) {
     // Settings and storage require the Windows native session owner.
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) ||
-        selectiveOpen || clearingData || storageReview !== null) return;
+        selectiveOpen || activeOperation === 'clearData' || storageReview !== null) return;
     closeOneTrigger=null;
     // A queued Refresh belongs to its original page; moving to another
     // page cancels only the undispatched UI request, never a native action.
@@ -448,7 +458,7 @@
     // A completed native suspend/present is not itself a UI or game receipt.
     const issued = observationEpoch;
     const current = () => isCurrentObservation(issued);
-    busy = true; loadingPage = next; issueKey=null;
+    activeOperation = 'navigate'; loadingPage = next; issueKey=null;
     try {
       if (next !== 'workspace') await workspaceSurface.suspend();
       if (!current()) return;
@@ -464,8 +474,7 @@
       if(next==='settings'||next==='storage') {
         const snapshot=await lazyTester.settings();
         if (!current()) return;
-        publishProfiles(snapshot.profiles);settings=snapshot.settings;available=true;
-        if(!performanceDirty){activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;}
+        publishProfiles(snapshot.profiles);observeSettings(snapshot.settings);available=true;
       }
       if(next==='storage') {
         try {
@@ -486,7 +495,7 @@
     } catch (error) {
       if (current()) {issueKey='workspace';dirty=true;}
     }
-    finally { loadingPage = null; busy = false; }
+    finally { loadingPage = null; activeOperation = null; }
   }
   function requestHeaderRefresh(event: MouseEvent): void {
     if (navigationReviewOpen) return;
@@ -504,14 +513,14 @@
     const keyboardOrigin = headerRefreshFocusPage;
     headerRefreshFocusPage = null;
     if (nativeBackend !== 'WindowsNative' || navigationReviewOpen ||
-        busy || refreshing || resizing) return;
+        activeOperation !== null || refreshing || resizing) return;
     const issued = observationEpoch;
     const current = () => isCurrentObservation(issued);
     manualRefreshing=true;
     try {
     issueKey=null;
     if (page === 'storage') {
-      busy=true;
+      activeOperation = 'refreshStorage';
       try {
         if(!binding?.configured)await checkBinding();
         if (!current()) return;
@@ -538,7 +547,7 @@
       }catch(error){
         if (current()) {issueKey='storage';storage=null;}
       }
-      finally{busy=false;}
+      finally{activeOperation = null;}
     } else {
       // Only explicit Refresh of a known preview failure requests another
       // DWM layout. Periodic session inspection and worker errors never
@@ -565,40 +574,40 @@
     }
   }
   async function saveWebCachePreference(enabled:boolean):Promise<void> {
-    if(busy||refreshing||resizing||!available||navigationReviewOpen||settings?.storagePreferences===undefined)return;
-    busy=true;storageNotice='';
+    if(activeOperation !== null||refreshing||resizing||!available||navigationReviewOpen||settings?.storagePreferences===undefined)return;
+    activeOperation = 'saveStoragePreferences';storageNotice='';
     try {
       const snapshot=await lazyTester.saveStoragePreferences({...settings.storagePreferences,autoClearWebCache:enabled});
-      settings=snapshot.settings;publishProfiles(snapshot.profiles);
+      publishSettings(snapshot.settings);publishProfiles(snapshot.profiles);
       storageNotice='Web cache preference saved.';
     } catch {
       // An uncertain save must not be represented as the old or new value.
       if(settings)settings={...settings,storagePreferences:undefined};
       storageNotice='Web cache preference could not be confirmed. Refresh settings.';
-    } finally {busy=false;}
+    } finally {activeOperation = null;}
   }
   async function saveAudio(mode:'Keep'|'Mute') {
-    if(busy||!available||!settings?.backgroundAudio)return;
+    if(activeOperation !== null||!available||!settings?.backgroundAudio)return;
     if(refreshing||resizing){queuedAudio=mode;return;}
-    busy=true;issueKey=null;settingsNotice='';
-    try {const snapshot=await lazyTester.saveAudio(mode);settings=snapshot.settings;publishProfiles(snapshot.profiles);settingsNotice='Background audio saved and applied to managed games.';}
+    activeOperation = 'saveAudio';issueKey=null;settingsNotice='';
+    try {const snapshot=await lazyTester.saveAudio(mode);publishSettings(snapshot.settings);publishProfiles(snapshot.profiles);settingsNotice='Background audio saved and applied to managed games.';}
     catch(error){issueKey='audio';}
-    finally{busy=false;}
+    finally{activeOperation = null;}
   }
   function requestPerformanceSave() {
-    if(busy||queuedPerformance!==null||!available||!settings||!performanceValid||!performanceDirty)return;
+    if(activeOperation !== null||queuedPerformance!==null||!available||!settings||!performanceValid||!performanceDirty)return;
     queuedPerformance={active:activeFps!,background:backgroundFps!};
   }
   async function savePerformance(limits:{active:number;background:number}) {
     if(!available||!settings){issueKey='performanceBlocked';return;}
-    busy=true;savingPerformance=true;issueKey=null;performanceNotice='';
+    activeOperation = 'savePerformance';issueKey=null;performanceNotice='';
     try{
       const snapshot=await lazyTester.savePerformance(limits.active,limits.background);
-      publishProfiles(snapshot.profiles);settings=snapshot.settings;
-      activeFps=settings.activeFps;backgroundFps=settings.backgroundFps;
+      publishProfiles(snapshot.profiles);publishSettings(snapshot.settings);
+      activeFps=snapshot.settings.activeFps;backgroundFps=snapshot.settings.backgroundFps;
       performanceNotice='FPS limits saved. Applies when each game next starts.';
     }catch(error){issueKey='performance';}
-    finally{savingPerformance=false;busy=false;}
+    finally{activeOperation = null;}
   }
   function cancelCloseOne() {
     if (closeOneSlot===null) return;
@@ -623,7 +632,7 @@
     cancelCloseOne();
   }
   function requestCloseOne(slot: ProfileSlot, trigger: HTMLButtonElement) {
-    if (closeInProgress || nativeExitReview || busy || closingOneSlot !== null ||
+    if (closeInProgress || nativeExitReview || activeOperation !== null || closingOneSlot !== null ||
         closeOneSlot !== null || activeRecordingSlots.has(slot)) return;
     const profile=profiles.find(item=>item.slot===slot);
     if (!profile || !['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state)) return;
@@ -660,7 +669,7 @@
   }
   async function confirmCloseOne() {
     const slot=closeOneSlot;
-    if (slot===null || closeInProgress || nativeExitReview || busy ||
+    if (slot===null || closeInProgress || nativeExitReview || activeOperation !== null ||
         refreshing || resizing || closingOneSlot!==null || activeRecordingSlots.has(slot)) return;
     // A committed CloseOne review disappears immediately. Before its focused
     // button is removed, anchor keyboard context to the SAME stable MC slot
@@ -669,7 +678,7 @@
     if (document.hasFocus() && closeOneReviewElement?.contains(document.activeElement) &&
         entry?.isConnected)
       entry.focus({preventScroll:true});
-    closeOneSlot=null;closeOneTrigger=null; closingOneSlot=slot; busy=true; issueKey=null;
+    closeOneSlot=null;closeOneTrigger=null; closingOneSlot=slot; activeOperation = 'closeOne'; issueKey=null;
     try {
       const report=await lazyTester.closeOne(slot);
       if (!report.presentationReleased) {
@@ -715,7 +724,7 @@
       // not clear uncertainWindowSlots, even when the game has stopped.
       await reconcileCloseObservation();
     } finally {
-      closingOneSlot=null;busy=false;dirty=true;
+      closingOneSlot=null;activeOperation = null;dirty=true;
     }
   }
 
@@ -767,7 +776,7 @@
   }
 
   async function syncLayout() {
-    if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing || !mounted) return;
+    if (nativeBackend !== 'WindowsNative' || activeOperation !== null || refreshing || resizing || !mounted) return;
     if (closeReviewActive(reviewState())) {
       await syncSelectedReviewGeometry();
       return;
@@ -838,16 +847,26 @@
   function publishProfiles(incoming: ProfileSession[]) {
     if (!sameProfileObservation(profiles, incoming)) profiles = incoming;
   }
+  function publishSettings(incoming: SettingsReport) {
+    if (!sameSettingsObservation(settings, incoming)) settings = incoming;
+  }
+  function observeSettings(incoming: SettingsReport) {
+    // Only passive observation adopts FPS values when the user has no draft.
+    if (!performanceDirty) {
+      activeFps = incoming.activeFps; backgroundFps = incoming.backgroundFps;
+    }
+    publishSettings(incoming);
+  }
   function applyStorageSnapshot(snapshot: {profiles: ProfileSession[]; storage: ProfileStorage[] | null}) {
     publishProfiles(snapshot.profiles);
     storage = snapshot.storage;
     storageReportReceivedAt = storageReportReceivedTime();
   }
   async function loadBinding(importProfiles = false) {
-    if (nativeBackend !== 'WindowsNative' || busy || refreshing || resizing || disposed) return;
-    busy = true; issueKey=null;
+    if (nativeBackend !== 'WindowsNative' || activeOperation !== null || refreshing || resizing || disposed) return;
+    activeOperation = 'binding'; issueKey=null;
     try { await checkBinding(importProfiles); }
-    finally { busy = false; }
+    finally { activeOperation = null; }
   }
   async function initializeLaunchers() {
     initializing=true;
@@ -895,8 +914,8 @@
     catch (error) { binding = null; bindingIssue = userMessage('binding'); }
   }
   async function loadLocation(action:'Inspect'|'Open'|'Locate'|'Choose'='Inspect') {
-    if(busy||refreshing||resizing||disposed)return;
-    busy=true;issueKey=null;locationIssue='';
+    if(activeOperation !== null||refreshing||resizing||disposed)return;
+    activeOperation = 'dataLocation';issueKey=null;locationIssue='';
     try {
       const previousPath = dataLocation?.path;
       dataLocation=await lazyTester.dataLocation(action);
@@ -908,18 +927,18 @@
         dataLocation=null;storage=null;cancelStorageReview('cache');storageNotice='';
         binding=null;if(!bindingIssue)bindingIssue=locationIssue;
       }
-    }finally{busy=false;}
+    }finally{activeOperation = null;}
   }
   async function openFolder(slot: ProfileSlot) {
-    if (busy || refreshing || resizing) return;
-    busy = true; issueKey=null;
+    if (activeOperation !== null || refreshing || resizing) return;
+    activeOperation = 'openFolder'; issueKey=null;
     try { await lazyTester.openFolder(slot); }
     catch (error) { issueKey='folder'; }
-    finally { busy = false; }
+    finally { activeOperation = null; }
   }
   async function confirmWorlds(slot: ProfileSlot, receipt: import('./app/bridge/lazyTester.js').SelectiveReviewReceipt): Promise<void> {
-    if(busy||refreshing||resizing||!available||!binding?.configured||!selectiveOpen||slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending||!selectedStorage||selectedStorage.fullClear?.pending===true)throw new Error('Selected data cleanup is unavailable');
-    busy=true;storageNotice='';
+    if(activeOperation !== null||refreshing||resizing||!available||!binding?.configured||!selectiveOpen||slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending||!selectedStorage||selectedStorage.fullClear?.pending===true)throw new Error('Selected data cleanup is unavailable');
+    activeOperation = 'confirmSelectedData';storageNotice='';
     try {
       const snapshot=receipt.items.every(item=>item.category==='Worlds')
         ?await lazyTester.confirmSelectedWorlds(slot,receipt):await lazyTester.confirmSelectedPacks(slot,receipt);
@@ -929,15 +948,15 @@
       storage=null;
       storageNotice='Cleanup was refused or its result is uncertain. Refresh session and storage.';
       throw error;
-    } finally {busy=false;}
+    } finally {activeOperation = null;}
   }
   async function confirmDownloadCache(slot:ProfileSlot):Promise<void> {
     const report=storage?.find(item=>item.slot===slot)?.downloadCache;
-    if(busy||refreshing||resizing||!available||!binding?.configured||!selectiveOpen||
+    if(activeOperation !== null||refreshing||resizing||!available||!binding?.configured||!selectiveOpen||
       slot!==selectedSlot||selectedProfile?.state!=='STOPPED'||closeReviewPending||
       selectedStorage?.fullClear?.pending===true||!report?.canClear||report.partial||
       report.issue!==null||!report.files)throw new Error('Download cache cleanup is unavailable');
-    busy=true;storageNotice='';
+    activeOperation = 'clearDownloadCache';storageNotice='';
     try {
       const snapshot=await lazyTester.clearDownloadCache(slot);
       applyStorageSnapshot(snapshot);
@@ -946,55 +965,55 @@
       storage=null;
       storageNotice='Download cache cleanup was refused or its result is uncertain. Refresh session and storage.';
       throw error;
-    } finally {busy=false;}
+    } finally {activeOperation = null;}
   }
   function cancelStorageReview(kind: StorageReviewKind) {
     if (storageReview?.kind === kind) storageReview = null;
   }
   function reviewCache() {
-    if (navigationReviewOpen || storageReview !== null || busy || refreshing || resizing) return;
+    if (navigationReviewOpen || storageReview !== null || activeOperation !== null || refreshing || resizing) return;
     storageReview = {kind:'cache',slot:selectedSlot};
   }
   async function clearCache(slot: ProfileSlot) {
-    if (busy || refreshing || resizing || storageReview?.kind !== 'cache' ||
+    if (activeOperation !== null || refreshing || resizing || storageReview?.kind !== 'cache' ||
         storageReview.slot !== slot || !storage?.find(item=>item.slot===slot)?.cache.canClear) return;
-    busy = true; issueKey=null; storageNotice = ''; storageReview = null;
+    activeOperation = 'clearCache'; issueKey=null; storageNotice = ''; storageReview = null;
     try {
       const snapshot = await lazyTester.clearCache(slot);
       applyStorageSnapshot(snapshot);
       storageNotice = 'Web cache for Minecraft - ' + slot + ' cleared.';
     } catch (error) {
       issueKey='cache'; storage = null;
-    } finally { busy = false; }
+    } finally { activeOperation = null; }
   }
   async function recoverSettings() {
     const pending=storageReview;
-    if(pending?.kind!=='settings'||busy||refreshing||resizing||pending.slot!==selectedSlot)return;
+    if(pending?.kind!=='settings'||activeOperation !== null||refreshing||resizing||pending.slot!==selectedSlot)return;
     const status=selectedStorage?.gameSettings;
     const allowed=pending.action==='Reset'?status?.canReset:status?.canRestore;
     if(!allowed)return;
-    busy=true;issueKey=null;storageNotice='';storageReview=null;
+    activeOperation = 'recoverSettings';issueKey=null;storageNotice='';storageReview=null;
     try {
       const snapshot=await lazyTester.recoverSettings(pending.slot,pending.action);
       applyStorageSnapshot(snapshot);
       storageNotice=`Minecraft - ${pending.slot}: settings ${pending.action==='Reset'?'reset':'restored'}. The global optimized graphics preset applies at next launch. Previous settings remain available through Restore.`;
     } catch(error) {issueKey='settings';storage=null;}
-    finally {busy=false;}
+    finally {activeOperation = null;}
   }
   function reviewFullClear() {
     const status=selectedStorage?.fullClear;
-    if(busy||navigationReviewOpen||storageReview!==null||!status?.canClear||!status.confirmationToken)return;
+    if(activeOperation !== null||navigationReviewOpen||storageReview!==null||!status?.canClear||!status.confirmationToken)return;
     fullName='';fullAck=false;
     storageReview={kind:'full',slot:selectedSlot,token:status.confirmationToken,pending:status.pending};
     void tick().then(()=>document.getElementById('full-clear-name')?.focus());
   }
   function reviewSettings(action:StorageSettingsAction) {
-    if(navigationReviewOpen||storageReview!==null||busy||refreshing||resizing||!available)return;
+    if(navigationReviewOpen||storageReview!==null||activeOperation !== null||refreshing||resizing||!available)return;
     storageReview={kind:'settings',slot:selectedSlot,action};
   }
   async function clearAllData() {
     const pending=storageReview,status=selectedStorage?.fullClear;
-    if(pending?.kind!=='full'||busy||refreshing||resizing||!fullAck||pending.slot!==selectedSlot||fullName!==`Minecraft - ${pending.slot}`||
+    if(pending?.kind!=='full'||activeOperation !== null||refreshing||resizing||!fullAck||pending.slot!==selectedSlot||fullName!==`Minecraft - ${pending.slot}`||
       !status?.canClear||status.confirmationToken!==pending.token)return;
     // The exact typed-name/ack/token admission above remains authoritative.
     // This is only a focus handoff from the disappearing confirmation form
@@ -1003,13 +1022,13 @@
     if (document.hasFocus() && document.activeElement instanceof Node &&
         deletionReview?.contains(document.activeElement))
       document.getElementById('lazytester-clear-data-heading')?.focus({preventScroll:true});
-    busy=true;clearingData=true;issueKey=null;storageNotice='';storageReview=null;
+    activeOperation = 'clearData';issueKey=null;storageNotice='';storageReview=null;
     try {
       const snapshot=await lazyTester.clearData(pending.slot,pending.token,fullName);
       applyStorageSnapshot(snapshot);
       storageNotice=`Minecraft - ${pending.slot}: local data cleared. Next launch uses an empty profile. Other launchers, Minecraft installation and app preferences stay.`;
     } catch(error) {issueKey='clearData';storage=null;}
-    finally {busy=false;clearingData=false;}
+    finally {activeOperation = null;}
   }
   onMount(() => {
     try { workspaceLayout = window.localStorage.getItem(workspaceLayoutKey) === 'Right' ? 'Right' : 'Bottom'; }
@@ -1024,11 +1043,11 @@
     const interval = setInterval(() => {
       // Capture status is a bounded local read, only while a recording may
       // be active or its terminal receipt is unknown. No second interval.
-      if(recordingWatch&&!busy&&!closeInProgress&&!nativeExitReview&&!document.hidden)void refreshRecordingStatus();
+      if(recordingWatch&&activeOperation === null&&!closeInProgress&&!nativeExitReview&&!document.hidden)void refreshRecordingStatus();
       // Unsupported, hidden and closing views never schedule Minecraft IPC.
       if (nativeBackend === 'WindowsNative' && !closeReviewActive(reviewState()) && !document.hidden && binding?.configured &&
           !selectiveOpen && storageReview===null &&
-          !busy && !refreshing && !resizing && !initializing) {
+          activeOperation === null && !refreshing && !resizing && !initializing) {
         const now = performance.now();
         // Only a fully observed, healthy stopped roster may slow Play.
         // Keep rapid observation for launch, recovery and agent activity.
