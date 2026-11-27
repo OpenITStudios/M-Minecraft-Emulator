@@ -45,6 +45,9 @@ M-Minecraft-Emulator/                 one Local checkout, not several app roots
       manifest.json                  committed after evidence
       evidence/events.jsonl
       analysis/issues.json
+    Testing/runs/<run-id>/            optional original Probe summary
+      manifest.json
+      report.json
   Development/                        canonical source and tool scripts
   docs/ planning/                     source guidance, never game/account data
   workspace/                          local developer-only output (ignored)
@@ -105,6 +108,19 @@ Each new run is reserved exclusively; the manifest is committed last.
 Uncommitted directories are preserved for manual review, never auto-deleted.
 Older unmodified two-file archives remain readable. The storage contract
 and quotas are in docs/system/map-diagnostics.md.
+
+Optional MCP archives use Project Data (manager root), not a chosen launcher
+catalog subfolder. For the standard `App/lazy-tester.exe` path, the existing
+`--diagnostics-dir project` and `--testing-archive-dir project` select
+`Data/Diagnostics` and `Data/Testing` respectively. Neither is enabled by
+default. Explicit archive paths must match the standard App sibling Data
+root, and both archives must have the same Data parent if enabled together.
+Developer/legacy executable and archive-only configurations retain explicit
+absolute paths; the MCP does not guess those roots. This is a lexical
+configuration check, not native identity or access proof. Each archive
+keeps its original reader/writer checks and immutable receipt. Explicit
+external capture input (`--evidence-dir`) remains read-only; no copying,
+automatic import, account access, directory discovery or background sync.
 
 App refresh preserves Data and the previous app/starter. project_profiles remains the existing
 product_profiles.rs owner; manager_settings.rs owns root/preferences and the

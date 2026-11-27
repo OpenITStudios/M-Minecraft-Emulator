@@ -140,10 +140,13 @@ records in memory; no persistent background database is necessary yet.
 
 ## Codex connection is optional and read-only
 
-Start the existing MCP with --diagnostics-dir pointing at an absolute
-Data/Diagnostics folder, or set LAZY_TESTER_DIAGNOSTICS_DIR. If unset,
-new diagnostic tools report NOT_CONFIGURED; no directory is discovered
-or created. A remote model requires a separately configured, permitted
+Start the existing MCP with --diagnostics-dir pointing at the selected
+absolute Data/Diagnostics folder, or set LAZY_TESTER_DIAGNOSTICS_DIR.
+For the standard App/lazy-tester.exe layout, use the explicit value
+`project` to select its sibling Data/Diagnostics without a repeated path.
+See [canonical data layout](data-layout.md) for archive consistency and
+developer/legacy exceptions. If unset, diagnostic tools report
+NOT_CONFIGURED; no directory is discovered or created. A remote model requires a separately configured, permitted
 local MCP connection. Local files are not automatically uploaded.
 
 The four read-only MCP tools are:

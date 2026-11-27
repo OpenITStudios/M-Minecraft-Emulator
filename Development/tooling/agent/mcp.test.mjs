@@ -41,6 +41,39 @@ test('modes, absolute paths, no implicit native permissions',()=>{
     .cuaExecutable,path.resolve('cua-driver.exe'));
 });
 
+test('optional archives share the selected project Data without enabling or discovering other stores',()=>{
+  const root=path.resolve('project-fixture');
+  const executable=path.join(root,'App','lazy-tester.exe');
+  const data=path.join(root,'Data');
+  const diagnostics=path.join(data,'Diagnostics');
+  const testing=path.join(data,'Testing');
+  const bare=parseConfiguration(['--exe',executable],{});
+  assert.equal(bare.diagnosticsDirectory,'');
+  assert.equal(bare.testingArchiveDirectory,'');
+  assert.equal(bare.evidenceDirectory,'');
+  const one=parseConfiguration(['--exe',executable,'--diagnostics-dir','project'],{});
+  assert.equal(one.diagnosticsDirectory,diagnostics);
+  assert.equal(one.testingArchiveDirectory,'');
+  const both=parseConfiguration(['--exe',executable,'--testing-archive-dir','project',
+    '--diagnostics-dir',diagnostics],{});
+  assert.equal(both.testingArchiveDirectory,testing);
+  assert.equal(both.diagnosticsDirectory,diagnostics);
+  const env=parseConfiguration([],{
+    LAZY_TESTER_AGENT_EXE:executable,LAZY_TESTER_TESTING_ARCHIVE_DIR:'project'});
+  assert.equal(env.testingArchiveDirectory,testing);
+  assert.equal(env.diagnosticsDirectory,'');
+  const external=path.resolve('external-capture');
+  assert.equal(parseConfiguration(['--exe',executable,'--evidence-dir',external],{}).evidenceDirectory,external);
+  const other=path.join(path.resolve('other-fixture'),'Data','Testing');
+  assert.throws(()=>parseConfiguration(['--exe',executable,'--testing-archive-dir',other],{}),/same Project Data/);
+  assert.throws(()=>parseConfiguration(['--diagnostics-dir',diagnostics,'--testing-archive-dir',other],{}),/same Project Data/);
+  assert.throws(()=>parseConfiguration(['--testing-archive-dir','project'],{}),/requires an absolute App/);
+  assert.throws(()=>parseConfiguration(['--exe',path.join(root,'target','lazy-tester.exe'),
+    '--diagnostics-dir','project'],{}),/requires an absolute App/);
+  assert.equal(parseConfiguration(['--diagnostics-dir',diagnostics,
+    '--testing-archive-dir',testing],{}).testingArchiveDirectory,testing);
+});
+
 test('hybrid four and full five AI native ACKs require exact pulse payload content',()=>{
   // Source-authored only; neither the fixture nor the native input runs.
   for(const slots of [[2,3,4,5],[1,2,3,4,5]]) {

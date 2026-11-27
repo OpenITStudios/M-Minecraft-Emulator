@@ -109,7 +109,7 @@ export function parseConfiguration(argv, env = process.env) {
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
     if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--testing-archive-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <Data/Diagnostics>] [--testing-archive-dir <Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
+      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <project|Data/Diagnostics>] [--testing-archive-dir <project|Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
@@ -149,8 +149,31 @@ export function parseConfiguration(argv, env = process.env) {
   if (evidenceDirectory && !path.isAbsolute(evidenceDirectory)) {
     throw new Error('Evidence directory must be absolute');
   }
-  if (diagnosticsDirectory) validateDiagnosticsRoot(diagnosticsDirectory);
-  if (testingArchiveDirectory)validateTestingArchiveRoot(testingArchiveDirectory);
+  if (diagnosticsDirectory || testingArchiveDirectory) {
+    // Match the native App/../Data layout only. Do not guess a root for a
+    // developer build, legacy flat install, or archive-only invocation.
+    const appFolder=executable ? path.dirname(executable) : '';
+    const projectData=appFolder && path.basename(appFolder).toLowerCase()==='app'
+      && path.basename(executable).toLowerCase()==='lazy-tester.exe'
+      && path.normalize(executable)===executable
+      ? path.join(path.dirname(appFolder),'Data') : '';
+    const archivePath=(value,child)=>{
+      if(value!=='project') return value;
+      if(!projectData)throw new Error('Project archive selection requires an absolute App/lazy-tester.exe path');
+      return path.join(projectData,child);
+    };
+    diagnosticsDirectory=archivePath(diagnosticsDirectory,'Diagnostics');
+    testingArchiveDirectory=archivePath(testingArchiveDirectory,'Testing');
+    if (diagnosticsDirectory) validateDiagnosticsRoot(diagnosticsDirectory);
+    if (testingArchiveDirectory)validateTestingArchiveRoot(testingArchiveDirectory);
+    // Configuration consistency, not filesystem identity or access authority.
+    // Existing archive readers/writers still own their per-operation checks.
+    const roots=[diagnosticsDirectory,testingArchiveDirectory].filter(Boolean).map(dir=>path.dirname(dir));
+    const expected=projectData || roots[0];
+    if(roots.some(root=>path.relative(expected,root)!=='')) {
+      throw new Error('Diagnostics and Testing must use the same Project Data folder');
+    }
+  }
   if (probeZip && (!path.isAbsolute(probeZip) || !/\.zip$/i.test(probeZip))) {
     throw new Error('Probe ZIP must be an absolute .zip file path');
   }

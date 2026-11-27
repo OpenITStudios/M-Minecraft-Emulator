@@ -27,6 +27,20 @@ one next action; old archived "Next" entries are not authorization.
 | Review supplied team ZIP updates | `team-update.mjs` and approved source fingerprints | No automatic module installation or sync |
 | Report limited agent activity to desktop | Existing `agent_capabilities` + explicit same-image status mirror | Presentation-only; desktop does not control MCP/game |
 
+## Select the same Project Data
+
+For an installed or prepared `App/lazy-tester.exe`, select optional archives
+with the existing flags, using `project` instead of repeating an absolute
+path: `--diagnostics-dir project --testing-archive-dir project`. Each flag
+enables only its own archive; leaving it unset keeps that archive disabled.
+Both resolve beneath the sibling `Data/` shown by Desktop. Explicit archive
+paths must agree with that root for the standard App layout and with each
+other when both are configured. For developer/legacy executable layouts or
+archive-only use, supply the exact absolute paths under the selected Project
+Data instead; no guessed root. The existing `--evidence-dir` is a separately
+selected read-only capture input, not an output or a copy destination.
+See [canonical data layout](../../../docs/system/data-layout.md).
+
 ## Runtime and permission boundaries
 
 The **only** Windows game lifecycle and native process owner is
