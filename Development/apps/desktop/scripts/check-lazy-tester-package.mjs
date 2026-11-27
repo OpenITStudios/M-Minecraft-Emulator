@@ -4,6 +4,24 @@ import {fileURLToPath} from 'node:url';
 import {mergePatch} from './check-native-preview-package.mjs';
 const root=resolve(fileURLToPath(new URL('..',import.meta.url)));
 const read=path=>readFileSync(resolve(root,path),'utf8');
+// Source-layout witness only. The native resolver and its Windows fixtures
+// remain the authorities for actual catalog, identity and data admission.
+export function verifyNativeProfileLayout(profiles) {
+  const canonicalFirst = [
+    'let (root, missing) = resolve_location(home, &locator_path(home))?;',
+    'if !missing { return Ok((root, false, false)); }',
+    'let (root, missing) = resolve_location(home, &home.join("App").join(LOCATOR))?;',
+    'Ok((root, missing, !missing))',
+  ].join('\n    ');
+  if (!profiles.includes('const LOCATOR: &str = "data-location.json";') ||
+      !profiles.includes('const CATALOG: &str = "profiles.json";') ||
+      !profiles.includes('home.join("Data/Settings").join(LOCATOR)') ||
+      !profiles.includes(canonicalFirst) ||
+      !profiles.includes('root.join(format!("Launchers/Minecraft-{slot}"))') ||
+      !profiles.includes('let profiles = if catalog.schema == 2 {\n        "Launchers"\n    } else {\n        "Profiles"\n    };')) {
+    throw new Error('LAZY_TESTER_PACKAGE_REFUSED: Native private profile owner differs from package policy');
+  }
+}
 export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.lazy-tester.conf.json'))) {
   const base=JSON.parse(read('src-tauri/tauri.conf.json'));
   const policy=JSON.parse(read('../../engine/distribution/lazy-tester-package.json'));
@@ -34,13 +52,7 @@ export function verifyLazyTesterPackage(patch=JSON.parse(read('src-tauri/tauri.l
     runtime.newProfileDirectories==='Data/Launchers/Minecraft-1..5' &&
     runtime.legacyProfileDirectories==='Data/Profiles/Minecraft-1..5',
     'Canonical and legacy data paths must stay distinct');
-  const profiles=read('src-tauri/src/engine/independent_bootstrap/product_profiles.rs');
-  fail(profiles.includes('home()?.join("Data/Settings").join(LOCATOR)') &&
-    profiles.includes('let legacy = home.join("App").join(LOCATOR);') &&
-    profiles.includes('root.join(format!("Launchers/Minecraft-{slot}"))') &&
-    profiles.includes('let profiles = if catalog.schema == 2 {') &&
-    profiles.includes('"Launchers"') && profiles.includes('"Profiles"'),
-    'Native private profile owner differs from package policy');
+  verifyNativeProfileLayout(read('src-tauri/src/engine/independent_bootstrap/product_profiles.rs'));
   const hooks=read('src-tauri/windows/lazy-tester-hooks.nsh');
   fail(hooks.includes('OpenMutexW')&&hooks.includes('Local\\MivubiEducationStartupObservation')&&hooks.includes('NSIS_HOOK_PREINSTALL')&&hooks.includes('NSIS_HOOK_PREUNINSTALL')&&hooks.includes('StrCpy $DeleteAppDataCheckboxState 0'),'Idle/data preservation hooks missing');
   fail(hooks.includes('MUI_CUSTOMFUNCTION_GUIINIT')&&hooks.includes('$PROFILE\\Lazy Tester\\App')&&hooks.includes('!insertmacro LAZY_TESTER_APP_LAYOUT')&&runtime.defaultDataRelativePath==='Data'&&runtime.applicationSubdirectory==='App'&&

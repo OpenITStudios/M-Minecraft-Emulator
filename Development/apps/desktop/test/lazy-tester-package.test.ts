@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
-import {verifyLazyTesterPackage} from '../scripts/check-lazy-tester-package.mjs';
+import {verifyLazyTesterPackage,verifyNativeProfileLayout} from '../scripts/check-lazy-tester-package.mjs';
 import {reviewedDigests,stageNativePayload} from '../scripts/prepare-native-payload.mjs';
 import {processRoles,roleMuiNames} from '../scripts/prepare-process-roles.mjs';
 
@@ -46,6 +46,23 @@ describe('Lazy Tester native package',()=>{
     extra.bundle.resources=structuredClone(config.bundle.resources);
     extra.identifier=policy.migration.previousIdentifier;
     expect(()=>verifyLazyTesterPackage(extra)).toThrow(/Identity/);
+  });
+  it('recognizes the current canonical-first profile owner and refuses conflicting layout witnesses',()=>{
+    const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap/product_profiles.rs',import.meta.url),'utf8');
+    expect(()=>verifyNativeProfileLayout(source)).not.toThrow();
+    const canonical='let (root, missing) = resolve_location(home, &locator_path(home))?;';
+    const legacy='let (root, missing) = resolve_location(home, &home.join("App").join(LOCATOR))?;';
+    const inverted=source.replace(canonical,'__CANONICAL_FIXTURE__').replace(legacy,canonical).replace('__CANONICAL_FIXTURE__',legacy);
+    for(const changed of [
+      inverted,
+      source.replace('home.join("Data/Settings").join(LOCATOR)','home.join("App").join(LOCATOR)'),
+      source.replace('if !missing { return Ok((root, false, false)); }','if missing { return Ok((root, false, false)); }'),
+      source.replace('let profiles = if catalog.schema == 2 {','let profiles = if catalog.schema == 1 {'),
+      source.replace('const CATALOG: &str = "profiles.json";','const CATALOG: &str = "other.json";'),
+    ]) {
+      expect(changed).not.toBe(source);
+      expect(()=>verifyNativeProfileLayout(changed)).toThrow(/profile owner differs/);
+    }
   });
   it('derives hashes from the exact runtime policy and refuses absent or malformed review',()=>{
     const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap.rs',import.meta.url),'utf8');
