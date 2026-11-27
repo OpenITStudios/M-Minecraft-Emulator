@@ -872,15 +872,15 @@ describe('Workspace geometry identity',()=>{
 
 describe('Recording receipt contract',()=>{
   it('accepts independent slots without interpreting a launch as a recording',()=>{
-    const receipts=parseRecordingStatus([{slot:1,state:'Starting',frames:0,codec:null},{slot:3,state:'Recording',frames:7,codec:'AV1'},{slot:5,state:'Saved',frames:120,codec:'H264'}]);
+    const receipts=parseRecordingStatus([{slot:1,state:'Starting',frames:0},{slot:3,state:'Recording',frames:7},{slot:5,state:'Saved',frames:120}]);
     expect(receipts.filter(recordingActive).map(r=>r.slot)).toEqual([1,3]);
     expect(recordingActive(undefined)).toBe(false);
-    expect(recordingActive({slot:2,state:'Stopping',frames:0,codec:null})).toBe(true);
+    expect(recordingActive({slot:2,state:'Stopping',frames:0})).toBe(true);
   });
   it('refuses duplicate, invalid or unconfirmed recording receipts',()=>{
-    const good={slot:1,state:'Recording',frames:1,codec:'AV1'};
+    const good={slot:1,state:'Recording',frames:1};
     for(const value of [[good,good],[{...good,slot:6}],[{...good,frames:0}],
-      [{...good,state:'Saved',frames:0}],[{...good,codec:null}],[{...good,codec:'H265'}],[{...good,state:'Starting',frames:0}],[{...good,state:'Starting'}],
+      [{...good,state:'Saved',frames:0}],[{...good,state:'Starting'}],
       [{...good,frames:-1}],[{...good,state:'Success'}],[{...good,state:['Recording']}],[{...good,path:'private.mkv'}],null]){
       expect(()=>parseRecordingStatus(value)).toThrow();
     }

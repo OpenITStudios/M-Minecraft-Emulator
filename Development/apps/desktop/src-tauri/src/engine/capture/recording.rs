@@ -24,8 +24,8 @@ const STOP_TIMEOUT:Duration=Duration::from_secs(10);
 
 #[derive(Clone,Serialize)]
 #[serde(rename_all="camelCase")]
-pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub codec:Option<&'static str>}
-struct Run{state:AtomicU8,stop:AtomicBool,frames:AtomicU64,encoder:AtomicU8,pixel_rate:u64}
+pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64}
+struct Run{state:AtomicU8,stop:AtomicBool,frames:AtomicU64,pixel_rate:u64}
 impl Run{
     fn active(&self)->bool{self.state.load(Ordering::Acquire)<SAVED}
     fn receipt(&self,slot:u32)->RecordingReceipt{
@@ -36,8 +36,7 @@ impl Run{
         // status read can observe the old state and new count; keep that
         // Starting receipt valid rather than reporting conflicting proof.
         let frames=if observed==STARTING{0}else{self.frames.load(Ordering::Acquire)};
-        let codec=if frames>0{video::Encoder::from_id(self.encoder.load(Ordering::Acquire)).map(video::Encoder::codec)}else{None};
-        RecordingReceipt{slot,state,frames,codec}
+        RecordingReceipt{slot,state,frames}
     }
 }
 static SLOTS:Mutex<[Option<Arc<Run>>;5]>=Mutex::new([const{None};5]);
@@ -91,7 +90,7 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     let image=worker::reviewed_image("ffmpeg.exe",video::REVIEWED_FFMPEG_SHA256)?;
     let parent=path.parent().ok_or_else(||io::Error::other("Recording save folder unavailable"))?;
     let temp=tempfile::Builder::new().prefix(".lazy-tester-video-").suffix(".part").tempfile_in(parent)?;
-    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),encoder:AtomicU8::new(0),pixel_rate:rate});
+    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate});
     let mut all=slots()?;
     admit(&all,idx,rate)?;
     let active=Arc::clone(&run);
@@ -111,7 +110,7 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
 // self-contained encoder that launches no descendants.
 struct Recorder{child:Child,_job:OwnedHandle}
 impl Recorder{
-    fn spawn(image:&worker::Image,target:&Target,temp:&tempfile::NamedTempFile,encoder:video::Encoder)->io::Result<Self>{
+    fn spawn(image:&worker::Image,target:&Target,temp:&tempfile::NamedTempFile)->io::Result<Self>{
         let job_raw=unsafe{CreateJobObjectW(std::ptr::null(),std::ptr::null())};
         if job_raw.is_null(){return Err(io::Error::last_os_error());}
         let job=unsafe{OwnedHandle::from_raw_handle(job_raw as _)};
@@ -121,7 +120,7 @@ impl Recorder{
             (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
             std::mem::size_of_val(&limits) as u32)}==0{return Err(io::Error::last_os_error());}
         target.verify()?;
-        let child=Command::new(&image.path).args(video::args(target.hwnd(),target.size,encoder)?)
+        let child=Command::new(&image.path).args(video::args(target.hwnd(),target.size)?)
             .creation_flags(0x08000000).stdin(Stdio::piped())
             .stdout(Stdio::from(temp.as_file().try_clone()?)).stderr(Stdio::piped()).spawn()?;
         let mut rec=Self{child,_job:job};
@@ -141,31 +140,47 @@ impl Drop for Recorder{
     }
 }
 
-// Only an observed nonzero exit before any output/frame, with completed
-// progress drainage, unchanged target and no Stop, permits another backend.
-// A timeout, malformed receipt, ambiguous cleanup or partial file is terminal.
-fn retry_empty_exit(state:u8,stopped:bool,frames:u64,bytes:u64)->bool{
-    state==STARTING&&!stopped&&frames==0&&bytes==0
-}
-enum Attempt{EmptyFailure,Complete}
-
 fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,path:PathBuf,run:&Arc<Run>)->io::Result<()>{
-    // One bounded start deadline across all four sequential attempts, not
-    // four independent capture windows. No codec probing or polling at idle.
-    let startup=Instant::now();
-    let mut completed=false;
-    for encoder in video::CANDIDATES{
-        if run.stop.load(Ordering::Acquire)||startup.elapsed()>=START_TIMEOUT{
-            return Err(io::Error::other("Recording cancelled or startup deadline elapsed"));
+    if run.stop.load(Ordering::Acquire){return Err(io::Error::other("Recording cancelled before start"));}
+    let mut rec=Recorder::spawn(&image,&target,&temp)?;
+    let stderr=rec.child.stderr.take().ok_or_else(||io::Error::other("Recording progress unavailable"))?;
+    let reader_run=Arc::clone(run);
+    let (tx,rx)=std::sync::mpsc::sync_channel(1);
+    // Progress is numeric metadata only. No logs or private media are copied.
+    // One bounded pipe reader; the child/job close releases its writer.
+    thread::Builder::new().name("recording-progress".into()).spawn(move||{
+        let _=tx.send(read_progress(stderr,&reader_run));
+    })?;
+    let started=Instant::now();
+    let mut stopping=None;
+    loop{
+        target.verify()?; // fail closed; no replacement window/slot
+        if let Some(status)=rec.child.try_wait()?{
+            if !status.success(){return Err(io::Error::other("Hardware recorder failed"));}
+            break;
         }
-        target.verify()?;
-        run.encoder.store(encoder as u8,Ordering::Release);
-        match attempt(&target,&image,&mut temp,run,encoder,startup)?{
-            Attempt::Complete=>{completed=true;break;}
-            Attempt::EmptyFailure=>{}
+        if run.frames.load(Ordering::Acquire)==0&&started.elapsed()>=START_TIMEOUT{
+            return Err(io::Error::new(io::ErrorKind::TimedOut,"Recording produced no frames"));
         }
+        if stopping.is_none()&&(run.stop.load(Ordering::Acquire)||
+            started.elapsed()>=Duration::from_secs(video::MAX_SECONDS)){
+            run.state.store(STOPPING,Ordering::Release);
+            stopping=Some(Instant::now());
+            let mut stdin=rec.child.stdin.take().ok_or_else(||io::Error::other("Recording stop unavailable"))?;
+            stdin.write_all(b"q\n")?; // FFmpeg graceful flush/trailer; no game input
+        }
+        if stopping.is_some_and(|t:Instant|t.elapsed()>=STOP_TIMEOUT){
+            return Err(io::Error::new(io::ErrorKind::TimedOut,"Recording finalization timed out"));
+        }
+        if temp.as_file().metadata()?.len()>video::MAX_BYTES+1024*1024{
+            return Err(io::Error::other("Recording exceeded storage limit"));
+        }
+        thread::sleep(POLL);
     }
-    if !completed{return Err(io::Error::other("No compatible hardware recorder completed startup"));}
+    drop(rec); // close job, then require final progress receipt
+    let ended=rx.recv_timeout(Duration::from_secs(2))
+        .map_err(|_|io::Error::other("Recording progress completion unavailable"))??;
+    if !ended||run.frames.load(Ordering::Acquire)==0{return Err(io::Error::other("Recording has no final frame receipt"));}
     target.verify()?;
     let file=temp.as_file_mut();
     let len=file.metadata()?.len();
@@ -176,61 +191,6 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     file.sync_all()?;
     temp.persist_noclobber(path).map_err(|e|e.error)?;
     Ok(())
-}
-
-fn attempt(target:&Target,image:&worker::Image,temp:&mut tempfile::NamedTempFile,run:&Arc<Run>,
-           encoder:video::Encoder,startup:Instant)->io::Result<Attempt>{
-    if temp.as_file().metadata()?.len()!=0||run.frames.load(Ordering::Acquire)!=0{
-        return Err(io::Error::other("Recording fallback refused after output"));
-    }
-    // A previous empty attempt may have moved the inherited file cursor.
-    temp.as_file_mut().seek(SeekFrom::Start(0))?;
-    let mut rec=Recorder::spawn(image,target,temp,encoder)?;
-    let stderr=rec.child.stderr.take().ok_or_else(||io::Error::other("Recording progress unavailable"))?;
-    let reader_run=Arc::clone(run);
-    let (tx,rx)=std::sync::mpsc::sync_channel(1);
-    thread::Builder::new().name("recording-progress".into()).spawn(move||{
-        let _=tx.send(read_progress(stderr,&reader_run));
-    })?;
-    let started=Instant::now();
-    let mut stopping=None;
-    let status=loop{
-        target.verify()?;
-        if let Some(status)=rec.child.try_wait()?{break status;}
-        if run.frames.load(Ordering::Acquire)==0&&startup.elapsed()>=START_TIMEOUT{
-            return Err(io::Error::new(io::ErrorKind::TimedOut,"Recording produced no frames"));
-        }
-        if stopping.is_none()&&(run.stop.load(Ordering::Acquire)||
-            started.elapsed()>=Duration::from_secs(video::MAX_SECONDS)){
-            run.state.store(STOPPING,Ordering::Release);
-            stopping=Some(Instant::now());
-            let mut stdin=rec.child.stdin.take().ok_or_else(||io::Error::other("Recording stop unavailable"))?;
-            stdin.write_all(b"q\n")?;
-        }
-        if stopping.is_some_and(|t:Instant|t.elapsed()>=STOP_TIMEOUT){
-            return Err(io::Error::new(io::ErrorKind::TimedOut,"Recording finalization timed out"));
-        }
-        if temp.as_file().metadata()?.len()>video::MAX_BYTES+1024*1024{
-            return Err(io::Error::other("Recording exceeded storage limit"));
-        }
-        thread::sleep(POLL);
-    };
-    // Child has exited; close its job and drain the entire progress stream
-    // before deciding whether an empty attempt can be replaced.
-    drop(rec);
-    let ended=rx.recv_timeout(Duration::from_secs(2))
-        .map_err(|_|io::Error::other("Recording progress completion unavailable"))??;
-    target.verify()?;
-    let frames=run.frames.load(Ordering::Acquire);
-    if !status.success(){
-        if retry_empty_exit(run.state.load(Ordering::Acquire),run.stop.load(Ordering::Acquire),
-            frames,temp.as_file().metadata()?.len()) && !ended{
-            return Ok(Attempt::EmptyFailure);
-        }
-        return Err(io::Error::other("Hardware recorder failed after startup or output"));
-    }
-    if !ended||frames==0{return Err(io::Error::other("Recording has no final frame receipt"));}
-    Ok(Attempt::Complete)
 }
 
 fn read_progress(mut input:impl Read,run:&Run)->io::Result<bool>{
@@ -266,7 +226,7 @@ fn read_progress(mut input:impl Read,run:&Run)->io::Result<bool>{
 #[cfg(test)]
 mod tests{
     use super::*;
-    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),encoder:AtomicU8::new(0),pixel_rate:rate})}
+    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate})}
     #[test]
     fn admission_prevents_duplicate_and_aggregate_overcommit(){
         let mut slots:[Option<Arc<Run>>;5]=[const{None};5];
@@ -278,28 +238,16 @@ mod tests{
         assert!(admit(&slots,0,MAX_ACTIVE_PIXEL_RATE).is_ok());
     }
     #[test]
-    fn fallback_requires_empty_confirmed_startup_failure(){
-        assert!(retry_empty_exit(STARTING,false,0,0));
-        assert!(!retry_empty_exit(STARTING,true,0,0));
-        assert!(!retry_empty_exit(STARTING,false,1,0));
-        assert!(!retry_empty_exit(STARTING,false,0,1));
-        assert!(!retry_empty_exit(RECORDING,false,0,0));
-        assert!(!retry_empty_exit(STOPPING,false,0,0));
-    }
-    #[test]
     fn starting_receipt_does_not_mix_an_unpromoted_frame_with_starting(){
         let r=run(1);
-        r.encoder.store(video::Encoder::H264Amf as u8,Ordering::Release);
         r.frames.store(1,Ordering::Release);
         let receipt=r.receipt(1);
         assert_eq!(receipt.state,"Starting");
         assert_eq!(receipt.frames,0);
-        assert_eq!(receipt.codec,None);
         r.state.store(RECORDING,Ordering::Release);
         let receipt=r.receipt(1);
         assert_eq!(receipt.state,"Recording");
         assert_eq!(receipt.frames,1);
-        assert_eq!(receipt.codec,Some("H264"));
     }
     #[test]
     fn progress_requires_terminal_receipt_and_real_frames(){
