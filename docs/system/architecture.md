@@ -182,7 +182,11 @@ selection level with a 1s reconciliation fallback; selected/unbound and
 failed-policy paths retain 250ms. The selected level is never waited on
 while admitted, so its manual-reset signal cannot spin the visible worker.
 Unadmitted HUD workers skip meter reads; Present and snapshot sampling
-remain independent.
+remain independent. The HUD renderer allocates its GDI canvas on the first
+visible redraw, frees it on binding/host reset or worker destruction, and
+reuses it across short hide/show on an unchanged binding. Hidden geometry
+and recovery still run without a canvas. No new owner, timer or eviction
+cache.
 Native restore precedes managed normal game close; failed window destruction
 reuses the existing post-release recovery path.
 Audio maintenance retains its one-second discovery deadline. When audio

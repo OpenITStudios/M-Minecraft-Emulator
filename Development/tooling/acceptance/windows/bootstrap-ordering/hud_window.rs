@@ -121,17 +121,25 @@ extern "system" {
 #[repr(C)]
 pub struct Composition { pub window:Handle,pub bounds:Rect,pub dpi:u32,pub visible:u32,pub drawn:u32 }
 pub struct Renderer { canvas:*mut Canvas, previous_dpi:u32, previous_rate:u32, previous_valid:bool, previous_bounds:Rect }
-impl Drop for Renderer { fn drop(&mut self) { unsafe { lazytester_hud_canvas_destroy(self.canvas); } } }
+impl Renderer {
+    unsafe fn release_canvas(&mut self) {
+        lazytester_hud_canvas_destroy(std::mem::replace(&mut self.canvas,ptr::null_mut()));
+    }
+}
+impl Drop for Renderer { fn drop(&mut self) { unsafe { self.release_canvas(); } } }
 pub(crate) unsafe fn lazytester_hud_renderer_create()->*mut Renderer {
-    let canvas=lazytester_hud_canvas_create();
-    if canvas.is_null() { return ptr::null_mut(); }
-    Box::into_raw(Box::new(Renderer {canvas,previous_dpi:0,previous_rate:u32::MAX,previous_valid:false,previous_bounds:Rect::default()}))
+    // The worker may never be selected. Own no GDI canvas until visible paint.
+    Box::into_raw(Box::new(Renderer {canvas:ptr::null_mut(),previous_dpi:0,previous_rate:u32::MAX,previous_valid:false,previous_bounds:Rect::default()}))
 }
 pub(crate) unsafe fn lazytester_hud_renderer_destroy(renderer:*mut Renderer) {
     if !renderer.is_null() { drop(Box::from_raw(renderer)); }
 }
 pub(crate) unsafe fn lazytester_hud_renderer_reset(renderer:*mut Renderer) {
-    if let Some(r)=renderer.as_mut() { r.previous_dpi=0;r.previous_bounds=Rect::default(); }
+    if let Some(r)=renderer.as_mut() {
+        // Owner/generation reset or unbind: no previous raster can be reused.
+        r.release_canvas();
+        r.previous_dpi=0;r.previous_bounds=Rect::default();
+    }
 }
 pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:*mut WindowHost,
     target:Handle,bound:u32,admitted:u32,milli:u32,valid:u32,out:*mut Composition)->u32 {
@@ -172,6 +180,8 @@ pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:
         let rate=((u64::from(milli)+50)/100) as u32;
         let redraw=dpi!=r.previous_dpi || (valid!=0)!=r.previous_valid || rate!=r.previous_rate;
         if redraw {
+            if r.canvas.is_null() { r.canvas=lazytester_hud_canvas_create(); }
+            if r.canvas.is_null() { return 0; }
             let mut view:CanvasView=std::mem::zeroed();
             if lazytester_hud_canvas_paint(r.canvas,milli,valid,dpi,&mut view)==0 { return 0; }
             let position=Point{x:bounds.left,y:bounds.top};
@@ -186,4 +196,34 @@ pub(crate) unsafe fn lazytester_hud_renderer_update(renderer:*mut Renderer,host:
     }
     if IsWindowVisible(window)==0 { ShowWindow(window,4); }
     out.window=window;out.bounds=bounds;out.dpi=dpi;out.visible=1;1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn renderer_defers_gdi_and_releases_canvas_on_binding_reset() {
+        // Disposable same-thread renderer only: no game, HWND or worker.
+        unsafe {
+            let renderer=lazytester_hud_renderer_create();
+            assert!(!renderer.is_null());
+            let mut renderer=Box::from_raw(renderer);
+            assert!(renderer.canvas.is_null());
+            lazytester_hud_renderer_reset(&mut *renderer);
+            assert!(renderer.canvas.is_null());
+            // Exercise the original GDI allocation and paint on this thread.
+            renderer.canvas=lazytester_hud_canvas_create();
+            assert!(!renderer.canvas.is_null());
+            let mut view:CanvasView=std::mem::zeroed();
+            assert_eq!(lazytester_hud_canvas_paint(renderer.canvas,60000,1,96,&mut view),1);
+            renderer.previous_dpi=96;
+            lazytester_hud_renderer_reset(&mut *renderer);
+            assert!(renderer.canvas.is_null());
+            assert_eq!(renderer.previous_dpi,0);
+            lazytester_hud_renderer_reset(&mut *renderer);
+            assert!(renderer.canvas.is_null());
+            // Drop still owns cleanup; repeated reset cannot double-delete.
+        }
+    }
 }

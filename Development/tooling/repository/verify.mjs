@@ -73,12 +73,20 @@ export function verifyNativeHudCompositionBoundary(worker, renderer, canvas) {
     'HUD canvas must reuse matching bitmap and font');
   const update = renderer.slice(renderer.indexOf('pub(crate) unsafe fn lazytester_hud_renderer_update('));
   const hidden = update.indexOf('if !visible {');
+  const allocate = update.indexOf('if r.canvas.is_null() { r.canvas=lazytester_hud_canvas_create(); }');
   const paint = update.indexOf('lazytester_hud_canvas_paint(r.canvas,');
   const upload = update.indexOf('if UpdateLayeredWindow(');
   const show = update.indexOf('ShowWindow(window,4)');
   assert.ok(hidden >= 0 && hidden < paint && paint < upload && upload < show &&
     /r\.previous_dpi=0;[\s\S]*?return 1;\s*\}/.test(update.slice(hidden,paint)),
     'Hidden HUD must skip raster/upload and invalidate the paint checkpoint before visible composition');
+  const constructor = renderer.slice(renderer.indexOf('pub(crate) unsafe fn lazytester_hud_renderer_create('),
+    renderer.indexOf('pub(crate) unsafe fn lazytester_hud_renderer_destroy('));
+  const reset = renderer.slice(renderer.indexOf('pub(crate) unsafe fn lazytester_hud_renderer_reset('),
+    renderer.indexOf('pub(crate) unsafe fn lazytester_hud_renderer_update('));
+  assert.ok(constructor.includes('canvas:ptr::null_mut()') && !constructor.includes('lazytester_hud_canvas_create()') &&
+    hidden < allocate && allocate < paint && reset.includes('r.release_canvas();'),
+    'HUD canvas allocation must be lazy and binding reset must release it');
 }
 
 // Heap experiments affect the game only in reviewed opt-in builds.

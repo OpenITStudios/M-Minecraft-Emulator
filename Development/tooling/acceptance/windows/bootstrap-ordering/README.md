@@ -139,8 +139,11 @@ timeout is one second instead of 250 ms. Promotion wakes that wait directly.
 Selected, unmanaged, unbound or stopped/dead-producer paths retain the
 250 ms fallback for deselection, retirement and other checks. Unselected
 owner/thread loss without a wake can take up to the longer fallback to
-observe (not a hard wall-clock bound). Bind/unbind reuses that worker and
-retains no native renderer object. Once the final swap-chain
+observe (not a hard wall-clock bound). Bind/unbind reuses that worker.
+The worker owns one lightweight renderer; it creates the GDI canvas only
+at the first visible redraw and releases it when the binding/host resets.
+Short hide/show transitions on an unchanged binding reuse the canvas to
+avoid allocation churn. Once the final swap-chain
 unbinds, a one-second grace period allows fast recreation; the HUD worker
 then retires even if the original game GUI thread/window remains alive.
 The private message loop processes at most 64 queued messages per wake so
@@ -186,7 +189,10 @@ Historical 25 October optimization: the HUD worker moved to painting directly
 into the DIB supplied to UpdateLayeredWindow, avoiding a returned vector and a
 second upload bitmap. The initial implementation did not retain a drawing
 surface or font between updates; the current Rust canvas now retains one
-matching bitmap/font/DC for reuse. The historical change removed one bitmap
+matching bitmap/font/DC for reuse within an unchanged binding after visible
+paint. OPT-05 defers that allocation until needed and releases it on reset;
+native resource fixture and source guard are AUTHORED_NOT_RUN.
+The historical change removed one bitmap
 creation, one vector allocation and two pixel copies per redraw; this is not
 a claim about game-content memory or measurements of the current revision. At 96 DPI the largest
 simultaneously owned pixel storage falls from two 16 KiB planes to one; at the

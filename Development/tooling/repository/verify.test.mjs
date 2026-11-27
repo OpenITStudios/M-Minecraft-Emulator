@@ -64,6 +64,8 @@ test('native HUD guard follows Rust ownership and rejects inverted hidden admiss
     'out.window=window;out.bounds=bounds;out.dpi=dpi;\n        return 1;',
     'out.window=window;out.bounds=bounds;out.dpi=dpi;'),canvas),/Hidden HUD/);
   assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer,canvas.replace('self.size==size && self.dpi==dpi { return true; }','self.size==size && self.dpi==dpi { return false; }')),/canvas must reuse/);
+  assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer.replace('canvas:ptr::null_mut()','canvas:lazytester_hud_canvas_create()'),canvas),/allocation must be lazy/);
+  assert.throws(()=>verifyNativeHudCompositionBoundary(worker,renderer.replace('r.release_canvas();','/* retained across reset */'),canvas),/reset must release/);
 });
 
 test('native graphics allocator canaries must not activate without a pinned opt-in',()=>{
