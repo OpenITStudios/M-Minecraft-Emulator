@@ -76,7 +76,8 @@ add_custom_command(OUTPUT "${native_fps_lib}"
     --crate-type staticlib --target x86_64-pc-windows-msvc -C panic=abort -C opt-level=3
     -C target-feature=+crt-static "${CMAKE_CURRENT_SOURCE_DIR}/native-fps.rs" -o "${native_fps_lib}"
   DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/native-fps.rs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/fps-meter.rs" "${CMAKE_CURRENT_SOURCE_DIR}/frame-pacing.rs" VERBATIM)
+    "${CMAKE_CURRENT_SOURCE_DIR}/fps-meter.rs" "${CMAKE_CURRENT_SOURCE_DIR}/frame-pacing.rs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/hud_canvas.rs" VERBATIM)
 add_custom_target(lazytester-native-fps-build DEPENDS "${native_fps_lib}")
 
 add_library(bootstrap-dependency SHARED dependency.cpp)
@@ -135,6 +136,6 @@ endforeach()
 # Meter, Pacer and enrollment consumers share the same Rust implementation.
 foreach(target bootstrap-compat bootstrap-enroll bootstrap-ordering frame-pacing-control fps-hud-control hud-lifetime-control)
   add_dependencies(${target} lazytester-native-fps-build)
-  target_link_libraries(${target} PRIVATE "${native_fps_lib}" advapi32 bcrypt kernel32 ntdll userenv ws2_32 dbghelp)
+  target_link_libraries(${target} PRIVATE "${native_fps_lib}" advapi32 bcrypt kernel32 ntdll userenv ws2_32 dbghelp user32 gdi32)
 endforeach()
 # Deliberately no install, CTest registration, product dependency or automatic execution.

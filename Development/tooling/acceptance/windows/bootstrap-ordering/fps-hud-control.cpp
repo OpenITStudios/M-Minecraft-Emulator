@@ -71,6 +71,8 @@ void meter() {
             && box.right - box.left == MulDiv(128, static_cast<int>(dpi), 96));
     }
     check(fps_hud::placement({0, 0, 16, 16}, 96).right == 0);
+    check(fps_hud::placement({-1000, 20, 1000, 1220}, 47).right == 0);
+    check(fps_hud::placement({-1000, 20, 1000, 1220}, 481).right == 0);
 }
 void rasterLifetimes() {
     const auto baseline = GetGuiResources(GetCurrentProcess(), GR_GDIOBJECTS);

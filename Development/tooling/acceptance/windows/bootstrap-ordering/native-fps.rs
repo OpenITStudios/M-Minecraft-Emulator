@@ -3,3 +3,6 @@
 mod fps_meter;
 #[path = "frame-pacing.rs"]
 mod frame_pacing;
+
+#[path = "hud_canvas.rs"]
+mod hud_canvas;

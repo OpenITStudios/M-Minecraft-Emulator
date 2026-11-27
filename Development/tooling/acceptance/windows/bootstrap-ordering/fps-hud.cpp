@@ -1,4 +1,5 @@
 #include "fps-hud.h"
+#include "hud-canvas-ffi.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -28,97 +29,20 @@ Reading Meter::read(LONGLONG now) noexcept {
     return {value.accepted, value.milliFps, value.valid != 0};
 }
 RECT placement(RECT client, UINT dpi) noexcept {
-    if (dpi < 48 || dpi > 480) return {};
-    const LONG width = MulDiv(128, static_cast<int>(dpi), 96), height = MulDiv(32, static_cast<int>(dpi), 96);
-    const LONG margin = MulDiv(12, static_cast<int>(dpi), 96);
-    if (static_cast<LONGLONG>(client.right) - client.left < width + 2 * margin
-        || static_cast<LONGLONG>(client.bottom) - client.top < height + 2 * margin) return {};
-    return {client.right - margin - width, client.top + margin, client.right - margin, client.top + margin + height};
+    RECT result{}; lazytester_hud_placement(&client, dpi, &result); return result;
 }
 bool physicalClient(HWND owner, RECT& result) noexcept {
-    const auto context = GetWindowDpiAwarenessContext(owner);
-    const auto previous = context ? SetThreadDpiAwarenessContext(context) : nullptr;
-    if (!previous) return false;
-    RECT client{}; POINT a{}, b{};
-    bool okay = GetClientRect(owner, &client) != FALSE;
-    a = {client.left, client.top}; b = {client.right, client.bottom};
-    okay = okay && ClientToScreen(owner, &a) && ClientToScreen(owner, &b)
-        && LogicalToPhysicalPointForPerMonitorDPI(owner, &a) && LogicalToPhysicalPointForPerMonitorDPI(owner, &b);
-    const bool restored = SetThreadDpiAwarenessContext(previous) != nullptr;
-    result = {a.x, a.y, b.x, b.y}; return okay && restored;
+    return lazytester_hud_physical_client(owner, &result) != 0;
 }
 namespace {
 struct Canvas {
-    HDC dc = CreateCompatibleDC(nullptr);
-    HBITMAP bitmap = nullptr;
-    HFONT font = nullptr;
-    HGDIOBJ oldBitmap = nullptr, oldFont = nullptr;
-    DWORD* pixels = nullptr;
-    SIZE extent{};
-    UINT fontDpi = 0;
+    LazyTesterHudCanvas* state = lazytester_hud_canvas_create();
+    HDC dc = nullptr;
+    const DWORD* pixels = nullptr;
     Canvas() = default;
     Canvas(const Canvas&) = delete;
     Canvas& operator=(const Canvas&) = delete;
-    // The owner is either one scoped diagnostic raster() call or exactly one
-    // native HUD worker thread. Nothing survives the worker's normal exit.
-    void release() noexcept {
-        if (dc && oldFont) SelectObject(dc, oldFont);
-        if (dc && oldBitmap) SelectObject(dc, oldBitmap);
-        if (font) DeleteObject(font);
-        if (bitmap) DeleteObject(bitmap);
-        font = nullptr; bitmap = nullptr;
-        oldBitmap = nullptr; oldFont = nullptr;
-        pixels = nullptr; extent = {}; fontDpi = 0;
-    }
-    ~Canvas() {
-        release();
-        if (dc) DeleteDC(dc);
-    }
-    bool allocate(SIZE requested) {
-        if (dc && bitmap && pixels && extent.cx == requested.cx && extent.cy == requested.cy)
-            return true;
-        // DPI/size changed: deselect before destroying GDI resources; never
-        // leave the previous DIB selected or retain multiple pixel buffers.
-        release();
-        if (!dc || requested.cx <= 0 || requested.cy <= 0) return false;
-        BITMAPINFO info{}; info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        info.bmiHeader.biWidth = requested.cx; info.bmiHeader.biHeight = -requested.cy;
-        info.bmiHeader.biPlanes = 1; info.bmiHeader.biBitCount = 32; info.bmiHeader.biCompression = BI_RGB;
-        void* mapped = nullptr;
-        const HBITMAP created = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &mapped, nullptr, 0);
-        if (!created || !mapped) {
-            if (created) DeleteObject(created);
-            return false;
-        }
-        const HGDIOBJ previouslySelected = SelectObject(dc, created);
-        if (!previouslySelected || previouslySelected == HGDI_ERROR) {
-            DeleteObject(created);
-            return false;
-        }
-        bitmap = created; pixels = static_cast<DWORD*>(mapped);
-        oldBitmap = previouslySelected; extent = requested;
-        return true;
-    }
-    bool selectFont(UINT dpi) {
-        if (dc && font && fontDpi == dpi) return true;
-        if (!dc) return false;
-        if (font) {
-            const HGDIOBJ previous = SelectObject(dc, oldFont);
-            if (!previous || previous == HGDI_ERROR || !DeleteObject(font)) return false;
-            font = nullptr; oldFont = nullptr; fontDpi = 0;
-        }
-        const HFONT created = CreateFontW(-MulDiv(17, static_cast<int>(dpi), 96), 0, 0, 0, FW_BOLD, FALSE, FALSE,
-            FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY,
-            DEFAULT_PITCH, L"Segoe UI");
-        if (!created) return false;
-        const HGDIOBJ previouslySelected = SelectObject(dc, created);
-        if (!previouslySelected || previouslySelected == HGDI_ERROR) {
-            DeleteObject(created);
-            return false;
-        }
-        font = created; oldFont = previouslySelected; fontDpi = dpi;
-        return true;
-    }
+    ~Canvas() { lazytester_hud_canvas_destroy(state); }
 };
 LONGLONG now() noexcept { LARGE_INTEGER value{}; return QueryPerformanceCounter(&value) ? value.QuadPart : 0; }
 LRESULT CALLBACK windowProcedure(HWND window, UINT message, WPARAM w, LPARAM l) {
@@ -130,19 +54,10 @@ LRESULT CALLBACK windowProcedure(HWND window, UINT message, WPARAM w, LPARAM l) 
 void moduleAnchor() {}
 constexpr wchar_t ClassName[] = L"MivubiMeasuredFpsHud";
 void paint(Canvas& canvas, Reading value, UINT dpi, SIZE& size) {
-    if (dpi < 48 || dpi > 480) throw std::runtime_error("HUD DPI unavailable");
-    size = {MulDiv(128, static_cast<int>(dpi), 96), MulDiv(32, static_cast<int>(dpi), 96)};
-    if (!canvas.allocate(size)) throw std::runtime_error("HUD bitmap unavailable");
-    std::fill_n(canvas.pixels, static_cast<size_t>(size.cx) * size.cy, 0xff182026UL);
-    if (!canvas.selectFont(dpi)) throw std::runtime_error("HUD font selection failed");
-    wchar_t text[32]{};
-    if (value.valid) swprintf_s(text, L"%.1f FPS", value.milliFps / 1000.0);
-    else wcscpy_s(text, L"-- FPS");
-    SetBkMode(canvas.dc, TRANSPARENT); SetTextColor(canvas.dc, RGB(255, 255, 255));
-    RECT bounds{0, 0, size.cx, size.cy};
-    if (!DrawTextW(canvas.dc, text, -1, &bounds, DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX)
-        || !GdiFlush()) throw std::runtime_error("HUD text unavailable");
-    for (LONG i = 0; i < size.cx * size.cy; ++i) canvas.pixels[i] |= 0xff000000UL;
+    LazyTesterHudCanvasView view{};
+    if (!lazytester_hud_canvas_paint(canvas.state, value.milliFps, value.valid ? 1U : 0U, dpi, &view))
+        throw std::runtime_error("HUD raster unavailable");
+    canvas.dc = view.dc; canvas.pixels = view.pixels; size = view.size;
 }
 }
 std::vector<DWORD> raster(Reading value, UINT dpi, SIZE& size) {
