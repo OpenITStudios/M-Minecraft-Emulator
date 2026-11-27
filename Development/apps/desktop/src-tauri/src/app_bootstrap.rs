@@ -152,9 +152,11 @@ pub fn run() {
                             // Serialize the entire close sequence with the same
                             // manager admission used by CloseOne/Launch/Present.
                             // On contention, no HWND or Minecraft process is touched.
-                            let result=commands::native_clients::close_all_managed();
+                            let result=commands::native_clients::close_all_managed()
+                                .and_then(|()| window.destroy().map_err(|error|
+                                    (true, std::io::Error::other(format!("Manager window could not close: {error}")))));
                             match result{
-                                Ok(())=>{let _=window.destroy();},
+                                Ok(())=>{},
                                 Err((release_attempted,error))=>{
                                     // Resume only after the close operation has
                                     // returned; the source gate remains authoritative.
@@ -426,11 +428,16 @@ mod workspace_foreground {
     }
     pub fn shutdown() {
         HANDLE.store(0, Ordering::Release);
-        if let Ok(mut worker) = WORKER.lock() {
-            if let Some((id, join)) = worker.take() {
-                if unsafe { PostThreadMessageW(id, WM_QUIT, 0, 0) } != 0 {
-                    let _ = join.join();
+        // Take ownership before joining; do not retain the worker lock
+        // across thread exit. Reap an already finished worker without posting.
+        let worker = WORKER.lock().ok().and_then(|mut owner| owner.take());
+        if let Some((id, join)) = worker {
+            if join.is_finished() || unsafe { PostThreadMessageW(id, WM_QUIT, 0, 0) } != 0 {
+                if join.join().is_err() {
+                    eprintln!("Workspace foreground worker exited with an error");
                 }
+            } else {
+                eprintln!("Workspace foreground worker quit could not be queued; process exit will remove the hook");
             }
         }
     }

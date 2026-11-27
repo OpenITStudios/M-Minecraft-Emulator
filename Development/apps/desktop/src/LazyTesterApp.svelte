@@ -897,7 +897,9 @@
       // Read a non-mutating capability from Rust. Unsupported platforms do
       // not retry Windows profile discovery or request game/session IPC.
       try {
-        nativeBackend = await lazyTester.backendSupport();
+        const backend = await lazyTester.backendSupport();
+        if (disposed) return;
+        nativeBackend = backend;
       } catch (error) {
         if (!disposed) {binding=null;bindingIssue=userMessage('backend');}
         return;
