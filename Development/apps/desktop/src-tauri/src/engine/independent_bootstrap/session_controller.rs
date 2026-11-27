@@ -1634,12 +1634,17 @@ impl ReplySnapshot {
     }
 }
 
-// A live game alone has no periodic reaping deadline: its original process
-// handle wakes the actor. Keep the old 1s bounded reconciliation wait for
-// the controller's Windows/peer boundary, and 250ms only for due maintenance
-// or degraded exit observation. This is not a busy wait.
+// Keep the bounded cadence for real maintenance, peer reconciliation,
+// and degraded native waits.
 fn maintenance_interval(pending_storage: bool, audio_needed: bool, exit_retry: bool) -> Duration {
     Duration::from_millis(if pending_storage || audio_needed || exit_retry {250} else {1000})
+}
+
+// Only the healthy native wait may omit the periodic maintenance wake.
+// Original game handles, request event and pipe-worker exit still wake it;
+// the pipe converts this budget to the maximum finite Win32 wait.
+fn native_wait_budget(running: bool, pending_storage: bool, audio_needed: bool, cadence: Duration) -> Duration {
+    if running && !pending_storage && !audio_needed { Duration::MAX } else { cadence }
 }
 
 fn run() -> io::Result<()> {
@@ -1718,7 +1723,8 @@ fn run() -> io::Result<()> {
                 .map(|started| started.children[0].process.as_handle())
                 .chain(manager.as_ref().filter(|_| !running).map(Peer::wait_handle));
             let hint = audio_focus.as_ref().filter(|_|focus_ready).map(|wake|wake.handle());
-            match server.wait_for_activity(lifetimes, hint, cadence) {
+            let budget = native_wait_budget(running, pending_storage, audio_needed, cadence);
+            match server.wait_for_activity(lifetimes, hint, budget) {
                 Ok(activity) => Some(activity),
                 Err(error) => {
                     // Actual native wait failure: preserve ownership and the
@@ -2326,6 +2332,23 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn healthy_live_controller_waits_for_events_without_idle_maintenance() {
+        for running in [false,true] {
+            for storage in [false,true] {
+                for audio in [false,true] {
+                    for cadence in [Duration::ZERO, Duration::from_millis(250), Duration::from_secs(1)] {
+                        let expected = if running && !storage && !audio {Duration::MAX} else {cadence};
+                        assert_eq!(native_wait_budget(running,storage,audio,cadence),expected);
+                    }
+                }
+            }
+        }
+        // The channel fallback still uses the bounded maintenance cadence.
+        assert_eq!(maintenance_interval(false,false,false),Duration::from_secs(1));
+        assert_eq!(maintenance_interval(false,false,true),Duration::from_millis(250));
     }
 
     // Private synthetic OGLES class, not Minecraft. Shared registration is

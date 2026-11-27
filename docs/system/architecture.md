@@ -161,13 +161,17 @@ query/synchronize process pin. Visible refresh, selection and rollback
 revalidate the original live process, PID/birth/session and HWND/root
 rather than reopen its PID; destination ownership checks are unchanged.
 A passive scene wake may share manager DPI/client/origin for the duplicate
-no-write decision only. Actual DWM placement, layout and rollback use fresh
-geometry; hidden primary skips redundant stacking checks. No geometry or
-mutation authority is cached across wakes. The native controller waits directly
-on original retained game process handles, an unnamed request-ready event
-and its existing pipe worker. A live game alone no longer schedules 250ms
-exit scans; ordinary bounded 1s waits do not reap. Pending storage and
-exit-observation retry retain 250ms deadlines; audio uses its own budget. A failed native wait degrades
+no-write decision only. Initial preview overlap validation uses one coherent
+manager geometry sample; actual DWM placement and rollback use fresh geometry.
+Hidden primary skips redundant stacking checks. No geometry or mutation
+authority is cached across wakes. The native controller waits directly on
+original retained game process handles, an unnamed request-ready event and
+its existing pipe worker. With a live game and no pending storage, audio
+maintenance or degraded exit observation, the healthy native wait uses the
+maximum finite Win32 wait rather than a 1s periodic wake. The ordinary 1s
+peer reconciliation and bounded channel fallback remain; pending storage
+and exit-observation retry retain 250ms deadlines; audio uses its own budget.
+A failed native wait degrades
 to the existing bounded channel/maintenance path without replacing or
 abandoning the original controller. Manager lifetime participates only when
 no games remain; a queued authenticated request takes priority over
