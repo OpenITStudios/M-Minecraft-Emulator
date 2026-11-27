@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Exclusive selected-world preflight checkpoint: existing bounded handle traversal now has a separate selected-tree mode, with DELETE-capable directory pins, exclusive leaf access and retained non-target ancestor handles. Only reviewed world identities are admitted; aggregate limits and reviewed totals must match. No file disposition or IPC mutation command. Windows sharing/enumeration behavior requires PC-local validation; pack deletion remains held pending dependency coverage. Fixture authored NOT_EXECUTED. Capture held.
+
 Selective review tree inspection checkpoint: reuse existing bounded read-only handle traversal for exact selected identities, reject linked files and incomplete traversal; aggregate logical bytes and file count under one shared deadline and 2048-file selection limit. Review receipt and bridge expose totals; fingerprint v2 includes totals. These are conservative review limits, not a hard latency guarantee or mutation preflight. Same-size content changes are not detected by the fingerprint. No deletion enabled; exclusive mutation plan and directory disposition remain pending. Fixture extended NOT_EXECUTED; capture held.
 
 Selective review integration: inventory receipts now carry opaque profile/slot/item identity fingerprints. Explicit review request validates bounded selections against fresh inventory and original display identity, rejects replaced directories, returns warnings and optional confirmation fingerprint through typed bridge. Existing controller admission and pending-clear guard reused. No deletion command, UI or byte totals yet. Full wire consumer audit and fixtures remain pending; NOT_EXECUTED. Capture held.

@@ -103,6 +103,7 @@ struct CachePlan {
     entries: usize,
     budget: InspectionBudget,
     deleting: bool,
+    selected_tree: bool,
 }
 impl CachePlan {
     fn new(deleting: bool, budget: InspectionBudget) -> Self {
@@ -113,6 +114,7 @@ impl CachePlan {
             entries: 0,
             budget,
             deleting,
+            selected_tree: false,
         }
     }
     fn bounded(&self, depth: usize) -> io::Result<()> {
@@ -130,10 +132,22 @@ impl CachePlan {
     }
     fn visit(&mut self, path: &Path, depth: usize) -> io::Result<()> {
         self.bounded(depth)?;
-        self.directories.push(open_directory(
-            path,
-            FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY,
-        )?);
+        let directory = if self.selected_tree {
+            // Directory handles need DELETE access for a later bottom-up
+            // disposition, but must still allow read_dir's read access.
+            // No write sharing and no delete sharing for other handles.
+            let pin = OpenOptions::new()
+                .access_mode(FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY | DELETE)
+                .share_mode(FILE_SHARE_READ)
+                .custom_flags(FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(path)?;
+            super::directory_id(&pin)?;
+            directory_path(&pin)?;
+            pin
+        } else {
+            open_directory(path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?
+        };
+        self.directories.push(directory);
         for entry in fs::read_dir(path)? {
             self.entries += 1;
             self.bounded(depth)?;
@@ -202,6 +216,60 @@ pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
     plan.visit(path, 0)?;
     plan.bounded(0)?;
     Ok((plan.bytes, plan.files.len() as u32))
+}
+
+// Exclusive selected-world preflight only. Retain category and profile
+// ancestor pins separately from deletion candidates. No disposition occurs
+// here, including when this plan is dropped after an error.
+pub(super) struct SelectedTreePlan {
+    _ancestors: Vec<File>,
+    plan: CachePlan,
+}
+impl SelectedTreePlan {
+    pub(super) fn totals(&self) -> (u64, u32) {
+        (self.plan.bytes, self.plan.files.len() as u32)
+    }
+}
+
+pub(super) fn preflight_selected_worlds(private: &File,
+    review: &super::resource_pack_inventory::SelectiveReview,
+    budget: InspectionBudget) -> io::Result<SelectedTreePlan> {
+    use super::resource_pack_inventory::InventoryCategory;
+    if review.items.is_empty() || !review.warnings.is_empty() ||
+        review.items.iter().any(|item| item.category != InventoryCategory::Worlds || item.root != "minecraftWorlds") ||
+        !super::same_image(&review.profile_identity, &super::directory_id(private)?) {
+        return Err(invalid("Selected world review is no longer eligible"));
+    }
+    let mut plan = CachePlan::new(true, budget);
+    plan.selected_tree = true;
+    plan.bounded(0)?;
+    let mut path = directory_path(private)?;
+    let mut ancestors = vec![private.try_clone()?];
+    for part in ["Roaming", "Minecraft Education Edition", "games", "com.mojang", "minecraftWorlds"] {
+        plan.bounded(0)?;
+        path.push(part);
+        ancestors.push(open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?);
+    }
+    for item in &review.items {
+        plan.bounded(0)?;
+        // Names came from the reviewed inventory; refuse non-single components
+        // defensively rather than allowing any caller to expand the scope.
+        let mut components = Path::new(&item.name).components();
+        if !matches!(components.next(), Some(std::path::Component::Normal(_))) ||
+            components.next().is_some() || item.name.contains(':') {
+            return Err(invalid("Unsupported selected world name"));
+        }
+        let before = plan.directories.len();
+        plan.visit(&path.join(&item.name), 0)?;
+        if !super::same_image(&item.identity, &super::directory_id(&plan.directories[before])?) {
+            return Err(invalid("Selected world changed before preflight"));
+        }
+    }
+    plan.bounded(0)?;
+    if (plan.bytes, plan.files.len() as u32) != (review.bytes, review.files) {
+        return Err(invalid("Selected world totals changed; review again"));
+    }
+    Ok(SelectedTreePlan { _ancestors: ancestors, plan })
 }
 
 fn plan(private: &File, deleting: bool, budget: InspectionBudget) -> io::Result<CachePlan> {

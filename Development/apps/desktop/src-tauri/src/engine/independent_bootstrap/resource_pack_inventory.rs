@@ -664,6 +664,30 @@ mod tests {
     }
 
     #[test]
+    fn exclusive_world_preflight_never_deletes_on_drop_or_changed_totals() {
+        let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
+        let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        let world = parent.join("Roaming/Minecraft Education Edition/games/com.mojang/minecraftWorlds/one");
+        fs::create_dir_all(&world).unwrap();
+        let leaf = world.join("level.dat");
+        fs::write(&leaf, b"fixture").unwrap();
+        let selection = ReviewSelection {
+            category: InventoryCategory::Worlds, root: "minecraftWorlds".into(), name: "one".into(),
+        };
+        let budget = || InspectionBudget::new(Duration::from_secs(2));
+        let review = review_selection(&private, &[selection], budget()).unwrap();
+        let plan = super::super::profile_storage::preflight_selected_worlds(&private, &review, budget()).unwrap();
+        assert_eq!(plan.totals(), (7, 1));
+        drop(plan);
+        assert_eq!(fs::read(&leaf).unwrap(), b"fixture");
+        fs::write(&leaf, b"changed size").unwrap();
+        assert!(super::super::profile_storage::preflight_selected_worlds(&private, &review, budget()).is_err());
+        assert_eq!(fs::read(&leaf).unwrap(), b"changed size");
+        drop(private);
+        fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
     fn selective_review_rejects_unknown_and_duplicate_items() {
         let parent = super::super::fresh_root(&std::env::temp_dir()).unwrap();
         let private = open_directory(&parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
