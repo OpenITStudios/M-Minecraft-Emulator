@@ -51,7 +51,11 @@ test('check relative document links, including fragments, without fetching exter
     mkdirSync(join(root, 'docs'));
     writeFileSync(join(root, 'docs', 'guide.md'), '[ok](../README.md#start) [web](https://example.com) [bad](missing.md)');
     writeFileSync(join(root, 'README.md'), '# start');
-    assert.deepEqual(checkLinks(root, ['docs/guide.md']), ['Invalid internal link: docs/guide.md -> missing.md']);
+    writeFileSync(join(root, 'docs', 'extra.md'), '[bad](other.md)');
+    assert.deepEqual(checkLinks(root, ['docs/guide.md', 'docs/guide.md', 'docs/extra.md']), [
+      'Invalid internal link: docs/guide.md -> missing.md',
+      'Invalid internal link: docs/extra.md -> other.md',
+    ]);
   } finally { rmSync(root, {recursive: true, force: true}); }
 });
 

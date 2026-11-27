@@ -58,7 +58,7 @@ export function checkPhysical(root) {
 }
 export function checkLinks(root, paths) {
   const errors = [];
-  for (const path of paths.filter(p => p.endsWith('.md') &&
+  for (const path of [...new Set(paths)].filter(p => p.endsWith('.md') &&
     !p.startsWith('planning/history/'))) {
     const text = readFileSync(resolve(root, path), 'utf8');
     if (/lifecycle: HISTORICAL/.test(text)) continue;
@@ -79,9 +79,9 @@ export function checkHandoff(text) {
   return text.startsWith('# Current Development Handoff') && text.length < 8000
     ? [] : ['Keep one concise handoff'];
 }
-export function verifyStructure(root) {
+export function verifyStructure(root, additionalLinkPaths = []) {
   const paths = execFileSync('git', ['ls-files', '-z'], {cwd: root, encoding: 'utf8'}).split('\0').filter(Boolean);
-  const errors = [...checkTracked(paths), ...checkLinks(root, paths), ...checkPhysical(root)];
+  const errors = [...checkTracked(paths), ...checkLinks(root, [...paths, ...additionalLinkPaths]), ...checkPhysical(root)];
   for (const path of ['Development/apps/desktop/package.json', 'Development/apps/desktop/package-lock.json',
     'Development/apps/desktop/src-tauri/Cargo.toml', 'Development/apps/desktop/src-tauri/Cargo.lock',
     'Development/engine/runtime-core/Cargo.toml', 'Development/engine/runtime-core/Cargo.lock',
@@ -98,6 +98,7 @@ export function verifyStructure(root) {
   }
   assert.deepEqual(errors, [], errors.join('\n'));
   console.log('Repository structure: PASS (' + paths.length + ' tracked files; retired vendor source denied)');
+  return paths;
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   verifyStructure(resolve(dirname(fileURLToPath(import.meta.url)), '../../..'));

@@ -107,7 +107,7 @@ npm --prefix Development run verify:source
 npm --prefix Development run dev
 ```
 
-`verify:repository` is a structural policy/consumer check. Desktop `verify:source` runs Svelte typecheck, Vitest source tests, frontend build, Tauri Rust check and Rust desktop tests; `verify:source` at **root** also checks canonical runtime Rust and formatting. Neither automatically starts VMware or Minecraft.
+`verify:repository` owns the full structural policy/consumer check, including the existing structure and dependency-lock checks. Full `verify:source` does not repeat those two commands; quick and standalone checks remain available. Desktop `verify:source` runs Svelte typecheck, Vitest source tests, frontend build, Tauri Rust check and Rust desktop tests; `verify:source` at **root** also checks canonical runtime Rust and formatting. Neither automatically starts VMware or Minecraft.
 
 `DEV.cmd bootstrap` is the single opt-in Windows x64 setup entrypoint: it downloads verified portable Node/PowerShell and checksum-verified official Rustup only to `workspace/`. Other `DEV.cmd` commands run the local PowerShell runtime, source `Development/tooling/windows-toolchain/local-env.ps1`, refuse global Node/npm/Rust fallbacks, and use process-scoped caches, Cargo/Rustup homes and temp within `workspace/`. Git, Visual Studio C++/MSVC and WDK still require a system installation; game/driver/service locations are not rewritten. `DEV.cmd` delegates to `Development/tooling/windows-toolchain/dev.ps1` for optional Windows developer tasks. The selected native pilot uses one fail-fast preflight before manual gameplay; the retired VMware `g0` command refuses before environment setup or build. Native preflight and candidate packaging remain separate:
 
@@ -159,7 +159,7 @@ lockfiles and the existing `CARGO_TARGET_DIR`. This aligns the
 It does not guarantee artifact reuse across different feature sets,
 Cargo profiles or build-script configurations and can require a one-time
 new compilation. The quick route deliberately skips `--all-targets` and
-Rust tests. The full `verify:source` composition is unchanged, while the desktop and
+Rust tests. The full `verify:source` coverage is preserved, while the desktop and
 runtime-core Cargo checks and tests now use the explicit Windows MSVC target
 consistently. This avoids a second host-default output layout for the supported
 Windows developer workflow; different Cargo features/profiles can still

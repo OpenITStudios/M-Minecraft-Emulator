@@ -4,7 +4,7 @@ import {existsSync,readFileSync,readdirSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 import {resolve,dirname,posix} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {checkTracked,checkLinks,checkHandoff} from './check-structure.mjs';
+import {verifyStructure} from './check-structure.mjs';
 import {checkDependencyLock} from './check-dependency-lock.mjs';
 import {verifyLazyTesterPackage} from '../../apps/desktop/scripts/check-lazy-tester-package.mjs';
 import {verifyNativePreviewPackage} from '../../apps/desktop/scripts/check-native-preview-package.mjs';
@@ -482,8 +482,8 @@ export function verifyRepository(root,g0=false) {
   assert.ok(!launcher.includes('maybe_run_profile_helper'), 'Retired fork helper role must not start');
   assert.ok(read('Development/apps/desktop/scripts/prepare-package-binaries.mjs').includes('const LEGACY_PACKAGE_RELEASE_APPROVED = false;'),'Legacy package hold must remain');
   verifyNativePreviewPackage();verifyLazyTesterPackage();
-  const tracked=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);
-  assert.deepEqual(checkTracked(tracked),[]);
+  // Include physical docs (even untracked) as before, without repeating tracked link checks.
+  const tracked=verifyStructure(root,filesBelow(root,'docs'));
   for(const path of ['Development/engine/guest/windows', 'Development/engine/isolation-native',
     'Development/apps/desktop/src-tauri/tauri.package.conf.json',
     'Development/apps/desktop/src-tauri/windows/installer-hooks.nsh']) {
@@ -497,9 +497,6 @@ export function verifyRepository(root,g0=false) {
     execFileSync('git',['check-ignore','--no-index','-q','--',path],{cwd:root});
   }
   if(g0)assert.equal(execFileSync('git',['ls-tree','-r','--name-only','HEAD','--','Development/apps/desktop/src-tauri/Cargo.lock'],{cwd:root,encoding:'utf8'}).trim(),'Development/apps/desktop/src-tauri/Cargo.lock');
-  assert.deepEqual(checkLinks(root,filesBelow(root,'docs').filter(path=>path.endsWith('.md'))),[]);
-  const handoff=read('planning/development.md');
-  assert.deepEqual(checkHandoff(handoff),[]);
   console.log('Lazy Tester repository contract: PASS ('+reached.length+' reachable frontend files; source/layout evidence only)');
 }
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url))verifyRepository(resolve(dirname(fileURLToPath(import.meta.url)),'../../..'),process.argv.includes('--g0'));
