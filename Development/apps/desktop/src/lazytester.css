@@ -1031,3 +1031,10 @@ body{
 .lazytester-selective-item span{min-width:0;overflow-wrap:anywhere}
 .lazytester-selective-item small{display:block;color:var(--lazytester-muted)}
 .lazytester-selective-footer{margin-top:12px;padding-top:12px;border-top:1px solid var(--lazytester-line)}
+
+.lazytester-global-storage-footer{justify-content:space-between;gap:16px}
+.lazytester-global-storage-footer p{flex:1;min-width:0;margin:0}
+.lazytester-global-storage-footer button{flex:none}
+.lazytester-storage-maintenance{margin-top:12px}
+.lazytester-storage-maintenance>summary{cursor:pointer;color:var(--lazytester-muted);padding:8px 0}
+.lazytester-storage-maintenance>.lazytester-settings-panel{margin-top:8px}

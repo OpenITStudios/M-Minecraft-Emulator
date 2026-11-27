@@ -153,6 +153,26 @@
 <svelte:window on:keydown={onReviewEscape}/>
 
         <div class="lazytester-settings-content">
+          <section class="lazytester-group" aria-labelledby="lazytester-global-storage-heading">
+            <div class="lazytester-profile-management-heading">
+              <h2 id="lazytester-global-storage-heading">Global Settings</h2>
+              <span class="lazytester-help">All launchers</span>
+            </div>
+            <div class="lazytester-settings-panel">
+              <div class="lazytester-setting">
+                <div><h3>Auto-clear Download Cache</h3><p>Unavailable until the download cache location is verified.</p></div>
+                <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Download Cache" checked={false} disabled/></label>
+              </div>
+              <div class="lazytester-setting">
+                <div><h3>Auto-clear Old Logs</h3><p>Keep logs for 7 days. Unavailable until log locations are verified.</p></div>
+                <label class="lazytester-audio-toggle"><input type="checkbox" role="switch" aria-label="Auto-clear Old Logs" checked={false} disabled/></label>
+              </div>
+              <div class="lazytester-actions lazytester-settings-panel-footer lazytester-global-storage-footer">
+                <p class="lazytester-help">Verified web cache is eligible for automatic cleanup after a successful game exit. Additional cleanup settings are not available yet.</p>
+                <button class="lazytester-secondary" disabled>Save Changes</button>
+              </div>
+            </div>
+          </section>
           <section class="lazytester-group" aria-labelledby="lazytester-storage-overview-section">
             <div class="lazytester-profile-management-heading">
               <h2 id="lazytester-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Profile Management</h2>
@@ -170,6 +190,9 @@
           <div class="lazytester-settings-panel">
             <div class="lazytester-setting"><div><h3>Profile Folder</h3><p>{selectedStorage ? formatStorageExtent(selectedStorage.bytes,selectedStorage.partial) : 'Not measured'}</p><p class="lazytester-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured} on:click={()=>onOpenFolder(selectedSlot)}>Open Folder</button></div>
             <div class="lazytester-setting"><div><h3>Selective Cleanup</h3><p>Review individual worlds and packs.</p></div><button class="lazytester-secondary" bind:this={selectiveTrigger} disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured||selectedProfile?.state!=='STOPPED'||!selectedStorage||selectedStorage.fullClear?.pending===true} on:click={()=>selectiveSlot=selectedSlot}>Select Data</button></div>
+          <section class="lazytester-setting lazytester-profile-clear" aria-labelledby="lazytester-clear-data-heading"><div><h3 id="lazytester-clear-data-heading" tabindex="-1">Clear All Data</h3><p>Permanently deletes this launcher's local accounts, worlds, cache, settings and backups. Minecraft and app preferences stay.</p><p>Export worlds first: no recovery backup is made. Windows sign-in may remain. External backups stay.</p>{#if selectedStorage?.fullClear?.pending}<p>Cleanup is pending. This launcher cannot start until it finishes.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{userMessage('clearData')}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lazytester-secondary lazytester-danger" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.fullClear?.canClear} on:click={event=>showFullReview(event.currentTarget)}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear All…'}</button></section>
+          </div>
+          <details class="lazytester-storage-maintenance" open={clearSlot!==null}><summary aria-disabled={clearSlot!==null} on:click={event=>{if(clearSlot!==null)event.preventDefault();}}>Storage details and maintenance</summary><div class="lazytester-settings-panel">
             <div class="lazytester-setting"><h3>Web cache</h3>
               <span>{selectedStorage ? formatStorageExtent(selectedStorage.cache.bytes,selectedStorage.cache.partial) : 'Not measured'}</span>
             </div>
@@ -182,7 +205,7 @@
 
           <div class="lazytester-setting"><div><h3>Clear cache</h3><p>Remove temporary web cache. Accounts, worlds and settings stay.</p>{#if selectedStorage?.cache.issue}<p>{userMessage('cache')}</p>{:else if selectedStorage&&!selectedStorage.cache.canClear}<p class="lazytester-help">Cache cleanup unavailable. Refresh to check again.</p>{/if}</div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.cache.canClear} on:click={event=>showCacheReview(event.currentTarget)}>Clear cache…</button></div>
           {#if clearSlot===selectedSlot}<section class="lazytester-cache-confirm" aria-label="Confirm cache cleanup" bind:this={cacheReviewElement}><h3>Clear web cache for Minecraft - {selectedSlot}?</h3><p>Worlds, accounts, settings and other launchers stay.</p><div class="lazytester-actions"><button disabled={busy||refreshing||resizing||!selectedStorage?.cache.canClear} on:click={()=>commitCacheReview(selectedSlot)}>Clear web cache</button><button class="lazytester-secondary" bind:this={cacheCancelButton} on:click={()=>cancelReview(onCancelCacheReview)}>Cancel</button></div></section>{/if}
-          </div>
+          </div></details>
           <details class="lazytester-location-options" open={!bindingConfigured || !dataLocation?.path}><summary>Find existing profile data</summary><p class="lazytester-data-path">{dataLocation?.path??'No data folder connected.'}</p>{#if locationIssue}<p class="lazytester-error">{locationIssue}</p>{/if}<div class="lazytester-actions"><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||runningCount>0||dataLocation?.canLocate===false} on:click={onLocateData}>Locate existing data</button>{#if dataLocation&&!dataLocation.path}<button disabled={busy||refreshing||resizing||storageReviewOpen} on:click={onChooseData}>Choose new data folder</button>{/if}</div><p>Connecting data does not move or delete accounts or worlds.</p></details>
           <details class="lazytester-storage-packs">
             <summary><strong>Resource pack details</strong></summary>
@@ -210,9 +233,6 @@
             </div>
           </details>
           {#if clearingData}<p class="lazytester-alert" role="status">Clearing profile data… Keep LazyTester open.</p>{/if}
-          <div class="lazytester-settings-panel lazytester-profile-clear-panel">
-          <section class="lazytester-setting lazytester-profile-clear" aria-labelledby="lazytester-clear-data-heading"><div><h3 id="lazytester-clear-data-heading" tabindex="-1">Clear All Data</h3><p>Permanently deletes this launcher's local accounts, worlds, cache, settings and backups. Minecraft and app preferences stay.</p><p>Export worlds first: no recovery backup is made. Windows sign-in may remain. External backups stay.</p>{#if selectedStorage?.fullClear?.pending}<p>Cleanup is pending. This launcher cannot start until it finishes.</p>{/if}{#if selectedStorage?.fullClear?.issue}<p>{userMessage('clearData')}</p>{:else if !selectedStorage?.fullClear}<p>Refresh storage to check availability.</p>{/if}</div><button class="lazytester-secondary lazytester-danger" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!selectedStorage?.fullClear?.canClear} on:click={event=>showFullReview(event.currentTarget)}>{selectedStorage?.fullClear?.pending?'Finish clearing data…':'Clear All…'}</button></section>
-          </div>
           {#if fullReview?.slot===selectedSlot}
             <form class="lazytester-cache-confirm lazytester-delete-confirm" aria-label="Confirm full launcher data deletion" bind:this={fullReviewElement} on:submit|preventDefault={onClearAllData}>
               <h3>{fullReview.pending?'Finish clearing':'Clear all data for'} Minecraft - {fullReview.slot}?</h3>

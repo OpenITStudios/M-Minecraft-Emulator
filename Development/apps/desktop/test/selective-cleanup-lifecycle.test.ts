@@ -3,6 +3,16 @@ import {describe, expect, it} from 'vitest';
 const source=(name:string)=>readFileSync(new URL('../src/'+name,import.meta.url),'utf8');
 
 describe('Selective Cleanup lifecycle source contract',()=>{
+  it('does not offer unverified global cleanup settings as active preferences',()=>{
+    const storage=source('DataStorage.svelte');
+    expect(storage).toContain('Global Settings');
+    expect(storage).toContain('All launchers');
+    expect(storage).toContain('aria-label="Auto-clear Download Cache" checked={false} disabled');
+    expect(storage).toContain('aria-label="Auto-clear Old Logs" checked={false} disabled');
+    expect(storage).toContain('Keep logs for 7 days');
+    expect(storage).toContain('disabled>Save Changes</button>');
+    expect(storage).toContain('Storage details and maintenance');
+  });
   it('invalidates outstanding receipts before closing and on destruction',()=>{
     const dialog=source('SelectiveCleanup.svelte');
     expect(dialog).toContain('function close(): void');
