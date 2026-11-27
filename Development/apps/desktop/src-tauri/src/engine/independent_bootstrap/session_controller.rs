@@ -1588,7 +1588,10 @@ fn sync_audio(sessions:&Sessions,audio:&mut Option<super::session_audio::Audio>,
 
 // Keep reply work in one policy: coordinated close already reaps the selected
 // slots; status and input receipts must not flush unrelated journals or
-// rewrite window labels. All ordinary operations retain full observation.
+// rewrite window labels. Desktop folder and selective-read consumers use
+// only their action receipt/payload; selective reads already reap and admit
+// the target before inspection. Keep full observation for lifecycle,
+// settings and storage reports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ReplySnapshot {
     Full,
@@ -1599,6 +1602,9 @@ impl ReplySnapshot {
     fn for_request(request: &SessionRequest) -> Self {
         match request {
             SessionRequest::CloseOne { .. } | SessionRequest::CloseAll => Self::Close,
+            SessionRequest::OpenProfileFolder { .. } |
+            SessionRequest::InspectSelectiveInventory { .. } |
+            SessionRequest::ReviewSelectiveInventory { .. } => Self::Receipt,
             SessionRequest::PublishAgentActivity { .. } |
             SessionRequest::TestingReserve { .. } |
             SessionRequest::TestingFinalize { .. } |
@@ -2146,6 +2152,24 @@ mod tests {
         assert!(release_attempted_ai_group(&[],|_|{
             panic!("no IPC was attempted, so there is nothing to release")
         }));
+    }
+
+    #[test]
+    fn desktop_folder_and_selective_reads_use_receipts_without_changing_mutation_snapshots() {
+        for request in [
+            SessionRequest::OpenProfileFolder { slot: 1 },
+            SessionRequest::InspectSelectiveInventory { slot: 2, category: SelectiveCategory::Worlds },
+            SessionRequest::ReviewSelectiveInventory { slot: 3, selections: vec![] },
+        ] {
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Receipt);
+        }
+        for request in [
+            SessionRequest::ClearProfileCache { slot: 1 },
+            SessionRequest::ResetGameSettings { slot: 2 },
+            SessionRequest::ConfirmSelectedWorlds { slot: 3, selections: vec![], confirmation_token: String::new() },
+        ] {
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Full);
+        }
     }
 
     #[test]
