@@ -27,10 +27,46 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 06 Integration | INT-01 naming; INT-02 ABI | Canonical FFI declaration owner, matching Rust/C++ compile-time size/alignment/offset checks; existing ABI preserved |
 | 06 Integration | INT-03 build | Native CMake source list, six link consumers, MSVC/static CRT and Tauri/package payload gates reviewed; explicit build-only Rust fixture target authored. Compiler/link proof held. |
 | 06 Integration | INT-04 fixtures | Source checkpoint: per-slot cache admission/receipt fixtures, existing native pacing/HUD controls, HUD constructor policy, native fractional shared-edge conversion, display-scale teardown and DWM startup receipt fixtures reconciled. Execution held. |
-| 06 Integration | INT-05 docs/Unreleased; INT-06 readiness | Open |
+| 06 Integration | INT-05 docs/Unreleased | Source checkpoint: current product, owner map, storage admission, payload gate and Unreleased summary reconciled |
+| 06 Integration | INT-06 readiness | Source checkpoint for scoped Rust-first integration; SOURCE_READY_FOR_LOCAL (not tested) |
 | 07 Native validation | VAL-01 compile/link; VAL-02 DLL/payload; VAL-03 five sessions; VAL-04 storage safety; VAL-05 performance; VAL-06 installer | Held for separately authorized PC-local phase |
 
-Phase 01 source checkpoint complete. Phase 02 presentation source checkpoint: Rust owns policy, image, transport and candidate classification; replaced C++ validation removed. Native C++ inventory and retained boundary documented in bootstrap-ordering README. Typed COM identity/reference transfer and pinned Detours transaction retained rather than replacing with unverified vtables/hook engine; non-presentation bootstrap/experimental owners remain deferred, not claimed migrated. Explicit standard includes restored for DXGI adapter. Native build/link/tests and payload review held. Phase 03 source checkpoint: storage review, held world/pack confirmation, download cache report/manual confirmation, global preferences and post-exit maintenance integrated. Native download/log producer/root, pack reference coverage/stability, and world/pack disposition proof remain explicit VAL-04 prerequisites; activation is not complete. Do not enable held targets merely by changing a preference or UI state. Phase 04 source checkpoint: layouts, launcher controls, selected HUD source, storage confirmation and DPI/viewport observation integrated; remaining visual fit and native transition proof held. Phase 05 source checkpoint: polling, worker wakeups, audio allocation and startup readiness improved; dependency roots reconciled without speculative removal. Phase 06 active: paired ABI guards, native build-consumer review and explicit standalone Rust fixture build route integrated; targeted native/desktop fixture reconciliation reached a source checkpoint. INT-05 docs/Unreleased and INT-06 readiness remain open. Compilation and measured benefit held. Do not alias HTTP cache or repository artifact retention to Minecraft download/log cleanup.
+Phase 01 source checkpoint complete. Phase 02 presentation source checkpoint: Rust owns policy, image, transport and candidate classification; replaced C++ validation removed. Native C++ inventory and retained boundary documented in bootstrap-ordering README. Typed COM identity/reference transfer and pinned Detours transaction retained rather than replacing with unverified vtables/hook engine; non-presentation bootstrap/experimental owners remain deferred, not claimed migrated. Explicit standard includes restored for DXGI adapter. Native build/link/tests and payload review held. Phase 03 source checkpoint: storage review, held world/pack confirmation, download cache report/manual confirmation, global preferences and post-exit maintenance integrated. Native download/log producer/root, pack reference coverage/stability, and world/pack disposition proof remain explicit VAL-04 prerequisites; activation is not complete. Do not enable held targets merely by changing a preference or UI state. Phase 04 source checkpoint: layouts, launcher controls, selected HUD source, storage confirmation and DPI/viewport observation integrated; remaining visual fit and native transition proof held. Phase 05 source checkpoint: polling, worker wakeups, audio allocation and startup readiness improved; dependency roots reconciled without speculative removal. Phase 06 active: paired ABI guards, native build-consumer review and explicit standalone Rust fixture build route integrated; targeted native/desktop fixture reconciliation reached a source checkpoint. INT-05 and INT-06 source checkpoints are complete for this scoped roadmap. Compilation and measured benefit held. Do not alias HTTP cache or repository artifact retention to Minecraft download/log cleanup.
+
+## Unreleased — Rust-first integration
+
+Source changes only; no version increment, tag, release, package or native acceptance.
+
+- Native FPS/presentation: shared Rust meter, pacer, HUD session/worker, geometry, GDI and presentation admission; canonical FFI and six native link consumers. Retain typed COM/DXGI and pinned Detours bridge.
+- Storage: global maintenance preferences, selected world/pack review, separate download cache report, seven-day log policy, pending-full-clear cache exclusion. Only the verified web cache is admitted for optional maintenance; new destructive targets stay held.
+- Desktop: Bottom/Right layout, observed selection and Close controls, selected-only HUD, compact storage confirmation and event-driven DPI/geometry.
+- Efficiency: inactive controller interval, coalesced focus hints, fixed audio targets, bounded worker startup receipts; dependency versions preserved, no measured gain claimed.
+- Integration: paired ABI guards, standalone Rust fixture build, native/desktop regression fixtures and current source/documentation ownership.
+
+## Source-to-local handoff — SOURCE_READY_FOR_LOCAL
+
+Scope: Phase 01–06 Rust-first roadmap above only. Source checkpoint at the
+revision containing this handoff; re-pin actual Local HEAD before later work.
+The final source review was based on 19a177f70ed73ea3301b1a5341ea85eb14a1037b
+plus the reconciled documentation in this commit. Native build, runtime and
+performance evidence remain NOT_EXECUTED; LOCAL_TEST_DEFERRED.
+
+The separately authorized PC-local phase uses existing validation owners in
+this order. This is a handoff, not permission or a request to execute now.
+
+| Work ID | Existing route and required evidence |
+|---|---|
+| VAL-01 | [Windows first-run](../docs/validation/local-pc-first-run.md): pinned clean Local SHA and toolchain, source quick/full checks as approved; [native CMake controls](../Development/tooling/acceptance/windows/bootstrap-ordering/README.md) and explicit Rust fixture build/run; actual compile/link and fixture results |
+| VAL-02 | Review matching standard v4 DLL pair from the same source revision; confirm native ABI/control behavior, inspect exact hashes and review admission separately. Current digest policy None; package/dev/new launch held |
+| VAL-03 | [Progressive local smoke](../docs/validation/efficient-local-testing.md): one licensed session then five, selected HUD, previews/DPI, normal close/reconnect and isolated data; retest historical MC02 exit issue |
+| VAL-04 | Use disposable data and exact native root/producer, dependency coverage/reference stability and exclusive disposition evidence before any new deletion gate is reviewed; preserve worlds/accounts and full-clear recovery |
+| VAL-05 | [Existing native baseline collectors](../Development/tooling/acceptance/windows/README.md): compare matched game/world/FPS workloads and actual CPU/RAM/startup/FPS observations; no speculative savings |
+| VAL-06 | [Distribution contract](../Development/engine/distribution/README.md): approved candidate installer, hash, installation/repair/uninstall/reinstall and data preservation; release approval remains separate |
+
+Preserve Local only, disabled CI, test hold, existing installed identity and
+private profile data. Broader bootstrap migration, experimental MCP/AI, F3
+and screenshot/video capture are outside this scoped roadmap. No new runner,
+second status owner or automatic test/release. STOP at source proof ceiling.
 
 ## Desktop UI refinement — 27 November 2026
 

@@ -13,8 +13,9 @@ and existing options backups are preserved. Data Storage retains Reset/Restore
 and maintenance, without per-profile Texture Streaming or Improved Input Response controls.
 Profile data-location inspection
 runs on Data Storage navigation, not when opening General Settings.
-The fixed-height launcher action strip hosts selected-game close review and
-pending-close status without inserting a new workspace row. Native close
+The launcher action strip hosts selected-game close review and pending-close
+status in normal flow and collapses when empty. Bottom/Right workspace layout
+uses the existing geometry scheduler and falls back to Bottom when space is insufficient. Native close
 admission and recovery remain unchanged. Every launcher reserves a bounded
 health row so a warning does not resize the rail or shift native previews.
 Unconfirmed launch receipts are scoped to the affected slot and block its
@@ -112,7 +113,8 @@ and `GITHUB_RULES.md`. Retired designs remain in Git history, not active UI.
 
 Workspace placement and preview IPC share one captured geometry per layout pass.
 Position, size, target identity and pixel ratio are rechecked after native awaits;
-ancestor scroll events reuse the existing dirty scheduler.
+ancestor scroll and event-driven display-scale changes reuse the existing dirty
+scheduler. The native conversion rounds shared physical edges consistently.
 
 Play-wide preview feedback uses the existing fixed launcher action strip;
 redundant below-rail guidance is removed. The existing Refresh action remains
@@ -126,9 +128,14 @@ Healthy Play relies on existing automatic inspection; the header Refresh is
 shown only for actionable exceptions or an in-flight manual refresh. Settings
 and Data Storage retain explicit inspection controls.
 
-Data Storage keeps pack counts inside the inventory disclosure and consolidates
-compatibility option status and guidance into their existing setting rows.
-No storage measurement, mutation, review token or backup contract is changed.
+Data Storage separates global preferences from per-launcher management. The
+verified temporary web-cache preference is persisted (default enabled); eligible
+post-exit maintenance uses the existing controller, without an extra worker.
+Selective Cleanup reviews worlds, resource/behavior packs and download cache.
+World/pack disposition and download/log cleanup remain held; unknown cache
+location is not zero usage. The seven-day log policy is source-only. Pending
+full-clear recovery revokes both cache admissions for that launcher. Existing
+full-clear confirmation, backup and data-preservation boundaries remain.
 
 ### Native payload review gate
 

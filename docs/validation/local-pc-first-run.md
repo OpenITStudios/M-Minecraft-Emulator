@@ -39,7 +39,7 @@ launcher, runtime owner, CI workflow or data directory is introduced.
 | Source and pinned locks | Yes, branch `Local` | Exact clean checkout SHA |
 | Developer controller / build scripts | `DEV.cmd`, source and manifest | Pinned tools and Windows compiler prerequisites |
 | App UI and native code | Svelte/Tauri/Rust source | Executed preflight and real desktop window |
-| Native runtime payload | **No DLL binaries in Git** | Both reviewed `bootstrap-compat.dll` and `bootstrap-enroll.dll` must be provided and match exact source digests |
+| Native runtime payload | **No DLL binaries in Git; v4 digest admission held** | Build and independently review matching `bootstrap-compat.dll` and `bootstrap-enroll.dll` before admitting their exact hashes |
 | Start shortcut | `RUN.cmd` source only | Root `Lazy Tester.exe` exists after an approved `DEV.cmd package` |
 | Installer candidate | Packaging source only | Actual unsigned NSIS output, integrity and preservation checks |
 | Minecraft and 5 profiles | Game/session source, historical pilot evidence | Fresh **same-revision** Windows + licensed Education gameplay acceptance |
@@ -211,16 +211,21 @@ native binaries:
 The source authority for their approved SHA-256 values is
 `REVIEWED_EDUCATION_BOOTSTRAP` in
 [the native controller](../../Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs).
-The existing staging script verifies **both** hashes before use.
-Obtain the matching reviewed pair from an authorized build/artifact
-process; if unavailable, report **BLOCKED: REVIEWED_NATIVE_PAYLOAD_MISSING**,
-not a missing feature in Git. If a previous local `App/` folder contains
+The existing staging script verifies **both** hashes before use. The current
+v4 policy is `None`: no old DLL pair is admitted. In the separately authorized
+PC-local phase, use the existing [native CMake procedure](../../Development/tooling/acceptance/windows/bootstrap-ordering/README.md)
+for matching x64 MSVC DLLs and own-data controls, including the explicit
+`lazytester-native-fps-fixtures-build` target. Record build/control results,
+then independently review the exact candidate binaries before any digest
+admission change. Do not enable experimental flags or treat a build as approval.
+Until matching approval exists, package/dev remain BLOCKED; a missing or
+unapproved DLL is not a missing feature in Git. If a previous local `App/` folder contains
 native DLLs, `DEV.cmd localcheck` will check their SHA-256 against the
 current Rust policy; matching binaries can be reused by pointing the
 environment variable to that `App/independent-bootstrap` folder.
 Until the variable is set, `localcheck` deliberately exits **BLOCKED** even
-when the old `App/` DLL hashes match: the build's staging script will not
-implicitly reuse those binaries.
+if a future reviewed pair matches the old `App/` DLL hashes: the build's staging
+script will not implicitly reuse those binaries.
 Do **not** copy accounts, profile data, worlds or arbitrary DLLs, override
 the hashes, create placeholders, or enable experimental AI input.
 

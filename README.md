@@ -9,7 +9,7 @@ signs in to Microsoft, or enters a world.
 **Development branch:** `Local`. `main` is release-reserved and GitHub
 Actions CI is disabled. This is the **source checkout**, not a distribution
 folder or an approved installer. Read [current status](planning/development.md)
-for the proof ceiling at the latest revision.
+for the proof ceiling at the latest revision and the [Unreleased changes](planning/development.md#unreleased--rust-first-integration).
 
 ## Choose the correct workflow
 
@@ -133,8 +133,10 @@ DEV.cmd package
 Developer commands require the reviewed local toolchain, a matching
 revision, and explicit authorization for effects. `DEV.cmd dev` and
 package preparation require the reviewed native payload configured
-through `LAZY_TESTER_NATIVE_PAYLOAD_DIR`. A package candidate is not a
-signed or gameplay-accepted release. No local tests, builds, package
+through `LAZY_TESTER_NATIVE_PAYLOAD_DIR`. The current presentation ABI v4
+has no admitted DLL digest pair; dev/package remain blocked until a matching
+pair is independently reviewed. A package candidate is not a signed or
+gameplay-accepted release. No local tests, builds, package
 operations, game launches or CI are started by a GitHub source review.
 
 ## Navigation

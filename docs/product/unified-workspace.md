@@ -72,9 +72,10 @@ Frame Rate explains FPS as limits, not measured game performance. Data Storage i
 General has no duplicate folder actions or navigation section. Data Storage reports byte units
 honestly (B/KiB/MiB/GiB), distinguishes zero from unavailable and incomplete
 measurements, and labels the UI receipt time rather than claiming an exact
-native measurement timestamp. Connect/locate, resource pack details, and
-recovery precede the final full-data-delete danger zone. Original native
-confirmation, profile data and game-world safety gates remain unchanged.
+native measurement timestamp. Global Settings contains the all-launcher maintenance preferences. Profile
+Management contains profile selection, Open Folder, Selective Cleanup and
+Clear All Data; detailed inventory and recovery controls remain in the
+maintenance disclosure. Native confirmation and data-safety gates remain.
 
 An optional source-only MCP activity projection can describe local
 observation, unverified experimental input requests/recovery, and original
@@ -206,7 +207,8 @@ Unavailable disk metadata stays unknown; cache bytes are part of profile bytes,
 not additional usage. Measurements remain on demand, without reading file contents.
 
 The sole session owner delegates filesystem details to
-independent_bootstrap/profile_storage.rs. The only disposable subtree is the
+independent_bootstrap/profile_storage.rs. The only admitted automatic cache
+cleanup subtree is the
 observed private Local/Temp/minecraftpe/codeBuilderV1/Default/Cache HTTP cache.
 Default itself, Cookies, Local Storage, GPU/Code Cache, other TEMP contents,
 authentication helpers, worlds and presets are excluded. This follows Chromium's
@@ -215,21 +217,29 @@ CEF's [cache_path documentation](https://chromiumembedded.github.io/cef/general_
 also shows why its broader profile/cache root can contain persistent storage.
 The exact Education path is observed metadata, not a general Minecraft cache API.
 
-Cleanup requires explicit per-profile selection/confirmation, all managed games
-stopped and no externally discovered Minecraft game. Backend admission is fresh
-and serialized with launches. A new bounded plan pins every ancestor and opens
-every candidate exclusively before marking any file for deletion by its retained
-handle. Locked files, reparses, hard links and incomplete scans refuse the plan;
-there is no path-based recursive delete, directory removal or background cleaner.
+Manual web-cache cleanup requires explicit per-profile confirmation. The target
+launcher must be stopped; other verified managed games may remain running, but
+unmanaged or identity-mismatched games block admission. Backend admission is
+fresh and serialized with launches. A bounded plan pins every ancestor and opens
+every candidate exclusively before marking files for deletion by retained
+handles. Locked files, reparses, hard links and incomplete scans refuse the plan;
+there is no path-based recursive delete or separate background cleaner.
+The global Auto-clear Web Cache preference (default enabled) uses the existing
+post-exit maintenance lane after successful exit and journal save; it is best
+effort, not a guaranteed deletion. Pending full-clear recovery blocks both cache
+actions. Selective worlds/packs have review and confirmation source but native
+disposition is disabled. Download cache and seven-day log retention remain
+unavailable until exact native roots/producers and required safety evidence are
+verified; they are not aliases for HTTP cache.
 Failure during disposition can remove part of this disposable cache and is
 reported explicitly. This does not prove every unowned helper has exited or
 prevent an external same-user process starting later; currently open cache files
 are protected by exclusive admission. Subsequent cache recreation is normal.
 
 Space uses Windows [GetDiskFreeSpaceExW](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexw)
-available-to-caller and total-to-caller values, preserving user quotas. Disposable
-fixture cleanup passed; cleanup/login persistence on actual profiles and the
-complete storage page remain unexecuted. Cache deletion is disk maintenance,
+available-to-caller and total-to-caller values, preserving user quotas. Historical
+disposable fixture success is not current-revision proof; cleanup/login persistence
+on actual profiles and the complete storage page remain unexecuted. Cache deletion is disk maintenance,
 not a claimed RAM/gameplay optimization.
 
 Four native DWM preview destinations are implemented as nonactivating top-level
