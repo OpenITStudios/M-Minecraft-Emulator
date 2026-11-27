@@ -371,8 +371,8 @@ mod workspace_foreground {
             .set(window)
             .map_err(|_| io::Error::other("Workspace foreground watcher already initialized"))?;
         HANDLE.store(handle, Ordering::Release);
-        let (ready, receiver) = mpsc::sync_channel(1);
-        let worker = thread::spawn(move || unsafe {
+        let (ready, receiver) = mpsc::sync_channel(0);
+        let worker = thread::Builder::new().name("lazytester-workspace-foreground".into()).spawn(move || unsafe {
             let mut message: MSG = std::mem::zeroed();
             PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_NOREMOVE);
             let hook = SetWinEventHook(
@@ -395,7 +395,7 @@ mod workspace_foreground {
                 }
             }
             UnhookWinEvent(hook);
-        });
+        })?;
         match receiver.recv_timeout(Duration::from_secs(3)) {
             Ok(Ok(id)) => {
                 *WORKER
@@ -408,9 +408,13 @@ mod workspace_foreground {
                 let _ = worker.join();
                 Err(error)
             }
-            Err(_) => Err(io::Error::other(
-                "Workspace foreground watcher startup timed out",
-            )),
+            Err(_) => {
+                // Drop the rendezvous receiver before returning: a late
+                // hook cannot enter its message loop after failed startup.
+                drop(receiver);
+                HANDLE.store(0,Ordering::Release);
+                Err(io::Error::other("Workspace foreground watcher startup timed out"))
+            },
         }
     }
     pub fn shutdown() {

@@ -3,7 +3,7 @@ use std::{
     mem, ptr,
     sync::{
         atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
-        mpsc, Arc, Mutex,
+        mpsc, Mutex,
     },
     thread::{self, JoinHandle},
     time::{Duration, Instant},
@@ -122,7 +122,8 @@ enum Job {
 }
 struct Worker {
     sender: mpsc::SyncSender<Job>,
-    id: Arc<AtomicU32>,
+    id: u32,
+    ready: mpsc::Receiver<io::Result<u32>>,
     join: JoinHandle<()>,
 }
 static WORKER: Mutex<Option<Worker>> = Mutex::new(None);
@@ -996,11 +997,12 @@ impl Scene {
         })
     }
 }
-fn start() -> Worker {
+fn start() -> io::Result<Worker> {
     let (sender, receiver) = mpsc::sync_channel(1);
-    let id = Arc::new(AtomicU32::new(0));
-    let thread_id = Arc::clone(&id);
-    let join = thread::spawn(move || unsafe {
+    // Retain the receiver across a caller timeout; never replace a worker
+    // that is still starting. One readiness receipt replaces 1ms polling.
+    let (ready, startup) = mpsc::sync_channel(1);
+    let join = thread::Builder::new().name("lazytester-dwm-preview".into()).spawn(move || unsafe {
         let mut message: MSG = mem::zeroed();
         PeekMessageW(&mut message, ptr::null_mut(), 0, 0, PM_NOREMOVE);
         let class = WNDCLASSW {
@@ -1011,12 +1013,17 @@ fn start() -> Worker {
             ..mem::zeroed()
         };
         if RegisterClassW(&class) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS {
+            let _=ready.send(Err(io::Error::last_os_error()));
             return;
         }
         REFRESH_PENDING.store(false, Ordering::Release);
         NATIVE_REFRESH_REQUESTED.store(false, Ordering::Release);
-        thread_id.store(GetCurrentThreadId(), Ordering::Release);
-        THREAD.store(GetCurrentThreadId(), Ordering::Release);
+        let id=GetCurrentThreadId();
+        THREAD.store(id, Ordering::Release);
+        if ready.send(Ok(id)).is_err() {
+            THREAD.store(0,Ordering::Release);
+            return;
+        }
         let mut scene = Scene {
             window: None,
             manager: 0,
@@ -1141,8 +1148,16 @@ fn start() -> Worker {
         }
         scene.thumbnails.clear();
         THREAD.store(0, Ordering::Release);
-    });
-    Worker { sender, id, join }
+    })?;
+    Ok(Worker { sender, id:0, ready:startup, join })
+}
+fn await_worker_ready(ready:&mpsc::Receiver<io::Result<u32>>, timeout:Duration)->io::Result<u32> {
+    let id=ready.recv_timeout(timeout).map_err(|error|match error {
+        mpsc::RecvTimeoutError::Timeout=>io::Error::new(io::ErrorKind::TimedOut,"Preview worker startup pending; owner retained"),
+        mpsc::RecvTimeoutError::Disconnected=>io::Error::other("Preview worker stopped before startup"),
+    })??;
+    if id==0 {return Err(io::Error::other("Preview worker has invalid thread identity"));}
+    Ok(id)
 }
 // WORKER protects only startup and bounded channel admission. Waiting
 // for a result while holding that global mutex can block an unrelated
@@ -1181,18 +1196,14 @@ fn send<T>(
         if !start_if_missing {
             return Ok(None);
         }
-        *owner = Some(start());
+        *owner = Some(start()?);
     }
-    let worker = owner.as_ref().unwrap();
-    let deadline = std::time::Instant::now() + Duration::from_secs(3);
-    while worker.id.load(Ordering::Acquire) == 0
-        && !worker.join.is_finished()
-        && std::time::Instant::now() < deadline
-    {
-        thread::sleep(Duration::from_millis(1));
+    let worker = owner.as_mut().unwrap();
+    if worker.id==0 {
+        worker.id=await_worker_ready(&worker.ready,Duration::from_secs(3))?;
     }
-    let id = worker.id.load(Ordering::Acquire);
-    if id == 0 || worker.join.is_finished() {
+    let id = worker.id;
+    if worker.join.is_finished() {
         return Err(io::Error::other("Preview worker did not start"));
     }
     let (reply, receive) = mpsc::sync_channel(1);

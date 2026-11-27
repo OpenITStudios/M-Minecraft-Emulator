@@ -637,3 +637,11 @@ fn hidden_own_windows_register_update_and_release_dwm_without_desktop_capture() 
         DestroyWindow(manager);
     }
 }
+
+#[test]
+fn preview_startup_timeout_retains_late_ready_receipt() {
+    let (sender,receiver)=std::sync::mpsc::sync_channel(1);
+    assert_eq!(super::await_worker_ready(&receiver,std::time::Duration::ZERO).unwrap_err().kind(),std::io::ErrorKind::TimedOut);
+    sender.send(Ok(42)).unwrap();
+    assert_eq!(super::await_worker_ready(&receiver,std::time::Duration::ZERO).unwrap(),42);
+}
