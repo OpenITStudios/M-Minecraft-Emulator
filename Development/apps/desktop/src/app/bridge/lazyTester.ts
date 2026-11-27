@@ -220,9 +220,12 @@ export function parseSession(value: unknown): SessionSnapshot {
      ...(Object.hasOwn(value,'agentActivity')?['agentActivity']:[])]) || value.schema !== 1 ||
       !Array.isArray(value.profiles) || value.profiles.length !== 5) throw new TypeError('Invalid session response');
   const pids = new Set<number>();
-  value.profiles.forEach((profile: unknown, index: number) => {
+  // Validate every ordered slot, including sparse/non-JSON inputs, before
+  // using index-based storage admission below.
+  for (let index = 0; index < value.profiles.length; index++) {
+    const profile: unknown = value.profiles[index];
     if (!record(profile) || !exact(profile, ['slot', 'state', 'process', 'issue']) ||
-        profile.slot !== index + 1 || !['STOPPED', 'STARTING', 'RUNNING', 'NOT_RESPONDING', 'ATTENTION'].includes(String(profile.state)) ||
+        profile.slot !== index + 1 || typeof profile.state !== 'string' || !['STOPPED', 'STARTING', 'RUNNING', 'NOT_RESPONDING', 'ATTENTION'].includes(profile.state) ||
         !(profile.issue === null || typeof profile.issue === 'string' && profile.issue.length <= 8192)) throw new TypeError('Invalid profile response');
     if (profile.process !== null) {
       const process = parseObservedProcess(profile.process);
@@ -230,14 +233,19 @@ export function parseSession(value: unknown): SessionSnapshot {
       pids.add(process.pid);
       if (profile.state === 'RUNNING' && (!process.responding || BigInt(process.windowHandle) === 0n)) throw new TypeError('Invalid running game');
     } else if (profile.state === 'RUNNING') throw new TypeError('Running game has no process');
-  });
+  }
   if (value.storage !== null) {
     if (!Array.isArray(value.storage) || value.storage.length !== 5) throw new TypeError('Invalid storage response');
-    value.storage.forEach((storage: unknown, index: number) => {
+    for (let index = 0; index < value.storage.length; index++) {
+      const storage: unknown = value.storage[index];
       if (!record(storage) || !exact(storage, ['slot','bytes','files','partial','disk','cache',...(Object.hasOwn(storage,'downloadCache')?['downloadCache']:[]),...(Object.hasOwn(storage,'gameSettings')?['gameSettings']:[]),...(Object.hasOwn(storage,'resourcePacks')?['resourcePacks']:[]),...(Object.hasOwn(storage,'fullClear')?['fullClear']:[])]) || storage.slot !== index + 1 ||
           !Number.isSafeInteger(storage.bytes) || Number(storage.bytes) < 0 || !Number.isInteger(storage.files) ||
           Number(storage.files) < 0 || Number(storage.files) > 100000 || typeof storage.partial !== 'boolean') throw new TypeError('Invalid storage metadata');
       const {disk, cache} = storage;
+      // Both rosters require slot === index + 1. Reuse this request-local
+      // observation for all four admission checks, never a persistent cache.
+      const state = (value.profiles as ProfileSession[])[index]!.state;
+      const active = state === 'STARTING' || state === 'RUNNING' || state === 'NOT_RESPONDING';
       if (disk !== null && (!record(disk) || !exact(disk, ['availableBytes', 'totalBytes']) ||
           !Number.isSafeInteger(disk.availableBytes) || Number(disk.availableBytes) < 0 ||
           !Number.isSafeInteger(disk.totalBytes) || Number(disk.totalBytes) <= 0 ||
@@ -247,7 +255,7 @@ export function parseSession(value: unknown): SessionSnapshot {
           Number(cache.files) < 0 || Number(cache.files) > 2048 || typeof cache.partial !== 'boolean' ||
           typeof cache.canClear !== 'boolean' || !(cache.issue === null || typeof cache.issue === 'string' && cache.issue.length <= 8192) ||
           cache.canClear && (cache.partial || cache.files === 0 || cache.issue !== null ||
-            (value.profiles as ProfileSession[]).some(profile => profile.slot === storage.slot && ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)))) throw new TypeError('Invalid cache metadata');
+            active)) throw new TypeError('Invalid cache metadata');
       if(Object.hasOwn(storage,'downloadCache')) {
         const download=storage.downloadCache;
         if(!record(download)||!exact(download,['bytes','files','partial','canClear','issue'])||
@@ -256,7 +264,7 @@ export function parseSession(value: unknown): SessionSnapshot {
           typeof download.partial!=='boolean'||typeof download.canClear!=='boolean'||
           !(download.issue===null||typeof download.issue==='string'&&download.issue.length<=8192)||
           download.canClear&&(download.partial||download.files===0||download.issue!==null||
-            (value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state))))
+            active))
           throw new TypeError('Invalid download cache metadata');
       }
       // Pack folders are a read-only inventory, never evidence that a world
@@ -288,7 +296,6 @@ export function parseSession(value: unknown): SessionSnapshot {
       }
       if(Object.hasOwn(storage,'gameSettings')) {
         const game=storage.gameSettings;
-        const active=(value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state));
         if(!record(game)||!exact(game,['hasSettings','backupAvailable','canReset','canRestore','issue',
           ...(Object.hasOwn(game,'improvedInputResponseEnabled')?['improvedInputResponseEnabled']:[]),
           ...(Object.hasOwn(game,'textureStreamingEnabled')?['textureStreamingEnabled']:[])])||
@@ -303,14 +310,13 @@ export function parseSession(value: unknown): SessionSnapshot {
       }
       if(Object.hasOwn(storage,'fullClear')) {
         const full=storage.fullClear;
-        const active=(value.profiles as ProfileSession[]).some(profile=>profile.slot===storage.slot&&['STARTING','RUNNING','NOT_RESPONDING'].includes(profile.state));
         if(!record(full)||!exact(full,['canClear','pending','confirmationToken','issue'])||typeof full.canClear!=='boolean'||typeof full.pending!=='boolean'||
           !(full.confirmationToken===null||typeof full.confirmationToken==='string'&&/^[0-9a-f]{64}$/.test(full.confirmationToken))||
           !(full.issue===null||typeof full.issue==='string'&&full.issue.length<=8192)||
           full.canClear&&(full.confirmationToken===null||full.issue!==null||active))throw new TypeError('Invalid full-clear metadata');
         if(full.pending&&(cache.canClear||(record(storage.downloadCache)&&storage.downloadCache.canClear===true)))throw new TypeError('Pending full clear conflicts with cache admission');
       }
-    });
+    }
   }
   if(Object.hasOwn(value,'settings')) {
     const settings=value.settings;

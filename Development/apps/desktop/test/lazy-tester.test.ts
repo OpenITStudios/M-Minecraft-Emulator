@@ -12,6 +12,34 @@ const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
   pid: slot + 100, createdFileTime: String(slot + 200), sessionId: 1, windowHandle: `0x${slot}`, responding: true,
 }});
+describe('Ordered desktop storage receipt admission',()=>{
+  const cache={bytes:1,files:1,partial:false,canClear:true,issue:null};
+  const gameSettings={hasSettings:true,backupAvailable:true,canReset:true,canRestore:true,issue:null};
+  const fullClear={canClear:true,pending:false,confirmationToken:'a'.repeat(64),issue:null};
+  const storage=[1,2,3,4,5].map(slot=>({slot,bytes:1,files:1,partial:false,disk:null,
+    cache,downloadCache:cache,gameSettings,fullClear}));
+  it('checks each mutation receipt against its own validated profile slot',()=>{
+    for(const state of ['STARTING','RUNNING','NOT_RESPONDING']){
+      const snapshot={...stopped(),profiles:stopped().profiles.map(p=>p.slot===3?{...running(3),state}:p)};
+      const blocked={...storage[2]!,cache:{...cache,canClear:false},downloadCache:{...cache,canClear:false},
+        gameSettings:{...gameSettings,canReset:false,canRestore:false},fullClear:{...fullClear,canClear:false}};
+      const rows=storage.map(row=>row.slot===3?blocked:row);
+      expect(parseSession({...snapshot,storage:rows}).storage?.[3]?.cache.canClear).toBe(true);
+      for(const key of ['cache','downloadCache','gameSettings','fullClear'] as const){
+        const unsafe=rows.map(row=>row.slot===3?{...row,[key]:storage[2]![key]}:row);
+        expect(()=>parseSession({...snapshot,storage:unsafe})).toThrow();
+      }
+    }
+  });
+  it('refuses sparse rosters, coerced states and mismatched storage order',()=>{
+    const snapshot=stopped();
+    expect(()=>parseSession({...snapshot,profiles:new Array(5)})).toThrow('Invalid profile response');
+    expect(()=>parseSession({...snapshot,profiles:snapshot.profiles.map((p,i)=>i===0?{...p,state:['STOPPED']}:p)})).toThrow('Invalid profile response');
+    expect(()=>parseSession({...snapshot,storage:new Array(5)})).toThrow('Invalid storage metadata');
+    expect(()=>parseSession({...snapshot,storage:[...storage].reverse()})).toThrow('Invalid storage metadata');
+  });
+});
+
 describe('Selective inventory wire contract',()=>{
   const item={root:'minecraftWorlds',name:'one',identity:'a'.repeat(64)};
   const inventory={slot:1,category:'Worlds',items:[item]};

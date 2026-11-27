@@ -97,18 +97,26 @@ enum Reply {
     Restored,
     Error(String),
 }
+const MAX_SURFACE_MESSAGE: usize = 4096;
 fn line<T: Serialize>(value: &T, out: &mut impl Write) -> io::Result<()> {
-    serde_json::to_writer(&mut *out, value)?;
-    out.write_all(b"\n")?;
+    // Serialize one complete bounded frame before touching the private pipe.
+    // Avoid small writes from serde's streaming serializer; write_all still
+    // handles short writes and flush preserves the original reply boundary.
+    let mut bytes = serde_json::to_vec(value)?;
+    if bytes.len() >= MAX_SURFACE_MESSAGE {
+        return Err(io::Error::other("Invalid surface message"));
+    }
+    bytes.push(b'\n');
+    out.write_all(&bytes)?;
     out.flush()
 }
 fn read_line(input: &mut impl BufRead) -> io::Result<Option<String>> {
     let mut bytes = Vec::new();
-    let read = std::io::Read::take(&mut *input, 4097).read_until(b'\n', &mut bytes)?;
+    let read = std::io::Read::take(&mut *input, (MAX_SURFACE_MESSAGE + 1) as u64).read_until(b'\n', &mut bytes)?;
     if read == 0 {
         return Ok(None);
     }
-    if read > 4096 || bytes.last() != Some(&b'\n') {
+    if read > MAX_SURFACE_MESSAGE || bytes.last() != Some(&b'\n') {
         return Err(io::Error::other("Invalid surface message"));
     }
     String::from_utf8(bytes).map(Some).map_err(io::Error::other)
@@ -502,6 +510,37 @@ mod tests {
         }
         .validate()
         .is_ok());
+    }
+    #[test]
+    fn helper_output_writes_one_complete_frame_and_preserves_short_write_handling() {
+        #[derive(Default)]
+        struct Sink { bytes: Vec<u8>, writes: usize, flushes: usize, limit: Option<usize> }
+        impl Write for Sink {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                let count = bytes.len().min(self.limit.unwrap_or(usize::MAX));
+                self.writes += 1;
+                self.bytes.extend_from_slice(&bytes[..count]);
+                Ok(count)
+            }
+            fn flush(&mut self) -> io::Result<()> { self.flushes += 1; Ok(()) }
+        }
+        let command = Command::Place { rect: Rectangle { x: 1, y: 2, width: 800, height: 600 }, manager_pid: 3 };
+        let mut expected = serde_json::to_vec(&command).unwrap();
+        expected.push(b'\n');
+        for limit in [None, Some(3)] {
+            let mut sink = Sink { limit, ..Sink::default() };
+            line(&command, &mut sink).unwrap();
+            assert_eq!(sink.bytes, expected);
+            assert_eq!(sink.flushes, 1);
+            if limit.is_none() { assert_eq!(sink.writes, 1); }
+        }
+        let mut sink = Sink::default();
+        line(&"x".repeat(MAX_SURFACE_MESSAGE - 3), &mut sink).unwrap();
+        assert_eq!(sink.bytes.len(), MAX_SURFACE_MESSAGE);
+        let mut refused = Sink::default();
+        assert!(line(&"x".repeat(MAX_SURFACE_MESSAGE - 2), &mut refused).is_err());
+        assert_eq!(refused.writes, 0);
+        assert_eq!(refused.flushes, 0);
     }
     #[test]
     fn helper_input_is_bounded_and_requires_whole_messages() {
