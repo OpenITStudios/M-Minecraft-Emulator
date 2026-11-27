@@ -49,12 +49,13 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
         const DWORD before = GetLastError();
         const bool outer = !insidePresent;
         DWORD observedProcess = 0;
-        const bool measured = outer && sync <= 4
+        // TEST never paces, draws F3 or records an accepted frame.
+        const bool measured = outer && !(flags & DXGI_PRESENT_TEST) && sync <= 4
             && GetWindowThreadProcessId(window_, &observedProcess) == windowThread_
             && observedProcess == GetCurrentProcessId();
         insidePresent = true;
         if (outer) {
-            if (!measured || (flags & (DXGI_PRESENT_TEST | DXGI_PRESENT_DO_NOT_WAIT))) policy_.bypassed.fetch_add(1);
+            if (!measured || (flags & DXGI_PRESENT_DO_NOT_WAIT)) policy_.bypassed.fetch_add(1);
             else {
                 // Clock serialization ends BEFORE entering the native renderer.
                 AcquireSRWLockExclusive(&policy_.rendering);
@@ -77,7 +78,7 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
         // No game Player data or F3 keyboard adapter is claimed or installed
         // by the DXGI wrapper; both remain unbound by default.
 #if defined(BOOTSTRAP_EDUCATION_CLIENT_F3_SOURCE)
-        if (measured && !(flags & (DXGI_PRESENT_TEST | DXGI_PRESENT_DO_NOT_WAIT))) {
+        if (measured && !(flags & DXGI_PRESENT_DO_NOT_WAIT)) {
             // The source-only F3 renderer reads measured FPS lazily,
             // ONLY when it has a visible and fresh in-game Player frame.
             education_client_f3::before_present(inner_.Get(), window_, windowThread_);
@@ -86,7 +87,7 @@ class Chain final : public IDXGISwapChain4, public IDXGISwapChainMedia {
         SetLastError(before);
         const HRESULT result = native();
         const DWORD after = GetLastError();
-        if (measured) policy_.hud.present(result, flags);
+        if (measured && result == S_OK) policy_.hud.present(result, flags);
         if (outer) insidePresent = false;
         SetLastError(after); return result;
     }

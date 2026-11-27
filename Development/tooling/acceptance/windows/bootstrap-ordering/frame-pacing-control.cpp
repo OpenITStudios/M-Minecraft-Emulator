@@ -377,11 +377,19 @@ void adapterChecks(bool modern) {
     check(SUCCEEDED(target->Present(0, DXGI_PRESENT_TEST)));
     check(SUCCEEDED(target->Present1(0, DXGI_PRESENT_TEST, &parameters)));
     check(dxgi_pacing::hud_snapshot().reading.accepted == beforeTestOnly);
+    const auto afterTestOnly = dxgi_pacing::snapshot();
+    check(afterTestOnly.bypassed == before.bypassed + 2
+        && afterTestOnly.pacedPresent == before.pacedPresent
+        && afterTestOnly.pacedPresent1 == before.pacedPresent1
+        && afterTestOnly.lastRelease == before.lastRelease);
     // Native DO_NOT_WAIT may legitimately report WAS_STILL_DRAWING; preserve it.
     const HRESULT nonblocking = target->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
     check(SUCCEEDED(nonblocking) || nonblocking == DXGI_ERROR_WAS_STILL_DRAWING);
     const HRESULT nonblockingNewer = target->Present1(0, DXGI_PRESENT_DO_NOT_WAIT, &parameters);
     check(SUCCEEDED(nonblockingNewer) || nonblockingNewer == DXGI_ERROR_WAS_STILL_DRAWING);
+    const auto acceptedNonblocking = beforeTestOnly + (nonblocking == S_OK ? 1 : 0)
+        + (nonblockingNewer == S_OK ? 1 : 0);
+    check(dxgi_pacing::hud_snapshot().reading.accepted == acceptedNonblocking);
     SetLastError(sentinel);
     const HRESULT forwarded = target->Present(5, 0);
     const DWORD forwardedError = GetLastError();
@@ -391,6 +399,7 @@ void adapterChecks(bool modern) {
     const DWORD forwardedNewerError = GetLastError();
     check(forwardedNewer == invalidNewer && forwardedNewerError == invalidNewerError
         && memcmp(&parameters, &unchanged, sizeof(parameters)) == 0);
+    check(dxgi_pacing::hud_snapshot().reading.accepted == acceptedNonblocking);
     after = dxgi_pacing::snapshot();
     check(after.pacedPresent == before.pacedPresent && after.pacedPresent1 == before.pacedPresent1
         && after.lastRelease == before.lastRelease && after.bypassed >= before.bypassed + 6
