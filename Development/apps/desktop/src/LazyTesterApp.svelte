@@ -13,7 +13,7 @@
   import {canRequestProfileLaunch, projectSessionHealth, type LaunchReceiptState, type SessionHealthAction} from './app/presentation/sessionHealth.js';
   import {guidedRecoveryAllowed} from './app/presentation/guidedRecovery.js';
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
-  import {sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
+  import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
   import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionDue, nextPendingUiAction, sameProfileObservation, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
@@ -71,6 +71,7 @@
   function chooseWorkspaceLayout(value: 'Bottom' | 'Right') {
     if (page !== 'settings' || navigationReviewOpen) return;
     workspaceLayout = value;
+    dirty = true;
     try { window.localStorage.setItem(workspaceLayoutKey, value); layoutPersistenceIssue = ''; }
     catch { layoutPersistenceIssue = 'Layout applied for this session only. Preference could not be saved.'; }
   }
@@ -274,7 +275,7 @@
     busy = true; issueKey=null;
     try {
       page = 'workspace'; await tick();
-      await lazyTester.present(slot, viewport.getBoundingClientRect());
+      await presentCurrentViewport(slot);
       active = slot; selectedIdentity = identity(profiles.find(profile => profile.slot === slot));
       detached = false; requested = null; dirty = true;
     } catch (error) { issueKey='selection'; dirty = true; }
@@ -359,7 +360,7 @@
       if (requested === slot && profiles.find(profile => profile.slot === slot)?.state === 'RUNNING') queued = slot;
       else if (active !== null) {
         await tick();
-        try { await lazyTester.present(active, viewport.getBoundingClientRect()); }
+        try { await presentCurrentViewport(active); }
         catch { issueKey='selection'; }
       }
     } catch (error) { recordLaunchFailure(slot,'unverified'); requested = null; }
@@ -395,7 +396,7 @@
       if (next !== 'workspace' && pageHeading?.isConnected)
         pageHeading.focus({preventScroll:true});
       if (next === 'workspace' && active !== null) {
-        await lazyTester.present(active, viewport.getBoundingClientRect());
+        await presentCurrentViewport(active);
         if (!current()) return;
       }
       if(next==='settings'||next==='storage') {
@@ -654,6 +655,12 @@
     } finally {
       closingOneSlot=null;busy=false;dirty=true;
     }
+  }
+
+  function presentCurrentViewport(slot:ProfileSlot):Promise<void> {
+    const rect=viewport.getBoundingClientRect();
+    const pixelRatio=window.devicePixelRatio;
+    return lazyTester.present(slot,rect,pixelRatio);
   }
 
   function captureWorkspaceGeometry(): WorkspaceGeometry {
@@ -957,7 +964,9 @@
         }
       }
     }, 2000);
-    observer = new ResizeObserver(() => { dirty = true; }); observer.observe(viewport, {box: 'device-pixel-content-box'});
+    observer = new ResizeObserver(() => { dirty = true; });
+    try { observer.observe(viewport, {box: 'device-pixel-content-box'}); }
+    catch { observer.observe(viewport); } // Older WebView fallback; DPR listener below remains active.
     observer.observe(stageSpace);
     for (const node of images.values()) observer.observe(node);
     const changed = () => {
@@ -969,6 +978,7 @@
       dirty = true;
     };
     window.addEventListener('resize', changed); document.addEventListener('visibilitychange', changed);
+    const stopDisplayScale=observeDisplayScale(window,changed);
     // Main can scroll even when native targets retain their original size.
     const workspaceScrolled = (event: Event) => {
       if (page==='workspace' && event.target instanceof Element && event.target.contains(viewport)) dirty=true;
@@ -1025,7 +1035,7 @@
       if ([1,2,3,4,5].includes(event.payload)) select(event.payload as ProfileSlot);
     }).then(retain).catch(error => { previewIssue = userMessage('preview'); });
     return () => {
-      mounted = false; disposed = true; clearInterval(interval); observer?.disconnect();
+      mounted = false; disposed = true; clearInterval(interval); observer?.disconnect();stopDisplayScale();
       window.removeEventListener('resize', changed); document.removeEventListener('visibilitychange', changed);
       document.removeEventListener('scroll', workspaceScrolled, true);
       stops.forEach(stop => stop());pendingPreviewInvalidations.clear();

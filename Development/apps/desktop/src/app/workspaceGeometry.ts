@@ -7,6 +7,26 @@ export interface WorkspaceGeometry {
   readonly pixelRatio: number;
 }
 
+// One event-driven observer, no timer. Re-arm only when the old resolution
+// query changes, and release the exact listener on teardown.
+export function observeDisplayScale(host: Pick<Window,'matchMedia'|'devicePixelRatio'>, onChange:()=>void):()=>void {
+  let query:MediaQueryList|undefined;
+  let disposed=false;
+  function changed():void {
+    if(disposed)return;
+    arm();
+    onChange();
+  }
+  function arm():void {
+    query?.removeEventListener('change',changed);
+    const scale=host.devicePixelRatio;
+    query=Number.isFinite(scale)&&scale>0?host.matchMedia(`(resolution: ${scale}dppx)`):undefined;
+    query?.addEventListener('change',changed);
+  }
+  arm();
+  return ()=>{disposed=true;query?.removeEventListener('change',changed);query=undefined;};
+}
+
 export function sameWorkspaceGeometry(a: WorkspaceGeometry,b: WorkspaceGeometry): boolean {
   const sameRect=(x: DOMRect,y: DOMRect)=>x.x===y.x && x.y===y.y &&
     x.width===y.width && x.height===y.height;

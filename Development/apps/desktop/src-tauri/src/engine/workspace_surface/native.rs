@@ -869,8 +869,8 @@ pub(super) fn rectangle(manager: u64, viewport: Viewport) -> io::Result<Rectangl
         }
         let x = (viewport.x * scale).round() as i32;
         let y = (viewport.y * scale).round() as i32;
-        let width = (viewport.width * scale).round() as i32;
-        let height = (viewport.height * scale).round() as i32;
+        let width = ((viewport.x + viewport.width) * scale).round() as i32 - x;
+        let height = ((viewport.y + viewport.height) * scale).round() as i32 - y;
         if x < 0 || y < 0 || x + width > client.right + 1 || y + height > client.bottom + 1 {
             return Err(io::Error::new(
                 io::ErrorKind::WouldBlock,

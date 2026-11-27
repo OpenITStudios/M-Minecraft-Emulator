@@ -1,5 +1,6 @@
 import {expect,it} from 'vitest';
 import {workspaceViewport} from '../src/app/bridge/workspaceSurface.js';
+import {observeDisplayScale} from '../src/app/workspaceGeometry.js';
 import {readFileSync} from 'node:fs';
 it('keeps focus authority in the foreground manager and geometry in the recovery helper',()=>{
   const source=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/native.rs',import.meta.url),'utf8');
@@ -49,4 +50,27 @@ it('Play switch uses original session observation before retained or verified pr
   expect(handler.indexOf('SessionRequest::Inspect')).toBeLessThan(handler.indexOf('present_retained('));
   expect(handler.indexOf('present_retained(')).toBeLessThan(handler.indexOf('present_verified('));
   expect(handler).not.toContain('native_clients::inspect_native_workspace');
+});
+
+
+it('rearms display-scale observation once and removes the current listener on teardown',()=>{
+  let ratio=1;
+  let calls=0;
+  const queries:{text:string;listeners:Set<()=>void>}[]=[];
+  const host={get devicePixelRatio(){return ratio;},matchMedia(text:string){
+    const listeners=new Set<()=>void>();queries.push({text,listeners});
+    return {addEventListener(_event:string,cb:()=>void){listeners.add(cb);},removeEventListener(_event:string,cb:()=>void){listeners.delete(cb);}} as unknown as MediaQueryList;
+  }};
+  const stop=observeDisplayScale(host,()=>{calls++;});
+  expect(queries[0].text).toBe('(resolution: 1dppx)');
+  ratio=1.5;[...queries[0].listeners].forEach(cb=>cb());
+  expect(queries[0].listeners.size).toBe(0);
+  expect(queries[1].text).toBe('(resolution: 1.5dppx)');
+  expect(calls).toBe(1);
+  stop();expect(queries[1].listeners.size).toBe(0);
+});
+it('rounds native viewport edges consistently instead of independent dimensions',()=>{
+  const native=readFileSync(new URL('../src-tauri/src/engine/workspace_surface/native.rs',import.meta.url),'utf8');
+  expect(native).toContain('((viewport.x + viewport.width) * scale).round() as i32 - x');
+  expect(native).toContain('((viewport.y + viewport.height) * scale).round() as i32 - y');
 });

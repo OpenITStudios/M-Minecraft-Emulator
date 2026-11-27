@@ -491,8 +491,8 @@ export const lazyTester = {
     if(!profileSlots.includes(slot)||!/^[0-9a-f]{64}$/.test(confirmationToken)||confirmationName!==`Minecraft - ${slot}`)throw new TypeError('Confirm the exact launcher name before clearing all data');
     return parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ClearProfileData',slot,confirmationToken,confirmationName}}));
   },
-  present: (slot: ProfileSlot, rect: WorkspaceRectangle) => invokeRuntime<void>('lazy_tester_present', {
-    slot, viewport: workspaceViewport(rect, window.devicePixelRatio),
+  present: (slot: ProfileSlot, rect: WorkspaceRectangle, pixelRatio=window.devicePixelRatio) => invokeRuntime<void>('lazy_tester_present', {
+    slot, viewport: workspaceViewport(rect, pixelRatio),
   }),
   previews: async(rect:WorkspaceRectangle,tiles:{slot:ProfileSlot;rect:WorkspaceRectangle}[],pixelRatio=window.devicePixelRatio)=>{
     const placements:PreviewPlacement[]=tiles.map(tile=>({slot:tile.slot,viewport:previewViewport(tile.rect,pixelRatio)}));

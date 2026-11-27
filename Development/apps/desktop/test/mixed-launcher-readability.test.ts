@@ -92,7 +92,7 @@ describe('Lazy Tester mixed launcher and long-copy source contract',()=>{
     expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
     expect(app).toContain('onRequestClose={requestCloseOne} onGuidedRecovery={requestGuidedRecovery}');
-    expect(app).toContain('await lazyTester.present(slot, viewport.getBoundingClientRect())');
+    expect(app).toContain('await presentCurrentViewport(slot)');
     expect(rail).toContain('aria-pressed={observed&&profile.state===\'RUNNING\'');
   });
 });

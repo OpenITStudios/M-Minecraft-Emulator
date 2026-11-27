@@ -19,7 +19,7 @@ Status means source availability, not runtime acceptance. Preserve existing cont
 | 03 Storage | STG-08 logs (7 days) | Bounded Rust exclusive log preflight/disposition connected to existing post-exit maintenance through source-owned producer resolver; resolver and activation gate held pending native evidence |
 | 04 Desktop/workspace | UI-01 layouts; UI-02 selected HUD | Source available; native geometry and HUD evidence held |
 | 04 Desktop/workspace | UI-03 launcher; UI-04 storage UI | Close reservation now follows actual control; observed selection only; cache acknowledgement invalidation and selection isolation integrated; visual acceptance held |
-| 04 Desktop/workspace | UI-05 consumers; UI-06 DPI | Open; reconcile browser fixtures and native viewport transitions |
+| 04 Desktop/workspace | UI-05 consumers; UI-06 DPI | Explicit DPR observation and teardown, native edge rounding and layout invalidation integrated; browser/native validation held |
 | 05 Optimization | OPT-01 workers; OPT-02 memory; OPT-03 polling; OPT-04 dependencies; OPT-05 startup/shutdown | Open; evidence-driven, no speculative rewrite |
 | 06 Integration | INT-01 naming; INT-02 ABI; INT-03 build; INT-04 fixtures; INT-05 docs/Unreleased; INT-06 readiness | Open |
 | 07 Native validation | VAL-01 compile/link; VAL-02 DLL/payload; VAL-03 five sessions; VAL-04 storage safety; VAL-05 performance; VAL-06 installer | Held for separately authorized PC-local phase |
