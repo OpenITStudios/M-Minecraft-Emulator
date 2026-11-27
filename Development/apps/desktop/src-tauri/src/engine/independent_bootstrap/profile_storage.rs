@@ -104,6 +104,7 @@ struct CachePlan {
     budget: InspectionBudget,
     deleting: bool,
     selected_tree: bool,
+    tree_records: Vec<Vec<u8>>,
 }
 impl CachePlan {
     fn new(deleting: bool, budget: InspectionBudget) -> Self {
@@ -115,6 +116,7 @@ impl CachePlan {
             budget,
             deleting,
             selected_tree: false,
+            tree_records: Vec::new(),
         }
     }
     fn bounded(&self, depth: usize) -> io::Result<()> {
@@ -131,8 +133,11 @@ impl CachePlan {
         Ok(())
     }
     fn visit(&mut self, path: &Path, depth: usize) -> io::Result<()> {
+        self.visit_tree(path, path, depth)
+    }
+    fn visit_tree(&mut self, path: &Path, root: &Path, depth: usize) -> io::Result<()> {
         self.bounded(depth)?;
-        let directory = if self.selected_tree {
+        let directory = if self.selected_tree && self.deleting {
             // Directory handles need DELETE access for a later bottom-up
             // disposition, but must still allow read_dir's read access.
             // No write sharing and no delete sharing for other handles.
@@ -147,6 +152,9 @@ impl CachePlan {
         } else {
             open_directory(path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?
         };
+        if self.selected_tree {
+            self.record_tree_entry(path, root, &directory, true)?;
+        }
         self.directories.push(directory);
         for entry in fs::read_dir(path)? {
             self.entries += 1;
@@ -157,7 +165,7 @@ impl CachePlan {
                 return Err(invalid("Linked cache entry; nothing was deleted"));
             }
             if metadata.is_dir() {
-                self.visit(&path, depth + 1)?;
+                self.visit_tree(&path, root, depth + 1)?;
             } else {
                 // Open the exact leaf without following a reparse. Cleanup takes exclusive
                 // access to every candidate before marking even one for deletion.
@@ -196,10 +204,46 @@ impl CachePlan {
                     .bytes
                     .checked_add(standard.EndOfFile as u64)
                     .ok_or_else(|| invalid("Cache size overflow"))?;
+                if self.selected_tree { self.record_tree_entry(&path, root, &file, false)?; }
                 self.files.push(file);
             }
         }
         Ok(())
+    }
+
+    fn record_tree_entry(&mut self, path: &Path, root: &Path, file: &File, directory: bool) -> io::Result<()> {
+        use std::os::windows::ffi::OsStrExt;
+        let relative = path.strip_prefix(root).map_err(|_| invalid("Selected tree path escaped root"))?;
+        let mut record = Vec::new();
+        record.push(if directory { 1 } else { 2 });
+        let name: Vec<u16> = relative.as_os_str().encode_wide().collect();
+        record.extend_from_slice(&(name.len() as u64).to_le_bytes());
+        for unit in name { record.extend_from_slice(&unit.to_le_bytes()); }
+        let id = if directory { super::directory_id(file)? } else { image_id(file)? };
+        record.extend_from_slice(&id.VolumeSerialNumber.to_le_bytes());
+        record.extend_from_slice(&id.FileId.Identifier);
+        // Directory timestamps can change on unrelated enumeration; file
+        // size and last-write metadata detect ordinary same-size edits.
+        if !directory {
+            let metadata = file.metadata()?;
+            record.extend_from_slice(&metadata.len().to_le_bytes());
+            record.extend_from_slice(&metadata.last_write_time().to_le_bytes());
+        }
+        self.tree_records.push(record);
+        Ok(())
+    }
+
+    fn tree_digest(&mut self, start: usize) -> [u8; 32] {
+        use sha2::{Digest, Sha256};
+        let records = &mut self.tree_records[start..];
+        records.sort();
+        let mut hash = Sha256::new();
+        hash.update(b"LazyTester/selected-tree/v1");
+        for record in records {
+            hash.update((record.len() as u64).to_le_bytes());
+            hash.update(record);
+        }
+        hash.finalize().into()
     }
 }
 
@@ -207,15 +251,17 @@ impl CachePlan {
 // The caller must retain the verified ancestor chain and exact item pin.
 // Never pass user-supplied paths directly; this does not grant DELETE access.
 pub(super) fn inspect_selected_tree(path: &Path, expected: &FILE_ID_INFO,
-    budget: InspectionBudget) -> io::Result<(u64, u32)> {
+    budget: InspectionBudget) -> io::Result<(u64, u32, [u8; 32])> {
     let pin = open_directory(path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
     if !super::same_image(expected, &super::directory_id(&pin)?) {
         return Err(invalid("Selected directory changed before tree inspection"));
     }
     let mut plan = CachePlan::new(false, budget);
+    plan.selected_tree = true;
     plan.visit(path, 0)?;
     plan.bounded(0)?;
-    Ok((plan.bytes, plan.files.len() as u32))
+    let digest = plan.tree_digest(0);
+    Ok((plan.bytes, plan.files.len() as u32, digest))
 }
 
 // Exclusive selected-world preflight only. Retain category and profile
@@ -250,7 +296,8 @@ pub(super) fn preflight_selected_worlds(private: &File,
         path.push(part);
         ancestors.push(open_directory(&path, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?);
     }
-    for item in &review.items {
+    if review.tree_digests.len() != review.items.len() { return Err(invalid("Incomplete selected tree review")); }
+    for (item, expected_digest) in review.items.iter().zip(&review.tree_digests) {
         plan.bounded(0)?;
         // Names came from the reviewed inventory; refuse non-single components
         // defensively rather than allowing any caller to expand the scope.
@@ -260,9 +307,13 @@ pub(super) fn preflight_selected_worlds(private: &File,
             return Err(invalid("Unsupported selected world name"));
         }
         let before = plan.directories.len();
+        let record_start = plan.tree_records.len();
         plan.visit(&path.join(&item.name), 0)?;
         if !super::same_image(&item.identity, &super::directory_id(&plan.directories[before])?) {
             return Err(invalid("Selected world changed before preflight"));
+        }
+        if plan.tree_digest(record_start) != *expected_digest {
+            return Err(invalid("Selected world tree changed; review again"));
         }
     }
     plan.bounded(0)?;

@@ -395,6 +395,7 @@ pub(super) struct SelectiveReview {
     pub(super) warnings: Vec<String>,
     pub(super) bytes: u64,
     pub(super) files: u32,
+    pub(super) tree_digests: Vec<[u8; 32]>,
 }
 
 // Domain-separated review fingerprint, not a bearer capability. The caller
@@ -403,11 +404,11 @@ pub(super) struct SelectiveReview {
 impl SelectiveReview {
     pub(super) fn confirmation_token(&self, slot: u32) -> io::Result<String> {
         use sha2::{Digest, Sha256};
-        if !(1..=5).contains(&slot) || self.items.is_empty() || !self.warnings.is_empty() {
+        if !(1..=5).contains(&slot) || self.items.is_empty() || self.items.len() != self.tree_digests.len() || !self.warnings.is_empty() {
             return Err(io::Error::other("Selective review is not eligible for confirmation"));
         }
         let mut hash = Sha256::new();
-        hash.update(b"LazyTester/selective-review/v2");
+        hash.update(b"LazyTester/selective-review/v3");
         hash.update(self.bytes.to_le_bytes());
         hash.update(self.files.to_le_bytes());
         hash.update(slot.to_le_bytes());
@@ -421,10 +422,10 @@ impl SelectiveReview {
         }
         identity(&mut hash, &self.profile_identity);
         // Canonical ordering makes checkbox order irrelevant.
-        let mut items: Vec<_> = self.items.iter().collect();
-        items.sort_by(|a,b| a.root.cmp(b.root).then_with(|| a.name.cmp(&b.name)));
+        let mut items: Vec<_> = self.items.iter().zip(&self.tree_digests).collect();
+        items.sort_by(|(a,_),(b,_)| a.root.cmp(b.root).then_with(|| a.name.cmp(&b.name)));
         hash.update((items.len() as u64).to_le_bytes());
-        for item in items {
+        for (item, digest) in items {
             hash.update([match item.category {
                 InventoryCategory::Worlds => 1u8,
                 InventoryCategory::ResourcePacks => 2,
@@ -433,6 +434,7 @@ impl SelectiveReview {
             field(&mut hash, item.root);
             field(&mut hash, &item.name);
             identity(&mut hash, &item.identity);
+            hash.update(digest);
         }
         Ok(hash.finalize().iter().map(|byte| format!("{byte:02x}")).collect::<Vec<_>>().join(""))
     }
@@ -493,18 +495,20 @@ pub(super) fn review_selection(private: &File, selections: &[ReviewSelection],
         .ok_or_else(|| io::Error::other("Selected profile data disappeared"))?;
     let mut bytes = 0u64;
     let mut files = 0u32;
+    let mut tree_digests = Vec::new();
     for item in &items {
         if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
         let root = base.join(item.root);
         let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
-        let (item_bytes, item_files) = super::profile_storage::inspect_selected_tree(
+        let (item_bytes, item_files, digest) = super::profile_storage::inspect_selected_tree(
             &root.join(&item.name), &item.identity, budget)?;
+        tree_digests.push(digest);
         bytes = bytes.checked_add(item_bytes).ok_or_else(|| io::Error::other("Selection size overflow"))?;
         files = files.checked_add(item_files).ok_or_else(|| io::Error::other("Selection file count overflow"))?;
         if files > 2048 { return Err(io::Error::other("Selection file limit exceeded")); }
     }
     if budget.exhausted() { return Err(io::Error::other("Selective review deadline exceeded")); }
-    Ok(SelectiveReview { profile_identity, items, warnings, bytes, files })
+    Ok(SelectiveReview { profile_identity, items, warnings, bytes, files, tree_digests })
 }
 
 fn read_world_declarations(path: &Path) -> io::Result<Option<u32>> {
@@ -649,6 +653,7 @@ mod tests {
         assert_ne!(token, review.confirmation_token(2).unwrap());
         assert!(review.confirmation_token(0).is_err());
         review.items.reverse();
+        review.tree_digests.reverse();
         assert_eq!(token, review.confirmation_token(1).unwrap());
         assert_ne!(token, review_selection(&private, &[select("one")], budget()).unwrap().confirmation_token(1).unwrap());
         // Preserve the old directory so the filesystem cannot reuse its ID.
@@ -679,6 +684,11 @@ mod tests {
         let plan = super::super::profile_storage::preflight_selected_worlds(&private, &review, budget()).unwrap();
         assert_eq!(plan.totals(), (7, 1));
         drop(plan);
+        assert_eq!(fs::read(&leaf).unwrap(), b"fixture");
+        fs::rename(&leaf, world.join("old.dat")).unwrap();
+        fs::write(&leaf, b"fixture").unwrap();
+        fs::remove_file(world.join("old.dat")).unwrap();
+        assert!(super::super::profile_storage::preflight_selected_worlds(&private, &review, budget()).is_err());
         assert_eq!(fs::read(&leaf).unwrap(), b"fixture");
         fs::write(&leaf, b"changed size").unwrap();
         assert!(super::super::profile_storage::preflight_selected_worlds(&private, &review, budget()).is_err());
