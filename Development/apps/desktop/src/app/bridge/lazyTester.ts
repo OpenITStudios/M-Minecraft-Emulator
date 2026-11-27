@@ -36,8 +36,10 @@ export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
 export interface SettingsReport {backgroundAudio?:BackgroundAudio; audioIssue?:string; graphicsPresets?:GraphicsPreset[]; activeFps:number; backgroundFps:number; renderDistanceChunks:number; canApplyPreset:boolean; changedProfiles:number|null}
 export type SelectiveCategory = 'Worlds' | 'ResourcePacks' | 'BehaviorPacks';
-export interface SelectiveInventory {slot: ProfileSlot; category: SelectiveCategory; items: {root: string; name: string}[]}
-export interface SessionSnapshot {selectiveInventory?: SelectiveInventory; schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport; agentActivity?:AgentActivityReport}
+export interface SelectiveInventory {slot: ProfileSlot; category: SelectiveCategory; items: {root: string; name: string; identity: string}[]}
+export interface SelectiveSelection {category: SelectiveCategory; root: string; name: string; identity: string}
+export interface SelectiveReviewReceipt {slot: ProfileSlot; items: SelectiveSelection[]; warnings: string[]; confirmationToken: string|null}
+export interface SessionSnapshot {selectiveReview?: SelectiveReviewReceipt; selectiveInventory?: SelectiveInventory; schema: 1; profiles: ProfileSession[]; storage: ProfileStorage[] | null; settings?:SettingsReport; agentActivity?:AgentActivityReport}
 export interface PreviewPlacement {slot: ProfileSlot; viewport: WorkspaceViewport}
 export interface PreviewStatus {slot: ProfileSlot; registered: boolean; reason: string | null}
 export interface PreviewReport {schema: 1; tiles: PreviewStatus[]}
@@ -212,6 +214,7 @@ export function parseSession(value: unknown): SessionSnapshot {
   if (!record(value) || !exact(value, ['schema','profiles','storage',
      ...(Object.hasOwn(value,'settings')?['settings']:[]),
      ...(Object.hasOwn(value,'selectiveInventory')?['selectiveInventory']:[]),
+     ...(Object.hasOwn(value,'selectiveReview')?['selectiveReview']:[]),
      ...(Object.hasOwn(value,'agentActivity')?['agentActivity']:[])]) || value.schema !== 1 ||
       !Array.isArray(value.profiles) || value.profiles.length !== 5) throw new TypeError('Invalid session response');
   const pids = new Set<number>();
@@ -320,12 +323,34 @@ export function parseSession(value: unknown): SessionSnapshot {
     if(!roots.length)throw new TypeError('Invalid inventory category');
     const keys=new Set<string>();
     for(const item of inventory.items) {
-      if(!record(item)||!exact(item,['root','name'])||typeof item.root!=='string'||!roots.includes(item.root)||
+      if(!record(item)||!exact(item,['root','name','identity'])||typeof item.identity!=='string'||!/^[0-9a-f]{64}$/.test(item.identity)||typeof item.root!=='string'||!roots.includes(item.root)||
         typeof item.name!=='string'||!item.name.length||item.name.length>255||item.name==='.'||item.name==='..'||
         /[\\/\x00-\x1f:]/.test(item.name))throw new TypeError('Invalid inventory item');
       const key=item.root+'/'+item.name.toLowerCase();
       if(keys.has(key))throw new TypeError('Duplicate inventory item');
       keys.add(key);
+    }
+  }
+  if(Object.hasOwn(value,'selectiveReview')) {
+    const review=value.selectiveReview;
+    if(!record(review)||!exact(review,['slot','items','warnings','confirmationToken'])||
+      !profileSlots.includes(review.slot as ProfileSlot)||
+      (value.profiles as ProfileSession[]).some(p=>p.slot===review.slot&&p.state!=='STOPPED')||
+      !Array.isArray(review.items)||!review.items.length||review.items.length>128||
+      !Array.isArray(review.warnings)||review.warnings.length>385||
+      review.warnings.some(w=>typeof w!=='string'||w.length>1024)||
+      !(review.confirmationToken===null||typeof review.confirmationToken==='string'&&/^[0-9a-f]{64}$/.test(review.confirmationToken))||
+      (review.warnings.length>0)!==(review.confirmationToken===null))throw new TypeError('Invalid selective review');
+    const ids=new Set<string>();
+    for(const item of review.items) {
+      if(!record(item)||!exact(item,['category','root','name','identity'])||
+        !['Worlds','ResourcePacks','BehaviorPacks'].includes(String(item.category))||
+        typeof item.root!=='string'||typeof item.name!=='string'||!item.name.length||item.name.length>255||
+        typeof item.identity!=='string'||!/^[0-9a-f]{64}$/.test(item.identity)||ids.has(item.identity))
+        throw new TypeError('Invalid reviewed item');
+      const roots=item.category==='Worlds'?['minecraftWorlds']:item.category==='ResourcePacks'?['resource_packs','development_resource_packs']:['behavior_packs','development_behavior_packs'];
+      if(!roots.includes(item.root))throw new TypeError('Invalid reviewed root');
+      ids.add(item.identity);
     }
   }
   if(Object.hasOwn(value,'agentActivity'))parseAgentActivity(value.agentActivity);
@@ -405,6 +430,14 @@ export const lazyTester = {
     const inventory=snapshot.selectiveInventory;
     if(!inventory||inventory.slot!==slot||inventory.category!==category)throw new TypeError('Inventory receipt does not match request');
     return inventory;
+  },
+  reviewSelectiveInventory: async (slot: ProfileSlot, selections: SelectiveSelection[]): Promise<SelectiveReviewReceipt> => {
+    const snapshot=parseSession(await invokeRuntime<unknown>('lazy_tester_session',{request:{operation:'ReviewSelectiveInventory',slot,selections}}));
+    const review=snapshot.selectiveReview;
+    if(!review||review.slot!==slot||review.items.length!==selections.length||
+      !review.items.every((item,i)=>item.identity===selections[i].identity&&item.category===selections[i].category&&item.root===selections[i].root&&item.name===selections[i].name))
+      throw new TypeError('Review receipt does not match request');
+    return review;
   },
   openFolder: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'OpenProfileFolder', slot}})),
   clearCache: async (slot: ProfileSlot) => parseSession(await invokeRuntime<unknown>('lazy_tester_session', {request: {operation: 'ClearProfileCache', slot}})),

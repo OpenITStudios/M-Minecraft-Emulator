@@ -485,6 +485,8 @@ pub struct SessionSnapshot {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub selective_inventory: Option<SelectiveInventory>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub selective_review: Option<SelectiveReviewReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<SettingsReport>,
     #[serde(default,skip_serializing_if="Option::is_none")]
     pub agent_activity:Option<AgentActivityReport>,
@@ -544,6 +546,7 @@ pub enum SelectiveCategory { Worlds, ResourcePacks, BehaviorPacks }
 pub struct SelectiveInventoryEntry {
     pub root: String,
     pub name: String,
+    pub identity: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -552,6 +555,24 @@ pub struct SelectiveInventory {
     pub slot: u32,
     pub category: SelectiveCategory,
     pub items: Vec<SelectiveInventoryEntry>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SelectiveSelection {
+    pub category: SelectiveCategory,
+    pub root: String,
+    pub name: String,
+    pub identity: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SelectiveReviewReceipt {
+    pub slot: u32,
+    pub items: Vec<SelectiveSelection>,
+    pub warnings: Vec<String>,
+    pub confirmation_token: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -620,6 +641,7 @@ impl SessionSnapshot {
             schema: 1,
             storage: None,
             selective_inventory: None,
+            selective_review: None,
             settings: None,
             agent_activity: None,
             testing_run: None,
@@ -656,6 +678,7 @@ pub enum SessionRequest {
     SaveAudio {mode:super::manager_settings::BackgroundAudio},
     InspectStorage,
     InspectSelectiveInventory { slot: u32, category: SelectiveCategory },
+    ReviewSelectiveInventory { slot: u32, selections: Vec<SelectiveSelection> },
     OpenProfileFolder { slot: u32 },
     ClearProfileCache { slot: u32 },
     ResetGameSettings { slot: u32 },
@@ -1186,6 +1209,11 @@ fn can_reconcile_pending_transport(request:&SessionRequest)->bool {
 
 #[cfg(windows)]
 fn validate_request(request: &SessionRequest) -> io::Result<()> {
+    if let SessionRequest::ReviewSelectiveInventory { selections, .. } = request {
+        if selections.is_empty() || selections.len() > 128 || selections.iter().any(|s| s.root.len() > 64 || s.name.is_empty() || s.name.len() > 255 || s.identity.len() != 64 || !s.identity.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selective review selection"));
+        }
+    }
     match request {
         SessionRequest::TestingInspect {slot,owner_id} => {
             if !(1..=5).contains(slot)||!valid_testing_id(owner_id) {
@@ -1227,7 +1255,7 @@ fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         super::manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot } | SessionRequest::ClearProfileCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot } | SessionRequest::RestoreGameSettings { slot } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

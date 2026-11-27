@@ -2,6 +2,8 @@
 
 ## Desktop UI refinement — 27 November 2026
 
+Selective review integration: inventory receipts now carry opaque profile/slot/item identity fingerprints. Explicit review request validates bounded selections against fresh inventory and original display identity, rejects replaced directories, returns warnings and optional confirmation fingerprint through typed bridge. Existing controller admission and pending-clear guard reused. No deletion command, UI or byte totals yet. Full wire consumer audit and fixtures remain pending; NOT_EXECUTED. Capture held.
+
 Selective confirmation fingerprint checkpoint: domain-separated SHA-256 binds slot, profile native identity, canonical selected category/root/name and item native identities. Selection order is immaterial; warning-bearing reviews refuse a fingerprint (pack coverage remains held). Authored identity replacement, slot, order and warning fixtures NOT_EXECUTED. Internal fingerprint only, not a bearer capability; controller receipt, inventory identity continuity, fresh confirmation and file-tree mutation preflight remain pending. No deletion enabled; capture held.
 
 Selective review checkpoint: exact category/root/name selections are resolved only against fresh bounded inventory, duplicate native identities and unknown selections refused, retained profile identity captured. Pack reviews collect world, cross-pack and candidate global references, compare UUID conservatively regardless of version, and explicitly flag unverified coverage. Internal read-only review only; no confirmation token or deletion authority, UI/IPC review consumer pending. Fixture authored NOT_EXECUTED; capture held.

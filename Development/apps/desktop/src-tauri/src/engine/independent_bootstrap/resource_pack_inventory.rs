@@ -30,6 +30,25 @@ pub(super) struct InventoryItem {
     pub(super) identity: windows_sys::Win32::Storage::FileSystem::FILE_ID_INFO,
 }
 
+// Opaque display identity also binds the retained profile and selected slot.
+// This is not an authorization token.
+pub(super) fn inventory_identity(private: &File, slot: u32, item: &InventoryItem) -> io::Result<String> {
+    use sha2::{Digest, Sha256};
+    let profile = directory_id(private)?;
+    let mut hash = Sha256::new();
+    hash.update(b"LazyTester/selective-item/v1");
+    hash.update(slot.to_le_bytes());
+    for id in [&profile, &item.identity] {
+        hash.update(id.VolumeSerialNumber.to_le_bytes());
+        hash.update(id.FileId.Identifier);
+    }
+    for field in [item.root, item.name.as_str()] {
+        hash.update((field.len() as u64).to_le_bytes());
+        hash.update(field.as_bytes());
+    }
+    Ok(hash.finalize().iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(""))
+}
+
 pub(super) fn individual_inventory(private: &File, category: InventoryCategory,
     budget: InspectionBudget) -> io::Result<Vec<InventoryItem>> {
     let Some((base, _pins)) = base_path(private, budget)? else {
