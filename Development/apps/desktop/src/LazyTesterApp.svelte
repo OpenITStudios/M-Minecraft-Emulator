@@ -1144,6 +1144,8 @@
           {clearSlot} {recovery} {fullReview} {clearingData}
           {dataLocation} {locationIssue} {runningCount}
           onChooseSlot={chooseSlot}
+          onInspectSelective={lazyTester.selectiveInventory}
+          onReviewSelective={lazyTester.reviewSelectiveInventory}
           onReviewCache={() => {if (!navigationReviewOpen && !busy && !refreshing && !resizing) {fullReview=null;recovery=null;clearSlot=selectedSlot;}}}
           onClearCache={clearCache}
           onCancelCacheReview={() => {clearSlot=null;}}

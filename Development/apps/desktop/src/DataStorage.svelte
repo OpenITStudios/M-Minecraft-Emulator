@@ -2,6 +2,8 @@
   // Visual state only: all cache/settings/full-clear reviews and native
   // admission remain in LazyTesterApp. The three form bindings target its state.
   import {tick} from 'svelte';
+  import SelectiveCleanup from './SelectiveCleanup.svelte';
+  import type {SelectiveCategory, SelectiveInventory, SelectiveSelection, SelectiveReviewReceipt} from './app/bridge/lazyTester.js';
   import type {DataLocation, ProfileSession, ProfileSlot, ProfileStorage} from './app/bridge/lazyTester.js';
   import {userMessage} from './app/presentation/sessionFeedback.js';
   import {formatStorageBytes, formatStorageExtent} from './app/presentation/storageSize.js';
@@ -34,6 +36,15 @@
   export let runningCount: number;
 
   export let onChooseSlot: (slot: ProfileSlot) => void;
+  export let onInspectSelective: (slot: ProfileSlot, category: SelectiveCategory) => Promise<SelectiveInventory>;
+  export let onReviewSelective: (slot: ProfileSlot, selections: SelectiveSelection[]) => Promise<SelectiveReviewReceipt>;
+  let selectiveSlot: ProfileSlot | null = null;
+  let selectiveTrigger: HTMLButtonElement | undefined;
+  $: if (selectiveSlot !== null && (selectiveSlot !== selectedSlot || !available || !bindingConfigured || selectedProfile?.state !== 'STOPPED')) selectiveSlot = null;
+  function closeSelective(): void {
+    selectiveSlot = null;
+    void tick().then(() => { if(selectiveTrigger?.isConnected && !selectiveTrigger.disabled) selectiveTrigger.focus({preventScroll:true}); });
+  }
   export let onReviewCache: () => void;
   export let onClearCache: (slot: ProfileSlot) => void;
   export let onCancelCacheReview: () => void;
@@ -57,7 +68,7 @@
   let settingsCancelButton: HTMLButtonElement | undefined;
 
   // Keep one storage review in place until native confirmation or Cancel.
-  $: storageReviewOpen = clearSlot !== null || recovery !== null || fullReview !== null;
+  $: storageReviewOpen = clearSlot !== null || recovery !== null || fullReview !== null || selectiveSlot !== null;
 
   // Presentation-only input feedback; native data-clear admission is unchanged.
   $: typedFullClearNameIncorrect = fullReview !== null && fullName.length > 0 &&
@@ -140,7 +151,7 @@
           <section class="lazytester-group" aria-labelledby="lazytester-storage-overview-section">
             <div class="lazytester-profile-management-heading">
               <h2 id="lazytester-storage-overview-section" bind:this={storageOverviewHeading} tabindex="-1">Profile Management</h2>
-              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||clearSlot!==null||recovery!==null||fullReview!==null} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
+              <div class="lazytester-launcher-heading"><select value={selectedSlot} disabled={busy||storageReviewOpen} aria-label="Choose Minecraft launcher" aria-describedby={clearSlot!==null||recovery!==null||fullReview!==null?'lazytester-storage-review-guidance':undefined} on:change={event=>onChooseSlot(Number(event.currentTarget.value) as ProfileSlot)}>{#each profiles as p}<option value={p.slot}>Minecraft {p.slot}</option>{/each}</select><span>{!available?'Status unavailable':selectedProfile?labels[selectedProfile.state]:'Unavailable'}</span></div>
             </div>
           {#if clearSlot!==null||recovery!==null||fullReview!==null}<p id="lazytester-storage-review-guidance" class="lazytester-help" role="status">Finish or cancel this review before switching profiles.</p>{/if}
           {#if storageNotice}<p role="status">{storageNotice}</p>{/if}
@@ -153,6 +164,7 @@
           {/if}
           <div class="lazytester-settings-panel">
             <div class="lazytester-setting"><div><h3>Profile Folder</h3><p>{selectedStorage ? formatStorageExtent(selectedStorage.bytes,selectedStorage.partial) : 'Not measured'}</p><p class="lazytester-data-path">{selectedPath??'Location unavailable.'}</p></div><button class="lazytester-secondary" disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured} on:click={()=>onOpenFolder(selectedSlot)}>Open Folder</button></div>
+            <div class="lazytester-setting"><div><h3>Selective Cleanup</h3><p>Review individual worlds and packs.</p></div><button class="lazytester-secondary" bind:this={selectiveTrigger} disabled={busy||refreshing||resizing||storageReviewOpen||!available||!bindingConfigured||selectedProfile?.state!=='STOPPED'||!selectedStorage||selectedStorage.fullClear?.pending===true} on:click={()=>selectiveSlot=selectedSlot}>Select Data</button></div>
             <div class="lazytester-setting"><h3>Web cache</h3>
               <span>{selectedStorage ? formatStorageExtent(selectedStorage.cache.bytes,selectedStorage.cache.partial) : 'Not measured'}</span>
             </div>
@@ -211,3 +223,7 @@
           {/if}
           </section>
         </div>
+
+{#if selectiveSlot!==null}
+  <SelectiveCleanup slot={selectiveSlot} inspect={onInspectSelective} review={onReviewSelective} onClose={closeSelective}/>
+{/if}
