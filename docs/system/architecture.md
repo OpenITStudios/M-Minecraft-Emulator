@@ -131,7 +131,13 @@ candidate or a UI hint can remain unobserved until full inspection; native
 launch/settings/storage mutation admission is not weakened.
 Without a retained controller, read-only Settings shares the fresh verified
 empty inventory already used for its stopped roster; saves still reobserve
-after writing. Geometry-only resize/DPI events outside Play do not schedule
+after the save attempt. A Settings report resolves its checked directory
+once for FPS, audio and optional storage preferences; individual file
+validation remains. Equal, valid persisted preferences skip temporary-file
+creation, serialization, flush and rename. Missing preferences still allow
+an explicit first save; invalid inputs and saved files remain refused.
+Explicit audio application and native post-save observation are unchanged.
+Geometry-only resize/DPI events outside Play do not schedule
 preview cleanup; navigation, visibility transitions, failed preview recovery
 and native safety admission retain their original paths.
 
