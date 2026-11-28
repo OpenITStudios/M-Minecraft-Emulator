@@ -10,9 +10,9 @@ use security_framework_sys::code_signing::{
     SecRequirementRef, SecStaticCodeRef,
 };
 use serde::{Deserialize, Serialize};
-use objc2::{rc::autoreleasepool, ClassType};
+use objc2::rc::autoreleasepool;
 use objc2_app_kit::NSRunningApplication;
-use objc2_foundation::{NSObjectProtocol, NSString};
+use objc2_foundation::NSString;
 use std::{
     collections::HashSet,
     fs::{self, Metadata, OpenOptions},
@@ -62,6 +62,7 @@ pub struct MacEducationInstallationReport {
     publisher: &'static str,
     multiple_instances_prohibited: Option<bool>,
     observed_application_count: Option<u32>,
+    single_window_application_count: Option<u32>,
     runtime_admission: bool,
 }
 
@@ -75,6 +76,7 @@ fn report(status: CandidateStatus, version: Option<String>) -> MacEducationInsta
         publisher: "NotPinned",
         multiple_instances_prohibited: None,
         observed_application_count: None,
+        single_window_application_count: None,
         runtime_admission: false,
     }
 }
@@ -257,7 +259,7 @@ fn reobserve_application_pid(app: &NSRunningApplication) -> Option<libc::pid_t> 
         return None;
     }
     let current = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)?;
-    if !app.isEqual(Some(current.as_super().as_super()))
+    if app != &*current
         || current.isTerminated() || app.isTerminated()
         || current.processIdentifier() != pid || app.processIdentifier() != pid
     {
@@ -280,20 +282,32 @@ fn distinct_observation_count(pids: impl IntoIterator<Item = Option<libc::pid_t>
 
 // On-demand bundle-id discovery only. Keep all external apps unmanaged;
 // release every temporary reference when the observation returns.
-fn observe_application_count() -> Option<u32> {
+fn observe_applications() -> (Option<u32>, Option<u32>) {
     autoreleasepool(|_| {
         let identifier = NSString::from_str(EXPECTED_BUNDLE_ID);
         let applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(&identifier);
-        distinct_observation_count((0..applications.count()).map(|index| {
-            let original = applications.objectAtIndex(index);
-            reobserve_application_pid(&original)
-        }))
+        let pids = (0..applications.count()).map(|index| {
+            reobserve_application_pid(&applications.objectAtIndex(index))
+        }).collect::<Option<Vec<_>>>();
+        let Some(pids) = pids else { return (None, None) };
+        let count = distinct_observation_count(pids.iter().copied().map(Some));
+        if count.is_none() {
+            return (None, None);
+        }
+        let single = crate::engine::workspace_surface::macos_observation::observe_single_window_applications(&pids);
+        // Recheck the same original objects after the Quartz snapshot.
+        // Not an atomic cross-API or signed loaded-image proof.
+        if pids.iter().enumerate().any(|(index, pid)|
+            reobserve_application_pid(&applications.objectAtIndex(index)) != Some(*pid)) {
+            return (None, None);
+        }
+        (count, single)
     })
 }
 
 pub(super) fn inspect() -> MacEducationInstallationReport {
     let mut result = inspect_at(Path::new("/Applications"), observe_static_signature);
-    result.observed_application_count = observe_application_count();
+    (result.observed_application_count, result.single_window_application_count) = observe_applications();
     result
 }
 
@@ -349,7 +363,7 @@ mod tests {
         let wire = serde_json::to_value(observed).unwrap();
         assert_eq!(wire, serde_json::json!({"schema":1,"platform":"macos","status":"Candidate",
             "version":"1.26.33","signature":"Unconfirmed","publisher":"NotPinned",
-            "multipleInstancesProhibited":null,"observedApplicationCount":null,"runtimeAdmission":false}));
+            "multipleInstancesProhibited":null,"observedApplicationCount":null,"singleWindowApplicationCount":null,"runtimeAdmission":false}));
         // An expected identity/team observation still cannot pin the official
         // distribution or authorize launch, even with the singleton key absent.
         let mut matched = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);

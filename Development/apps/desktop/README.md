@@ -57,7 +57,11 @@ applications with the Education bundle identifier after each original
 AppKit object is rechecked by equality, PID and termination state. Ambiguous
 or duplicate observations return unknown, never a partial count. This is a
 read-only snapshot, not verified image identity, managed profiles or launch authority.
-No background watcher or adoption of existing games.
+One bounded Quartz on-screen metadata snapshot also reports how many of
+those matching apps have exactly one normal-layer window candidate. No
+window titles, raw IDs, image capture, focus, or permission prompt. This
+is not proof of an interactive game surface. No background watcher or
+adoption of existing games.
 The shell must show unsupported native management, not five ready
 profiles. Build/launch and permission behavior remain NOT_EXECUTED.
 See [cross-platform handoff](../../../planning/development.md) for the

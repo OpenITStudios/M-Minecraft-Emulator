@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-11b: original AppKit object revalidation)
+## Current status — cross-platform-native (MAC-12a: native window candidate observation)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,32 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-12a — same-desktop Quartz window candidates
+
+Reuse the existing explicit Mac installation inspection and original
+AppKit objects. One Quartz CGWindowListCopyWindowInfo call, on-screen
+only, desktop elements excluded; current user GUI session only.
+[Apple API](https://developer.apple.com/documentation/coregraphics/cgwindowlistcopywindowinfo(_:_:))
+and [required keys](https://developer.apple.com/documentation/coregraphics/required-window-list-keys)
+establish owner PID/window number/layer. No continuous enumeration;
+bounded parsing, existing CoreFoundation 0.10.1 ownership wrappers, no
+package or lock change. Filter matching PIDs before reading other window
+fields; count apps with exactly one layer-zero candidate, reject duplicate
+or invalid target window IDs. Null list returns unknown. AppKit retained
+objects are rechecked after the snapshot; any changed observation refuses
+both counts. Simplify AppKit equality to the generated binding's PartialEq
+(NSObject isEqual), no explicit superclass conversion.
+Report a typed aggregate only in existing diagnostic UI, with count not
+greater than observed apps. No raw window/PID/title, screenshot, focus,
+permission prompt, process adoption or controller. Layer zero is only a
+candidate: not exact main game window, signed loaded image, playable
+visibility, or durable ownership. AppKit/Quartz snapshots are non-atomic.
+Rust/TS regression source authored, NOT_EXECUTED. Windows behavior,
+native admission=false, Plan A and all holds preserved.
+Next: review the existing ScreenCaptureKit fixture for selected-window
+capture seam; do not activate capture or input without a retained
+authorized target. Profile and account isolation remain unresolved.
 
 ### MAC-11b — revalidate original AppKit application objects
 

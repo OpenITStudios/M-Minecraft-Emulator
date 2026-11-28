@@ -34,7 +34,7 @@ describe('Education installation observation',()=>{
     expect(settings).toContain('{#if installationNotice}');
   });
   it('keeps Mac candidate observation separate from Windows and native admission',()=>{
-    const mac={schema:1,platform:'macos',status:'Candidate',version:'26.33',signature:'Unconfirmed',publisher:'NotPinned',multipleInstancesProhibited:null,observedApplicationCount:null,runtimeAdmission:false};
+    const mac={schema:1,platform:'macos',status:'Candidate',version:'26.33',signature:'Unconfirmed',publisher:'NotPinned',multipleInstancesProhibited:null,observedApplicationCount:null,singleWindowApplicationCount:null,runtimeAdmission:false};
     expect(parseMacEducationInstallation(mac)).toEqual(mac);
     for(const count of [0,1,5,6,0xffffffff]) {
       const observed=parseMacEducationInstallation({...mac,observedApplicationCount:count});
@@ -43,6 +43,11 @@ describe('Education installation observation',()=>{
     }
     for(const count of [-1,1.5,'2',undefined,0x100000000])
       expect(()=>parseMacEducationInstallation({...mac,observedApplicationCount:count})).toThrow();
+    expect(parseMacEducationInstallation({...mac,observedApplicationCount:5,singleWindowApplicationCount:3}).singleWindowApplicationCount).toBe(3);
+    expect(parseMacEducationInstallation({...mac,observedApplicationCount:0,singleWindowApplicationCount:0}).runtimeAdmission).toBe(false);
+    for(const count of [-1,1.5,'2',undefined,6])
+      expect(()=>parseMacEducationInstallation({...mac,observedApplicationCount:5,singleWindowApplicationCount:count})).toThrow();
+    expect(()=>parseMacEducationInstallation({...mac,singleWindowApplicationCount:0})).toThrow();
     for(const status of ['Missing','Ambiguous','Unconfirmed'])
       expect(parseMacEducationInstallation({...mac,status,version:null,signature:'NotChecked'}).status).toBe(status);
     expect(parseMacEducationInstallation({...mac,signature:'ExpectedTeamMatched',multipleInstancesProhibited:true}).runtimeAdmission).toBe(false);

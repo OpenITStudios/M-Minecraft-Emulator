@@ -528,6 +528,9 @@
       macInstallationNotice += result.observedApplicationCount===null
         ? ' Running application identities could not be confirmed.'
         : ' AppKit reports '+result.observedApplicationCount+' matching application(s). None are managed by Lazy Tester.';
+      macInstallationNotice += result.singleWindowApplicationCount===null
+        ? ' Window candidates could not be confirmed.'
+        : ' '+result.singleWindowApplicationCount+' application(s) have exactly one on-screen normal-layer window candidate.';
     } catch {
       if (!disposed) macInstallationNotice='Installation inspection unavailable.';
     } finally { installationPending=false; }

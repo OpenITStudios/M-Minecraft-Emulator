@@ -7,6 +7,9 @@ use std::io::{self, BufRead, Write};
 mod previews;
 #[path = "workspace_surface/recovery_gate.rs"]
 mod recovery_gate;
+#[cfg(target_os = "macos")]
+#[path = "workspace_surface/macos_observation.rs"]
+pub(super) mod macos_observation;
 // Synthetic transport admission contract; absent from all product builds.
 #[cfg(test)]
 #[path = "workspace_surface/macos_transport_contract.rs"]
