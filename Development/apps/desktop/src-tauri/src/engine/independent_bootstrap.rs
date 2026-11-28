@@ -641,9 +641,16 @@ pub(super) struct SavedStartupObservation {
     pub(super) exit_code: u32,
 }
 
-/// Dispatch internal product modes before UI startup; historical diagnostics
-/// have their own explicitly named CLI owner.
+/// Dispatch internal product modes before UI startup. Retired launch modes
+/// fail closed rather than starting a controller or falling through to the UI.
 pub(super) fn maybe_run_native_entrypoint() -> bool {
+    if std::env::args_os().nth(1).as_deref().is_some_and(|arg| {
+        ["--education-startup-observation-once", "--education-five-startup-observation-once",
+         "--education-prepare-five-profiles-once"].iter().any(|flag| arg == OsStr::new(*flag))
+    }) {
+        eprintln!("LEGACY_STARTUP_RETIRED: use the Lazy Tester session controller");
+        std::process::exit(2);
+    }
     #[cfg(feature = "lazy-tester-package")]
     if std::env::args_os().skip(1).eq([OsString::from("--lazy-tester-migrate-data")]) {
         use std::io::Write;
@@ -672,8 +679,7 @@ pub(super) fn maybe_run_native_entrypoint() -> bool {
         let _=writeln!(io::stdout(),"{}",serde_json::to_string(&report).unwrap());
         std::process::exit(if report.configured {0}else{2});
     }
-    if session_controller::maybe_run() { return true; }
-    legacy_startup_observation::maybe_run()
+    session_controller::maybe_run()
 }
 
 // Retain a named existence lease, not mutex ownership. Do not wait or

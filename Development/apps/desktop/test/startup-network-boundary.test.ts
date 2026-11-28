@@ -70,6 +70,27 @@ describe("Active native-first startup boundary", () => {
     expect(locationUi).toContain("if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();");
   });
 
+  it("refuses retired multi-child startup modes before native dispatch, retaining the controller journal", () => {
+    const bootstrap = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap.rs", import.meta.url), "utf8");
+    const entry = bootstrap.split("pub(super) fn maybe_run_native_entrypoint() -> bool {")[1]!.split("fn acquire_startup_gate")[0]!;
+    const refusal = entry.indexOf("LEGACY_STARTUP_RETIRED");
+    expect(refusal).toBeGreaterThanOrEqual(0);
+    for (const flag of ["--education-startup-observation-once", "--education-five-startup-observation-once", "--education-prepare-five-profiles-once"])
+      expect(entry.slice(0, refusal)).toContain(flag);
+    expect(entry.indexOf("std::process::exit(2);")).toBeLessThan(entry.indexOf("product_profiles::migrate_reviewed"));
+    expect(entry).toContain("session_controller::maybe_run()");
+    expect(entry).not.toContain("legacy_startup_observation::maybe_run()");
+    const journal = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/legacy_startup_observation.rs", import.meta.url), "utf8");
+    expect(journal).not.toContain("fn run_startup_observation(");
+    expect(journal).toContain("#[cfg(test)]\npub(super) fn observe_until_exit");
+    expect(journal).toContain("#[cfg(test)]\npub(super) fn prepare_registered_enrolled_for");
+    expect(journal).toContain("pub(super) fn save_after_exit");
+    const replay = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/reviewed_profile_replay.rs", import.meta.url), "utf8");
+    expect(replay).not.toContain("fn prepare_five_profiles(");
+    const controller = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/session_controller.rs", import.meta.url), "utf8");
+    expect(controller).toContain("started.save_after_exit(1)");
+  });
+
   it("routes a failed window destroy through existing post-release exit recovery", () => {
     const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
     const close = bootstrap.split("let result=commands::native_clients::close_all_managed()")[1]!.split("CONFIRMING.store(false,Ordering::SeqCst);")[0]!;

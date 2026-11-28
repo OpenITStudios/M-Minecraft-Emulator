@@ -1,87 +1,20 @@
-//! Historical opt-in startup observation and replay preparation CLI.
-//! Not a mounted product session owner. Shared bootstrap process lifecycle remains in the parent.
-use super::{
-    acquire_startup_gate, create_suspended_process, directory_id, game_preset,
-    image_id, invalid, open_directory, registered_image, registered_slots,
-    same_image, window_caption, BootstrapLibrary, PendingEducationBootstrap,
-    PreparedEducationEnrollment, SavedStartupObservation, StartedEducationObservation,
-    StartupAttempt,
-};
-use super::reviewed_profile_replay::prepare_five_profiles;
-use std::{ffi::OsStr, fs::OpenOptions, io, os::windows::{fs::OpenOptionsExt, io::{AsRawHandle, FromRawHandle, OwnedHandle}}, path::{Path, PathBuf}, ptr};
+//! Shared startup journal for the retained controller; historical multi-child
+//! observation helpers are compiled only as disposable Rust fixtures.
+use super::{directory_id, image_id, invalid, open_directory, same_image,
+    PendingEducationBootstrap, SavedStartupObservation, StartedEducationObservation};
+#[cfg(test)]
+use super::{create_suspended_process, game_preset, registered_image, registered_slots,
+    window_caption, BootstrapLibrary, PreparedEducationEnrollment, StartupAttempt};
+use std::{fs::OpenOptions, io, os::windows::{fs::OpenOptionsExt, io::{AsRawHandle, FromRawHandle, OwnedHandle}}, path::PathBuf, ptr};
+#[cfg(test)]
+use std::path::Path;
 use windows_sys::Win32::{
     Foundation::{HANDLE, HANDLE_FLAG_INHERIT, INVALID_HANDLE_VALUE, SetHandleInformation, WAIT_OBJECT_0, WAIT_TIMEOUT},
     Storage::FileSystem::{FILE_FLAG_OPEN_REPARSE_POINT, FILE_READ_ATTRIBUTES, FILE_SHARE_READ},
     System::{Memory::{CreateFileMappingW, MapViewOfFile, UnmapViewOfFile, FILE_MAP_READ, PAGE_READWRITE}, Threading::WaitForSingleObject},
 };
 
-pub(super) fn maybe_run() -> bool {
-    let mut args = std::env::args_os().skip(1);
-    let mode = args.next();
-    let count = match mode.as_deref() {
-        Some(v) if v == OsStr::new("--education-startup-observation-once") => 2,
-        Some(v) if v == OsStr::new("--education-five-startup-observation-once") => 5,
-        Some(v) if v == OsStr::new("--education-prepare-five-profiles-once") => 0,
-        _ => return false,
-    };
-    let result = if args.next().is_some() {
-        Err(invalid(
-            "Startup observation accepts no additional arguments",
-        ))
-    } else {
-        if count == 0 {
-            prepare_five_profiles()
-        } else {
-            run_startup_observation(count)
-        }
-    };
-    let code = match result {
-        Ok(code) => code,
-        Err(error) => {
-            use std::io::Write;
-            let _ = writeln!(
-                io::stderr(),
-                "{{\"event\":\"startup-refused\",\"kind\":\"{:?}\",\"osCode\":{}}}",
-                error.kind(),
-                error
-                    .raw_os_error()
-                    .map_or_else(|| "null".to_owned(), |code| code.to_string())
-            );
-            2
-        }
-    };
-    std::process::exit(code);
-}
-
-fn run_startup_observation(count: usize) -> io::Result<i32> {
-    // One experiment process per interactive session; no persisted readiness/account state.
-    let _gate = acquire_startup_gate(
-        crate::engine::native_clients_session::CONTROLLER_GATE_NAME,
-        io::Error::new(io::ErrorKind::AlreadyExists, "Startup experiment already active"),
-    )?;
-    let mut launch_guard = super::super::acquire_native_launch()?;
-    // Preserve existing games; no termination, sign-out or activation fallback.
-    if !super::super::inspect_native_workspace()?.processes.is_empty() {
-        return Err(io::Error::new(
-            io::ErrorKind::AlreadyExists,
-            "Close the existing game normally first",
-        ));
-    }
-    if count == 5 {
-        let started =
-            prepare_registered_enrolled_for::<5>()?.resume_for_authorized_observation()?;
-        *launch_guard = Some(std::time::Instant::now());
-        observe_until_exit(&started)
-    } else if count == 2 {
-        let started = prepare_registered_enrolled_for::<2>()?.resume_for_authorized_observation()?;
-        *launch_guard = Some(std::time::Instant::now());
-        observe_until_exit(&started)
-    } else {
-        Err(invalid("Unsupported Education slot count"))
-    }
-}
-
-
+#[cfg(test)]
 fn label_started_windows<const N: usize>(started: &StartedEducationObservation<N>) {
     use windows_sys::Win32::{
         Foundation::HWND,
@@ -129,6 +62,7 @@ fn label_started_windows<const N: usize>(started: &StartedEducationObservation<N
     }
 }
 
+#[cfg(test)]
 pub(super) fn observe_until_exit<const N: usize>(started: &StartedEducationObservation<N>) -> io::Result<i32> {
     use std::io::Write;
     let mut completed = [false; N];
@@ -191,8 +125,8 @@ pub(super) fn observe_until_exit<const N: usize>(started: &StartedEducationObser
     Ok(i32::from(failed))
 }
 
-// Explicit legacy observation uses reviewed profiles and the reviewed payload;
-// there is no registered fresh-profile preparation route.
+// Retained only for the unreviewed-payload refusal fixture; no product entrypoint.
+#[cfg(test)]
 fn prepare_registered_observation<const N: usize>(
     payload: &BootstrapLibrary,
 ) -> io::Result<[PendingEducationBootstrap; N]> {
@@ -225,6 +159,7 @@ fn prepare_registered_observation<const N: usize>(
     children.try_into().map_err(|_| invalid("Incomplete Education process set"))
 }
 
+#[cfg(test)]
 pub(super) fn prepare_registered_enrolled_for<const N: usize>() -> io::Result<PreparedEducationEnrollment<N>> {
     let payload = BootstrapLibrary::reviewed()?;
     let children = prepare_registered_observation::<N>(&payload)?;

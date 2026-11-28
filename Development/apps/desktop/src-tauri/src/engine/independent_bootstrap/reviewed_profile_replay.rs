@@ -1,14 +1,13 @@
-//! Reviewed legacy profile replay capability and explicit one-shot preparation.
-//! No new launch or data authority; the existing product catalog and retained controller decide admission.
+//! Reviewed legacy profile replay capability; historical profile preparation is retired.
+//! Existing identity checks remain for preserved stores and migration.
 use super::{
-    acquire_startup_gate, create_private_slot, directory_id, directory_path, image_id,
-    invalid, known_folder, open_directory, open_existing_registry_store,
-    open_private_temporary, pin_image, profile_binding, registered_slots, same_image,
+    directory_id, directory_path, invalid, known_folder, open_directory,
+    open_existing_registry_store, open_private_temporary, pin_image, profile_binding, same_image,
     user_registry_path, PrivateTemporaryMode, SlotStorage,
 };
-use std::{ffi::OsStr, fs::{File, OpenOptions}, io, os::windows::fs::OpenOptionsExt, path::{Path, PathBuf}};
+use std::{ffi::OsStr, fs::File, io, path::{Path, PathBuf}};
 use windows_sys::Win32::{
-    Storage::FileSystem::{FILE_FLAG_OPEN_REPARSE_POINT, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_SHARE_READ},
+    Storage::FileSystem::{FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES},
     UI::Shell::{FOLDERID_LocalAppData, FOLDERID_Profile, FOLDERID_RoamingAppData},
 };
 
@@ -138,6 +137,7 @@ pub(super) fn reopen_slots_for<const N: usize>(
     slots.try_into().map_err(|_| invalid("Missing replay slot"))
 }
 
+#[cfg(test)]
 pub(super) fn five_replay_bytes(pair: &[u8], stores: &[SlotStorage]) -> io::Result<Vec<u8>> {
     if pair.len() != 216 || stores.len() != 5 {
         return Err(invalid("Incomplete five-slot identity set"));
@@ -163,91 +163,6 @@ pub(super) fn five_replay_bytes(pair: &[u8], stores: &[SlotStorage]) -> io::Resu
         bytes[at + 8..at + 24].copy_from_slice(&id.FileId.Identifier);
     }
     Ok(bytes)
-}
-
-// Explicit one-shot preparation only. Never launch a game or read account/world contents.
-pub(super) fn prepare_five_profiles() -> io::Result<i32> {
-    use sha2::{Digest, Sha256};
-    use std::io::{Read, Write};
-    let _gate = acquire_startup_gate(
-        "Local\\MivubiEducationFiveProfilePreparation",
-        io::Error::new(io::ErrorKind::AlreadyExists, "Five-profile preparation already active"),
-    )?;
-    // Existing pair replay is the trust anchor; no root path or profile override is accepted.
-    let pair = registered_slots::<2>()?;
-    let payload_root = std::env::current_exe()?
-        .parent()
-        .ok_or_else(|| invalid("Missing replay payload root"))?
-        .join("independent-bootstrap");
-    let _payload_pin = open_directory(&payload_root, FILE_READ_ATTRIBUTES)?;
-    let mut original = pin_image(&payload_root.join("replay-profile-pair.bin"))?;
-    let mut pair_bytes = [0u8; 216];
-    original.read_exact(&mut pair_bytes)?;
-    if Some(<[u8; 32]>::from(Sha256::digest(pair_bytes))) != REVIEWED_REPLAY {
-        return Err(invalid("Original replay changed"));
-    }
-    let output = payload_root.join("replay-profile-five.bin");
-    let parent = known_folder(&FOLDERID_Profile)?;
-    let bytes = if output.try_exists()? {
-        let mut file = pin_image(&output)?;
-        if file.metadata()?.len() != 288 {
-            return Err(invalid(
-                "Incomplete five-slot capability; preserve data and review",
-            ));
-        }
-        let mut bytes = vec![0u8; 288];
-        file.read_exact(&mut bytes)?;
-        if bytes[16..216] != pair_bytes[16..216] {
-            return Err(invalid("Five-slot capability changed the original pair"));
-        }
-        // Preparation revalidation is not launch authorization: launch still requires its reviewed digest.
-        let stores = reopen_slots_for::<5>(
-            pair[0].logical.try_clone()?,
-            &parent,
-            &bytes,
-            Sha256::digest(&bytes).into(),
-        )?;
-        if five_replay_bytes(&pair_bytes, &stores)? != bytes {
-            return Err(invalid("Five-slot capability mismatch"));
-        }
-        bytes
-    } else {
-        let root = pair[0]
-            .private_path
-            .parent()
-            .ok_or_else(|| invalid("Missing original profile root"))?
-            .to_path_buf();
-        let _root_pin = open_directory(&root, FILE_READ_ATTRIBUTES)?;
-        // Refuse existing extra directories before writing anything; never adopt/reset a partial profile.
-        for slot in 3..=5 {
-            if root.join(format!("MC{slot:02}")).try_exists()? {
-                return Err(invalid(
-                    "Extra slot already exists; preserve data and review partial preparation",
-                ));
-            }
-        }
-        let mut stores = Vec::from(pair);
-        for slot in 3..=5 {
-            stores.push(create_private_slot(&stores[0].logical, &root, slot)?);
-        }
-        let bytes = five_replay_bytes(&pair_bytes, &stores)?;
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .share_mode(FILE_SHARE_READ)
-            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
-            .open(&output)?;
-        image_id(&file)?;
-        file.write_all(&bytes)?;
-        file.sync_all()?;
-        bytes
-    };
-    let digest: String = Sha256::digest(&bytes)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    writeln!(io::stdout(), "{{\"event\":\"five-profiles-prepared\",\"slots\":5,\"capabilitySha256\":\"{digest}\",\"gameLaunched\":false}}")?;
-    Ok(0)
 }
 
 pub(super) fn replay_roots() -> io::Result<(File, PathBuf)> {

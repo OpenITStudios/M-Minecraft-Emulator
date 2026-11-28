@@ -9,6 +9,19 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired executable pair/five startup and profile preparation — 28 November 2026
+
+The three historical `--education-*-once` startup/preparation flags now refuse
+before product dispatch; they cannot launch games, create profiles or fall
+through to UI startup. The old batch-launch runner and five-profile creation
+route are removed. Historical multi-child observation helpers are fixture-only;
+the existing controller still uses the original journal mapping and after-exit
+persistence. Reviewed existing replay/profile data remain intact pending
+explicit migration cutover. Pair-only historical data are preserved, not
+automatically expanded or migrated. Prior source:
+[15cd0072](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/15cd0072fcb0e78d74ae661a6092eb4a5eac8851).
+Source fixture authored NOT_EXECUTED.
+
 ## Retired uncalled registered fresh-pair preparation — 28 November 2026
 
 Remove the unused `prepare_registered` wrapper and its false observation /

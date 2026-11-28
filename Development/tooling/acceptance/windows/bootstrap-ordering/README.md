@@ -1,12 +1,13 @@
 # Self-owned early-import ordering experiment
 
-**Current source boundary (28 November 2026):** registered historical startup
-observation requires a reviewed payload and existing reviewed profile replay
-(or the existing five-slot product catalog). The former uncalled fresh
-registered two-slot preparation route is retired; fresh pair helpers remain
-only in Rust fixtures. Explicit five-profile replay preparation and product
-profile creation are unchanged. Earlier experiment descriptions below are
-historical, not additional current launch paths. Tests NOT_EXECUTED.
+**Current source boundary (28 November 2026):** the historical pair/five
+startup and five-profile preparation CLI routes are retired and refuse before
+product dispatch. Only the retained session controller can launch managed
+games. The original per-child startup journal remains active in that controller;
+historical multi-child observation helpers remain only in Rust fixtures.
+Reviewed existing profile replay and explicit migration are preserved pending
+storage cutover. All earlier CLI examples and evidence below are historical,
+not available invocation instructions. Tests NOT_EXECUTED.
 
 ## Selective native file-information processing — NGE-02
 

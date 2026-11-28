@@ -2,25 +2,24 @@
 
 ## Current status
 
-Branch `Local`; Unreleased. Work: `prelocal-modularity-efficiency`.
-MOD-01–09 closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). SIM-MOD-01–07: [exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/3f7658dbcde7ed616b7d6b08832ce1da3eb2be61/planning/development.md). SIM-MOD integration: 7 commits, 27 paths compared; selected module declarations, visibility, feature routes, dispatch, verifier and fixture consumers inspected. Offline report now routes six storage/settings codes to profile_storage_operations; unrelated location, clear recovery and general settings routes retained. Fixture authored NOT_EXECUTED.
-Final review baseline: `bf2588dc527d137fe75e4cdf6559130259b1dcf3`. Original work baseline: `ed320acd98065300e48dce9f574af0bfd7e7f18b`.
-No source test, compiler, formatter, build, CI, PC or runtime execution.
+Branch `Local`; Unreleased. Work: `zero-legacy-runtime`.
+Approved goal: one retained native runtime, canonical profile storage, one agent
+contract (MCP and SDK adapters), no extra worker/dependency or redundant owner.
+Previous MOD/SIM-MOD source closure and exact history:
+[15cd0072 handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/15cd0072fcb0e78d74ae661a6092eb4a5eac8851/planning/development.md).
 
-| Scope | Source result / exact commit |
-| --- | --- |
-| MOD-01 | Agent activity contract, fixed slot flags — [2efb1c8](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/2efb1c84c1e11a5ecb0ced9279977bc09a1749f8) |
-| MOD-02 | Session protocol, Testing Run, AI input leases — [45c3674](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/45c3674b6fcf813a8b60376d0df6f9fe258b3fe2) |
-| MOD-03 | Reviewed payload, child configuration/environment, fixtures — [0078a2c](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/0078a2c1e17707563a23776f4cf6ccaf16ee4a24) |
-| MOD-04 | Owned windows, audio, reply scope, fixtures — [f04a61c](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/f04a61ce540c12d03c59fe58597a933dbf83ee6f) |
-| MOD-05 | Windows identity, package, signature, private-root observers — [476e05d](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/476e05d5452a53259da7b7710b0868b893dc3307) |
-| MOD-06 | Agent configuration, Probe QA and evidence operations — [14ffcac](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/14ffcac87f66325685cb37be430de51c4ece1538) |
-| MOD-07 | Report-local process ownership reuse and source routing — [f7fc983](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/f7fc983ead90964b40d99ec68c06213ab19e8215) |
-| MOD-08 | Scoped named-owner declarations in existing verifier; review responsibility, state, naming, forwarding and dependencies without a line limit. Handoff compacted to existing bound. Fixtures authored NOT_EXECUTED. |
+ZLR-01: retired executable pair/five startup and five-profile preparation CLI.
+Retired flags fail before dispatch, old runner and legacy profile creation
+removed; shared controller journal and test-only historical observer preserved.
+Reviewed existing data/replay retained until safe storage cutover. Pair-only
+historical data preserved, no automatic expansion. Source fixture NOT_EXECUTED.
 
-| MOD-09 | Correct staging, packaging and readiness digest-owner paths; repair stale startup fixture boundaries and classify extracted Rust test files correctly. Source fixtures authored NOT_EXECUTED. |
-
-Next: STOP at scoped source proof (SOURCE_READY_FOR_LOCAL, not execution approval). Re-pin actual HEAD for any separately approved PC-local stage. DLL and release holds remain. Exhaustive semantic review, compilation, runtime and performance NOT_EXECUTED.
+Next: CONTINUE ZLR-02 canonical storage cutover: trace schema 1, reviewed
+replay/binding, migration and fresh-setup refusal; do not disable recovery
+before a safe explicit migration path exists. Then ZLR-03 one agent contract
+with retained safety/capability gates, ZLR-04 consumer cleanup/integration.
+No compiler, test, CI, runtime, data migration or performance execution.
+No release or version bump.
 
 ## Prior source work and continuity
 
