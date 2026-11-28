@@ -4,7 +4,7 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,existsSync,rmSync,linkS
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
 import {verifyLazyTesterPackage,verifyNativeProfileLayout,verifyFrontendPayload,verifyInstallerLayout,verifyCandidateReleasePolicy} from '../scripts/check-lazy-tester-package.mjs';
-import {reviewedDigests,stageNativePayload,verifyNativePayload} from '../scripts/prepare-native-payload.mjs';
+import {reviewedDigests,readReviewedDigests,stageNativePayload,verifyNativePayload} from '../scripts/prepare-native-payload.mjs';
 import {processRoles,roleMuiNames,verifyRoleResources} from '../scripts/prepare-process-roles.mjs';
 
 describe('Lazy Tester native package',()=>{
@@ -17,7 +17,7 @@ describe('Lazy Tester native package',()=>{
     expect(end).toBeGreaterThan(start);
     const startup=source.slice(start,end);
     const native=startup.indexOf('drop(BootstrapLibrary::reviewed()?);');
-    const profiles=startup.indexOf('registered_slots::<5>(true)?');
+    const profiles=startup.indexOf('registered_slots::<5>()?');
     expect(native).toBeGreaterThanOrEqual(0);
     expect(profiles).toBeGreaterThan(native);
   });
@@ -130,8 +130,18 @@ describe('Lazy Tester native package',()=>{
       expect(()=>verifyCandidateReleasePolicy(release)).toThrow(/publication hold/);
   });
   it('derives hashes from the exact runtime policy and refuses absent or malformed review',()=>{
-    const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap.rs',import.meta.url),'utf8');
+    const source=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap/reviewed_bootstrap_payload.rs',import.meta.url),'utf8');
+    expect(source).toContain('const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = None;');
     expect(()=>reviewedDigests(source)).toThrow(/unavailable/); // v4 payload is not reviewed yet.
+    expect(()=>readReviewedDigests()).toThrow(/unavailable/);
+    const packaging=readFileSync(new URL('../scripts/package-lazy-tester.mjs',import.meta.url),'utf8');
+    const staging=readFileSync(new URL('../scripts/prepare-native-payload.mjs',import.meta.url),'utf8');
+    const readiness=readFileSync(new URL('../../../tooling/windows-toolchain/local-readiness.ps1',import.meta.url),'utf8');
+    expect(packaging).toContain('const expected=readReviewedDigests();');
+    expect(staging).toContain('const policy = readReviewedDigests();');
+    expect(readiness).toContain('independent_bootstrap/reviewed_bootstrap_payload.rs');
+    for(const consumer of [packaging,staging,readiness])
+      expect(consumer).not.toContain('engine/independent_bootstrap.rs');
     const fixture='const REVIEWED_EDUCATION_BOOTSTRAP: Option<PayloadDigests> = Some(PayloadDigests {enroller: ['+
       Array(32).fill('0x11').join(',')+'], compatibility: ['+Array(32).fill('0x22').join(',')+']});';
     expect(reviewedDigests(fixture)).toEqual({

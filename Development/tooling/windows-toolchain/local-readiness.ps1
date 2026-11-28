@@ -156,7 +156,7 @@ Report 'CHECK' 'WebView2 and official Minecraft Education require separate Windo
 # Parse only the existing Rust-approved standard DLL digests. This is not an
 # alternative trust policy and cannot enable the experimental AI-input DLL.
 try {
-    $nativeSource = [IO.File]::ReadAllText((Join-Path $Root 'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs'))
+    $nativeSource = [IO.File]::ReadAllText((Join-Path $Root 'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/reviewed_bootstrap_payload.rs'))
     $policy = [regex]::Match($nativeSource,
         '(?s)const\s+REVIEWED_EDUCATION_BOOTSTRAP:\s*Option<PayloadDigests>\s*=\s*Some\(PayloadDigests\s*\{(.*?)\}\);')
     if (-not $policy.Success) { throw 'Cannot find reviewed standard native digests.' }

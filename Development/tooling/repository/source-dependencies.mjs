@@ -75,7 +75,8 @@ function sourceId(path){
   return 'source.file.'+path.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 }
 function sourceKind(path){
-  if(/(?:^|\/)(?:test|tests|fixtures)\//.test(path)||/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path))
+  if(/(?:^|\/)(?:test|tests|fixtures)\//.test(path)||/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(path)||
+     /(?:^|\/)(?:tests|[^/]+_fixture)\.rs$/.test(path))
     return 'AUTHORED_TEST_NOT_EXECUTION_PROOF';
   if(path.endsWith('CMakeLists.txt'))return 'DECLARATIVE_CMAKE_TARGET_SOURCE';
   if(CPP_EXTS.has(extname(path)))return 'CPP_DECLARATION_SOURCE';

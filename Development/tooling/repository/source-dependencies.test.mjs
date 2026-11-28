@@ -141,6 +141,20 @@ test('an unavailable TypeScript/Svelte parser yields explicit incomplete status'
   assert.equal(sourceImpact(index,'Development/apps/desktop/src-tauri/src/main.rs').status.status,
     'GLOBAL_PARSER_COVERAGE_INCOMPLETE');
 }));
+test('extracted Rust test modules are authored fixtures, not product runtime evidence',()=>fixture(({root,put,rs})=>{
+  const owner=rs+'engine/first.rs';
+  const tests=rs+'engine/first/tests.rs';
+  const witness=rs+'engine/first/coordinate_tcp_pid_witness_fixture.rs';
+  put(owner,'#[cfg(test)] mod tests;\n#[cfg(test)] mod coordinate_tcp_pid_witness_fixture;\npub fn first() {}');
+  put(tests,'#[test] fn one() {}');
+  put(witness,'#[test] fn two() {}');
+  const index=buildSourceDependencyIndex(root,parsers());
+  assert.equal(index.byPath.get(owner).kind,'RUST_DECLARATION_SOURCE');
+  for(const path of [tests,witness]){
+    assert.equal(index.byPath.get(path).kind,'AUTHORED_TEST_NOT_EXECUTION_PROOF');
+    assert.ok(index.edges.some(e=>e.from===index.byPath.get(owner).id&&e.to===index.byPath.get(path).id));
+  }
+}));
 test('frontend test directory is scanned and its source import becomes a reverse test impact',()=>fixture(({root,put,ui})=>{
   put('Development/apps/desktop/test/regression.test.ts',
     'import {answer} from "../src/lib.js";\n');

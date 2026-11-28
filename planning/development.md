@@ -3,8 +3,8 @@
 ## Current status
 
 Branch `Local`; Unreleased. Work: `prelocal-modularity-efficiency`.
-MOD-01–08 scoped source integration; MOD-09 final integration remains.
-Baseline for MOD-08: `f7fc983ead90964b40d99ec68c06213ab19e8215`.
+MOD-01–09 scoped source integration; SOURCE_READY_FOR_LOCAL (scoped handoff, not execution or native readiness).
+Final review baseline: `bf2588dc527d137fe75e4cdf6559130259b1dcf3`. Original work baseline: `ed320acd98065300e48dce9f574af0bfd7e7f18b`.
 No source test, compiler, formatter, build, CI, PC or runtime execution.
 
 | Scope | Source result / exact commit |
@@ -18,10 +18,11 @@ No source test, compiler, formatter, build, CI, PC or runtime execution.
 | MOD-07 | Report-local process ownership reuse and source routing — [f7fc983](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/f7fc983ead90964b40d99ec68c06213ab19e8215) |
 | MOD-08 | Scoped named-owner declarations in existing verifier; review responsibility, state, naming, forwarding and dependencies without a line limit. Handoff compacted to existing bound. Fixtures authored NOT_EXECUTED. |
 
-Next: MOD-09 review full scoped diff, current source owners and consumers,
-module wiring/visibility/feature gates, existing verifier and packaging
-consumers; correct concrete integration defects before local handoff.
-Do not infer compilation, runtime improvement, or release readiness.
+| MOD-09 | Correct staging, packaging and readiness digest-owner paths; repair stale startup fixture boundaries and classify extracted Rust test files correctly. Source fixtures authored NOT_EXECUTED. |
+
+STOP at scoped source proof. Re-pin actual HEAD for any separately
+approved PC-local stage. The existing native DLL and release holds remain.
+No compilation, runtime improvement or whole-product readiness claimed.
 
 ## Prior source work and continuity
 

@@ -17,6 +17,10 @@ export function reviewedDigests(source) {
   }
   return result;
 }
+// Both staging and packaging use the same canonical Rust admission owner.
+export function readReviewedDigests() {
+  return reviewedDigests(readFileSync(resolve(root,'src-tauri/src/engine/independent_bootstrap/reviewed_bootstrap_payload.rs'),'utf8'));
+}
 function ordinaryAncestors(path) {
   for (let current = resolve(path);;) {
     try {
@@ -72,7 +76,7 @@ export function stageNativePayload(source, destination, expected) {
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const source = process.argv[2] ?? process.env.LAZY_TESTER_NATIVE_PAYLOAD_DIR;
   if (!source) throw new Error('Set LAZY_TESTER_NATIVE_PAYLOAD_DIR to the reviewed native DLL directory');
-  const policy = reviewedDigests(readFileSync(resolve(root,'src-tauri/src/engine/independent_bootstrap.rs'),'utf8'));
+  const policy = readReviewedDigests();
   const destination=resolve(root,'src-tauri/package-resources/lazy-tester');
   const locale=resolve(destination,'en-US');
   verifyRoleResources(locale);

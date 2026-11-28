@@ -8,7 +8,7 @@ import {verifyLazyTesterPackage} from './check-lazy-tester-package.mjs';
 import {buildRootLauncher} from './build-root-launcher.mjs';
 import {digestInstallerFile,pruneSupersededCandidates} from '../../../tooling/storage/package-recycle.mjs';
 import {processRoles,roleMuiNames,verifyRoleResources} from './prepare-process-roles.mjs';
-import {reviewedDigests,verifyNativePayload} from './prepare-native-payload.mjs';
+import {readReviewedDigests,verifyNativePayload} from './prepare-native-payload.mjs';
 
 const developmentRoot = resolve(fileURLToPath(new URL('../../..', import.meta.url)));
 const root = resolve(developmentRoot, '..');
@@ -190,7 +190,7 @@ function main() {
   if (process.platform !== 'win32' || process.arch !== 'x64') throw new Error('Windows x64 packaging is required');
   const sha = sourceRevision(root);
   verifyLazyTesterPackage();
-  const expected=reviewedDigests(readFileSync(resolve(developmentRoot,'apps/desktop/src-tauri/src/engine/independent_bootstrap.rs'),'utf8'));
+  const expected=readReviewedDigests();
   const toolchain = JSON.parse(readFileSync(resolve(developmentRoot,'toolchain.json'),'utf8'));
   if (process.versions.node !== toolchain.node.version) throw new Error('Use the declared workspace Node version');
   const npm = process.env.npm_execpath;
