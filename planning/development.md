@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-09a: Plan A only)
+## Current status — cross-platform-native (MAC-09b: bundle resource evidence)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,46 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-09b — inspect remaining accessible bundle resources
+
+Reused the operator-supplied extracted Education bundle; no new upload.
+Read the complete OneAuth 3.5.4 Resources/PrivacyInfo.xcprivacy (1022
+bytes). It declares UserDefaults reasons 1C8F.1 and AC6B.1, file
+timestamp reason C617.1. Apple's
+[required reason API reference](https://developer.apple.com/documentation/bundleresources/app-privacy-configuration/nsprivacyaccessedapitypes/nsprivacyaccessedapitype)
+defines these as same-App-Group defaults, managed configuration/feedback,
+and metadata of container/group/CloudKit files, respectively.
+This is a declaration by the bundled authentication framework, not an
+observed call, effective entitlement, active account key or evidence that
+all instances share active accounts. Together with MAC-06c provisioning
+observations it strengthens the need to distinguish per-process game
+storage from group-scoped authentication/settings. Microsoft's
+[MSAL Keychain guide](https://learn.microsoft.com/en-us/entra/msal/objc/howto-v2-keychain-objc)
+requires app-owned cache configuration and matching entitlements; it
+does not expose a supported external per-instance override.
+
+Inspected Resources and Resources/data immediate inventory, including
+localization/storyboard directories; data contains shared packs,
+definitions, renderer/shaders, templates and small configuration files.
+Read all three actual bootstrap JSON files (bootstrap, bootstrap_creator,
+bootstrap_legacy): their profile objects are diagnostic verbosity/category
+settings, not player storage or account profiles. Do not edit them or
+duplicate assets as an isolation mechanism. No profile path configuration
+found in this bounded review; nested asset trees were not exhaustively
+searched. Main and OneAuth executable bytes remain unread; a fresh
+container availability check returned ClientError before reading the
+already materialized main file. No further large transfer attempted.
+
+Plan A only. Preserve the single signed app and shared immutable assets;
+private mutable game data and independently retained licensed account
+selection are the acceptance boundary, not necessarily a separate token
+cache implementation. Do not manipulate shared preferences, Keychain,
+MDM or signing to force independence. No new runtime, probe or dependency.
+The existing MAC-09 compact offline intake remains the next evidence
+source; its indicators alone cannot establish native behavior.
+Source reviewed, NOT_EXECUTED; native integration BLOCKED. All holds
+preserved. No request to resend the existing bundle.
 
 ### MAC-09a — operator selects Plan A exclusively
 
