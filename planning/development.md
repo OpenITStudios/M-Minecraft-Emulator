@@ -142,7 +142,13 @@ BS-02: expose terminal cleanupUnconfirmed in existing recording receipt,
 strict TS parser and disabled start across slots, no new requests.
 BS-03: standalone settings saves retain original controller startup
 existence gate through observation/write, refusing concurrent startup.
-BS-05 deferred: server synchronous request/ACK still lacks per-I/O
+BS-04/06: share bounded preference reading with opened-file metadata
+checks and Windows reparse-point refusal; audio stage cleanup owns only
+its successfully created stage, reuse checked storage directory. Preserve
+formats and independent image revalidation; ancestor replacement races
+against outside writers are not proven closed. BS-07: bound WebP
+destination before append and clear partial output, not codec scratch
+or peak RAM. BS-05 deferred: server synchronous request/ACK still lacks per-I/O
 deadline; proper overlapped I/O needs separate review of cancellation
 completion, buffers, peer identity, wire and actor admission; no unsafe
 PIPE_NOWAIT substitution. Cross-process lease behavior and all fixtures

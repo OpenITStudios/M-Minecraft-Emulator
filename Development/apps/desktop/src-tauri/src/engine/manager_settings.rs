@@ -7,15 +7,41 @@ pub fn load_audio()->io::Result<BackgroundAudio> {read_audio(&product_settings()
 fn read_audio(path:&std::path::Path)->io::Result<BackgroundAudio> {
     Ok(read_saved_audio(path)?.unwrap_or_default())
 }
-fn read_saved_audio(path: &std::path::Path) -> io::Result<Option<BackgroundAudio>> {
-    match fs::symlink_metadata(path) {
-        Err(e) if e.kind()==io::ErrorKind::NotFound=>return Ok(None),
-        Err(e)=>return Err(e),
-        Ok(m) if !m.is_file()||m.file_type().is_symlink()=>return Err(io::Error::other("Audio settings must be an ordinary file")),
-        Ok(_)=>{}
+// Shared bounded preference read: validate the actual opened file as
+// well as the path. Each format retains its own size and content limits.
+fn ordinary_preference_file(metadata: &fs::Metadata) -> bool {
+    if !metadata.is_file() || metadata.file_type().is_symlink() { return false; }
+    #[cfg(windows)] {
+        use std::os::windows::fs::MetadataExt;
+        if metadata.file_attributes() & 0x400 != 0 { return false; }
     }
-    let mut bytes=Vec::new();fs::File::open(path)?.take(65).read_to_end(&mut bytes)?;
-    if bytes.len()>64{return Err(io::Error::other("Audio settings are too large"));}
+    true
+}
+fn read_preference_bytes(path: &std::path::Path, limit: usize) -> io::Result<Option<Vec<u8>>> {
+    match fs::symlink_metadata(path) {
+        Err(error) if error.kind()==io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+        Ok(metadata) if !ordinary_preference_file(&metadata) =>
+            return Err(io::Error::other("Settings must be an ordinary file")),
+        Ok(_) => {}
+    }
+    let mut options=fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(windows)] {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x00200000); // FILE_FLAG_OPEN_REPARSE_POINT
+    }
+    let file=options.open(path)?;
+    if !ordinary_preference_file(&file.metadata()?) {
+        return Err(io::Error::other("Settings must be an ordinary file"));
+    }
+    let mut bytes=Vec::new();
+    file.take(limit as u64+1).read_to_end(&mut bytes)?;
+    if bytes.len()>limit { return Err(io::Error::other("Settings file is too large")); }
+    Ok(Some(bytes))
+}
+fn read_saved_audio(path: &std::path::Path) -> io::Result<Option<BackgroundAudio>> {
+    let Some(bytes)=read_preference_bytes(path,64)? else {return Ok(None)};
     serde_json::from_slice(&bytes).map(Some).map_err(io::Error::other)
 }
 pub fn save_audio(value:BackgroundAudio)->io::Result<()> {write_audio(&product_settings()?.join("audio.json"),value)}
@@ -25,7 +51,8 @@ fn write_audio(path:&std::path::Path,value:BackgroundAudio)->io::Result<()> {
     if read_saved_audio(path)? == Some(value) { return Ok(()); }
     fs::create_dir_all(path.parent().ok_or_else(||io::Error::other("Audio settings parent unavailable"))?)?;
     let temp=path.with_extension(format!("{}-{}.tmp",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_nanos()));
-    let result=(||{let mut f=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;f.write_all(&serde_json::to_vec(&value).map_err(io::Error::other)?)?;f.sync_all()?;drop(f);fs::rename(&temp,path)})();
+    let mut f=fs::OpenOptions::new().write(true).create_new(true).open(&temp)?;
+    let result=(||{f.write_all(&serde_json::to_vec(&value).map_err(io::Error::other)?)?;f.sync_all()?;drop(f);fs::rename(&temp,path)})();
     if result.is_err(){let _=fs::remove_file(temp);}result
 }
 
@@ -138,30 +165,13 @@ pub fn load_storage_preferences() -> io::Result<StoragePreferences> {
 pub fn save_storage_preferences(value: StoragePreferences) -> io::Result<()> {
     let directory=product_settings()?;
     fs::create_dir_all(&directory)?;
-    write_storage_preferences(&product_settings()?.join("storage.json"),value)
+    write_storage_preferences(&directory.join("storage.json"),value)
 }
 fn read_storage_preferences(path:&std::path::Path)->io::Result<StoragePreferences> {
     Ok(read_saved_storage_preferences(path)?.unwrap_or_default())
 }
 fn read_saved_storage_preferences(path: &std::path::Path) -> io::Result<Option<StoragePreferences>> {
-    match fs::symlink_metadata(path) {
-        Err(e) if e.kind()==io::ErrorKind::NotFound=>return Ok(None),
-        Err(e)=>return Err(e),
-        Ok(m)=>{
-            if !m.is_file()||m.file_type().is_symlink(){return Err(io::Error::other("Storage settings must be an ordinary file"));}
-            #[cfg(windows)] { use std::os::windows::fs::MetadataExt; if m.file_attributes()&0x400!=0{return Err(io::Error::other("Linked storage settings"));} }
-        }
-    }
-    let mut bytes=Vec::new();
-    let mut options=fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(windows)] { use std::os::windows::fs::{OpenOptionsExt,MetadataExt}; options.custom_flags(0x00200000); }
-    let file=options.open(path)?;
-    let meta=file.metadata()?;
-    if !meta.is_file(){return Err(io::Error::other("Storage settings must be an ordinary file"));}
-    #[cfg(windows)] {use std::os::windows::fs::MetadataExt; if meta.file_attributes()&0x400!=0{return Err(io::Error::other("Linked storage settings"));}}
-    file.take(4097).read_to_end(&mut bytes)?;
-    if bytes.len()>4096{return Err(io::Error::other("Storage settings are too large"));}
+    let Some(bytes)=read_preference_bytes(path,4096)? else {return Ok(None)};
     let value: StoragePreferences=serde_json::from_slice(&bytes).map_err(|_|io::Error::other("Storage settings invalid; saved file preserved"))?;
     value.validate()?;
     Ok(Some(value))
@@ -220,21 +230,7 @@ fn read_performance(path: &std::path::Path) -> io::Result<PerformanceSettings> {
     Ok(read_saved_performance(path)?.unwrap_or_default())
 }
 fn read_saved_performance(path: &std::path::Path) -> io::Result<Option<PerformanceSettings>> {
-    match fs::symlink_metadata(path) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error),
-        Ok(metadata) if !metadata.is_file() || metadata.file_type().is_symlink() => {
-            return Err(io::Error::other(
-                "Performance settings must be an ordinary file",
-            ))
-        }
-        Ok(_) => {}
-    }
-    let mut bytes = Vec::new();
-    fs::File::open(path)?.take(4097).read_to_end(&mut bytes)?;
-    if bytes.len() > 4096 {
-        return Err(io::Error::other("Performance settings file is too large"));
-    }
+    let Some(bytes)=read_preference_bytes(path,4096)? else {return Ok(None)};
     let value: PerformanceSettings = serde_json::from_slice(&bytes).map_err(|_| {
         io::Error::other("Performance settings are invalid; the saved file was preserved")
     })?;
@@ -312,6 +308,18 @@ mod tests {
         assert_eq!(application_root(&exe).unwrap_err().kind(),io::ErrorKind::AlreadyExists);
         assert_eq!(fs::read(old_data.join("preserved-world")).unwrap(),b"keep-again");
         fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn preference_reader_checks_missing_and_bounded_bytes() {
+        use super::*;
+        let root=tempfile::tempdir().unwrap();
+        let path=root.path().join("prefs.json");
+        assert!(read_preference_bytes(&path,64).unwrap().is_none());
+        fs::write(&path,[0u8;64]).unwrap();
+        assert_eq!(read_preference_bytes(&path,64).unwrap().unwrap().len(),64);
+        fs::write(&path,[0u8;65]).unwrap();
+        assert!(read_preference_bytes(&path,64).is_err());
+        assert!(read_preference_bytes(root.path(),64).is_err());
     }
     #[test]
     fn audio_roundtrip_rejects_unknown_and_preserves_bad_preferences() {

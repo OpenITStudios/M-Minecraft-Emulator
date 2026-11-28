@@ -107,6 +107,9 @@ rectangle without resizing (in-place row compaction), and uses pure-Rust
 or changed geometry, nonopaque premultiplied pixels, invalid length, and
 dimensions above 4096 on either side. Raw and encoded limits are 64 and
 80 MiB respectively; these bound the payload, not total codec/GPU memory.
+The shared WebP destination rejects writes before exceeding its byte cap
+(including fitted previews); an encode failure clears partial output.
+Codec scratch allocations and Vec capacity are not a peak-memory guarantee.
 See [WGC 3.1.0 Frame](https://docs.rs/wgc/3.1.0/wgc/frame/struct.Frame.html)
 and [image-webp 0.2.4](https://docs.rs/image-webp/0.2.4/image_webp/struct.WebPEncoder.html).
 Original process handle liveness is rechecked after window identity observation. Native DWM/WGC mapping, DPI, opacity, deadline and actual file size are

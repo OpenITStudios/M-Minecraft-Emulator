@@ -4,6 +4,11 @@ This is the current Tauri 2 / Svelte 5 / TypeScript / Rust application.
 Capture source candidates are capability-gated: selected-instance WebP
 screenshot and independent-slot HEVC NVENC/MKV recording (RTX 3070-compatible codec target). Neither reviewed worker
 binary is approved or shipped; controls remain unavailable until review.
+Managed close (desktop or agent CLI) excludes active recording on selected
+slots; a terminal unconfirmed-cleanup receipt disables subsequent starts.
+Standalone settings saves exclude concurrent controller startup using its
+existing lease. Audio, performance and storage settings share a bounded
+opened-file reader with reparse-point refusal on Windows.
 See [recording contract](../../../docs/system/recording.md) and
 [GPU capture worker](../../tooling/agent/native-gpu-capture/README.md).
 The mounted UI is `src/LazyTesterApp.svelte`, not the historical

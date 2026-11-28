@@ -108,15 +108,32 @@ pub(super) fn encode_client(width:u32,height:u32,mut rgba:Vec<u8>,crop:Crop)->io
     Ok(encoded)
 }
 
+// Bound the destination before each write, not after the encoder has
+// appended an oversized payload. This does not bound codec scratch memory.
+struct BoundedWebp<'a>{bytes:&'a mut Vec<u8>,limit:usize}
+impl io::Write for BoundedWebp<'_>{
+    fn write(&mut self,buf:&[u8])->io::Result<usize>{
+        if buf.len()>self.limit.saturating_sub(self.bytes.len()){
+            return Err(io::Error::other("WebP output budget exceeded"));
+        }
+        self.bytes.extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self)->io::Result<()>{Ok(())}
+}
+
 // Shared direct RGBA -> VP8L encoder. The screenshot caller retains its
 // exact native crop/opacity checks; fitted AI previews have their own cap.
 pub(super) fn encode_webp_rgba(rgba:&[u8],width:u32,height:u32,
     encoded:&mut Vec<u8>,max_bytes:usize)->io::Result<()> {
-    if rgba.len()!=rgba_len(width,height)?{return Err(invalid());}
     encoded.clear();
-    WebPEncoder::new(&mut *encoded).encode(rgba,width,height,ColorType::Rgba8)
-        .map_err(|_|io::Error::other("WebP lossless encode failed"))?;
-    if encoded.len()>max_bytes{return Err(io::Error::other("WebP output budget exceeded"));}
+    if rgba.len()!=rgba_len(width,height)?{return Err(invalid());}
+    let result=WebPEncoder::new(BoundedWebp{bytes:&mut *encoded,limit:max_bytes})
+        .encode(rgba,width,height,ColorType::Rgba8);
+    if result.is_err(){
+        encoded.clear();
+        return Err(io::Error::other("WebP lossless encode failed or exceeded output budget"));
+    }
     Ok(())
 }
 
@@ -125,6 +142,18 @@ mod tests {
     use super::*;
     use image_webp::WebPDecoder;
     use std::io::Cursor;
+
+    #[test]
+    fn webp_writer_refuses_oversize_before_append_and_clears_failed_output(){
+        use std::io::Write;
+        let mut bytes=Vec::new();
+        let mut writer=BoundedWebp{bytes:&mut bytes,limit:2};
+        assert_eq!(writer.write(&[1,2]).unwrap(),2);
+        assert!(writer.write(&[3]).is_err());
+        assert_eq!(bytes,[1,2]);
+        assert!(encode_webp_rgba(&[1,2,3,255],1,1,&mut bytes,2).is_err());
+        assert!(bytes.is_empty());
+    }
 
     #[test]
     fn crop_preserves_pixels_and_original_client_dimensions(){
