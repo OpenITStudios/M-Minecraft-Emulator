@@ -7,6 +7,10 @@ use std::io::{self, BufRead, Write};
 mod previews;
 #[path = "workspace_surface/recovery_gate.rs"]
 mod recovery_gate;
+// Synthetic transport admission contract; absent from all product builds.
+#[cfg(test)]
+#[path = "workspace_surface/macos_transport_contract.rs"]
+mod macos_transport_contract;
 #[cfg(windows)]
 #[path = "workspace_surface/native_timing.rs"]
 mod native_timing;

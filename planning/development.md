@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-07a: standard-session transport review)
+## Current status — cross-platform-native (MAC-07b: synthetic transport admission contract)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,50 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-07b — synthetic transport admission contract
+
+Reviewed pinned native_clients.rs, native_clients_session.rs and
+session_protocol.rs, independent_bootstrap/session_controller.rs,
+controller_ai_input_leases.rs, process_identity.rs, workspace_surface.rs
+and previews.rs. The existing retained Windows Sessions owner holds
+game lifetime and profile state; its original process/window identity
+is Windows-specific (FILETIME, session ID, HWND). Existing input leases
+are feature-gated Windows-specific, not cross-user authentication.
+Workspace preview is presentation-only, max four secondary tiles, with
+existing cancellation fencing. Non-Windows session requests and native
+previews remain Unsupported. Do not pretend these Windows receipts
+represent Mac native facts.
+
+Added a private cfg(test) contract fixture under the existing
+workspace_surface owner, no new product module, feature or public wire
+schema. It models only the distinct OS-user candidate: exact expected
+slot/UID/login-session/PID/birth/window plus controller connection
+generation, independently observed authenticated peer, virtual-session
+and exact-game-window facts. All IDs/facts are synthetic. Refuse unknown,
+console or wrong target, and duplicate user/login/process in two slots.
+Frame admission is metadata-only: exact current route, strictly newer
+sequence, owner-observed freshness and bounded payload size; no queue,
+pixel allocation, codec, fixed production budget or capture loop.
+Existing controller remains the sole future owner of generation, one
+selected input writer and neutral reconciliation. Model switch admission
+only after exact old writer release with a strictly newer lease epoch;
+unknown delivery, disconnect, stale receipt, missing focus or wrong
+connection refuses. No new writer book, network service or session
+lifecycle implementation. Fixture fields are not OS API choices, wire
+credentials or authorization evidence. Synthetic refusal tests authored,
+NOT_EXECUTED. No Windows code path/wire change.
+
+Next MAC-07c: compare public session-local OS mechanisms for observing
+an authorized UID/login context and exact target window, with Apple
+native viewer as feasibility witness. Determine a real trust boundary
+and transport feasibility before writing any live endpoint or RFB
+integration. Need original process lifetime and independently observed
+session identity, not peer claims or console fallback. No new controller;
+no assumption that a presentation connection implies launch/exit.
+Main executable identity, account isolation, background GPU render,
+relative gameplay input and actual two/five instance workspace remain
+BLOCKED. All native, test/CI and release holds preserved.
 
 ### MAC-07a — standard-session transport review and admission boundary
 
@@ -1061,7 +1105,8 @@ MAC-06a records actual user-supplied bundle metadata and exact discovery identit
 MAC-06b adds bounded cross-platform Mach-O evidence intake after transfer failure;
 MAC-06c records observed provisioning allowlist and authentication framework metadata;
 MAC-06d records bounded Mach-O observations of two actual bundled frameworks;
-MAC-07a reviews Standard-session transport and exact-target admission boundaries.
+MAC-07a reviews Standard-session transport and exact-target admission boundaries;
+MAC-07b adds a test-only synthetic transport admission contract.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
