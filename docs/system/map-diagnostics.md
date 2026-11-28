@@ -27,8 +27,9 @@ compatibility is still NOT_VERIFIED.
 Owners:
 - Development/tooling/agent/diagnostics-local.mjs: local evidence import,
   validation, archive, summaries and issue evidence queries.
-- Development/tooling/agent/mcp.mjs: existing one MCP stdio server, delegates
-  strictly bounded read-only queries when a local directory is configured.
+- `Development/tooling/agent/operation-core.mjs`: bounded read-only query
+  admission when a local directory is configured; the same operations serve
+  the existing `mcp.mjs` stdio adapter and trusted `code-mode.mjs` facade.
 - Original five-profile native controller, visual observer, and existing
   [ANALYTICS]/[GAME_RESULTS] reader remain unchanged.
 

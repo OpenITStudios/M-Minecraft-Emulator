@@ -231,8 +231,9 @@ directly, without redispatching a compatibility tool name.
 
 ## Boundaries and next runtime proof
 
-Canonical owner: `Development/tooling/agent/map-test-plan.mjs`; the
-existing `mcp.mjs` only hands off a compact plan through `probe_qa`.
+Canonical map-planning owner: `Development/tooling/agent/map-test-plan.mjs`.
+`operation-core.mjs` coordinates the checkpoint and compact `probe_qa`
+projection for both MCP and the trusted Code Mode facade.
 P2 adds a bounded read-only proof gate to the existing Lazy Tester `probe-qa.mjs`; the TEAM'S original Skills Probe runner and native game controller remain unchanged. No new
 daemon, observer, data store, CI, Minecraft world/account mutation, ZIP
 rehash, map source vendoring, native input or auto-execution.
