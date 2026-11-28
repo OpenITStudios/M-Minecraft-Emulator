@@ -322,6 +322,7 @@ export function createGpuFrameSource({
     const abort=new AbortController();
     const reservation={cancelled:false,abort};
     pendingStarts.set(slot,reservation);
+    let waitingForClose=false;
     try {
       const file=await statFile(executable);
       if(closed||reservation.cancelled||!file.isFile()||file.isSymbolicLink()) {
@@ -332,11 +333,24 @@ export function createGpuFrameSource({
         '--width',String(webpSize.width),'--height',String(webpSize.height)];
       let output;
       try {
-        ({stdout:output}=await executePreview(executable,args,{
+        const execution=executePreview(executable,args,{
           encoding:'buffer',shell:false,windowsHide:true,timeout:8000,
-          maxBuffer:MAX_FRAME+HEADER,signal:abort.signal}));
+          maxBuffer:MAX_FRAME+HEADER,signal:abort.signal});
+        // Promisified execFile exposes its exact ChildProcess. Abort can
+        // reject before close; neither a rejected promise nor kill proves exit.
+        waitingForClose=true;
+        if(typeof execution?.child?.once!=='function') {
+          void Promise.resolve(execution).catch(()=>{});
+          abort.abort();
+          throw new Error('GPU_PREVIEW_UNAVAILABLE');
+        }
+        execution.child.once('close',()=>{
+          waitingForClose=false;
+          if(stopping.get(slot)===reservation)stopping.delete(slot);
+        });
+        ({stdout:output}=await execution);
       }catch {throw new Error('GPU_PREVIEW_UNAVAILABLE');}
-      if(closed||reservation.cancelled||!Buffer.isBuffer(output)||output.length>MAX_FRAME+HEADER) {
+      if(waitingForClose||closed||reservation.cancelled||!Buffer.isBuffer(output)||output.length>MAX_FRAME+HEADER) {
         throw new Error('GPU_PREVIEW_UNAVAILABLE');
       }
       let frame=null;
@@ -357,6 +371,8 @@ export function createGpuFrameSource({
         sha256:frame.sha256,capturedAtMs:frame.capturedAtMs,workerSequence:frame.sequence,
         frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED'};
     }finally {
+      // Do not allow a new worker while the exact preview is still closing.
+      if(!closed&&waitingForClose)stopping.set(slot,reservation);
       if(pendingStarts.get(slot)===reservation)pendingStarts.delete(slot);
     }
   }

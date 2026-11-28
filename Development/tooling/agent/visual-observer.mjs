@@ -287,6 +287,11 @@ export function createVisualObserver({
       const {meta,image,identity,sourceFrameAtMs,sourceTimeKind,
         producerSequence}=boundedFrame(frame);
       const collectedMs=clock();
+      // Preserve explicit slow intervals; only bound adaptive WebP backoff
+      // for faster samplers so they do not needlessly age out the frame.
+      const cadenceLimit=meta.mimeType==='image/webp'?
+        Math.max(state.intervalMs,MAX_READ_FRAME_AGE_MS-1000):
+        OBSERVATION_LIMITS.maximumIntervalMs;
       if(sourceFrameAtMs!==null &&
          (sourceFrameAtMs>collectedMs ||
           collectedMs-sourceFrameAtMs>MAX_READ_FRAME_AGE_MS)) {
@@ -310,6 +315,7 @@ export function createVisualObserver({
         if(producerSequence===state.producerSequence) {
           state.duplicateGpuReads++;
           state.status='GPU_WORKER_FRAME_NOT_ADVANCED';
+          if(meta.mimeType==='image/webp')delay=Math.min(cadenceLimit,state.intervalMs*2);
           return;
         }
       }
@@ -347,7 +353,7 @@ export function createVisualObserver({
         // is not sufficient proof that a game has stopped.
         state.status=state.sameBytesCount>=3 ?
           (state.mimeType==='image/webp'?'STATIC_WEBP_BYTES_GAME_STATE_UNKNOWN':'STATIC_PNG_BYTES_GAME_STATE_UNKNOWN'):'FRAME_BYTES_UNCHANGED';
-        delay=Math.min(OBSERVATION_LIMITS.maximumIntervalMs,
+        delay=Math.min(cadenceLimit,
           state.intervalMs*(state.sameBytesCount>=3?3:2));
       }
     } catch(error) {

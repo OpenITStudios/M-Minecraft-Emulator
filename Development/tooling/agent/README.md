@@ -579,12 +579,17 @@ identical (PID, birth, Windows session and root HWND) across reads.
   once and releases raw bytes. A newer, not-yet-verified different frame
   may coexist with the observer's prior verified payload. Worker receipts
   and native identity/freshness remain independently checked.
-- When WGC stops or fails, the provider's slot map retains only
-  bounded status counters—not the stopped child, decoder or partial PNG.
-  Late callbacks from the old worker cannot change a restarted slot.
+- When WGC stops or fails, the provider's slot map retains bounded
+  status counters. Replacement is refused until the exact persistent
+  or one-shot child closes, including cancelled, timed-out or failed
+  previews. No new process owner or retry. Late callbacks from the old
+  worker cannot change a restarted slot.
 - The observer uses one short-lived per-slot cache, bounded freshness
-  and sampling intervals, adaptive backoff for identical PNG bytes,
-  and metadata-only group summaries. Replayed worker sequences are
+  and sampling intervals, adaptive backoff for identical bytes.
+  WebP also backs off repeated producer packets without renewing freshness;
+  adaptive delays are capped at 2.5 s or the explicitly requested longer
+  interval. The existing native producer FPS and legacy PNG cadence remain.
+  Metadata-only group summaries remain. Replayed worker sequences are
   not new observations; a hash change is not semantic movement.
 - Lossless capture and native target revalidation are mandatory.
   Avoid extra compression, constant screenshot transmission, second

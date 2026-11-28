@@ -317,6 +317,12 @@ test('explicit WebP decoder checks exact negotiated size and format, with no PNG
   assert.throws(()=>make().push(mismatch),/dimensions/);
   assert.throws(()=>previewSize(4096,360),/Invalid tool arguments/);
 });
+function completedPreview(stdout) {
+  const child=new EventEmitter();
+  queueMicrotask(()=>child.emit('close',0,null));
+  return Object.assign(Promise.resolve({stdout}),{child});
+}
+
 test('one-shot preview uses the existing executable, exact target, bounded exit and no stream',async()=>{
   const target={pid:42,windowId:123,createdFileTime:'134000000000000001',sessionId:1};
   let calls=0,output=webpPacket(320,180);
@@ -324,12 +330,12 @@ test('one-shot preview uses the existing executable, exact target, bounded exit 
     executable:path.resolve('lazy-tester-gpu-capture.exe'),platform:'win32',clock:()=>100000,
     statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
     spawnProcess:()=>{throw Error('One shot must not create a persistent stream');},
-    executePreview:async(_exe,args,options)=>{
+    executePreview:(_exe,args,options)=>{
       calls++;assert.deepEqual(args,['--preview','--pid','42','--window-id','123',
         '--birth',target.createdFileTime,'--session','1','--width','320','--height','180']);
       assert.equal(options.shell,false);assert.equal(options.timeout,8000);
       assert.equal(options.maxBuffer,3*1024*1024+28);
-      return {stdout:output};
+      return completedPreview(output);
     },
   });
   try {
@@ -354,7 +360,7 @@ test('WebP stream and one-shot share slot admission; cached image is not re-enco
     statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
     spawnProcess:(_exe,args)=>{assert.equal(args[0],'--webp');assert.deepEqual(args.slice(-4),
       ['--width','320','--height','180']);return child;},
-    executePreview:async()=>{calls++;return {stdout:webpPacket(320,180)};},
+    executePreview:()=>{calls++;return completedPreview(webpPacket(320,180));},
     schedule:()=>({unref(){}}),cancel:()=>{},
   });
   try {
@@ -378,4 +384,44 @@ test('WebP stream and one-shot share slot admission; cached image is not re-enco
     child.emit('close');
     assert.equal((await source.captureOnce(2,target,{width:320,height:180})).mimeType,'image/webp');
   }finally{source.shutdown();}
+});
+
+test('cancelled or failed preview retains exact slot until child close',async()=>{
+  const target={pid:42,windowId:123,createdFileTime:'134000000000000001',sessionId:1};
+  for(const reason of ['abort','timeout','early-success']) {
+    const child=new EventEmitter();
+    let rejectRun,resolveRun,started;
+    const startedRun=new Promise(resolve=>{started=resolve;});
+    let calls=0;
+    const source=createGpuFrameSource({
+      executable:path.resolve('lazy-tester-gpu-capture.exe'),platform:'win32',clock:()=>100000,
+      statFile:async()=>({isFile:()=>true,isSymbolicLink:()=>false}),
+      spawnProcess:()=>{throw Error('unexpected persistent worker');},
+      executePreview:(_exe,_args,{signal})=>{
+        calls++;
+        if(calls!==1)return completedPreview(webpPacket(320,180));
+        const run=new Promise((resolve,reject)=>{resolveRun=resolve;rejectRun=reject;});
+        signal.addEventListener('abort',()=>rejectRun(Error('cancelled')),{once:true});
+        started();
+        return Object.assign(run,{child});
+      },
+    });
+    try {
+      const pending=source.captureOnce(2,target,{width:320,height:180});
+      const failed=assert.rejects(pending,/GPU_PREVIEW_UNAVAILABLE/);
+      await startedRun;
+      if(reason==='abort')source.stop([2]);
+      else if(reason==='timeout')rejectRun(Error('timeout'));
+      else resolveRun({stdout:webpPacket(320,180)});
+      await failed;
+      await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/GPU_WORKER_STOP_PENDING/);
+      await assert.rejects(source.start(2,target),/GPU_WORKER_STOP_PENDING/);
+      assert.equal(calls,1);
+      child.emit('errorHandledByFixture'); // an unrelated event is not close proof
+      await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/GPU_WORKER_STOP_PENDING/);
+      child.emit('close',1,null);
+      assert.equal((await source.captureOnce(2,target,{width:320,height:180})).mimeType,'image/webp');
+      assert.equal(calls,2);
+    }finally{source.shutdown();}
+  }
 });

@@ -962,3 +962,55 @@ test('invalid deferred image is not marked delivered',async()=>{
     assert.equal(observer.read(2,{includeImage:false}).metadata.screenReviewFrameDelivered,false);
   }finally{observer.shutdown();}
 });
+
+test('WebP cadence backs off repeated packets without renewing freshness and returns to base on changed bytes',async()=>{
+  const t=clockFixture();
+  let n=0;
+  const observer=createVisualObserver({...t,capture:async slot=>{
+    n++;
+    const raw=frame(slot,n>=6?'b'.repeat(64):'a'.repeat(64));
+    return {...raw,metadata:{...raw.metadata,provider:'NATIVE_WGC_PERSISTENT',
+      mimeType:'image/webp',screenshotStatus:'WEBP_RETURNED_NOT_GAMEPLAY_PROOF',
+      workerSequence:n<=2?1:n-1,capturedAtMs:n<=2?1000:t.clock()}};
+  }});
+  try {
+    observer.start([2],{intervalMs:1000,durationMs:30000});
+    await t.next(); // 1000
+    await t.next(); // 2000: duplicate producer packet
+    const duplicate=observer.read(2,{includeImage:false}).metadata;
+    assert.equal(duplicate.sourceFrameAtMs,1000);
+    assert.equal(duplicate.successfulSamples,1);
+    assert.equal(duplicate.duplicateGpuReads,1);
+    const prior=t.clock();
+    await t.next(); // duplicate backoff 2000
+    assert.equal(t.clock()-prior,2000);
+    await t.next(); // unchanged bytes, 2000
+    await t.next(); // unchanged bytes, 2000, then 2500 cap
+    const beforeChanged=t.clock();
+    await t.next();
+    assert.equal(t.clock()-beforeChanged,2500);
+    assert.equal(observer.read(2,{includeImage:false}).metadata.sequence,2);
+    const changed=t.clock();
+    await t.next();
+    assert.equal(t.clock()-changed,1000);
+  }finally{observer.shutdown();}
+});
+
+test('WebP adaptive backoff never shortens an explicitly slow sampler interval',async()=>{
+  const t=clockFixture();
+  let n=0;
+  const observer=createVisualObserver({...t,capture:async slot=>{
+    const raw=frame(slot);
+    return {...raw,metadata:{...raw.metadata,provider:'NATIVE_WGC_PERSISTENT',
+      mimeType:'image/webp',screenshotStatus:'WEBP_RETURNED_NOT_GAMEPLAY_PROOF',
+      workerSequence:++n,capturedAtMs:t.clock()}};
+  }});
+  try {
+    observer.start([2],{intervalMs:5000,durationMs:30000});
+    await t.next();
+    await t.next();
+    const now=t.clock();
+    await t.next();
+    assert.equal(t.clock()-now,5000);
+  }finally{observer.shutdown();}
+});
