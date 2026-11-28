@@ -1,13 +1,72 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-01)
+## Current status — cross-platform-native (MAC-02)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
 (MC01–MC05), one official installation per host, one UI, one retained
 session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
-implementation BLOCKED at Mac profile isolation. Not SOURCE_READY_FOR_LOCAL.
+implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
+and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-02 — artifact candidate and isolation findings (2026-11-28)
+
+OBSERVED_EXTERNAL: [official changelog](https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log)
+identifies retail 26.33 (2026-10-28). The [pinned upstream Homebrew cask](https://github.com/Homebrew/homebrew-cask/blob/e4b5deed8c87229fd51ee3a71aff7f8679053419/Casks/m/minecraft-education.rb)
+and [cask API](https://formulae.brew.sh/api/cask/minecraft-education.json)
+identify the candidate below. The SHA is a third-party published
+download checksum, NOT an independently computed hash, a signer pin,
+or runtime admission.
+
+- Candidate: `https://downloads.minecrafteduservices.com/retailbuilds/MacOS/Minecraft_Education_1.26.33.0.dmg`
+- Expected DMG SHA-256 from cask:
+  `80bb151b1db4e46edc503230bc8ece25210fff94b7d73d6774559a054398a91e`
+- Bundle entry: `minecraft-edu.app`; Homebrew installs it as
+  `Minecraft Education.app`. Names are discovery hints only.
+- Cask lists both `com.microsoft.minecraft-edu` and
+  `com.microsoft.minecraftpe` preference/cache paths; neither is proof
+  of the current bundle ID. Preserve all candidate legacy data; do not
+  invoke the cask's zap or uninstall rules.
+- Official [Mac update guide](https://edusupport.minecraft.net/hc/en-us/articles/360047705032-Update-to-a-New-Version-of-Minecraft-Education)
+  describes manual installation. Do not port Windows updater-task semantics.
+
+| Mechanism | Evidence and decision |
+| --- | --- |
+| AppKit new instance | [New instance](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/createsnewapplicationinstance) supports a launch request; [LSMultipleInstancesProhibited](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/LaunchServicesKeys.html) can refuse it. Actual plist and internal game singleton unknown. Candidate only. |
+| Per-process environment or argument | [Apple environment](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/environment) and [arguments](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/arguments) are ignored for sandboxed callers; [NSHomeDirectory](https://developer.apple.com/documentation/foundation/nshomedirectory%28%29) uses the user's or sandbox's home. No verified Education profile argument. Do not assume HOME redirects all files or identity. |
+| Separate Microsoft accounts | [World locations](https://edusupport.minecraft.net/hc/en-us/articles/4404785703316-Location-of-World-Files) explicitly use the device login user, not the game account. [Manage Accounts](https://edusupport.minecraft.net/hc/en-us/articles/360061382672-Sign-Into-Minecraft-Education) can remember the last player or switch accounts; no concurrent isolated login guarantee. |
+| App Sandbox / Keychain | [Apple sandbox](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox) binds container to signed app identity on macOS 14+; [Keychain groups](https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps) bind protected items to authorized groups. Neither is a supported arbitrary per-instance profile namespace. Do not modify signature, entitlements or credentials. |
+| Alternative Bedrock launcher | [mcpelauncher upstream](https://github.com/minecraft-linux/mcpelauncher-manifest) uses a separate launcher/Android compatibility stack; its own [paths](https://mcpelauncher.readthedocs.io/en/latest/faq/index.html) do not establish official Education native compatibility. Reject as replacement. Java launcher gameDir and Education Classroom Mode multi-instance are different products, not evidence. |
+
+Smallest discriminating artifact review for a future authorized evidence
+source: read the exact DMG checksum, app Info.plist (CFBundleIdentifier,
+CFBundleExecutable, CFBundleVersion, CFBundleShortVersionString,
+LSMinimumSystemVersion, LSMultipleInstancesProhibited if present), executable
+Mach-O slices, signed bundle integrity, designated requirement and relevant
+sandbox/app-group entitlement presence. Use macOS standard metadata
+tools (shasum, plutil, lipo, codesign) on the authorized copy; no installer,
+launch, credential enumeration, data migration, entitlement changes or
+Gatekeeper override. Keep only sanitized metadata, no package bytes in Git.
+[Apple designated requirement](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements/)
+is a signature identity, not proof of profile isolation. Missing plist key
+is not proof that the game allows multiple instances.
+
+Decision rule: a valid image and supported launch mechanism are necessary,
+not sufficient. Before any managed Mac launch, establish a supported
+per-instance game data AND account mechanism with no shared mutable roots,
+including settings, caches, worlds and authentication broker behavior.
+If no supported mechanism exists, keep the Mac route unsupported; a
+single-client Mac variant or other-user workflow changes product acceptance
+and requires a separate design decision. Do not open a second runtime
+or call a normal user game session an isolated profile.
+
+Proof: official documents, exact upstream cask source and existing
+Windows source/unsupported gates reviewed. DMG bytes, actual Info.plist,
+Mach-O, signature, entitlements and native login/storage behavior NOT
+INSPECTED; no host or execution evidence. No new runtime module, dependency,
+CLI, test run or version bump. MAC-02 advances provenance and narrows the
+blocker, not Mac implementation readiness.
 
 ### Minimal architecture — proposed, not implemented
 
@@ -62,9 +121,9 @@ managed launch until a safe mechanism is established; two PIDs are not proof.
 
 ### Implementation and acceptance sequence
 
-1. MAC-02: identify authorized official artifact and verified independent
-   storage/account mechanism, with sanitized image/architecture/signature
-   and boundary evidence. No binary or secret in Git; no execution now.
+1. MAC-02: candidate package identified; actual artifact metadata and
+   verified independent storage/account mechanism remain outstanding.
+   Obtain sanitized image/architecture/signature and boundary evidence. No binary or secret in Git; no execution now.
 2. MAC-03: implement narrow owner-to-consumer slice, one controller and
    two independent persistent profiles, then reuse slot path for five.
    Author fixtures for shared-root rejection, changed image, stale identity,
@@ -83,7 +142,7 @@ managed launch until a safe mechanism is established; two PIDs are not proof.
    CPU/RAM/GPU/frame time/startup and Windows regression. No estimated
    performance claim or source-only PASS.
 
-MAC-01 changes planning only; no runtime code, dependencies, fake adapters,
+MAC-01 and MAC-02 change planning only; no runtime code, dependencies, fake adapters,
 test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
 and defensible isolation mechanism. Preserve all existing holds.
