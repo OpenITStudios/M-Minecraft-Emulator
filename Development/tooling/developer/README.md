@@ -12,6 +12,7 @@ DEV.cmd inspect --json
 DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd review --json
+DEV.cmd report --json
 DEV.cmd review --base-sha <40-char-ancestor-SHA> --json
 DEV.cmd review --json --paths Development/tooling/agent/operation-core.mjs
 DEV.cmd plan --profile local-smoke --json
@@ -28,6 +29,21 @@ DEV.cmd run auto --expect-sha <40-char-Local-SHA> --json
 DEV.cmd run auto --expect-sha <40-char-Local-SHA> --base-sha <40-char-ancestor-SHA> --json
 ```
 
+
+The read-only `report --json` operation reviews only the fixed checkout's
+`Data/Reports/issues.json` (16 KiB maximum). It does not read staging, launch
+Minecraft, run tests, invoke AI, modify files or scan private folders. Missing
+checkpoint returns `NO_REPORT`, not health proof. It validates the current
+schema-2 allowlisted UI/native observations, then selects at most 12 review
+candidates by static urgency (1 highest), unresolved evidence, recurrence and
+observed attempts. It emits source paths and investigation checks once per
+route, retains producer separation and reports omitted/truncated/unavailable
+coverage. Priority is a review heuristic, not verified severity or root cause.
+`reviewSourceSha` identifies the current Local checkout, never the report's
+unverified build. The file is locally supplied evidence, not authenticated
+runtime attestation. No automatic patch or retry is authorized. The reader
+checks ordinary paths and stable bounded file metadata; this is not a native
+Windows reparse/handle-chain security attestation. See the desktop report guide.
 
 The read-only `review` operation is an evidence-grounded improvement plan,
 not a second agent harness or test runner. It uses the same exact Local source

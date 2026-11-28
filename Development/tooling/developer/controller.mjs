@@ -5,6 +5,7 @@ import {spawn, spawnSync} from 'node:child_process';
 import {dirname, join, resolve, isAbsolute, posix, win32} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {beginSmoke,readSmoke,recordSmoke} from '../local-test/session.mjs';
+import {readIssueReport,reviewIssueReport} from './report-review.mjs';
 
 export const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const REGISTRY = resolve(dirname(fileURLToPath(import.meta.url)), 'tasks.json');
@@ -573,6 +574,7 @@ export function classifyCompletion(before,after,exitCode,spawnError=false,interr
 function report(operation,data) {return {schema:1,operation,...data};}
 function usage() {
   return 'Usage: DEV.cmd inspect|catalog|plan|review [--json] [--profile fast|local-smoke|five-client|release|experimental] [--base-sha <ancestor-40-char-SHA>] [--paths <source paths>...]\n'+
+    '       DEV.cmd report [--json]\n'+
     '       DEV.cmd run auto --expect-sha <40-char Local SHA> [--base-sha <ancestor-40-char-SHA>] [--json]\n'+
     '       DEV.cmd run <task-id> --expect-sha <40-char Local SHA> [--approve <task-id>] [--json]\n'+
     '       DEV.cmd smoke start --expect-sha <full-SHA> [--json]\n'+
@@ -793,7 +795,7 @@ async function runTask(task,parsed,source,selection=null) {
 }
 export async function main(argv=process.argv.slice(2)) {
   const [operation,...arguments_]=argv;
-  if(!['inspect','catalog','plan','review','run','smoke'].includes(operation)) {
+  if(!['inspect','catalog','plan','review','report','run','smoke'].includes(operation)) {
     console.error(usage());return 2;
   }
   if(operation==='smoke') {
@@ -846,6 +848,15 @@ export async function main(argv=process.argv.slice(2)) {
   let source;
   try {source=sourceInfo();}
   catch(error){return blocked(operation,error.message,parsed.json);}
+  if(operation==='report') {
+    if(source.branch!=='Local')return blocked(operation,'Report review requires branch Local',parsed.json);
+    try {
+      const text=readIssueReport(REPO);
+      const review=text===null?{status:'NO_REPORT',proof:'NO_CHECKPOINT_NOT_HEALTH_PROOF'}:reviewIssueReport(text);
+      emit(report(operation,{reviewSourceSha:source.sha,...review}),parsed.json);
+      return 0;
+    }catch{return blocked(operation,'Issue checkpoint unavailable, changed or invalid',parsed.json);}
+  }
   if(operation==='inspect') {
     let paths;
     try {paths=changedPaths();}catch(error){return blocked(operation,error.message,parsed.json);}

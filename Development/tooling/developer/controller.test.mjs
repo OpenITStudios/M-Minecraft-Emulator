@@ -50,6 +50,12 @@ test('registry refuses injected command, duplicate identity, and unreviewed mode
   assert.throws(()=>validatedRegistry(rogue),/Invalid/);
 });
 
+test('issue report review accepts only the fixed read-only command arguments',()=>{
+  assert.equal(parseFlags(['--json'],'report').json,true);
+  for(const args of [['--paths','Data/Reports/issues.json'],['--approve','anything'],['--json','--json'],['--base-sha',SHA]])
+    assert.throws(()=>parseFlags(args,'report'),/Unexpected|repeated/);
+});
+
 test('operator-only smoke commands require revision pinning, safe IDs and explicit PASS report',()=>{
   const id='20261103T123000Z-aaaaaaaa-smoke-1234abcd';
   assert.equal(parseSmokeFlags(['start','--expect-sha',SHA]).action,'start');

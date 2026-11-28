@@ -2,13 +2,14 @@
 
 ## Current status
 
-Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–05). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).
+Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–06). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).
 
 - RPT-01–04: selective desktop and Rust request-client report, 48+16 rows, bounded counts and receipt-grounded recovery/recurrence; no routine logs, polling, raw data or inferred mutation outcomes. [Exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/35e652489d1ba297aff3845ec51964f5018678b8/planning/development.md).
 - RPT-05: one ordinary product desktop writer after exclusive instance lease; `Data/Reports/issues.json` latest issue-bearing lifetime, 16 KiB hard cap. Native checkpoint after request gate release; UI issue-only coalesced submission on new/recovered/recurrent/overflow or power-of-two counts. Explicit Copy retry and exit flush; identical on-disk bytes skip; exclusive fixed staging, pinned directory chain, same-directory publication. Healthy runs preserve previous checkpoint. Interrupted/unrecognized files preserved, no automatic deletion or historical recovery-state import. No new dependency, timer or service.
+- RPT-06: existing DEV.cmd report --json reads only the checkout's bounded checkpoint, validates current schema 2, maps all 50 known issue codes to current source investigation routes and prioritizes up to 12 observations with explicit omitted/unknown/truncated coverage. UI/native provenance retained, build and cause unknown; review SHA is not report build. No runtime instrumentation, AI calls, writes, execution or automatic remediation. Authored offline/catalog/routing fixtures NOT_EXECUTED. [Developer report guide](../Development/tooling/developer/README.md).
 - Standalone process failures, crash before checkpoint, unsubmitted UI repeats, historical UI read, exact build identity, correlation and measured overhead remain unresolved. [Checkpoint contract](../Development/apps/desktop/README.md#bounded-local-checkpoint). Native/TS fixtures authored NOT_EXECUTED. ICE-01–04 and prior PLA/source scopes closed; ICE-05/OPT-07 held.
 
-**Next — STOP at scoped RPT-01–05 source ceiling.** Native ABI v4 digest approval missing; standard dev/package/new launch blocked. All tests/builds/benchmarks/native acceptance NOT_EXECUTED. No CI or unapproved local validation.
+**Next — STOP at scoped RPT-01–06 source ceiling.** Native ABI v4 digest approval missing; standard dev/package/new launch blocked. All tests/builds/benchmarks/native acceptance NOT_EXECUTED. No CI or unapproved local validation.
 
 ## Unreleased — Rust-first integration
 

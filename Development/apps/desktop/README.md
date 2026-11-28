@@ -115,6 +115,19 @@ Historical evidence is available on disk, not imported into live UI.
 A crash before checkpoint or between repeat checkpoints may lose evidence.
 CLI/controller/helper and startup diagnostic processes never write.
 
+### Development feedback review
+
+Use `DEV.cmd report --json` in the authorized local developer checkout to
+review the latest fixed `Data/Reports/issues.json`. The existing pinned Node
+developer controller calls `tooling/developer/report-review.mjs` only on
+request; no installed-product dependency or runtime analysis. It returns up to
+12 prioritized issue observations, grouped investigation routes to current
+source owners, and explicit omitted/truncated/unknown coverage. UI/native
+observations remain distinct, recovery does not prove the original action,
+and the reported build and root cause remain UNKNOWN/NOT_ESTABLISHED.
+No report means no saved evidence, not healthy. Source mapping is a review
+starting point, not automated diagnosis or permission to execute a fix.
+
 The summary does not include success denominators, unobserved native
 failures, exact root causes or historical process exits. It cannot
 measure performance, availability or failure rates. Existing developer
