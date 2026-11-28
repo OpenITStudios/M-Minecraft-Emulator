@@ -562,7 +562,7 @@ export function qualityReviewForPaths(paths,revision) {
       {id:'PROPOSE',status:'NOT_EXECUTED',
         requirement:'Compare no-change, correction in the existing owner, reuse and a justified minimal extension. Cite exact current source for each candidate.'},
       {id:'PROBE',status:'NOT_EXECUTED',
-        requirement:'Review each candidate against owner boundaries, negative cases, changed consumers, source provenance and missing runtime evidence. No synthetic PASS.'},
+        requirement:'Review each candidate against owner boundaries, negative cases, changed consumers, source provenance and missing runtime evidence. Identify unrelated responsibilities, duplicate mutable state, generic owner names and unnecessary forwarding/dependency cycles. File size is a review signal, not a split rule. No synthetic PASS.'},
       {id:'COMPOSE',status:'NOT_EXECUTED',
         requirement:'Adopt only a supported, minimal source change; unresolved risk remains explicit and no agent automatically selects or commits a winner.'}
     ]:[],

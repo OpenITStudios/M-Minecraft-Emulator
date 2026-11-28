@@ -48,6 +48,18 @@ Keep fixtures behind one Windows/test gate and retain domain-specific names
 inside that namespace. Do not rename stable IPC, package or data contracts
 for cosmetic consistency.
 
+### Responsibility-based module naming
+
+Name a private module by its real domain and its owner when the folder
+alone is insufficient: for example `controller_testing_runs.rs`,
+`owned_game_windows.rs`, and `probe-qa-operations.mjs`. Use
+snake_case for Rust and kebab-case for agent JavaScript, matching their
+existing source conventions. A generic `utils`, `helpers`, `manager`
+or `state` name requires a concrete cohesive responsibility; do not
+create a dumping ground or a version-suffixed parallel implementation.
+Keep tests in their owner's test module and preserve stable public wire
+and installed names.
+
 ## Persistent product data
 
 - Current profile folders: `Data/Launchers/Minecraft-1..5`.

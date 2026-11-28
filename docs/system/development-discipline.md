@@ -22,6 +22,29 @@ Mandatory for repository/system development, adapted from the owner-first, minim
 7. **Verify proportionally:** use exact-tree/consumer checks and positive/negative regression cases first. Executed Node/Rust/Tauri tests require actual execution evidence. Package/Windows/game claims require corresponding environments. GitHub Actions remain disabled.
 8. **Stop with truth:** record the commit, changed owner, verified claim, proof ceiling and next necessary task in `planning/development.md` at a meaningful handoff. Do not continue cosmetic or speculative work after the requirement is met.
 
+## Prevent responsibility accumulation
+
+Use the existing `DEV.cmd review` and repository verifier. Review the
+actual state owner, callers, independently changing responsibilities,
+error/lifetime boundaries and unnecessary forwarding before expanding a
+module. Size or dependency fan-out is a review signal, not proof of a
+God File; no arbitrary line limit or automatic split. A cohesive large
+module can remain intact. Extract only when it improves the actual
+interface or removes duplication; never create a second controller,
+mutable authority, cache or worker to reduce file length.
+
+The existing `verify.mjs` checks named declarations of the refactored
+native and agent source families against their current owners.
+Missing, moved or duplicated conventional declaration lines require
+review and an intentional owner/consumer/witness update. Re-exports
+do not count as owners; named test files are excluded. This scoped
+lexical check does not detect renamed semantic duplicates, arbitrary
+new God Files, macro-generated declarations or every dependency cycle.
+Use the optional [source dependency graph](source-dependency-graph.md)
+only when direct source review needs it. Neither check is a compiler
+or runtime acceptance. Keep the existing handoff below its established
+8,000-character bound; use immutable Git history for completed detail.
+
 ## Evidence-grounded source improvement (Harness² / DeepSeek Harness / REA)
 
 Use the existing `DEV.cmd review --json` source-only route when a reviewed

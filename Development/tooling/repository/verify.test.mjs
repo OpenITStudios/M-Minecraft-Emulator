@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {traceFrontend,verifyDesktopWindowsDeps,verifyFrontendNativeIpcBoundary,
-  verifyNativeGraphicsExperimentBoundary,verifyNativeHudCompositionBoundary} from './verify.mjs';
+  verifyNativeGraphicsExperimentBoundary,verifyNativeHudCompositionBoundary,
+  ownershipSourcePath,verifyNamedOwnership} from './verify.mjs';
 test('frontend reachability rejects missing/escaping imports and unmounted alternate apps',()=>{
   assert.deepEqual(traceFrontend({'main.ts':"import App from './App.svelte';",'App.svelte':"import './style.css';",'style.css':''}),['main.ts','App.svelte','style.css']);
   assert.throws(()=>traceFrontend({'main.ts':"import './missing.js';"}),/Missing/);
@@ -152,4 +153,27 @@ test('experimental native AI inputs remain OFF in product releases and require s
     ()=>verify(build,manifest,cmake,native.replace('= None;','= REVIEWED_EDUCATION_BOOTSTRAP;')),
     ()=>verify(build,manifest,cmake,native.replace('    REVIEWED_EDUCATION_AI_BOOTSTRAP,','    REVIEWED_EDUCATION_BOOTSTRAP,')),
   ]) assert.throws(invalid);
+});
+
+// Scoped ownership regression: no line-count gate, no source execution.
+test('named ownership rejects missing, duplicate and moved declarations without rejecting large cohesive files',()=>{
+  const first='engine/domain.rs',second='engine/other.rs',js='agent/probe-qa-operations.mjs';
+  const expected=[['struct Sessions',first],['const probeQaPlans',js]];
+  const valid={
+    [first]:'pub(super) struct Sessions {}\n'+ '// cohesive detail\n'.repeat(2500),
+    [second]:'use super::Sessions;\n// struct Sessions {}',
+    [js]:'  const probeQaPlans=new Map();',
+  };
+  assert.doesNotThrow(()=>verifyNamedOwnership(valid,expected));
+  assert.throws(()=>verifyNamedOwnership({...valid,[second]:'struct Sessions {}'},expected),/Named ownership/);
+  assert.throws(()=>verifyNamedOwnership({...valid,[first]:'', [second]:'struct Sessions {}'},expected),/Named ownership/);
+  assert.throws(()=>verifyNamedOwnership({...valid,[js]:''},expected),/Named ownership/);
+  assert.throws(()=>verifyNamedOwnership({...valid,[js]:valid[js]+'\n'+valid[js]},expected),/Named ownership/);
+});
+test('ownership check only reads selected source families, not extracted fixtures or data',()=>{
+  const engine='Development/apps/desktop/src-tauri/src/engine/',agent='Development/tooling/agent/';
+  for(const path of [engine+'native_clients_session.rs',engine+'instance_identity/windows/image_signature.rs',
+    engine+'independent_bootstrap/session_controller.rs',agent+'operation-core.mjs'])assert.ok(ownershipSourcePath(path));
+  for(const path of [engine+'independent_bootstrap/tests.rs',engine+'instance_identity/coordinate_tcp_pid_witness_fixture.rs',
+    agent+'mcp.test.mjs','Data/profiles.json','workspace/private/profile.json'])assert.ok(!ownershipSourcePath(path));
 });

@@ -2,177 +2,39 @@
 
 ## Current status
 
-**MOD-07 — Cross-owner consistency (scoped source integration).** Baseline `14ffcac87f66325685cb37be430de51c4ece1538`. Audit extracted module paths and explicit imports, shared state/admission and developer source routing. Session protocol imports its actual sibling owners rather than the parent facade. Storage inspection matches the already-observed process roster once per report (including one FILETIME parse per observed process); per-slot idle/error precedence and fresh mutation admission remain unchanged. Offline issue review points receipt failures and Probe checkpoints to their extracted source owners, retaining bounded evidence and unknown-root-cause semantics. Authored negative and routing fixtures NOT_EXECUTED. Source-only review is scoped, not whole-repo compilation or proof of performance. MOD-08 prevention next; all existing local/CI/native holds remain.
+Branch `Local`; Unreleased. Work: `prelocal-modularity-efficiency`.
+MOD-01–08 scoped source integration; MOD-09 final integration remains.
+Baseline for MOD-08: `f7fc983ead90964b40d99ec68c06213ab19e8215`.
+No source test, compiler, formatter, build, CI, PC or runtime execution.
 
-**MOD-06 — Agent operation responsibilities (scoped source integration).** Baseline `476e05d5452a53259da7b7710b0868b893dc3307`. Extract operator configuration, private Probe QA checkpoint/correlation operations, and explicit evidence baseline/read operations. Keep one shared core for connection and native admission; same public MCP/Code Mode API, provider injection, native correlation, and shutdown behavior. Direct map iteration removes temporary capture-identity entry list and activity snapshot intermediate array; no new worker, dependency, protocol or authority. Existing review routes and source docs follow actual owners. Fixtures NOT_EXECUTED; all test, CI, and native holds unchanged. MOD-07 consistency review next.
+| Scope | Source result / exact commit |
+| --- | --- |
+| MOD-01 | Agent activity contract, fixed slot flags — [2efb1c8](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/2efb1c84c1e11a5ecb0ced9279977bc09a1749f8) |
+| MOD-02 | Session protocol, Testing Run, AI input leases — [45c3674](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/45c3674b6fcf813a8b60376d0df6f9fe258b3fe2) |
+| MOD-03 | Reviewed payload, child configuration/environment, fixtures — [0078a2c](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/0078a2c1e17707563a23776f4cf6ccaf16ee4a24) |
+| MOD-04 | Owned windows, audio, reply scope, fixtures — [f04a61c](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/f04a61ce540c12d03c59fe58597a933dbf83ee6f) |
+| MOD-05 | Windows identity, package, signature, private-root observers — [476e05d](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/476e05d5452a53259da7b7710b0868b893dc3307) |
+| MOD-06 | Agent configuration, Probe QA and evidence operations — [14ffcac](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/14ffcac87f66325685cb37be430de51c4ece1538) |
+| MOD-07 | Report-local process ownership reuse and source routing — [f7fc983](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/f7fc983ead90964b40d99ec68c06213ab19e8215) |
+| MOD-08 | Scoped named-owner declarations in existing verifier; review responsibility, state, naming, forwarding and dependencies without a line limit. Handoff compacted to existing bound. Fixtures authored NOT_EXECUTED. |
 
-**MOD-05 — Instance identity responsibilities (scoped source integration).** Baseline `f04a61ce540c12d03c59fe58597a933dbf83ee6f`. Separate Windows process/token context, package identity, image signature and private-root identity into named modules; external identity API and exact pin/liveness checks unchanged. Move native and root fixtures without changing module namespaces. Reuse the original UTF-16 image-path buffer for Authenticode and compare without its terminating NUL. Source verifier and developer review follow actual source owners. No new dependency, authority or native gate. Compiler, formatting, fixtures and performance NOT_EXECUTED; MOD-06 agent operation core next.
+Next: MOD-09 review full scoped diff, current source owners and consumers,
+module wiring/visibility/feature gates, existing verifier and packaging
+consumers; correct concrete integration defects before local handoff.
+Do not infer compilation, runtime improvement, or release readiness.
 
-**MOD-04 — Retained controller responsibilities (scoped source integration).** Baseline `0078a2c1e17707563a23776f4cf6ccaf16ee4a24`. Separate original-game window verification/normal-close requests, audio cadence and reply snapshot policy into controller child modules. Move fixtures to the same test namespace. Keep original actor, storage mutation/reap, dispatch and native gates intact; exact dialog uniqueness uses a bounded count and first HWND instead of a vector. Added ambiguous-dialog fixture NOT_EXECUTED. Existing developer review follows extracted owners. Compiler, rustfmt, fixtures and measured performance NOT_EXECUTED; native/CI holds unchanged. MOD-05 instance identity next.
+## Prior source work and continuity
 
-**MOD-03 — Bootstrap ownership (scoped source integration).** Baseline `45c3674b6fcf813a8b60376d0df6f9fe258b3fe2`. Separate reviewed DLL admission/enrollment, child configuration and private environment into named bootstrap modules; move existing fixtures to `tests.rs` without changing their module path. Preserve original suspended process ownership, payload pins, ABI and admission holds. Reuse row-name extraction and allocate the bounded final environment block once; authored boundary fixture NOT_EXECUTED. Existing verifier, developer review and local admission guide follow the actual source owner. Source reviewed; compiler, formatting, fixtures and runtime NOT_EXECUTED. MOD-04 retained session controller next.
-
-**MOD-02 — Session responsibilities (scoped source integration).** Baseline `2efb1c84c1e11a5ecb0ced9279977bc09a1749f8`. Separate `session_protocol` (request/reply schema and receipt predicates), `controller_testing_runs` (controller-owned run correlation), and `controller_ai_input_leases` (feature-gated controller-owned writer fencing), with explicit existing API re-exports. Move the existing domain fixtures with their owners; retain wire and admission. Use one exact-size slot-order validator for slice and target iterators, eliminating temporary slot vectors in acquire/release; all slot, epoch, original-process and neutral gates unchanged. Update the existing source verifier to the true schema owner. Module names identify domain and authority, not generic helpers or duplicate services. Rust, fixtures, native runtime and performance NOT_EXECUTED; binary and CI holds unchanged. MOD-03 bootstrap review next.
-
-**Modularity and efficiency (MOD-01, scoped source integration).** Baseline `ed320acd98065300e48dce9f574af0bfd7e7f18b`. Move the bounded agent activity wire contract and ingress fixture to a private transport child module; retain existing exported type paths, wire fields, one native controller and all admission checks. Replace the dynamic set for three kinds × five slots with fixed stack flags; add duplicate/different-kind/different-slot cases. No new worker, dependency, IPC, schema or native gate. Source reviewed; all fixtures, rustfmt, builds and native performance NOT_EXECUTED. Larger transport, bootstrap, lifecycle, identity and agent operation modules remain candidates for separate cohesive slices; no line-count-only splitting. Existing ABI and local/CI holds unchanged.
-
-**Source integration closed — Education update compatibility (UPD, scoped SOURCE_READY_FOR_LOCAL).** Baseline
-[`41e7eadd`](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/41e7eadde35bd72f215f0da983136a2817750c65).
-First slice: official Desktop updater state guard in the existing post-pin
-registered resolver; one query per managed launch, no task changes, updater
-execution, downloader, polling, new service or dependency. Preserve the
-existing signature/image/ABI checks; extract reviewed image recipe data
-without admitting new bytes. Compare candidate identity against all retained
-active child image pins before profile mutation, and clear only stale
-unsupported-image issues on verified compatible admission. Authored synthetic
-generation fixture NOT_EXECUTED. Updater state is a point-in-time observation,
-not an installer lock; missing/disabled tasks may be managed policy.
-Second slice (baseline [ea12355](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/ea12355be1e20f04b57e4e733d219438da7d3338)):
-explicit Settings entry/header Refresh reads bounded registry version,
-task state and exact reviewed-image match from existing registered resolver
-and post-pin checks; hashes once per explicit observation and releases pin.
-Normal session wire, passive polling and startup remain unchanged. One
-read-only Tauri route uses the existing manager gate; no raw path/hash in
-receipt, no launch permission, no task execution. TS contract fixtures
-authored NOT_EXECUTED.
-Third slice (baseline [2671af6](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/2671af695d0819aba967862766b51c21f0f7e5a3)):
-operator UX feedback: one version row only when healthy; one authored
-notice for actionable exceptions, never technical image-review or task
-state rows. Installation check on Settings entry precedes session settings
-so a blocked native payload does not suppress independent observation.
-No new requests, timer, backend authority or schema change. UI fixtures
-authored NOT_EXECUTED. Capability review: existing default-OFF native
-F3, experimental AI and heap experiments are compile-time isolated;
-ordinary and AI DLL admission are separately digest-pinned, with no
-verified new game ABI. Preserve these existing boundaries rather than
-add a duplicate capability manager or enable unsupported optional features.
-Fourth slice (baseline [8d9b262](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/8d9b262ed1e2c953cfab0f529192107f00702274)):
-official Education support confirms the Desktop task checks at sign-in and
-opening Minecraft can cancel an update. Keep official auto-updates; direct
-task invocation held because task name/Ready alone cannot prove publisher,
-permissions or installer exclusion against active/unmanaged game launches.
-Do not add a button, elevated helper or updater. Existing exception notice
-explains leaving games closed. Reduce managed launch hashing: exact
-continuous child image pins and matching reviewed recipes permit reuse within
-the active cohort; no idle cache, new pin, service or dependency. All launches
-still freshly validate signed registration, updater state, image identity and
-native DLLs. New or conflicting image generation refused; last exit requires
-full hash again. Synthetic fixture authored NOT_EXECUTED.
-Final integration slice (baseline [8c12940](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/8c12940976cada6326dc1dae0eda5282001dec5a)):
-launch checks updater before/after pin using the two existing resolver
-processes. Explicit Settings observes updater first and skips pin/hash
-when already busy; if busy after pin it skips the hash and releases the
-pin. Nullable image review is valid only during Busy, not a positive
-compatibility receipt. Manual Refresh pauses competing UI/background
-observations and checks installation independently before session settings.
-No new polling, process count, dependency, service, updater action or
-native admission. Core and direct consumers reviewed; fixtures authored
-NOT_EXECUTED. Official Windows scheduler state values and Desktop task
-name checked against Microsoft/Minecraft documentation. Actual scheduler
-visibility, task provenance, pin/installer coordination (including the
-existing temporary controller-preparation pin), measured overhead,
-future exact recipe/ABI review and end-to-end update acceptance remain
-unverified. Manual official task execution remains held pending verified
-native evidence. Stop source work at scoped handoff; no release or
-automatic future-version compatibility claim.
-No new binary is admitted, and the ABI v4/local-test holds below remain.
-
-Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).
-
-- RPT-01–04: selective desktop and Rust request-client report, 48+16 rows, bounded counts and receipt-grounded recovery/recurrence; no routine logs, polling, raw data or inferred mutation outcomes. [Exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/35e652489d1ba297aff3845ec51964f5018678b8/planning/development.md).
-- RPT-05: one ordinary product desktop writer after exclusive instance lease; `Data/Reports/issues.json` latest issue-bearing lifetime, 16 KiB hard cap. Native checkpoint after request gate release; UI issue-only coalesced submission on new/recovered/recurrent/overflow or power-of-two counts. Explicit Copy retry and exit flush; identical on-disk bytes skip; exclusive fixed staging, pinned directory chain, same-directory publication. Healthy runs preserve previous checkpoint. Interrupted/unrecognized files preserved, no automatic deletion or historical recovery-state import. No new dependency, timer or service.
-- RPT-06: existing DEV.cmd report --json reads only the checkout's bounded checkpoint, validates current schema 2, maps all 50 known issue codes to current source investigation routes and prioritizes up to 12 observations with explicit omitted/unknown/truncated coverage. UI/native provenance retained, build and cause unknown; review SHA is not report build. No runtime instrumentation, AI calls, writes, execution or automatic remediation. Authored offline/catalog/routing fixtures NOT_EXECUTED. [Developer report guide](../Development/tooling/developer/README.md).
-- RPT-07 integration audit: typed Rust operation/code vocabulary reused for full prior-checkpoint validation before replacement; explicit native-only Check/Copy with nullable UI checkpoint, no healthy report or false absence on failed native read; cross-language vocabulary and regression fixtures authored NOT_EXECUTED. Native failure checkpoint I/O is synchronous after transport gate release; outer manager gate can remain held. No new poll, service, dependency or session-wire change.
-- Standalone process failures, crash before checkpoint, unsubmitted UI repeats, historical UI read, exact build identity, correlation and measured overhead remain unresolved. [Checkpoint contract](../Development/apps/desktop/README.md#bounded-local-checkpoint). Native/TS fixtures authored NOT_EXECUTED. ICE-01–04 and prior PLA/source scopes closed; ICE-05/OPT-07 held.
-
-**Prior handoff — SOURCE_READY_FOR_LOCAL (scoped source handoff, re-pin after UPD changes).** The operator requested preparation for the PC-local phase, not execution on this surface. Use the single staged handoff below; native ABI v4 digest approval still blocks standard dev/package/new launch. All tests/builds/benchmarks/native acceptance NOT_EXECUTED. No CI or unapproved local validation.
-
-## Unreleased — Rust-first integration
-
-Prior FLOW-01–09, MCP-01–08, OPT (except OPT-07), E2E-01–06, BS-01–10 and SIM/EFF/DDR/NGE/FMS/DST/Rust-first scopes remain source-closed. Preserve manual/automated map playtesting and evidence-grounded issue reporting, original five-profile ownership and all active constraints. Exact prior decisions, Work IDs, relative links and proof: [complete pre-closure history](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4ddb3c34311ccbe81b4f831cd743426d6cd90ee5/planning/development.md) and [earlier checkpoint](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/9b285c2110b7cdf91eda7e26c315a0b850eab82c/planning/development.md). Historical Next fields do not authorize action.
-
-## Active implementation roadmap — Rust-first
-
-Original Phase 01–06 source integration closed; VAL-01–06 held. Use [implementation map](../docs/system/implementation-map.md), [architecture](../docs/system/architecture.md) and [development operations](../docs/system/development-operations.md). No broader migration, new fallback or repeat of closed work.
-
-## Capture and recording — separately authorized source workstream
-
-CAP-01–05 source integrated: lossless client WebP screenshot, selected-slot HEVC NVENC/MKV recording, hardware-only FFmpeg candidate, audio off, no fallback, bounded ownership/no-clobber publication. Binary approval gates remain closed. Native capture/resize, GPU negotiation, disk failure and measured quality unverified. [Recording contract](../docs/system/recording.md); [prior details](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/9b285c2110b7cdf91eda7e26c315a0b850eab82c/planning/development.md#capture-and-recording--separately-authorized-source-workstream). Shared MCP observation remains separate.
-
-**Hardware efficiency — HW-01 (Unreleased, source only):** Operator-selected RTX 3070 compatibility supersedes AV1-only: one HEVC Main NVENC/MKV path with D3D11 frames, unchanged bounded supervision, no software fallback, no CUDA toolkit/custom kernels, no new UI/worker/controller. [NVIDIA matrix](https://developer.nvidia.com/video-encode-decode-support-matrix) and [FFmpeg 8.1 source](https://ffmpeg.org/doxygen/8.1/nvenc__hevc_8c_source.html) support the codec decision, not native negotiation. The existing optional capture worker releases its acquired GPU frame immediately after fitted readback/timestamp, before CPU encoding or stdout backpressure; it preserves identity checks, packet formats and cadence. Existing adaptive observation, FPS pacing, DWM previews, GPU buffer reuse, resource limits and memory-canary holds remain unchanged; no speculative affinity or new CUDA path. Acceptance: existing CAP checks plus independent HEVC decode, measured game frame time/CPU/RAM/VRAM and capture latency/cadence at matched one-to-five-client loads. HEVC redistribution review, both binary gates, exact Windows driver/device negotiation and all tests/builds/benchmarks remain held / NOT_EXECUTED. Do not infer speedup, installed support or reopen prior closed optimization scopes from this change.
-
-**Final pre-local improvement — FIN-01–08 (Unreleased, source only):**
-Baseline `ac43c876bea60579164c1dc7b07cb1f7bd244fa2`. A complete recording
-terminal marker now starts the existing finalization deadline before EOF;
-publication still requires clean reader completion, child success, positive
-frames, target and file checks. Close child/job before bounded reader result
-and join on ordinary exit/error; timeout or panic containment remains native
-validation, not a guarantee of thread termination. Same-slot Saved resolves
-LT-CAP-05; failed/unknown/intermediate states do not imply recovery. Retain
-200 ms active supervision and per-generation file identity checks (FIN-04/05):
-no new worker, cache or speculative optimization. First-run guide selects
-one source route; native performance guidance no longer routes to historical
-VMware contract. Authored Rust/UI fixtures NOT_EXECUTED. No binary admission,
-release, version bump, CI or native performance claim. Re-pin actual HEAD
-for the existing staged PC-local handoff below.
-
-**Reliability & efficiency closure — REV-01–08 (Unreleased, source only):**
-Baseline `d8b03d0e9090e7e12fbaa0ec061dfc3f0536d19f`. Move existing Rust
-format checks before compilation/testing, once per crate; correct preflight
-next-action message to respect native payload admission. Actual formatting
-and format PASS remain NOT_EXECUTED; do not claim existing source is
-rustfmt-clean. Recorder uses bounded original-process wait and bounded
-reader cancellation/join; uncertain cleanup refuses new recordings for
-the manager lifetime, not proof of exit. Session request timeout and later
-pending admission request cancellation of only the original client worker;
-retain the worker and uncertainty until original result/disconnect and
-fresh full Inspect; no replay or forced controller/game termination.
-**REV-02 follow-through (baseline `47ac059e340491190b2635be539fa6521dcf7bf1`):**
-Shared provider runner now uses one original-child guard and a 2 s
-nonblocking exit-observation budget after kill; retain unconfirmed child
-handles with their admission lease instead of losing ownership. The 24
-I/O-worker limit is preserved; 12 direct helper leases cover active and
-retained children, and later admission probes retained handles once and
-refuses new launches while any remain unconfirmed. Already admitted
-operations are not replayed or retroactively canceled. No idle thread,
-new dependency, descendant termination or PID reopen. Ordinary early pipe
-setup/worker failures and unwind run the same guard cleanup; no actual OS
-termination, inherited-pipe cancellation, or speedup is claimed. Authored
-fixtures NOT_EXECUTED. Actual rustfmt normalization remains held.
-Keep exceptional checkpoint durability, per-request peer verification,
-generation/image pins and polling until measured bottlenecks justify a
-change (REV-05–07). No new worker, service, dependency or binary admission.
-Authored source fixtures NOT_EXECUTED; Windows cancellation/exit, pipe
-recovery and performance remain unverified.
-
-**Cross-process and resource closure — BS-01–07 (Unreleased, source only):**
-Baseline `484d9b9cb2f5b25c58adef374f6ed54c0c335212`. BS-01: reuse
-named-object existence admission for per-slot recording/managed close
-exclusion at the retained controller, including CLI; acquire selected
-running slots before close effects, hold recording lease across final
-target validation and cleanup. Release on terminal failure; unknown cleanup
-still quarantines starts, does not indefinitely block normal game close.
-BS-02: expose terminal cleanupUnconfirmed in existing recording receipt,
-strict TS parser and disabled start across slots, no new requests.
-BS-03: standalone settings saves retain original controller startup
-existence gate through observation/write, refusing concurrent startup.
-BS-04/06: share bounded preference reading with opened-file metadata
-checks and Windows reparse-point refusal; audio stage cleanup owns only
-its successfully created stage, reuse checked storage directory. Preserve
-formats and independent image revalidation; ancestor replacement races
-against outside writers are not proven closed. BS-07: bound WebP
-destination before append and clear partial output, not codec scratch
-or peak RAM. BS-05 follow-through (baseline `9b72f670d667698b434a683c593743d1ee6fa91d`):
-server-only overlapped pipe I/O, one original worker and manual-reset
-operation/stop events. Idle connect is event-driven; authenticated request
-frame, reply write and ACK each use a 5 s phase deadline shared across
-partial transfers. Actor execution and client wire unchanged; no replay.
-Cancel exact pending operation and wait for actual completion before
-buffer reuse/reconnect. Slow OS cancellation can retain the original
-worker; existing bounded stop refuses to claim cleanup, not a hard
-kernel deadline. Synthetic stalled request/missing ACK fixtures authored.
-Cross-process lease behavior, native pipe recovery and all fixtures remain
-NOT_EXECUTED; no binary admission, new worker or service.
+UPD, RPT-01–07, CAP-01–05, HW-01, FIN-01–08, REV-01–08, BS-01–07,
+FLOW-01–09, MCP-01–08, OPT (except OPT-07), E2E-01–06, BS-01–10,
+SIM/EFF/DDR/NGE/FMS/DST/Rust-first and ICE-01–04/PLA scopes remain
+source-closed, not executed acceptance. OPT-07, ICE-05 and VAL-01–06 held.
+Preserve existing decisions and stricter safety constraints; do not reopen
+closed work or treat historical Next fields as authority.
+[Complete exact pre-MOD-08 handoff and decision history](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/f7fc983ead90964b40d99ec68c06213ab19e8215/planning/development.md).
+Use [implementation map](../docs/system/implementation-map.md),
+[architecture](../docs/system/architecture.md) and
+[development discipline](../docs/system/development-discipline.md).
 
 ## Proof ceiling and unresolved gates
 
@@ -183,30 +45,41 @@ NOT_EXECUTED; no binary admission, new worker or service.
 - Experimental input/AI/MCP holds unchanged: default OFF, exact writer/neutral/quarantine semantics, no unverified gameplay or Probe dispatch. [Prior decision](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/9b285c2110b7cdf91eda7e26c315a0b850eab82c/planning/development.md#separate-original-native-input-hold--unchanged).
 - Candidate export not publication: extracted payload/legal notices, signed bytes, Authenticode chain/timestamp, clean/upgrade/uninstall and active/concurrent native session evidence held. Installer idle check is point-in-time. Repository visibility operator-managed.
 
-## Source-to-local handoff — SOURCE_READY_FOR_LOCAL
+## Deferred PC-local validation — not an authorization
 
-Source baseline reviewed: `d11a5f63b5db8db5ed63533dbf5f2b06c90724e5` (RPT-07). This handoff-only commit advances HEAD without changing executable source. Re-pin the actual Local HEAD and reconcile any later changes before validation. Applies to completed scoped source work, including RPT-01–07, PLA, ZW, MCP/Code Mode and earlier closed scopes, not whole-product readiness or execution permission.
+Only a separately selected verified `LOCAL_PC_AGENT` with explicit
+operator approval may execute the existing sequence. Re-pin actual Local
+HEAD after MOD-09; the old source-ready baseline is not current proof.
+Use [Windows first-run guide](../docs/validation/local-pc-first-run.md),
+[progressive smoke](../docs/validation/efficient-local-testing.md) and
+the [full prior acceptance sequence](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/f7fc983ead90964b40d99ec68c06213ab19e8215/planning/development.md#source-to-local-handoff--source_ready_for_local).
 
-### One PC-local entry — progressive acceptance
+1. Admission: actual Windows x64 PC/agent, clean checkout and exact SHA;
+   read-only DEV.cmd localcheck. Preserve App/Data; bootstrap pinned tools
+   only if missing and approved.
+2. Source: approved DEV.cmd preflight once, default Cargo features;
+   no redundant setup/quick/check or agent suite. Stop at first failure,
+   correct canonical owner and re-pin; retain private receipts.
+3. Native prerequisite: independently review exact ABI v4 DLL pair and
+   admit approved digests in reviewed_bootstrap_payload.rs. Ordinary
+   dev/package/new launch held until then; no old or placeholder hashes.
+4. Product smoke only after matching native admission: manager then
+   MC01/MC02, progressive escalation, preserve slots/data, normal close
+   and reconnect. Packaging, capture/recording, AI/input separate gates.
+5. RPT and UPD acceptance during approved smoke: follow the exact prior
+   acceptance sequence above for disposable roots, checkpoint/receipt
+   preservation, ordinary official update observation, generation pins,
+   version/ABI refusal, no unreviewed task invocation or forced update.
+6. Feedback: exact SHA, first failing stage, sanitized observed versus
+   expected, canonical owner. No private logs/data committed, automatic
+   repair/replay or repeat of unaffected successful checks.
 
-Use the existing [Windows first-run guide](../docs/validation/local-pc-first-run.md) and `DEV.cmd`. No new runner, package format or status store. Only a verified `LOCAL_PC_AGENT` with explicit operator approval for each applicable held stage may execute:
-
-1. **Admission:** confirm actual Windows x64 PC/agent, clean Local checkout and full SHA; run read-only `DEV.cmd localcheck`. Preserve all existing App/Data, accounts and worlds. Missing native DLL approval is expected and blocks native stages, not independent source checks when their own prerequisites are met. Prepare pinned tools with `DEV.cmd bootstrap` only if missing and authorized; verify prerequisites per the first-run guide.
-2. **Source:** run `DEV.cmd preflight` once after approval. It reuses/installs locked npm dependencies as needed and includes frontend Vitest, desktop/runtime Rust checks/tests and the developer report-review suite. Do not precede it with redundant setup, quick, check or agent-suite runs. Default Cargo features only; product/experimental feature acceptance remains separate. Stop on failure; correct the first owning source and re-pin affected evidence. Preserve the private preflight manifest.
-3. **Native prerequisite:** use VAL-01/02 below for independently reviewed ABI v4 x64 DLL build/controls and separate exact digest admission; `REVIEWED_EDUCATION_BOOTSTRAP = None` at the baseline. Until admitted, do not follow preflight's generic dev suggestion, launch a new game or package. No placeholders, old DLLs, hash bypass or experimental flags.
-4. **Product smoke:** after native admission and matching approval, use `DEV.cmd dev` and the existing progressive LT-01–13 plan, manager then MC01/MC02, before any five-client escalation. Preserve original slot/session ownership, normal close/reconnect and private data. Reuse already matching source receipts rather than rerunning the quick screen. Packaging, capture/recording, experimental AI/input and full regression escalation remain separate gates.
-5. **Report acceptance during the same approved smoke:** on an isolated checkout/data root, healthy explicit Check yields no current issue report and creates no checkpoint; any existing historical checkpoint remains unchanged. A safely observed UI/native issue yields bounded sanitized evidence; check native-only Check/Copy, repeat/recovery semantics, exit/Copy checkpoint and retention via existing regression fixtures and naturally observed failures. Never induce faults in licensed sessions or overwrite real evidence. Use `DEV.cmd report --json` once when needed: no report is not health proof; UI/native provenance stays separate, at most 12 review candidates, root cause/build identity unknown. Malformed/oversized/interrupted evidence preservation belongs to existing disposable fixtures; do not modify real Data to simulate it. Unobserved runtime cases stay NOT_EXECUTED/INCONCLUSIVE.
-6. **UPD acceptance during the same approved native phase:** observe the actual official task and registration before/after an ordinary supported update on a disposable installation/data root. Check Settings healthy/busy/disabled/missing/unknown and failed observation; no stale success or duplicate UI requests. Verify queued/running task refusal, unchanged generation reuse across five launches, last-exit pin release, full hash of new bytes, unknown hash refusal before profile mutation, and normal close/account/world preservation. Do not trigger an unreviewed scheduled task, force an update, downgrade or modify real user data. Compare actual hash count/timing separately from Authenticode and DLL checks; if no natural approved update occurs, leave transition NOT_EXECUTED. No future-image admission without exact native review.
-7. **Feedback/STOP:** use existing private `workspace/runs/` receipts, exact SHA, first failing stage, sanitized observed vs expected and canonical source owner. Do not dump logs or commit private Data. No automatic fix, replay or repeat of successful unaffected checks; stop at the selected proof ceiling. OPT-07/ICE-05 and other holds below remain unchanged.
-
-All commands above are deferred; this is a source handoff, not a test or release authorization.
-
-| Gate | Existing evidence owner |
+| Gate | Evidence owner |
 | --- | --- |
-| VAL-01/02 | [Windows first-run](../docs/validation/local-pc-first-run.md), [native CMake controls](../Development/tooling/acceptance/windows/bootstrap-ordering/README.md): compile/link/fixtures and independent ABI v4 payload review. |
-| VAL-03 | [Progressive smoke](../docs/validation/efficient-local-testing.md): one then five licensed sessions, identity/layout/close/reconnect/preservation, MC02 exit regression. |
-| VAL-04 | [Data layout](../docs/system/data-layout.md): disposable data, exact producer/root, reference stability and exclusive disposition before new cleanup admission. |
-| VAL-05 | [Native collectors](../Development/tooling/acceptance/windows/README.md): matched game/workload, FPS, CPU/RAM/GPU, handles and timings. Compare MCP surfaces and actual local host/SDK; OPT-07 measured IPC remains held. |
-| VAL-06 | [Distribution](../Development/engine/distribution/README.md): extracted installer, signatures, legal notices, layout and active-session/data lifecycle. |
+| VAL-01/02 | [Windows first-run](../docs/validation/local-pc-first-run.md), [native CMake controls](../Development/tooling/acceptance/windows/bootstrap-ordering/README.md) |
+| VAL-03 | [Progressive smoke](../docs/validation/efficient-local-testing.md): one then five sessions, identity/layout/close/reconnect/preservation |
+| VAL-04 | [Data layout](../docs/system/data-layout.md): exact producer/root, reference stability and exclusive disposition |
+| VAL-05 | [Native collectors](../Development/tooling/acceptance/windows/README.md): matched workload, FPS, CPU/RAM/GPU, handles and timings; OPT-07 held |
+| VAL-06 | [Distribution](../Development/engine/distribution/README.md): installer bytes, signatures/legal notices, lifecycle |
 
-All native and source test execution remains NOT_EXECUTED under the hold. No CI, cloud substitution, release or version bump.
+All execution deferred. No CI/cloud substitution, release or version bump.

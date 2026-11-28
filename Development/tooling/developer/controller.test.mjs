@@ -438,6 +438,8 @@ test('quality review is deterministic, bounded and explicitly does not execute e
   assert.equal(review.sourceSha,SHA);
   assert.deepEqual(review.areas.map(area=>area.id),['agent-mcp','native-session']);
   assert.deepEqual(review.stages.map(stage=>stage.id),['PROPOSE','PROBE','COMPOSE']);
+  assert.match(review.stages.find(stage=>stage.id==='PROBE').requirement,/duplicate mutable state/);
+  assert.match(review.stages.find(stage=>stage.id==='PROBE').requirement,/File size is a review signal/);
   assert.ok(review.stages.every(stage=>stage.status==='NOT_EXECUTED'));
   assert.ok(review.areas.every(area=>area.status==='NOT_REVIEWED'));
   assert.deepEqual(review.recommendedValidationTaskIds,['source.validate']);

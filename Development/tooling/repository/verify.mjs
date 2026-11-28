@@ -196,6 +196,63 @@ function filesBelow(root,path) {
     return entry.isDirectory()?filesBelow(root,name):[name];
   });
 }
+// Named ownership witnesses for the refactored domains. These are scoped
+// declaration checks, not a parser, complexity score, or runtime proof.
+const OWNERSHIP_ENGINE='Development/apps/desktop/src-tauri/src/engine/';
+const OWNERSHIP_AGENT='Development/tooling/agent/';
+const NAMED_OWNERS=Object.freeze([
+  ['struct AgentActivityReport',OWNERSHIP_ENGINE+'native_clients_session/agent_activity.rs'],
+  ['struct NativeTestingRunBook',OWNERSHIP_ENGINE+'native_clients_session/controller_testing_runs.rs'],
+  ['struct AiLeaseBook',OWNERSHIP_ENGINE+'native_clients_session/controller_ai_input_leases.rs'],
+  ['enum SessionRequest',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
+  ['struct SessionSnapshot',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
+  ['struct PendingEducationBootstrap',OWNERSHIP_ENGINE+'independent_bootstrap.rs'],
+  ['struct BootstrapLibrary',OWNERSHIP_ENGINE+'independent_bootstrap/reviewed_bootstrap_payload.rs'],
+  ['struct EducationConfig',OWNERSHIP_ENGINE+'independent_bootstrap/child_configuration.rs'],
+  ['fn child_environment',OWNERSHIP_ENGINE+'independent_bootstrap/child_process_environment.rs'],
+  ['struct Sessions',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller.rs'],
+  ['struct NormalCloseProgress',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/owned_game_windows.rs'],
+  ['struct AudioIdleGate',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/audio_maintenance.rs'],
+  ['enum ReplySnapshot',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/reply_snapshot.rs'],
+  ['fn inspect_directory_for_process',OWNERSHIP_ENGINE+'instance_identity/windows/private_root_identity.rs'],
+  ['fn inspect_file_authenticode',OWNERSHIP_ENGINE+'instance_identity/windows/image_signature.rs'],
+  ['fn compare_package_families',OWNERSHIP_ENGINE+'instance_identity/windows/package_identity.rs'],
+  ['function createOperationCore',OWNERSHIP_AGENT+'operation-core.mjs'],
+  ['function createProbeQaOperations',OWNERSHIP_AGENT+'probe-qa-operations.mjs'],
+  ['const probeQaPlans',OWNERSHIP_AGENT+'probe-qa-operations.mjs'],
+  ['function createEvidenceOperations',OWNERSHIP_AGENT+'evidence-operations.mjs'],
+  ['const evidenceBaselines',OWNERSHIP_AGENT+'evidence-operations.mjs'],
+]);
+
+// Restrict I/O to these source families, using the existing tracked-file
+// inventory. Fixtures are excluded by explicit file naming; no private data.
+export function ownershipSourcePath(path) {
+  if(path.startsWith(OWNERSHIP_ENGINE)) {
+    const leaf=path.slice(OWNERSHIP_ENGINE.length);
+    return /^(?:native_clients_session|independent_bootstrap|instance_identity)(?:\.rs$|\/.*\.rs$)/.test(leaf)
+      && !/(?:^|\/)(?:tests|[^/]+_fixture)\.rs$/.test(leaf);
+  }
+  return path.startsWith(OWNERSHIP_AGENT) && path.endsWith('.mjs') && !path.endsWith('.test.mjs');
+}
+
+export function verifyNamedOwnership(sources,expected=NAMED_OWNERS) {
+  const found=new Map(expected.map(([declaration])=>[declaration,[]]));
+  for(const [path,source] of Object.entries(sources)) {
+    // Only conventional authored declaration lines count. Imports and
+    // re-exports are not new owners. A deliberate move updates the witness.
+    const declarations=path.endsWith('.rs')
+      ? /^[ \t]*(?:pub(?:\([^\n]*\))?[ \t]+)?(?:async[ \t]+)?(struct|enum|fn)[ \t]+([A-Za-z_][A-Za-z_0-9]*)\b/gm
+      : /^[ \t]*(?:export[ \t]+)?(?:async[ \t]+)?(function|const|let)[ \t]+([A-Za-z_][A-Za-z_0-9]*)\b/gm;
+    for(const [,kind,name] of source.matchAll(declarations)) {
+      found.get(kind+' '+name)?.push(path);
+    }
+  }
+  for(const [declaration,owner] of expected) {
+    assert.deepEqual(found.get(declaration),[owner],
+      'Named ownership requires one declaration in '+owner+': '+declaration);
+  }
+}
+
 export function verifyRepository(root,requireCommittedDesktopLock=false) {
   const read=path=>readFileSync(resolve(root,path),'utf8');
   const json=path=>JSON.parse(read(path));
@@ -513,6 +570,7 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
   verifyNativePreviewPackage();verifyLazyTesterPackage();
   // Include physical docs (even untracked) as before, without repeating tracked link checks.
   const tracked=verifyStructure(root,filesBelow(root,'docs'));
+  verifyNamedOwnership(Object.fromEntries(tracked.filter(ownershipSourcePath).map(path=>[path,read(path)])));
   for(const path of ['Development/engine/guest/windows', 'Development/engine/isolation-native',
     'Development/apps/desktop/src-tauri/tauri.package.conf.json',
     'Development/apps/desktop/src-tauri/windows/installer-hooks.nsh']) {

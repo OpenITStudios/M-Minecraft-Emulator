@@ -80,6 +80,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Static source declaration dependency/impact trace across existing Rust, TypeScript, JavaScript and Svelte files | `Development/tooling/repository/source-dependencies.mjs`, `source-reasoning.mjs` through existing `knowledge-query.mjs` | [Source Dependency Graph](source-dependency-graph.md); read-only, conditional/coverage gaps explicit; no Rust runtime or build proof |
 | Read-only documentation Resource Catalog, authored Graph and scoped Retrieval | `Development/tooling/repository/knowledge-graph.mjs`, `knowledge-query.mjs` | [Repository knowledge navigation](repository-knowledge-graph.md); does not infer source dependencies, create a runtime agent, or own native product behavior |
 | Source contracts and optional Windows evidence | `Development/tooling/repository/`, `Development/tooling/acceptance/windows/` | `docs/validation/README.md` |
+| Scoped named ownership regression and responsibility review | `Development/tooling/repository/verify.mjs`, `Development/tooling/developer/controller.mjs` | Existing verifier and review only; [development discipline](development-discipline.md) and [canonical naming](canonical-naming.md), no line-count cap, background monitor or runtime authority. |
 | Current work, blockers, proof ceiling and single next action | `planning/development.md` | Exact `Local` commits |
 
 ## Minimum-change routing
