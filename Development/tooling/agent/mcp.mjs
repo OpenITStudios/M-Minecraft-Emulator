@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Single stdio adapter for playtesting and retained compatibility profiles.
 import {pathToFileURL} from 'node:url';
-import readline from 'node:readline';
 import {createOperationCore,REQUEST_LIMIT,MAX_MCP_IMAGE_CHARS,boundedMcpText,publicToolError,parseConfiguration} from './operation-core.mjs';
 import {createCodeModeSurface} from './code-mode.mjs';
 import {assertAgentSurface} from './agent-contract.mjs';
@@ -79,20 +78,77 @@ export function createHandler(config,dependencies) {
   return createMcpHandler(createOperationCore(config,dependencies),surface);
 }
 
-export function serve(config) {
-  const handler=createHandler(config);
-  const rl=readline.createInterface({input:process.stdin,crlfDelay:Infinity,terminal:false});
-  let disconnected=false;
-  rl.once('close',()=>{disconnected=true;handler.shutdown();});
-  rl.on('line',async line=>{
-    if (disconnected||Buffer.byteLength(line)>REQUEST_LIMIT) return;
-    let message;
-    try{message=JSON.parse(line);}catch{return;}
+const MAX_PENDING_REQUESTS=16;
+const OUTPUT_STALL_MS=30000;
+
+// One stdio connection, one bounded LF/CRLF frame, no request queue.
+export function attachMcpStdio(handler,input,output) {
+  const frame=Buffer.alloc(REQUEST_LIMIT+1); // Optional trailing CR.
+  let used=0,oversized=false,pending=0,closed=false,stall=null;
+  function close(abortOutput=false) {
+    if(closed)return;
+    closed=true;
+    if(stall!==null)clearTimeout(stall);
+    input.off('data',read);
+    output.off('drain',drain);
+    handler.shutdown();
+    input.destroy();
+    if(abortOutput||stall!==null)output.destroy();
+  }
+  function drain() {
+    if(closed||stall===null)return;
+    clearTimeout(stall);
+    stall=null;
+    input.resume();
+  }
+  async function dispatch(message) {
     try {
       const reply=await handler.handle(message);
-      if (reply&&!disconnected) process.stdout.write(JSON.stringify(reply)+'\n');
-    }catch { /* MCP stdout must remain parseable; failures are returned by handler. */ }
-  });
+      if(!reply||closed)return;
+      if(!output.write(JSON.stringify(reply)+'\n')&&stall===null) {
+        input.pause();
+        // Do not keep an abandoned connection waiting on asynchronous drain.
+        stall=setTimeout(()=>close(true),OUTPUT_STALL_MS);
+      }
+    }catch {close(true);}
+    finally {pending--;}
+  }
+  function read(chunk) {
+    for(let offset=0;offset<chunk.length&&!closed;) {
+      const newline=chunk.indexOf(10,offset);
+      const end=newline<0?chunk.length:newline;
+      const length=end-offset;
+      if(!oversized) {
+        if(used+length>frame.length)oversized=true;
+        else {chunk.copy(frame,used,offset,end);used+=length;}
+      }
+      if(newline<0)break;
+      const size=used>0&&frame[used-1]===13?used-1:used;
+      let message;
+      if(!oversized&&size<=REQUEST_LIMIT) {
+        try{message=JSON.parse(frame.toString('utf8',0,size));}catch{}
+      }
+      used=0;oversized=false;offset=end+1;
+      if(!message||!Object.hasOwn(message,'id'))continue;
+      // Independent Stop/other IDs stay live during normal concurrency.
+      // A flooding peer is disconnected rather than queued or retried.
+      if(pending>=MAX_PENDING_REQUESTS){close(true);break;}
+      pending++;
+      void dispatch(message);
+    }
+  }
+  input.once('end',()=>close());
+  input.once('close',()=>close());
+  input.on('error',()=>close(true));
+  output.once('close',()=>close(true));
+  output.on('error',()=>close(true));
+  output.on('drain',drain);
+  input.on('data',read);
+  if(input.readableEnded||input.destroyed||output.destroyed)close(true);
+}
+
+export function serve(config) {
+  attachMcpStdio(createHandler(config),process.stdin,process.stdout);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

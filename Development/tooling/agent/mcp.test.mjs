@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {createOperationCore,createMcpHandler} from './mcp.mjs';
+import {createOperationCore,createMcpHandler,attachMcpStdio} from './mcp.mjs';
+import {PassThrough,Writable} from 'node:stream';
 import {createCodeModeClient,createCodeModeSurface} from './code-mode.mjs';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
@@ -5642,4 +5643,113 @@ test('closed MCP connection does not publish a late native reply',async()=>{
   finish();
   assert.equal(await pending,null);
   assert.equal(await h.handle({jsonrpc:'2.0',id:2,method:'ping'}),null);
+});
+
+const stdioTurn=()=>new Promise(resolve=>setImmediate(resolve));
+const stdioRequest=(id,extra={})=>JSON.stringify({jsonrpc:'2.0',id,method:'ping',...extra});
+function stdioFixture(handle,options={}) {
+  const input=new PassThrough();
+  const replies=[];
+  let shutdowns=0;
+  const output=new Writable({highWaterMark:options.highWaterMark??65536,
+    write(chunk,_encoding,done){
+      replies.push(JSON.parse(chunk.toString()));
+      if(options.write)options.write(done);
+      else done();
+    }});
+  attachMcpStdio({handle,shutdown(){shutdowns++;}},input,output);
+  return {input,output,replies,shutdowns:()=>shutdowns};
+}
+const stdioReply=async message=>({jsonrpc:'2.0',id:message.id,result:{}});
+
+test('stdio bounds bytes before parsing, preserves split UTF-8 and LF/CRLF recovery',async()=>{
+  const seen=[];
+  const f=stdioFixture(async message=>{seen.push(message);return stdioReply(message);});
+  try {
+    const request=Buffer.from(stdioRequest('é')+'\r\n');
+    const split=request.indexOf(Buffer.from('é'))+1;
+    f.input.write(request.subarray(0,split));
+    f.input.write(request.subarray(split));
+    const empty=stdioRequest(2,{padding:''});
+    f.input.write(stdioRequest(2,{padding:'x'.repeat(64*1024-Buffer.byteLength(empty))})+'\r\n');
+    f.input.write(Buffer.alloc(64*1024+2,120));
+    f.input.write(Buffer.alloc(64*1024,120));
+    f.input.write('\n'+stdioRequest(3)+'\n');
+    f.input.write(stdioRequest(4,{padding:'x'.repeat(64*1024)})+'\n'+stdioRequest(5)+'\n');
+    await stdioTurn();
+    assert.deepEqual(seen.map(message=>message.id),['é',2,3,5]);
+    assert.deepEqual(f.replies.map(reply=>reply.id),['é',2,3,5]);
+    f.input.end();
+    await stdioTurn();
+    assert.equal(f.shutdowns(),1);
+  }finally{f.input.destroy();f.output.destroy();}
+});
+
+test('stdio pauses on output pressure, resumes on drain and keeps independent IDs live',async()=>{
+  let release,finish;
+  const seen=[];
+  const f=stdioFixture(async message=>{
+    seen.push(message.id);
+    if(message.id===1)await new Promise(resolve=>{finish=resolve;});
+    return stdioReply(message);
+  },{highWaterMark:1,write(done){release=done;}});
+  try {
+    f.input.write(stdioRequest(1)+'\n'+stdioRequest(2)+'\n');
+    await stdioTurn();
+    assert.deepEqual(seen,[1,2]);
+    assert.equal(f.input.isPaused(),true);
+    f.input.write(stdioRequest(3)+'\n');
+    await stdioTurn();
+    assert.deepEqual(seen,[1,2]);
+    release();
+    await stdioTurn();
+    assert.deepEqual(seen,[1,2,3]);
+    release();
+    await stdioTurn();
+    finish();
+    await stdioTurn();
+    release();
+    await stdioTurn();
+    assert.deepEqual(f.replies.map(reply=>reply.id),[2,3,1]);
+    f.input.end();
+    await stdioTurn();
+    assert.equal(f.shutdowns(),1);
+  }finally{f.input.destroy();f.output.destroy();}
+});
+
+test('stdio flood or output failure closes once and fences pending replies',async()=>{
+  for(const failure of ['flood','output']) {
+    const finishes=[];
+    const f=stdioFixture(async message=>{
+      await new Promise(resolve=>finishes.push(resolve));
+      return stdioReply(message);
+    });
+    try {
+      const count=failure==='flood'?17:1;
+      f.input.write(Array.from({length:count},(_,i)=>stdioRequest(i)+'\n').join(''));
+      if(failure==='output')f.output.destroy(new Error('EPIPE'));
+      await stdioTurn();
+      assert.equal(finishes.length,failure==='flood'?16:1);
+      assert.equal(f.shutdowns(),1);
+      for(const finish of finishes)finish();
+      await stdioTurn();
+      assert.deepEqual(f.replies,[]);
+      assert.equal(f.shutdowns(),1);
+    }finally{f.input.destroy();f.output.destroy();}
+  }
+});
+
+test('stdio abandons an asynchronous output stall and runs core shutdown once',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  const f=stdioFixture(stdioReply,{highWaterMark:1,write(){}});
+  try {
+    f.input.write(stdioRequest(1)+'\n');
+    await stdioTurn();
+    assert.equal(f.input.isPaused(),true);
+    t.mock.timers.tick(30000);
+    await stdioTurn();
+    assert.equal(f.shutdowns(),1);
+    assert.equal(f.input.destroyed,true);
+    assert.equal(f.output.destroyed,true);
+  }finally{f.input.destroy();f.output.destroy();}
 });

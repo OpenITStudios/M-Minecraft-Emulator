@@ -38,6 +38,13 @@ Mode feature. The host owns code execution, script budgets, model usage
 and approvals. Users choose whether to enable that feature; no change
 to host settings is made by Lazy Tester.
 
+Development direction: Code Mode first for AI orchestration, ordinary MCP for
+compatibility, and no AI requirement for manual use. Prepare complete coverage
+of admitted playtest operations through the existing shared typed contract;
+retain host-owned isolation and approvals. The current restricted direct SDK
+is not yet the full playtest contract. Do not expose experimental input or
+add a second executor to reach coverage.
+
 Use one connection for the chosen workflow. The manual application
 and optional MCP connection reuse the same controller. Do not run duplicate
 bridges for the same task or silently widen a restricted profile.
@@ -288,7 +295,14 @@ all 25 default legacy tool names remain compatible. No arbitrary-code execution
 tool, Deno/Node guest, dependency, new controller or PC permission is added.
 Direct SDK call budgets apply per client facade; Codex owns its own cell budget.
 MCP retains its existing request/response limits, not the direct SDK's per-script
-64-call budget. Use unique JSON-RPC IDs and one connection per workflow.
+64-call budget. The stdio adapter retains at most 64 KiB plus an optional CR
+per LF-delimited request; oversized frames are discarded until the next LF.
+At most 16 requests may be pending per connection. Asynchronous stdout pressure
+pauses stdin until drain; overload, output error or a 30-second drain stall
+closes the connection and invokes core shutdown. There is no waiting request
+queue or automatic retry. These are source-level bounds, not measured Windows
+pipe latency or guaranteed interruption of synchronous OS writes.
+Use unique JSON-RPC IDs and one connection per workflow.
 Duplicate in-flight IDs are ignored (the original retains its only reply);
 there is no replay cache, automatic retry, second dispatcher or serial queue
 that delays an independent stop. Closing the core suppresses late tool replies.
