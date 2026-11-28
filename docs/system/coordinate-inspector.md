@@ -16,9 +16,10 @@ lifecycle: SOURCE_ONLY
 > components, popup helpers and browser tests were retired. The unmounted
 > TypeScript coordinate research and its fixtures were subsequently retired
 > from active source on 26 November 2026 and remain recoverable at the
-> [pre-retirement revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/67ef2b636f4e2579a6c5c03cfb7d8f5777630bb7/Development/apps/desktop). Existing native Saved Locations
-> storage and records remain unchanged; no in-game HUD, waypoint, or command
-> was installed.
+> [pre-retirement revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/67ef2b636f4e2579a6c5c03cfb7d8f5777630bb7/Development/apps/desktop). The native Saved Locations
+> command and unused notebook storage implementation were retired on
+> 28 November 2026. Existing `Data/Coordinates/bookmarks.json` records
+> remain untouched; no in-game HUD, waypoint, or command was installed.
 > Education native-HUD experiments are retired from active source; historical compatibility remains unverified. See [retirement register](legacy-retirement.md).
 
 ## Purpose and scope

@@ -179,11 +179,6 @@ fn write_storage_preferences(path:&std::path::Path,value:StoragePreferences)->io
 pub(crate) fn product_cache() -> io::Result<PathBuf> {
     product_directory("Cache")
 }
-// Same checked application-root Data authority; notebook content is distinct
-// from settings, account data, and per-client Minecraft profile storage.
-pub(crate) fn product_coordinates() -> io::Result<PathBuf> {
-    product_directory("Coordinates")
-}
 fn product_directory(name:&str)->io::Result<PathBuf> {
     let directory=application_root(&std::env::current_exe()?)?.join("Data").join(name);
     for path in directory.ancestors() {

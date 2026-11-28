@@ -286,12 +286,18 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
   const exposed=[...invoked.matchAll(/commands::native_clients::([a-z_]+),/g)].map(m=>m[1]);
   assert.deepEqual(exposed,[
     'lazy_tester_startup_capabilities','lazy_tester_session','lazy_tester_close_one','lazy_tester_profile_binding',
-    'lazy_tester_data_location','lazy_tester_coordinate_bookmarks','lazy_tester_present',
+    'lazy_tester_data_location','lazy_tester_present',
     'lazy_tester_screenshot','lazy_tester_recording_status','lazy_tester_start_recording','lazy_tester_stop_recording',
     'lazy_tester_previews',
     'lazy_tester_clear_previews','desktop_update_workspace',
     'desktop_release_workspace','desktop_suspend_workspace',
-  ],'Only reviewed Lazy Tester handlers, including retained bookmark compatibility, may be exposed; retired provider IPC forbidden');
+  ],'Only reviewed mounted Lazy Tester handlers may be exposed; retired provider IPC forbidden');
+  assert.ok(!bootstrap.includes('lazy_tester_coordinate_bookmarks') &&
+    !read('Development/apps/desktop/src-tauri/src/commands/native_clients.rs').includes('lazy_tester_coordinate_bookmarks') &&
+    !read('Development/apps/desktop/src-tauri/src/engine/mod.rs').includes('mod coordinate_bookmarks') &&
+    !read('Development/apps/desktop/src-tauri/src/engine/manager_settings.rs').includes('fn product_coordinates') &&
+    !existsSync(resolve(root,'Development/apps/desktop/src-tauri/src/engine/coordinate_bookmarks.rs')),
+    'Retired coordinate notebook source and IPC must not return; existing Data files are outside source validation');
 
   for(const path of [
     'Development/apps/desktop/src-tauri/src/engine/owned_isolation.rs',

@@ -78,8 +78,7 @@ pub fn run() {
             }
             Ok(())
         })
-        // Expose mounted UI commands and the explicitly retained native
-        // bookmark compatibility command; no additional provider handlers.
+        // Expose mounted UI commands only; no additional provider handlers.
         // Dormant Sandboxie/VMware and developer inspection handlers are not
         // reachable through Tauri until independently reviewed and reauthorized.
         .invoke_handler(tauri::generate_handler![
@@ -88,7 +87,6 @@ pub fn run() {
             commands::native_clients::lazy_tester_close_one,
             commands::native_clients::lazy_tester_profile_binding,
             commands::native_clients::lazy_tester_data_location,
-            commands::native_clients::lazy_tester_coordinate_bookmarks,
             commands::native_clients::lazy_tester_present,
             commands::native_clients::lazy_tester_screenshot,
             commands::native_clients::lazy_tester_recording_status,

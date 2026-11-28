@@ -28,7 +28,6 @@ pub mod instance_identity;
 #[cfg(all(windows, test))]
 mod native_isolation_fixtures;
 pub mod manager_settings;
-pub mod coordinate_bookmarks;
 pub mod native_clients;
 pub mod workspace_surface;
 pub mod capture;
