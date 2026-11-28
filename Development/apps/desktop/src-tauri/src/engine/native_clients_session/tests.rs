@@ -1,6 +1,38 @@
 //! Existing transport fixtures; original module namespace retained.
     use super::*;
 
+    #[test]
+    fn shared_session_state_preserves_native_owner_observation_semantics() {
+        for storage in [false, true] {
+            for issue in [false, true] {
+                assert_eq!(profile_session_state(true, Some(true), issue, storage), "RUNNING");
+                assert_eq!(profile_session_state(true, Some(false), issue, storage), "NOT_RESPONDING");
+                assert_eq!(profile_session_state(true, None, issue, storage),
+                    if issue { "NOT_RESPONDING" } else { "STARTING" });
+                // Even a stale window observation cannot make a stopped slot live.
+                for responding in [None, Some(false), Some(true)] {
+                    assert_eq!(profile_session_state(false, responding, issue, storage),
+                        if issue || !storage { "ATTENTION" } else { "STOPPED" });
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn selected_normal_close_mask_affects_only_one_launcher() {
+        assert_eq!(normal_close_mask(None).unwrap(),[true;5]);
+        for slot in 1..=5 {
+            let mask=normal_close_mask(Some(slot)).unwrap();
+            for (index,selected) in mask.iter().enumerate() {
+                assert_eq!(*selected,index as u32+1==slot);
+            }
+        }
+        for slot in [0,6,u32::MAX] {
+            assert_eq!(normal_close_mask(Some(slot)).unwrap_err().kind(),io::ErrorKind::InvalidInput);
+        }
+    }
+
+
     #[cfg(windows)]
     #[test]
     fn existence_lease_excludes_second_creator_until_original_handle_closes() {

@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-03b: artifact metadata tooling)
+## Current status — cross-platform-native (MAC-03c: shared session contract)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,25 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-03c — shared session contract (source only)
+
+Move the existing five-state status projection and five-slot normal-close
+selection from the active Windows controller into the existing session
+protocol owner. The Windows controller uses both directly; no duplicated
+session registry, transport, runtime dependency or native launch path.
+Preserve all five wire strings and schema, exact slot semantics, and
+native process/window verification, storage checks, reaping, close,
+uncertainty and admission. Pure fixtures cover retained/missing window,
+unresponsive/issue, absent storage, all five slots and invalid close
+targets, independently of OS native APIs; authored NOT_EXECUTED.
+Do not reuse the historical four-slot runtime-core identity as a live
+five-profile abstraction. Mac identity/storage remain unresolved;
+no positive Mac backend or profile claim. A future real Mac owner must
+provide verified observations and retain native lifecycle authority.
+The design permits comparing OS-user separation as research only
+(no user creation, remote desktop fallback or changed acceptance).
+No compiler/test/native execution, release or version change.
 
 ### MAC-03b — explicit Mac artifact inspection (source only)
 
@@ -175,7 +194,9 @@ managed launch until a safe mechanism is established; two PIDs are not proof.
    performance claim or source-only PASS.
 
 MAC-01 and MAC-02 change planning only; MAC-03a changes common frontend
-source and matching fixtures; MAC-03b adds explicit offline artifact tooling. No native runtime code, dependencies,
+source and matching fixtures; MAC-03b adds explicit offline artifact tooling;
+MAC-03c shares existing pure session policy with its active native caller.
+No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
 and defensible isolation mechanism. Preserve all existing holds.

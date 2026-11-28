@@ -4,6 +4,7 @@ use crate::engine::{
     native_clients_session::{
         pipe::{Activity, Endpoint, Peer, Server},
         ProfileSession, SessionRequest, SessionSnapshot, SettingsReport,
+        profile_session_state, normal_close_mask,
     },
     process_identity::OwnedProcess,
 };
@@ -311,21 +312,12 @@ impl Sessions {
                         }
                     }
                 }
-                let state = if self.running[index].is_some() {
-                    match process.as_ref() {
-                        Some(p) if p.responding => "RUNNING",
-                        Some(_) => "NOT_RESPONDING",
-                        // This owned process is still alive but has no usable game HWND.
-                        // NOT_RESPONDING prevents an unsafe second Launch in the UI;
-                        // ATTENTION without a process is reserved for stopped profiles.
-                        None if issue.is_some() => "NOT_RESPONDING",
-                        None => "STARTING",
-                    }
-                } else if issue.is_some() || self.stores[index].is_none() {
-                    "ATTENTION"
-                } else {
-                    "STOPPED"
-                };
+                let state = profile_session_state(
+                    self.running[index].is_some(),
+                    process.as_ref().map(|p| p.responding),
+                    issue.is_some(),
+                    self.stores[index].is_some(),
+                );
                 ProfileSession {
                     slot: index as u32 + 1,
                     state: state.into(),
@@ -538,13 +530,6 @@ impl Sessions {
 fn require_preset_idle(idle: bool) -> io::Result<()> {
     if !idle { return Err(invalid("Close all Minecraft sessions normally before applying the graphics preset")); }
     Ok(())
-}
-
-fn normal_close_mask(slot:Option<u32>)->io::Result<[bool;5]> {
-    if slot.is_some_and(|value|!(1..=5).contains(&value)) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
-    }
-    Ok(std::array::from_fn(|index|slot.is_none_or(|value|value==index as u32+1)))
 }
 
 #[path = "session_controller/profile_storage_operations.rs"]

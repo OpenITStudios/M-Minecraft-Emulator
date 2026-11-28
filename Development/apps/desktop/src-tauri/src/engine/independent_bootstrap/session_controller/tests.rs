@@ -453,20 +453,6 @@
     }
 
     #[test]
-    fn selected_normal_close_mask_affects_only_one_launcher() {
-        assert_eq!(normal_close_mask(None).unwrap(),[true;5]);
-        for slot in 1..=5 {
-            let mask=normal_close_mask(Some(slot)).unwrap();
-            for (index,selected) in mask.iter().enumerate() {
-                assert_eq!(*selected,index as u32+1==slot);
-            }
-        }
-        for slot in [0,6,u32::MAX] {
-            assert_eq!(normal_close_mask(Some(slot)).unwrap_err().kind(),io::ErrorKind::InvalidInput);
-        }
-    }
-
-    #[test]
     fn full_exit_of_idle_sessions_does_not_prepare_profiles_and_denies_new_launches() {
         let mut sessions=Sessions{stores:(0..5).map(|_|None).collect(),running:(0..5).map(|_|None).collect(),issues:vec![None;5],windows:vec![None;5],path:String::new(),exiting:false,pending_storage_maintenance:[false;5],#[cfg(feature="mc02-native-input")] ai_leases:AiLeaseBook::default()};
         // The selected-close owner must never report a successful exit

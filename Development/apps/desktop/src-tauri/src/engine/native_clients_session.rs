@@ -32,6 +32,8 @@ pub use self::session_protocol::{
     SessionRequest, SessionSnapshot, SettingsReport, WorldPackDeclarations,
 };
 pub(crate) use self::session_protocol::SessionReply;
+#[cfg(any(windows, test))]
+pub(super) use self::session_protocol::{profile_session_state, normal_close_mask};
 use self::session_protocol::SESSION_FRAME_LIMIT;
 #[cfg(windows)]
 pub(super) use self::session_protocol::validate_request;
