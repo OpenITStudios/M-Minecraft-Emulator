@@ -652,7 +652,10 @@ archive integrity checks and explicit desktop publication remain independent.
 
 A read-only Testing run may optionally be correlated with the original
 controller and a private immutable `Data/Testing` summary, but the
-sealed transfer/CAS path has no external authorization route.
+controller exposes no ownership transfer route. The prospective compare-only
+contract is retained in Rust test-only source; the uncalled staged transfer
+mutation is retired. Live recovery still requires separately implemented,
+independently authenticated operator and archive admission.
 Neither source ZIP hashes, OS process handles nor log markers prove
 the exact Player, world, command delivery or gameplay success.
 

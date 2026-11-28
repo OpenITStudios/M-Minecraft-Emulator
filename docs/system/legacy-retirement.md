@@ -9,6 +9,18 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired uncalled Testing ownership transfer — 28 November 2026
+
+The private `transfer_with_sealed_admission` mutation had no caller or production
+admission issuer. Retire it; retain the compare-only prospective CAS and marker
+types under `cfg(test)` with the existing conflict fixtures. The exact staged
+implementation is recoverable from [the prior revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/c5293e102578a1f3484aae7f7cf2e5bc9d891f50/Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs).
+Live `TestingInspect`, reservation and finalization keep their existing
+process-handle fences and immutable results. Transfer remains unavailable; no
+wire schema, IPC, archive data, lease cleanup or user data changes. Future
+transfer requires separately authorized native operator/archive admission;
+source fixtures NOT_EXECUTED.
+
 ## Retired dormant native coordinate notebook — 28 November 2026
 
 All current desktop source files were inspected for the former bookmark

@@ -204,17 +204,12 @@ struct TestingRecord {
     #[cfg(windows)]
     owner_process:Option<pipe::McpOwnerLifetime>,
 }
-// Stage-only recovery capability: NO production constructor or IPC/Tauri
-// deserialization exists. These private markers must eventually be issued
-// only by independently authenticated Windows operator presence and a
-// native, revalidated immutable-archive decision in this controller.
-// Neither a model-provided boolean nor a source-only MCP archive report
-// can create either marker. The only constructors are in pure unit fixtures.
-#[allow(dead_code)]
+// Test-only prospective recovery contract; never a production capability.
+#[cfg(test)]
 struct VerifiedTestingOperatorPresence(());
-#[allow(dead_code)]
+#[cfg(test)]
 struct VerifiedNativeTestingArchive(());
-#[allow(dead_code)]
+#[cfg(test)]
 struct TestingRecoveryAdmission {
     slot:u32,
     expected_run_id:String,
@@ -402,11 +397,9 @@ impl NativeTestingRunBook {
         }
         self.finalize(slot,owner,run_id,outcome,digest)
     }
-    // Compare-only portion of one prospective transfer. No ownership is
-    // changed by a preflight and it does NOT authenticate the admission.
-    // The actual internal CAS below independently pins the old + new OS
-    // process lifetime just before replacing the ONE native slot record.
-    #[allow(dead_code)]
+    // Test-only compare of a prospective transfer. No authentication or
+    // ownership change is available in the live controller.
+    #[cfg(test)]
     fn check_recovery_cas(
         &self,permit:&TestingRecoveryAdmission,
     )->Result<(),&'static str> {
@@ -431,47 +424,6 @@ impl NativeTestingRunBook {
             return Err("TESTING_TRANSFER_FINAL_OR_INCONSISTENT");
         }
         Ok(())
-    }
-
-    // No live route currently calls this method. All markers are private,
-    // have no production issuers, and cannot be built from wire, UI or MCP
-    // values. It remains unreachable until independent native operator
-    // authentication + archive reconciliation have been implemented.
-    #[cfg(windows)]
-    #[allow(dead_code)]
-    fn transfer_with_sealed_admission(
-        &mut self,permit:TestingRecoveryAdmission,
-        successor:pipe::McpOwnerLifetime,
-    )->Result<TestingRunView,&'static str> {
-        self.check_recovery_cas(&permit)?;
-        let index=(permit.slot-1) as usize;
-        let old=self.slots[index].as_ref()
-            .ok_or("TESTING_TRANSFER_OLD_RUN_UNAVAILABLE")?;
-        let old_pin=old.owner_process.as_ref()
-            .ok_or("TESTING_TRANSFER_OLD_PROCESS_NOT_PINNED")?;
-        // A time threshold, a stale caller token, or an UNKNOWN process
-        // state can NEVER release the original reservation.
-        if old_pin.status()!="BOUND_PARENT_EXIT_CONFIRMED" {
-            return Err("TESTING_TRANSFER_OLD_PROCESS_NOT_CONFIRMED_EXITED");
-        }
-        if successor.status()!="BOUND_PARENT_RUNNING_AT_INSPECTION"||
-           successor.same(old_pin) {
-            return Err("TESTING_TRANSFER_NEW_PROCESS_NOT_VERIFIED");
-        }
-        // No await, filesystem access, IPC request or guest action between
-        // final checks and this single-slot replacement. The old run is
-        // never reused; previous same-token finalize now fails closed.
-        let view=TestingRunView {
-            schema:1,slot:permit.slot,run_id:permit.new_run_id,
-            phase:"RESERVED".into(),owner_match:true,
-            reported_status:None,report_digest:None,
-            provenance:"NATIVE_RUN_CORRELATION_ONLY_NOT_GAMEPLAY_PROOF".into(),
-        };
-        self.slots[index]=Some(TestingRecord {
-            owner:permit.new_owner,view:view.clone(),
-            owner_process:Some(successor),
-        });
-        Ok(view)
     }
 
 }
@@ -1855,10 +1807,13 @@ mod tests {
             "REQUIRE_VERIFIED_OWNER_DEATH_AND_OPERATOR_APPROVAL");
         assert!(!owner_view.transfer_allowed);
         assert!(!other_view.transfer_allowed);
+        assert_eq!(other_view.operator_approval,"NOT_AVAILABLE_IN_PROTOCOL");
         assert_eq!(book.reserve(2,&owner,&run,None).unwrap(),reserved,
             "Inspection must not mutate a reservation");
         assert!(!book.reserve(2,&other,&"d".repeat(32),None)
             .unwrap().owner_match);
+        assert_eq!(book.inspect(2,&owner).unwrap(),owner_view,
+            "A competing reservation cannot change the original owner or recovery gate");
 
         book.finalize(2,&owner,&run,"FAIL",&digest).unwrap();
         let final_view=book.inspect(2,&other).unwrap();
