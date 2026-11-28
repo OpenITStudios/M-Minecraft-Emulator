@@ -53,13 +53,17 @@ it('Play switch uses one verified presentation path after original session obser
   const transport=readFileSync(new URL('../src-tauri/src/engine/native_clients_session.rs',import.meta.url),'utf8');
   const route=transport.slice(transport.indexOf('fn request_inner('),transport.indexOf('let (sender, replies)',transport.indexOf('fn request_inner(')));
   expect(route.indexOf('validate_request(&request)?')).toBeLessThan(route.indexOf('owner.drain_previous_request()?'));
-  expect(route.indexOf('owner.drain_previous_request()?')).toBeLessThan(route.indexOf('workspace_observation_request(request,workspace_selection,owner.uncertain)'));
-  expect(transport).toContain('if workspace_selection && uncertain && request.is_agent_target()');
+  expect(route.indexOf('owner.drain_previous_request()?')).toBeLessThan(route.indexOf('desktop_observation_request(request,desktop_target,owner.uncertain)'));
+  expect(transport).toContain('if desktop_target && uncertain && request.is_agent_target()');
   expect(transport).toContain('request_inner(SessionRequest::InspectAgentTarget{slot}, true)');
   expect(source).toContain('if request.is_agent_target()');
   expect(source).toContain('Private target inspection is not a desktop session command');
   expect(handler.match(/present_verified\(/g)).toHaveLength(1);
   expect(handler).not.toContain('native_clients::inspect_native_workspace');
+  const capture=readFileSync(new URL('../src-tauri/src/engine/capture/mod.rs',import.meta.url),'utf8');
+  expect(capture).toContain('let target=request_desktop_target(slot)?.profiles.into_iter()');
+  expect(capture).not.toContain('request(SessionRequest::Inspect)');
+  expect(capture).toContain('.filter(|p|same_target(p,expected))');
 });
 
 
