@@ -113,9 +113,18 @@ the manager lifetime, not proof of exit. Session request timeout and later
 pending admission request cancellation of only the original client worker;
 retain the worker and uncertainty until original result/disconnect and
 fresh full Inspect; no replay or forced controller/game termination.
-Shared provider runner still has its direct-child kill/wait contract and
-bounded I/O-worker admission; changing its process ownership is deferred
-rather than dropping an unconfirmed child without a retention design.
+**REV-02 follow-through (baseline `47ac059e340491190b2635be539fa6521dcf7bf1`):**
+Shared provider runner now uses one original-child guard and a 2 s
+nonblocking exit-observation budget after kill; retain unconfirmed child
+handles with their admission lease instead of losing ownership. The 24
+I/O-worker limit is preserved; 12 direct helper leases cover active and
+retained children, and later admission probes retained handles once and
+refuses new launches while any remain unconfirmed. Already admitted
+operations are not replayed or retroactively canceled. No idle thread,
+new dependency, descendant termination or PID reopen. Ordinary early pipe
+setup/worker failures and unwind run the same guard cleanup; no actual OS
+termination, inherited-pipe cancellation, or speedup is claimed. Authored
+fixtures NOT_EXECUTED. Actual rustfmt normalization remains held.
 Keep exceptional checkpoint durability, per-request peer verification,
 generation/image pins and polling until measured bottlenecks justify a
 change (REV-05–07). No new worker, service, dependency or binary admission.

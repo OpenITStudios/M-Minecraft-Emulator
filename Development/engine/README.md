@@ -22,6 +22,19 @@ or Sandboxie-backed product.
   and a synthetic diagnostic helper. VMware/Guest Agent/provider runtime modules
   and VM CLI source have been retired from this crate.
 
+The shared subprocess runner owns only the original direct helper (e.g.
+registered Education query or approved one-shot screenshot worker). Its
+24 I/O-worker limit is unchanged; at most 12 direct helper leases are
+admitted, including retained children. On failure it requests direct-child
+termination and checks exit for up to 2 s using nonblocking `try_wait`.
+Unconfirmed children retain their original handle and lease; later helper
+admission checks these handles once and refuses new launches while any
+remain unconfirmed. Already admitted callers are unaffected. No idle
+reaper, descendant termination, automatic replay, or PID reopen. The
+budget is not a hard wall-clock bound on every OS call; inherited pipes
+can still outlive their child and consume the existing I/O-worker slots.
+This is source policy, not executed containment or performance proof.
+
 ## Retired source
 
 Both full Sandboxie v1.18.6 checkout copies and the historical Sandboxie

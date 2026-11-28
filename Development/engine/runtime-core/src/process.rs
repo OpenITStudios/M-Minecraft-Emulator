@@ -6,7 +6,7 @@ use std::{
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
-        mpsc, Arc,
+        mpsc, Arc, Mutex,
     },
     thread,
     time::{Duration, Instant},
@@ -41,6 +41,77 @@ fn reserve_io_workers(count: usize) -> io::Result<Vec<IoWorkerSlot>> {
             )
         })?;
     Ok((0..count).map(|_| IoWorkerSlot).collect())
+}
+
+// A child can remain alive after both I/O workers have released their slots.
+// Bound its lifetime separately, without reducing the existing I/O budget.
+const MAX_DIRECT_HELPERS: usize = MAX_BOUNDED_IO_WORKERS / 2;
+const CLEANUP_TIMEOUT: Duration = Duration::from_secs(2);
+static DIRECT_HELPERS: AtomicUsize = AtomicUsize::new(0);
+static RETAINED_HELPERS: Mutex<Vec<(Child, HelperSlot)>> = Mutex::new(Vec::new());
+
+struct HelperSlot;
+
+impl Drop for HelperSlot {
+    fn drop(&mut self) {
+        DIRECT_HELPERS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+fn retained_helpers() -> std::sync::MutexGuard<'static, Vec<(Child, HelperSlot)>> {
+    // Preserve original child handles even if another caller panicked.
+    RETAINED_HELPERS.lock().unwrap_or_else(|error| error.into_inner())
+}
+
+fn reserve_helper() -> io::Result<HelperSlot> {
+    let mut retained = retained_helpers();
+    // Only an actual later request probes retained children, once each.
+    // No background reaper, repeated kill or new launch after uncertain cleanup.
+    retained.retain_mut(|(child, _)| !matches!(child.try_wait(), Ok(Some(_))));
+    if !retained.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "previous provider process cleanup unconfirmed; helper launch refused",
+        ));
+    }
+    DIRECT_HELPERS.fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+        (count < MAX_DIRECT_HELPERS).then_some(count + 1)
+    }).map_err(|_| io::Error::new(
+        io::ErrorKind::WouldBlock, "too many active direct provider processes",
+    ))?;
+    Ok(HelperSlot)
+}
+
+// One guard owns the original process and admission lease on every exit,
+// including partial pipe setup and unwind. Never adopt/reopen a PID.
+struct OwnedHelper<'a> {
+    inner: Option<(Child, HelperSlot)>,
+    program: &'a Path,
+}
+
+impl OwnedHelper<'_> {
+    fn child_mut(&mut self) -> &mut Child {
+        &mut self.inner.as_mut().expect("owned helper").0
+    }
+
+    fn cleanup(&mut self, context: &str) -> io::Result<()> {
+        let Some((mut child, slot)) = self.inner.take() else { return Ok(()); };
+        // Close any pipes that were not moved to their bounded workers.
+        drop(child.stdin.take());
+        drop(child.stdout.take());
+        drop(child.stderr.take());
+        let result = terminate_direct_child(&mut child, self.program, context);
+        if result.is_err() {
+            retained_helpers().push((child, slot));
+        }
+        result
+    }
+}
+
+impl Drop for OwnedHelper<'_> {
+    fn drop(&mut self) {
+        let _ = self.cleanup("scope exit");
+    }
 }
 
 pub(crate) fn command_output_with_timeout<I, S>(
@@ -115,6 +186,7 @@ where
 {
     // Reserve before spawning the process. An unavailable slot refuses work
     // without starting another helper or increasing resource pressure.
+    let helper_slot = reserve_helper()?;
     let slots = reserve_io_workers(if input.is_some() { 3 } else { 2 })?;
     let mut slots = slots.into_iter();
     let mut command = Command::new(program);
@@ -124,7 +196,7 @@ where
         // Background helpers launched by the GUI must not allocate a console.
         command.creation_flags(0x08000000); // CREATE_NO_WINDOW
     }
-    let mut child = command
+    let child = command
         .args(args)
         .stdin(if input.is_some() {
             Stdio::piped()
@@ -134,17 +206,18 @@ where
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
+    let mut helper = OwnedHelper { inner: Some((child, helper_slot)), program };
     // Write stdin concurrently with stdout/stderr drainage. This prevents
     // deadlocks when the script is larger than the child's stdin pipe.
     let input_result = if let Some(bytes) = input {
-        let mut writer = child
+        let mut writer = helper.child_mut()
             .stdin
             .take()
             .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing bounded command stdin"))?;
         let data = bytes.to_vec();
         let (tx, rx) = mpsc::sync_channel(1);
         let slot = slots.next().expect("reserved stdin worker slot");
-        spawn_worker_or_reap(&mut child, program, || {
+        spawn_worker_or_reap(&mut helper, || {
             thread::Builder::new().spawn(move || {
                 let _slot = slot;
                 let _ = tx.send(writer.write_all(&data));
@@ -157,11 +230,11 @@ where
 
     // Drain both streams while the child is running. Waiting before reading can
     // deadlock when the child fills an OS pipe buffer.
-    let stdout = child
+    let stdout = helper.child_mut()
         .stdout
         .take()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing stdout pipe"))?;
-    let stderr = child
+    let stderr = helper.child_mut()
         .stderr
         .take()
         .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing stderr pipe"))?;
@@ -176,13 +249,13 @@ where
     let stderr_overflow = Arc::clone(&oversized_output);
     let stdout_slot = slots.next().expect("reserved stdout worker slot");
     let stderr_slot = slots.next().expect("reserved stderr worker slot");
-    spawn_worker_or_reap(&mut child, program, || {
+    spawn_worker_or_reap(&mut helper, || {
         thread::Builder::new().spawn(move || {
             let _slot = stdout_slot;
             let _ = stdout_sender.send(OutputReceipt::Stdout(drain_output_with_limit(stdout, &stdout_overflow, stdout_limit)));
         })
     })?;
-    spawn_worker_or_reap(&mut child, program, || {
+    spawn_worker_or_reap(&mut helper, || {
         thread::Builder::new().spawn(move || {
             let _slot = stderr_slot;
             let _ = stderr_sender.send(OutputReceipt::Stderr(drain_output(stderr, &stderr_overflow)));
@@ -194,13 +267,13 @@ where
         // Never wait for EOF from a stream whose bounded capture already
         // overflowed. Terminate ONLY our direct helper, not game descendants.
         if oversized_output.load(Ordering::Acquire) {
-            terminate_direct_child(&mut child, program, "oversized output")?;
+            helper.cleanup("oversized output")?;
             return Err(oversized_output_error(program, stdout_limit));
         }
-        let observed_status = match child.try_wait() {
+        let observed_status = match helper.child_mut().try_wait() {
             Ok(status) => status,
             Err(error) => {
-                terminate_direct_child(&mut child, program, "status check")?;
+                helper.cleanup("status check")?;
                 return Err(error);
             }
         };
@@ -224,11 +297,13 @@ where
             {
                 return Err(oversized_output_error(program, stdout_limit));
             }
+            // The original child exit is already observed; release its lease.
+            helper.cleanup("completed output")?;
             return Ok((status.success(), stdout, stderr));
         }
         let remaining = timeout.saturating_sub(started.elapsed());
         if remaining.is_zero() {
-            terminate_direct_child(&mut child, program, "timeout")?;
+            helper.cleanup("timeout")?;
             return Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 format!(
@@ -246,8 +321,7 @@ where
 // failures into ordinary errors and reap only the directly owned helper.
 // Dropped successful JoinHandles detach; IoWorkerSlot stays owned by the thread.
 fn spawn_worker_or_reap(
-    child: &mut Child,
-    program: &Path,
+    helper: &mut OwnedHelper<'_>,
     spawn: impl FnOnce() -> io::Result<thread::JoinHandle<()>>,
 ) -> io::Result<()> {
     match spawn() {
@@ -256,48 +330,59 @@ fn spawn_worker_or_reap(
             Ok(())
         }
         Err(error) => {
-            terminate_direct_child(child, program, "I/O worker allocation failure")
+            helper.cleanup("I/O worker allocation failure")
                 .map_err(|cleanup| io::Error::new(
                     cleanup.kind(),
                     format!(
                         "{} could not create an I/O worker ({error}); helper cleanup failed: {cleanup}",
-                        program.display()
+                        helper.program.display()
                     ),
                 ))?;
             Err(io::Error::new(
                 error.kind(),
                 format!(
                     "{} could not create an I/O worker: {error}",
-                    program.display()
+                    helper.program.display()
                 ),
             ))
         }
     }
 }
 
-// Only manage the direct child created here, never VMware descendants.
-// A failed kill must not lead to an unconditional, potentially infinite wait.
-// An already-exited child is the harmless race between try_wait and kill.
-fn terminate_direct_child(child: &mut Child, program: &Path, context: &str) -> io::Result<()> {
-    match child.kill() {
-        Ok(()) => child.wait().map(|_| ()).map_err(|error| {
-            io::Error::new(
-                error.kind(),
-                format!("{} {context}; child reap unconfirmed: {error}", program.display()),
-            )
-        }),
-        Err(kill_error) => match child.try_wait() {
-            Ok(Some(_)) => Ok(()),
-            Ok(None) => Err(io::Error::new(
-                kill_error.kind(),
-                format!("{} {context}; child is still running and could not be terminated: {kill_error}", program.display()),
-            )),
-            Err(probe_error) => Err(io::Error::new(
-                probe_error.kind(),
-                format!("{} {context}; child status unknown (kill: {kill_error}; probe: {probe_error})", program.display()),
-            )),
-        },
+// Only manage our original direct child. Kill is a request, not proof of
+// exit; try_wait is nonblocking and reaps an exited child on Unix.
+fn wait_for_exit(mut probe: impl FnMut() -> io::Result<bool>, timeout: Duration) -> io::Result<()> {
+    let started = Instant::now();
+    loop {
+        if probe()? {
+            return Ok(());
+        }
+        let remaining = timeout.saturating_sub(started.elapsed());
+        if remaining.is_zero() {
+            return Err(io::Error::new(io::ErrorKind::TimedOut, "child exit unconfirmed"));
+        }
+        thread::sleep(remaining.min(Duration::from_millis(10)));
     }
+}
+
+fn terminate_direct_child(child: &mut Child, program: &Path, context: &str) -> io::Result<()> {
+    let cleanup = (|| {
+        if child.try_wait()?.is_some() {
+            return Ok(());
+        }
+        if let Err(error) = child.kill() {
+            // Natural exit may race the kill request.
+            if child.try_wait()?.is_some() {
+                return Ok(());
+            }
+            return Err(error);
+        }
+        wait_for_exit(|| child.try_wait().map(|status| status.is_some()), CLEANUP_TIMEOUT)
+    })();
+    cleanup.map_err(|error| io::Error::new(
+        error.kind(),
+        format!("{} {context}; child exit unconfirmed: {error}", program.display()),
+    ))
 }
 
 // Keep diagnostic memory bounded. Oversize output is invalid evidence, so
@@ -426,16 +511,18 @@ mod tests {
         #[cfg(not(windows))]
         let (program, args): (&Path, &[&str]) = (Path::new("sh"), &["-c", "sleep 5"]);
 
-        let mut child = Command::new(program)
+        let slot = super::reserve_helper().unwrap();
+        let child = Command::new(program)
             .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .expect("start a disposable, directly owned test helper");
+        let mut helper = super::OwnedHelper { inner: Some((child, slot)), program };
 
         // Inject thread allocation failure without exhausting host resources.
-        let error = super::spawn_worker_or_reap(&mut child, program, || {
+        let error = super::spawn_worker_or_reap(&mut helper, || {
             Err(io::Error::new(
                 io::ErrorKind::WouldBlock,
                 "synthetic thread quota",
@@ -444,9 +531,20 @@ mod tests {
         .expect_err("worker allocation failure must return, not panic");
         assert_eq!(error.kind(), io::ErrorKind::WouldBlock);
         assert!(error.to_string().contains("could not create an I/O worker"));
-        assert!(
-            child.try_wait().unwrap().is_some(),
-            "direct helper must be reaped"
+        assert!(helper.inner.is_none(), "the original helper guard must be consumed");
+        assert!(!error.to_string().contains("helper cleanup failed"));
+    }
+
+    #[test]
+    fn exit_wait_requires_observation_and_preserves_probe_failure() {
+        assert!(super::wait_for_exit(|| Ok(true), Duration::ZERO).is_ok());
+        assert_eq!(
+            super::wait_for_exit(|| Ok(false), Duration::ZERO).unwrap_err().kind(),
+            io::ErrorKind::TimedOut
+        );
+        assert_eq!(
+            super::wait_for_exit(|| Err(io::Error::new(io::ErrorKind::PermissionDenied, "probe")), Duration::ZERO).unwrap_err().kind(),
+            io::ErrorKind::PermissionDenied
         );
     }
 
