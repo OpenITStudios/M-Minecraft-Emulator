@@ -565,6 +565,7 @@ test('extracted controller owners retain scoped counterpart review',()=>{
     ['owned_game_windows.rs',['agent-input-lease','native-desktop-session','native-input-v4']],
     ['audio_maintenance.rs',['native-desktop-session']],
     ['profile_storage_operations.rs',['agent-input-lease','native-desktop-session']],
+    ['experimental_input_operations.rs',['agent-input-lease','native-desktop-session','native-input-v4']],
     ['reply_snapshot.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
     ['tests.rs',['agent-input-lease','native-desktop-session','native-input-v4']]
   ];
@@ -655,6 +656,7 @@ test('P44 Rust/C++ ABI v4 consumer changes require bounded cross-owner input rev
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session/controller_ai_input_leases.rs',
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs',
     controller,
+    'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/experimental_input_operations.rs',
     'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/owned_game_windows.rs',
     'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/reply_snapshot.rs',
     'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/tests.rs',

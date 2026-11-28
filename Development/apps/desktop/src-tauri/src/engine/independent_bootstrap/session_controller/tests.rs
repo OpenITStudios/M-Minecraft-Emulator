@@ -124,6 +124,12 @@
         assert!(release_attempted_ai_group(&[],|_|{
             panic!("no IPC was attempted, so there is nothing to release")
         }));
+        let attempted=[2,4,0,0,0];
+        let mut visited=Vec::new();
+        assert!(release_attempted_ai_group(&attempted[..2],|slot|{
+            visited.push(slot);Ok(())
+        }));
+        assert_eq!(visited,[2,4],"unused fixed-capacity entries must never receive input");
     }
 
     #[test]

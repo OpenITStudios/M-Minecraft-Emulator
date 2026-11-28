@@ -215,6 +215,8 @@ const NAMED_OWNERS=Object.freeze([
   ['fn open_private_temporary',OWNERSHIP_ENGINE+'independent_bootstrap/profile_storage_handles.rs'],
   ['fn child_environment',OWNERSHIP_ENGINE+'independent_bootstrap/child_process_environment.rs'],
   ['struct Sessions',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller.rs'],
+  ['fn ai_input_group',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/experimental_input_operations.rs'],
+  ['fn legacy_mc02_input',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/experimental_input_operations.rs'],
   ['fn admit_profile_mutation',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/profile_storage_operations.rs'],
   ['fn resolve_selective_review',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/profile_storage_operations.rs'],
   ['struct NormalCloseProgress',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/owned_game_windows.rs'],
@@ -466,7 +468,7 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
   const gameBootstrap=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs');
   const reviewedPayload=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/reviewed_bootstrap_payload.rs');
   const presentationPreparation=reviewedPayload.slice(reviewedPayload.indexOf('    pub(super) fn prepare_presentation('),reviewedPayload.indexOf('    pub(super) fn enroll('));
-  const managedLaunch=gameSessions.slice(gameSessions.indexOf('    fn launch_inner('),gameSessions.indexOf('    fn mc02_input('));
+  const managedLaunch=gameSessions.slice(gameSessions.indexOf('    fn launch_inner('),gameSessions.indexOf('    fn snapshot('));
   assert.ok((managedLaunch.match(/load_performance\(\)/g)??[]).length===1
     && managedLaunch.indexOf('let limits = crate::engine::manager_settings::load_performance()?;')<managedLaunch.indexOf('game_preset::apply_inactive')
     && managedLaunch.includes('Some((&payload, limits))')

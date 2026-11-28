@@ -3,7 +3,7 @@
 ## Current status
 
 Branch `Local`; Unreleased. Work: `prelocal-modularity-efficiency`.
-MOD-01–09 closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). Focused simplification: SIM-MOD-01 [bc3417c](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/bc3417c92accb76ee3fb8f02e72d6b291ca3fe2b) storage handles/Temp mode/fresh-root cfg; SIM-MOD-02 [23fef07](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/23fef07b04525c8955116ad9ca4aa44e9f118f92) replay/startup journal. SIM-MOD-03: controller storage operations, one pending-clear policy and cache target admission, remove world forwarding. Source only; fixtures NOT_EXECUTED.
+MOD-01–09 closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). Focused SIM-MOD-01–03 storage/replay/journal/controller storage details: [exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/2d742bdbe6a8636b38494f723f16cbc4ae8f5529/planning/development.md). SIM-MOD-04: isolate experimental input operations; fixed five-slot group targets and attempted prefix, preserve exact original lease, deadline and neutral fences. Source only; fixtures NOT_EXECUTED.
 Final review baseline: `bf2588dc527d137fe75e4cdf6559130259b1dcf3`. Original work baseline: `ed320acd98065300e48dce9f574af0bfd7e7f18b`.
 No source test, compiler, formatter, build, CI, PC or runtime execution.
 
@@ -20,7 +20,7 @@ No source test, compiler, formatter, build, CI, PC or runtime execution.
 
 | MOD-09 | Correct staging, packaging and readiness digest-owner paths; repair stale startup fixture boundaries and classify extracted Rust test files correctly. Source fixtures authored NOT_EXECUTED. |
 
-Next: review session controller experimental input ownership and remaining redundant work; preserve native input holds. Re-pin actual HEAD for any separately
+Next: review session transport and agent operation redundancy; keep native holds. Re-pin actual HEAD for any separately
 approved PC-local stage. The existing native DLL and release holds remain.
 No compilation, runtime improvement or whole-product readiness claimed.
 
