@@ -269,7 +269,9 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
     mountedUI.includes("profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null)") &&
     mountedUI.includes('workspaceSettledIdle = workspaceObservationHealthy && active === null') &&
     mountedUI.includes('requested === null && queued === null && queuedLaunch === null') &&
-    mountedUI.includes("previewIssue === '' && !closeFailure && agentActivity === null") &&
+    mountedUI.includes("previewIssue === '' && !closeFailure;") &&
+    mountedUI.includes('workspaceSettledIdle = workspaceObservationHealthy && active === null && agentActivity === null') &&
+    mountedUI.includes('workspaceSettledLive = workspaceObservationHealthy && active !== null && !agentNeedsFastInspection(agentActivity)') &&
     mountedUI.includes('activeOperation === null && !refreshing && !resizing && !initializing') &&
     mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
     mountedUI.includes("if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState())") &&

@@ -6,7 +6,7 @@ import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, agentNeedsFastInspection, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {
@@ -312,6 +312,16 @@ describe('Lazy Tester profile contract', () => {
     expect(sameAgentObservation(base, {...base, stale:true})).toBe(false);
     expect(sameAgentObservation(base, {...base, snapshotAt:'2026-01-01T00:00:01.000Z'})).toBe(false);
     expect(sameAgentObservation(base, {...base, items:[]})).toBe(false);
+    expect(agentNeedsFastInspection(null)).toBe(false);
+    expect(agentNeedsFastInspection(base)).toBe(true);
+    const routine = {...base, displayHint:'ACTIVITY' as const, items:[
+      {kind:'VISUAL_OBSERVATION' as const, slot:1 as const, status:'SAMPLER_ACTIVE_RECENT_FRAME',
+       importance:'INFORMATION' as const, evidence:'LOCAL_SAMPLER_ONLY'}]};
+    expect(agentNeedsFastInspection(routine)).toBe(false);
+    expect(agentNeedsFastInspection({...routine, stale:true})).toBe(true);
+    expect(agentNeedsFastInspection({...routine, items:[
+      {kind:'AI_INPUT',slot:1,status:'EXPERIMENTAL_INPUT_REQUEST_IN_FLIGHT',
+       importance:'INFORMATION',evidence:'LOCAL_MCP_REQUEST_ONLY'}]})).toBe(true);
   });
   it('rejects reversed native inventory rather than trusting unverified order',()=>{
     const snapshot=stopped();

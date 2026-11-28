@@ -15,7 +15,7 @@
     import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from './app/presentation/sessionFeedback.js';
   import {observeDisplayScale, sameWorkspaceGeometry, type WorkspaceGeometry} from './app/workspaceGeometry.js';
   import type {StorageReview, StorageReviewKind, StorageSettingsAction} from './app/storageReview.js';
-  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, type CloseReview} from './app/inspectionScheduling.js';
+  import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, agentNeedsFastInspection, type CloseReview} from './app/inspectionScheduling.js';
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
@@ -250,10 +250,10 @@
   $: workspaceObservationHealthy = profiles.length === 5 &&
     requested === null && queued === null && queuedLaunch === null &&
     !detached && attentionCount === 0 && issueKey === null && connectionIssueKey === null &&
-    previewIssue === '' && !closeFailure && agentActivity === null;
-  $: workspaceSettledIdle = workspaceObservationHealthy && active === null &&
+    previewIssue === '' && !closeFailure;
+  $: workspaceSettledIdle = workspaceObservationHealthy && active === null && agentActivity === null &&
     profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null);
-  $: workspaceSettledLive = workspaceObservationHealthy && active !== null &&
+  $: workspaceSettledLive = workspaceObservationHealthy && active !== null && !agentNeedsFastInspection(agentActivity) &&
     selectedIdentity !== '' && selectedIdentity === identity(profiles.find(profile => profile.slot === active)) &&
     profiles.some(profile => profile.slot === active && profile.state === 'RUNNING') &&
     profiles.every(profile => profile.issue === null &&

@@ -54,6 +54,15 @@ export function sameAgentObservation(a: AgentActivityReport | null, b: AgentActi
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+// Only healthy live Play uses this hint. Routine local observation is not
+// a lifecycle warning; attention, stale and in-flight input retain the fast
+// cadence. Idle still requires no report so its passive read is unchanged.
+export function agentNeedsFastInspection(report:AgentActivityReport|null):boolean {
+  return report !== null && (report.stale || report.displayHint === 'ATTENTION' ||
+    report.items.some(item=>item.importance === 'ATTENTION' ||
+      item.status === 'EXPERIMENTAL_INPUT_REQUEST_IN_FLIGHT'));
+}
+
 export interface CloseReview {
   readonly nativeExitReview: boolean;
   readonly closeAllRunning: boolean;
