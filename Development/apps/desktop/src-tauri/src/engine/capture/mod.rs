@@ -3,7 +3,7 @@ use super::process_identity::OwnedProcess;
 use serde::Serialize;
 use std::io;
 #[cfg(windows)]
-use super::native_clients_session::{request,SessionRequest};
+use super::native_clients_session::request_desktop_target;
 
 #[cfg(windows)]
 mod screenshot;
@@ -77,7 +77,7 @@ fn same_target(a:&OwnedProcess,b:&OwnedProcess)->bool {
 #[cfg(windows)]
 fn verified_target(slot:u32,expected:&OwnedProcess)->io::Result<OwnedProcess>{
     if !(1..=5).contains(&slot){return Err(io::Error::other("Unknown Minecraft profile"));}
-    let target=request(SessionRequest::Inspect)?.profiles.into_iter()
+    let target=request_desktop_target(slot)?.profiles.into_iter()
         .find(|p|p.slot==slot&&p.state=="RUNNING").and_then(|p|p.process)
         .filter(|p|same_target(p,expected))
         .ok_or_else(||io::Error::other("Minecraft target changed or is not responding"))?;

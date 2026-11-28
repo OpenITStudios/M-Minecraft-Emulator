@@ -213,7 +213,7 @@ pub async fn lazy_tester_present(
     #[cfg(not(windows))]
     let manager = { let _ = window; 0 };
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
-        let snapshot = crate::engine::native_clients_session::request_workspace_target(slot)?;
+        let snapshot = crate::engine::native_clients_session::request_desktop_target(slot)?;
         let target = snapshot.profiles.into_iter().find(|p| p.slot == slot && p.state=="RUNNING")
             .and_then(|p| p.process).filter(|p| p.responding)
             .ok_or_else(|| io::Error::other("Minecraft has no verified responsive game window"))?;

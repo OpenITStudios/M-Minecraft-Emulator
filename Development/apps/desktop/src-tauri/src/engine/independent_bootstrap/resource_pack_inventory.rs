@@ -20,8 +20,7 @@ const MAX_DECLARATIONS_BYTES: usize = 32 * 1024;
 
 // Selective inventory is read-only and on demand. A directory identity is
 // evidence for a future review, not deletion authorization.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum InventoryCategory { Worlds, ResourcePacks, BehaviorPacks }
+pub(super) use crate::engine::native_clients_session::SelectiveCategory as InventoryCategory;
 
 pub(super) struct InventoryItem {
     pub(super) category: InventoryCategory,

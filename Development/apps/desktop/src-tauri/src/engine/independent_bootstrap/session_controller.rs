@@ -924,13 +924,7 @@ impl Sessions {
         if product_profiles::clear::pending(store)? {
             return Err(invalid("Finish pending profile cleanup first"));
         }
-        use resource_pack_inventory::InventoryCategory;
-        let native_category = match category {
-            SelectiveCategory::Worlds => InventoryCategory::Worlds,
-            SelectiveCategory::ResourcePacks => InventoryCategory::ResourcePacks,
-            SelectiveCategory::BehaviorPacks => InventoryCategory::BehaviorPacks,
-        };
-        let inventory = resource_pack_inventory::individual_inventory(&store.private, native_category,
+        let inventory = resource_pack_inventory::individual_inventory(&store.private, category,
             InspectionBudget::new(Duration::from_secs(2)))?;
         let items = if inventory.is_empty() {
             Vec::new()
@@ -951,13 +945,9 @@ impl Sessions {
         if product_profiles::clear::pending(store)? {
             return Err(invalid("Finish pending profile cleanup first"));
         }
-        use resource_pack_inventory::{InventoryCategory, ReviewSelection};
+        use resource_pack_inventory::ReviewSelection;
         let native: Vec<_> = selections.iter().map(|s| ReviewSelection {
-            category: match s.category {
-                SelectiveCategory::Worlds => InventoryCategory::Worlds,
-                SelectiveCategory::ResourcePacks => InventoryCategory::ResourcePacks,
-                SelectiveCategory::BehaviorPacks => InventoryCategory::BehaviorPacks,
-            },
+            category: s.category,
             root: s.root.clone(), name: s.name.clone(),
         }).collect();
         let review = resource_pack_inventory::review_selection(&store.private, &native,

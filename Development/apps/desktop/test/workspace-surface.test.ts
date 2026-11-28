@@ -45,10 +45,10 @@ it('Play switch uses one verified presentation path after original session obser
   const end=source.indexOf('pub async fn lazy_tester_previews(',start);
   const handler=source.slice(start,end);
   expect(handler).not.toContain('present_retained(');
-  expect(handler).toContain('request_workspace_target(slot)?');
+  expect(handler).toContain('request_desktop_target(slot)?');
   expect(handler).toContain('p.slot == slot && p.state=="RUNNING"');
   expect(handler).toContain('.filter(|p| p.responding)');
-  expect(handler.indexOf('request_workspace_target(slot)')).toBeLessThan(handler.indexOf('present_verified('));
+  expect(handler.indexOf('request_desktop_target(slot)')).toBeLessThan(handler.indexOf('present_verified('));
   expect(handler).not.toContain('SessionRequest::Inspect');
   const transport=readFileSync(new URL('../src-tauri/src/engine/native_clients_session.rs',import.meta.url),'utf8');
   const route=transport.slice(transport.indexOf('fn request_inner('),transport.indexOf('let (sender, replies)',transport.indexOf('fn request_inner(')));

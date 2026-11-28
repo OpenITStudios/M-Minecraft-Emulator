@@ -1388,21 +1388,21 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     request_inner(request, false)
 }
 
-// Only the trusted Rust workspace presentation handler uses this entry.
+// Only trusted Rust desktop presentation and capture use this entry.
 // The generic webview session command still refuses the private wire route.
 // Reuse the same actor, exact receipt and transport owner; never replay.
 #[cfg(windows)]
-pub(crate) fn request_workspace_target(slot:u32) -> io::Result<SessionSnapshot> {
+pub(crate) fn request_desktop_target(slot:u32) -> io::Result<SessionSnapshot> {
     request_inner(SessionRequest::InspectAgentTarget{slot}, true)
 }
 #[cfg(not(windows))]
-pub(crate) fn request_workspace_target(slot:u32) -> io::Result<SessionSnapshot> {
+pub(crate) fn request_desktop_target(slot:u32) -> io::Result<SessionSnapshot> {
     request(SessionRequest::InspectAgentTarget{slot})
 }
 
 #[cfg(windows)]
-fn workspace_observation_request(request:SessionRequest, workspace_selection:bool, uncertain:bool) -> SessionRequest {
-    if workspace_selection && uncertain && request.is_agent_target() {
+fn desktop_observation_request(request:SessionRequest, desktop_target:bool, uncertain:bool) -> SessionRequest {
+    if desktop_target && uncertain && request.is_agent_target() {
         SessionRequest::Inspect
     } else {
         request
@@ -1416,13 +1416,13 @@ fn read_needs_reconciliation(request:&SessionRequest, uncertain:bool)->bool {
 }
 
 #[cfg(windows)]
-fn request_inner(request: SessionRequest, workspace_selection:bool) -> io::Result<SessionSnapshot> {
+fn request_inner(request: SessionRequest, desktop_target:bool) -> io::Result<SessionSnapshot> {
     validate_request(&request)?;
     let mut owner = admit_controller(&CONTROLLER)?;
     owner.drain_previous_request()?;
     // A prior uncertain mutation still requires the original full Inspect.
     // Decide after draining while holding the existing admission gate.
-    let request=workspace_observation_request(request,workspace_selection,owner.uncertain);
+    let request=desktop_observation_request(request,desktop_target,owner.uncertain);
     let deadline=std::time::Instant::now()+std::time::Duration::from_secs(45);
     if read_needs_reconciliation(&request,owner.uncertain) {
         // Do not replay an older mutation or let the page-specific receipt
@@ -3015,17 +3015,17 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn workspace_selection_uses_exact_slot_unless_original_transport_needs_reconciliation() {
+    fn desktop_target_uses_exact_slot_unless_original_transport_needs_reconciliation() {
         for slot in 1..=5 {
             for uncertain in [false,true] {
-                let selected=workspace_observation_request(SessionRequest::InspectAgentTarget{slot},true,uncertain);
+                let selected=desktop_observation_request(SessionRequest::InspectAgentTarget{slot},true,uncertain);
                 if uncertain {
                     assert!(matches!(selected,SessionRequest::Inspect));
                 } else {
                     assert!(matches!(selected,SessionRequest::InspectAgentTarget{slot:observed} if observed==slot));
                 }
                 // The agent's own selected observation never reconciles.
-                let agent=workspace_observation_request(SessionRequest::InspectAgentTarget{slot},false,uncertain);
+                let agent=desktop_observation_request(SessionRequest::InspectAgentTarget{slot},false,uncertain);
                 assert!(matches!(agent,SessionRequest::InspectAgentTarget{slot:observed} if observed==slot));
             }
         }

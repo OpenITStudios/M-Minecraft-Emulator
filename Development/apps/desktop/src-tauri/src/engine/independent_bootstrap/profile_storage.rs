@@ -324,8 +324,16 @@ impl CachePlan {
         for entry in fs::read_dir(path)? {
             self.entries += 1;
             self.bounded(depth)?;
-            let path = entry?.path();
-            let metadata = fs::symlink_metadata(&path)?;
+            let entry = entry?;
+            let path = entry.path();
+            // Ordinary cache reports reuse enumeration metadata on Windows.
+            // Selected-tree fingerprints and mutation preflight retain their
+            // fresh pathname probe; every branch still pins and checks leaves.
+            let metadata = if self.deleting || self.selected_tree {
+                fs::symlink_metadata(&path)?
+            } else {
+                entry.metadata()?
+            };
             if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
                 return Err(invalid("Linked cache entry; nothing was deleted"));
             }
