@@ -78,7 +78,14 @@ per-frame identity proof; exact WGC capture-item lifetime must be verified.
 Stop sends q to the child stdin only, then waits for graceful finalization
 up to 10 s. A BrokenPipe during concurrent natural exit still requires
 successful exit and complete progress; it is not an automatic success or
-retry. A final progress report without child exit also has a 10 s deadline.
+retry. A complete `progress=end` marker signals the supervisor before pipe EOF;
+the next existing 200 ms supervision wake starts the 10 s exit deadline
+unless already stopping. EOF, successful child exit and positive frame
+count are still required for publication. After child/job close, the
+supervisor waits up to 2 s for the reader result and joins a completed
+reader, including on ordinary supervision errors. An unclosed pipe can
+still leave a detached reader on timeout; this is a failure, not a saved
+receipt, and requires native containment verification.
 The same 15 s frame-progress deadline covers both startup and mid-stream
 stalls: only a completed, monotonic frame-count report resets it. A game
 that produces no new frames for 15 s is conservatively failed, including
@@ -97,7 +104,9 @@ Settings; start is limited to Play with a responding profile. The existing
 status never authorizes another Start; explicit per-slot Stop remains
 available while a recording may be active. Close
 controls for a known active slot are disabled; native CloseOne/CloseAll
-still enforce admission. A switch or layout that changes target client
+still enforce admission. A successful same-slot Saved observation resolves the prior recording
+failure issue; Failed records recurrence and intermediate/unknown states
+do not prove recovery. A switch or layout that changes target client
 dimensions can invalidate recording; this is not proof of uninterrupted
 recording across selection changes. No change to account,
 world, cache or diagnostic data.

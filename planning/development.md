@@ -87,6 +87,21 @@ CAP-01–05 source integrated: lossless client WebP screenshot, selected-slot HE
 
 **Hardware efficiency — HW-01 (Unreleased, source only):** Operator-selected RTX 3070 compatibility supersedes AV1-only: one HEVC Main NVENC/MKV path with D3D11 frames, unchanged bounded supervision, no software fallback, no CUDA toolkit/custom kernels, no new UI/worker/controller. [NVIDIA matrix](https://developer.nvidia.com/video-encode-decode-support-matrix) and [FFmpeg 8.1 source](https://ffmpeg.org/doxygen/8.1/nvenc__hevc_8c_source.html) support the codec decision, not native negotiation. The existing optional capture worker releases its acquired GPU frame immediately after fitted readback/timestamp, before CPU encoding or stdout backpressure; it preserves identity checks, packet formats and cadence. Existing adaptive observation, FPS pacing, DWM previews, GPU buffer reuse, resource limits and memory-canary holds remain unchanged; no speculative affinity or new CUDA path. Acceptance: existing CAP checks plus independent HEVC decode, measured game frame time/CPU/RAM/VRAM and capture latency/cadence at matched one-to-five-client loads. HEVC redistribution review, both binary gates, exact Windows driver/device negotiation and all tests/builds/benchmarks remain held / NOT_EXECUTED. Do not infer speedup, installed support or reopen prior closed optimization scopes from this change.
 
+**Final pre-local improvement — FIN-01–08 (Unreleased, source only):**
+Baseline `ac43c876bea60579164c1dc7b07cb1f7bd244fa2`. A complete recording
+terminal marker now starts the existing finalization deadline before EOF;
+publication still requires clean reader completion, child success, positive
+frames, target and file checks. Close child/job before bounded reader result
+and join on ordinary exit/error; timeout or panic containment remains native
+validation, not a guarantee of thread termination. Same-slot Saved resolves
+LT-CAP-05; failed/unknown/intermediate states do not imply recovery. Retain
+200 ms active supervision and per-generation file identity checks (FIN-04/05):
+no new worker, cache or speculative optimization. First-run guide selects
+one source route; native performance guidance no longer routes to historical
+VMware contract. Authored Rust/UI fixtures NOT_EXECUTED. No binary admission,
+release, version bump, CI or native performance claim. Re-pin actual HEAD
+for the existing staged PC-local handoff below.
+
 ## Proof ceiling and unresolved gates
 
 - Native presentation ABI v4 digest pair not admitted; standard dev/package/new launch held. Exact DLLs require independent review; never substitute arbitrary bytes.

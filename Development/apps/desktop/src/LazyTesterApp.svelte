@@ -119,6 +119,10 @@
       if(disposed)return;
       recordings=result;recordingStatusKnown=true;recordingWatch=result.some(recordingActive);
       resolveIssue('LT-CAP-03');
+      for (const item of result) {
+        if (item.state==='Failed') noteIssue('LT-CAP-05',item.slot);
+        else if (item.state==='Saved') resolveIssue('LT-CAP-05',item.slot);
+      }
     }catch{
       if(!disposed){recordingStatusKnown=false;recordingWatch=true;noteIssue('LT-CAP-03');}
     }finally{recordingStatusPending=false;}
@@ -323,8 +327,6 @@
       noteIssue(code,item.slot);
     }
     if (settings?.audioIssue) noteIssue(userFeedback('audio').code);
-    if (recordingStatusKnown)
-      for (const item of recordings) if (item.state==='Failed') noteIssue('LT-CAP-05',item.slot);
     if (agentActivity?.stale) noteIssue('LT-AGT-05');
     else if (agentActivity) for (const item of agentActivity.items) {
       if (item.importance!=='ATTENTION') continue;

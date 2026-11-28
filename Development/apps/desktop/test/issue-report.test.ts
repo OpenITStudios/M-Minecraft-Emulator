@@ -61,6 +61,16 @@ describe('Selective desktop issue report',()=>{
     report.note('LT-CAP-01',2,true);
     expect(report.takeCheckpointDue()).toBe(true);
   });
+  it('retains recording failure until a positive same-slot saved receipt resolves it',()=>{
+    let now=100;
+    const report=new IssueReport(()=>now);
+    report.note('LT-CAP-05',1);
+    report.note('LT-CAP-05',2);
+    now=110; report.resolve('LT-CAP-05',1);
+    now=120; report.note('LT-CAP-05',1);
+    expect(JSON.parse(report.read()!).issues).toEqual([
+      {c:'LT-CAP-05',s:1,t:100,e:1,l:120},{c:'LT-CAP-05',s:2,t:100}]);
+  });
   it('bounds the summary, preserves the first records and excludes expected refusals',()=>{
     const keys:UserMessageKey[]=['general','backend','binding','connection','launch','selection','workspace','location','storage','settings','performance'];
     const slots:ProfileSlot[]=[1,2,3,4,5];
@@ -107,6 +117,9 @@ describe('Selective desktop issue report',()=>{
     expect(app).toContain('await lazyTester.checkpointIssues(ui)');
     expect(app).toContain('if (issueCheckpoint !== null) return;');
     expect(app).toContain("resolveIssue('LT-CAP-03')");
+    const recording=app.slice(app.indexOf("async function refreshRecordingStatus()"),app.indexOf("async function recordingAction()"));
+    expect(recording).toContain("if (item.state==='Failed') noteIssue('LT-CAP-05',item.slot)");
+    expect(recording).toContain("else if (item.state==='Saved') resolveIssue('LT-CAP-05',item.slot)");
     const shot=app.slice(app.indexOf('async function saveScreenshot()'),app.indexOf('let manualRefreshRequested'));
     expect(shot.indexOf('if(receipt&&!disposed)')).toBeLessThan(shot.indexOf("resolveIssue('LT-CAP-01',slot)"));
     const session=readFileSync(new URL('../src-tauri/src/engine/native_clients_session.rs',import.meta.url),'utf8');

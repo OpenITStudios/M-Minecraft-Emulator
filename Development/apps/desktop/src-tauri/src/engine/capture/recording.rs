@@ -21,11 +21,12 @@ const MAX_ACTIVE_PIXEL_RATE:u64=4096*2160*30; // conservative initial admission,
 const POLL:Duration=Duration::from_millis(200);
 const FRAME_TIMEOUT:Duration=Duration::from_secs(15);
 const STOP_TIMEOUT:Duration=Duration::from_secs(10);
+const READER_TIMEOUT:Duration=Duration::from_secs(2);
 
 #[derive(Clone,Serialize)]
 #[serde(rename_all="camelCase")]
 pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub recovery_file:Option<String>}
-struct Run{state:AtomicU8,stop:AtomicBool,frames:AtomicU64,pixel_rate:u64,recovery_file:OnceLock<String>}
+struct Run{state:AtomicU8,stop:AtomicBool,terminal_progress:AtomicBool,frames:AtomicU64,pixel_rate:u64,recovery_file:OnceLock<String>}
 impl Run{
     fn active(&self)->bool{self.state.load(Ordering::Acquire)<SAVED}
     fn receipt(&self,slot:u32)->RecordingReceipt{
@@ -91,7 +92,7 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     let image=worker::reviewed_image("ffmpeg.exe",video::REVIEWED_FFMPEG_SHA256)?;
     let parent=path.parent().ok_or_else(||io::Error::other("Recording save folder unavailable"))?;
     let temp=tempfile::Builder::new().prefix(".lazy-tester-video-").suffix(".part").tempfile_in(parent)?;
-    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()});
+    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),terminal_progress:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()});
     let mut all=slots()?;
     admit(&all,idx,rate)?;
     let active=Arc::clone(&run);
@@ -149,7 +150,7 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     let (tx,rx)=std::sync::mpsc::sync_channel(1);
     // Progress is numeric metadata only. No logs or private media are copied.
     // One bounded pipe reader; the child/job close releases its writer.
-    thread::Builder::new().name("recording-progress".into()).spawn(move||{
+    let reader=thread::Builder::new().name("recording-progress".into()).spawn(move||{
         let _=tx.send(read_progress(stderr,&reader_run));
     })?;
     let started=Instant::now();
@@ -157,6 +158,8 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     let mut progress_complete=false;
     let mut last_frame=0;
     let mut last_advance=started;
+    // Close the child/job before waiting for EOF, including on ordinary errors.
+    let supervised=(|| -> io::Result<()> {
     loop{
         target.verify()?; // fail closed; no replacement window/slot
         if !progress_complete{
@@ -175,7 +178,7 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
         }
         // A final progress report is not proof that the child exited.
         // Bound the remaining trailer/exit wait even after a natural end.
-        if stopping.is_none()&&progress_complete{
+        if stopping.is_none()&&run.terminal_progress.load(Ordering::Acquire){
             run.state.store(STOPPING,Ordering::Release);
             stopping=Some(Instant::now());
         }
@@ -202,9 +205,17 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
         }
         thread::sleep(POLL);
     }
-    drop(rec); // close job, then require final progress receipt
-    let ended=progress_complete||rx.recv_timeout(Duration::from_secs(2))
-        .map_err(|_|io::Error::other("Recording progress completion unavailable"))??;
+    Ok(())
+    })();
+    drop(rec); // close job/writer before bounded reader completion
+    // A received result (or disconnect) means the reader is returning.
+    // Never join a potentially blocked pipe reader after a timeout.
+    let completion=if progress_complete {Ok(Ok(true))} else {rx.recv_timeout(READER_TIMEOUT)};
+    if !matches!(&completion,Err(std::sync::mpsc::RecvTimeoutError::Timeout)) {
+        reader.join().map_err(|_|io::Error::other("Recording progress reader failed"))?;
+    }
+    supervised?;
+    let ended=completion.map_err(|_|io::Error::other("Recording progress completion unavailable"))??;
     if !ended||run.frames.load(Ordering::Acquire)==0{return Err(io::Error::other("Recording has no final frame receipt"));}
     target.verify()?;
     let file=temp.as_file_mut();
@@ -283,6 +294,7 @@ fn read_progress(mut input:impl Read,run:&Run)->io::Result<bool>{
                     run.frames.store(frames,Ordering::Release);
                     if frames>0{let _=run.state.compare_exchange(STARTING,RECORDING,Ordering::AcqRel,Ordering::Acquire);}
                     ended=value=="end";
+                    if ended{run.terminal_progress.store(true,Ordering::Release);}
                 }
                 length=0;
             }else{
@@ -297,7 +309,7 @@ fn read_progress(mut input:impl Read,run:&Run)->io::Result<bool>{
 #[cfg(test)]
 mod tests{
     use super::*;
-    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()})}
+    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),terminal_progress:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()})}
     #[test]
     fn admission_prevents_duplicate_and_aggregate_overcommit(){
         let mut slots:[Option<Arc<Run>>;5]=[const{None};5];
@@ -361,6 +373,28 @@ mod tests{
         let retained=receipt.recovery_file.unwrap();
         assert_eq!(std::fs::read(folder.path().join(retained)).unwrap(),b"finalized fixture");
         assert_eq!(std::fs::read(destination).unwrap(),b"existing");
+    }
+
+    #[test]
+    fn terminal_marker_visible_before_eof_and_does_not_validate_trailing_bytes(){
+        struct AfterMarker<'a>{run:&'a Run,first:bool}
+        impl Read for AfterMarker<'_>{
+            fn read(&mut self,buf:&mut [u8])->io::Result<usize>{
+                let bytes:&[u8]=if self.first{
+                    self.first=false;
+                    assert!(!self.run.terminal_progress.load(Ordering::Acquire));
+                    b"frame=5\nprogress=end\n"
+                }else{
+                    assert!(self.run.terminal_progress.load(Ordering::Acquire));
+                    b"unexpected"
+                };
+                buf[..bytes.len()].copy_from_slice(bytes);
+                Ok(bytes.len())
+            }
+        }
+        let r=run(1);
+        assert!(read_progress(AfterMarker{run:&r,first:true},&r).is_err());
+        assert!(r.terminal_progress.load(Ordering::Acquire));
     }
 
     #[test]

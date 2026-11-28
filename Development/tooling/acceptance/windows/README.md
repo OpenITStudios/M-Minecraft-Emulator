@@ -1102,21 +1102,16 @@ appearance. Close the debug manager normally after restoring windows, then run
 normally to remove the endpoint. Canonical results belong in
 `docs/validation/native-pilot-localtest.md`.
 
-Use `performance-contract.json` during target-machine performance acceptance. Record measurements as observations, not conclusions.
-
-The purpose is to calibrate the single automatic performance policy with real Native + Virtual-01/02/03 evidence. Do not change configured RAM, vCPU, GPU policy or startup thresholds from an incomplete run. Missing measurements remain unknown; they are never treated as zero or PASS.
-
-At minimum, capture the host baseline, each Virtual VM start duration, Guest Agent readiness duration, Minecraft readiness duration, observed host working set, 3D-graphics observation, resolution, peak host CPU during sequential startup, concurrent Minecraft count and operator responsiveness.
-
-Performance acceptance must distinguish:
-- capacity: what the hardware should reasonably support;
-- pressure: whether another client should start now;
-- experience: whether Native and the running Virtual clients remain usable together.
-
-The benchmark harness does not automatically declare a performance PASS. Threshold calibration is a separate evidence review after representative target machines have been measured.
-
-
-
+For current Lazy Tester performance acceptance use the native-profile schema
+8 procedure at the start of this guide and the five-client capture section
+above. `performance-contract.json` is retained only for historical VMware
+measurements; its Virtual VM and Guest Agent requirements do not apply to
+native profiles. Record matched workload, exact process identities, CPU,
+memory composition and present intervals with their existing evidence
+limits. Optional GPU counter hints are not actual VRAM or frame-time proof.
+Missing measurements remain unknown, not zero or PASS. Do not change
+runtime policy or thresholds from an incomplete run; the existing reviewer
+does not automatically declare performance acceptance.
 
 ## Explicit one-shot LFH reclamation experiment
 

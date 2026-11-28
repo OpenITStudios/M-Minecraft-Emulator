@@ -17,9 +17,10 @@ For experimental independent AI keyboard/mouse input use the separate
 feature is compile-OFF/default-OFF and **not** in a normal package.
 
 For a practical **first day** with no need to traverse 306 cases, follow the
-[13-scenario local smoke](efficient-local-testing.md). It selects a
-quick source screen and only MC01/MC02 first. Full-source and five-client
-acceptance remain separate; no tests are executed by reading these guides.
+[13-scenario local smoke](efficient-local-testing.md). It selects
+MC01/MC02 first. Its quick source screen is an alternative to full
+preflight, not a prerequisite when full preflight is selected. Five-client
+acceptance remains separate; no tests are executed by reading these guides.
 
 For a full operator-facing checklist beyond this short command runbook,
 see the [master test guide](lazy-tester-test-master.md),
@@ -130,17 +131,17 @@ exact-revision test results.
 
 ## 2. Prepare and verify the developer environment
 
-When the operator authorizes downloads/toolchain setup, run **once**:
+Only if `localcheck` identifies missing portable tools and the operator
+authorizes downloads/toolchain setup, run:
 
 ```powershell
 .\DEV.cmd bootstrap
-.\DEV.cmd doctor
-.\DEV.cmd localcheck
 ```
 
-The launcher now propagates bootstrap's actual failure exit code instead
-of falsely succeeding. Stop if bootstrap or doctor fails. The read-only
-localcheck can still report missing DLLs until those files are provided.
+The launcher propagates bootstrap's actual failure exit code. Stop on
+failure. The selected source verification below checks the toolchain again;
+standalone `doctor` is for diagnosis, not a mandatory duplicate check.
+Missing native DLLs may remain blocked until the separate admission stage.
 
 `bootstrap` provisions pinned portable Node, npm, PowerShell and Rust
 inside ignored `workspace/toolchains/`. It **downloads files and changes
@@ -162,8 +163,10 @@ the native Lazy Tester acceptance path.
 
 ## 3. Verify source before opening a desktop window
 
-For an **efficient initial local smoke** after authorized toolchain and locked
-npm setup, from a **clean** `Local` checkout:
+Select **one** source verification route from a clean `Local` checkout.
+For the final source-to-local handoff, use full preflight directly (below).
+For a separately selected **quick-only initial smoke**, after authorized
+toolchain and locked npm setup:
 
 ```powershell
 .\DEV.cmd setup
@@ -182,7 +185,9 @@ elapsed wall time. `quickSourceScreen` alone may pass; full
 Record its actual result and full SHA. A failure stops this baseline; no
 gameplay PASS can be inferred from a source check.
 
-For **full regression / release verification**, separately authorize and run:
+For **full source verification** (the selected final handoff route),
+separately authorize and run once, without preceding it with `setup`,
+`check:quick`, `doctor` or duplicate agent/repository suites:
 
 ```powershell
 .\DEV.cmd preflight
