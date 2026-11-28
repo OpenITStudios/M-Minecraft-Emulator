@@ -559,6 +559,15 @@ test('extracted controller owners retain scoped counterpart review',()=>{
   }
 });
 
+test('extracted instance identity owners keep their native desktop review route',()=>{
+  for(const path of ["Development/apps/desktop/src-tauri/src/engine/instance_identity/windows.rs","Development/apps/desktop/src-tauri/src/engine/instance_identity/windows/private_root_identity.rs","Development/apps/desktop/src-tauri/src/engine/instance_identity/windows/package_identity.rs","Development/apps/desktop/src-tauri/src/engine/instance_identity/windows/image_signature.rs","Development/apps/desktop/src-tauri/src/engine/instance_identity/windows/tests.rs","Development/apps/desktop/src-tauri/src/engine/instance_identity/tests.rs","Development/apps/desktop/src-tauri/src/engine/instance_identity/coordinate_tcp_pid_witness_fixture.rs"]){
+    const review=qualityReviewForPaths([path],SHA);
+    assert.deepEqual(review.crossModuleReviews.map(seam=>seam.id),['native-desktop-session']);
+    assert.ok(review.crossModuleReviews[0].reviewParties.some(p=>
+      p.selectedInChangeSet&&p.inspectFiles.includes(path)));
+  }
+});
+
 test('desktop-only native or UI changes route to their exact consumer boundaries',()=>{
   const session=qualityReviewForPaths(
     ['Development/apps/desktop/src-tauri/src/engine/process_identity.rs'],SHA);

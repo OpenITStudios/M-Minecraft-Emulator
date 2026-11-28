@@ -485,7 +485,7 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
   const imageOwners=[
     gameSource,
     read('Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs'),
-    read('Development/apps/desktop/src-tauri/src/engine/instance_identity.rs'),
+    read('Development/apps/desktop/src-tauri/src/engine/instance_identity/windows/image_signature.rs'),
     windowsAdapter,
     read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs')
   ];
