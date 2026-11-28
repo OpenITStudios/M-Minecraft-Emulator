@@ -1112,21 +1112,7 @@ pub(super) fn maybe_run_native_entrypoint() -> bool {
 // release the mutex: the original handle keeps the gate alive for its caller.
 // Preserve the OS last-error immediately after creation.
 fn acquire_startup_gate(name: &str, already_exists: io::Error) -> io::Result<OwnedHandle> {
-    use windows_sys::Win32::{
-        Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
-        System::Threading::CreateMutexW,
-    };
-    let name = wide(OsStr::new(name))?;
-    let raw = unsafe { CreateMutexW(ptr::null(), 0, name.as_ptr()) };
-    if raw.is_null() {
-        return Err(io::Error::last_os_error());
-    }
-    let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
-    let gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
-    if existed {
-        return Err(already_exists);
-    }
-    Ok(gate)
+    crate::engine::native_clients_session::acquire_existence_gate(name, already_exists)
 }
 
 

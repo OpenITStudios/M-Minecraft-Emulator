@@ -1713,6 +1713,13 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
         return Ok(absent_controller_close_reply(&request,observation.processes.len()));
     }
     if matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings | SessionRequest::SavePerformance { .. } | SessionRequest::SaveAudio {..} | SessionRequest::SaveStoragePreferences {..}) {
+        // A standalone settings save must exclude concurrent controller
+        // startup across desktop and CLI. Retain the original startup gate.
+        let _settings_gate = if matches!(request, SessionRequest::SavePerformance { .. } |
+            SessionRequest::SaveAudio {..} | SessionRequest::SaveStoragePreferences {..}) {
+            Some(acquire_existence_gate(CONTROLLER_GATE_NAME,
+                io::Error::new(io::ErrorKind::WouldBlock,"Controller startup or settings save in progress"))?)
+        } else { None };
         // The old fallback returned five STOPPED profiles on Inspect without
         // checking whether a game survived the controller. Such a false idle
         // receipt could also clear the caller's pending-request uncertainty.
@@ -1779,6 +1786,34 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
     pipe::exchange(&endpoint, endpoint.connect()?, &request)
 }
 
+// Named-object existence lease, not thread-owned mutex locking.
+#[cfg(windows)]
+pub(crate) fn acquire_existence_gate(name: &str, already_exists: io::Error)
+    -> io::Result<std::os::windows::io::OwnedHandle> {
+    use std::os::windows::io::{FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::{Foundation::{GetLastError, ERROR_ALREADY_EXISTS},
+        System::Threading::CreateMutexW};
+    let name: Vec<u16> = name.encode_utf16().chain(Some(0)).collect();
+    let raw = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+    if raw.is_null() { return Err(io::Error::last_os_error()); }
+    let existed = unsafe { GetLastError() } == ERROR_ALREADY_EXISTS;
+    let gate = unsafe { OwnedHandle::from_raw_handle(raw as _) };
+    if existed { return Err(already_exists); }
+    Ok(gate)
+}
+
+// Shared per-slot exclusion, not target identity or launch authority.
+#[cfg(windows)]
+pub(crate) fn acquire_recording_close_gate(slot:u32)
+    -> io::Result<std::os::windows::io::OwnedHandle> {
+    if !(1..=5).contains(&slot) {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+    }
+    acquire_existence_gate(&format!(r"Local\LazyTester-RecordingClose-{slot}"),
+        io::Error::new(io::ErrorKind::WouldBlock,
+            "Minecraft recording or close is in progress for this profile"))
+}
+
 #[cfg(windows)]
 pub(crate) fn existing_controller_gate(name: &str) -> io::Result<bool> {
     use std::os::windows::io::{FromRawHandle, OwnedHandle};
@@ -1830,6 +1865,17 @@ mod tests {
     #[cfg(feature="mc02-native-input")]
     fn synthetic_ai_epoch(issued:u64)->String {
         format!("{issued:016x}{}e1","a".repeat(14))
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn existence_lease_excludes_second_creator_until_original_handle_closes() {
+        let name=format!(r"Local\LazyTester-GateFixture-{}",std::process::id());
+        let acquire=||acquire_existence_gate(&name,io::Error::new(io::ErrorKind::WouldBlock,"held"));
+        let first=acquire().unwrap();
+        assert_eq!(acquire().unwrap_err().kind(),io::ErrorKind::WouldBlock);
+        drop(first);
+        assert!(acquire().is_ok());
     }
 
     #[test]

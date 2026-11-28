@@ -131,6 +131,23 @@ change (REV-05–07). No new worker, service, dependency or binary admission.
 Authored source fixtures NOT_EXECUTED; Windows cancellation/exit, pipe
 recovery and performance remain unverified.
 
+**Cross-process and resource closure — BS-01–07 (Unreleased, source only):**
+Baseline `484d9b9cb2f5b25c58adef374f6ed54c0c335212`. BS-01: reuse
+named-object existence admission for per-slot recording/managed close
+exclusion at the retained controller, including CLI; acquire selected
+running slots before close effects, hold recording lease across final
+target validation and cleanup. Release on terminal failure; unknown cleanup
+still quarantines starts, does not indefinitely block normal game close.
+BS-02: expose terminal cleanupUnconfirmed in existing recording receipt,
+strict TS parser and disabled start across slots, no new requests.
+BS-03: standalone settings saves retain original controller startup
+existence gate through observation/write, refusing concurrent startup.
+BS-05 deferred: server synchronous request/ACK still lacks per-I/O
+deadline; proper overlapped I/O needs separate review of cancellation
+completion, buffers, peer identity, wire and actor admission; no unsafe
+PIPE_NOWAIT substitution. Cross-process lease behavior and all fixtures
+remain NOT_EXECUTED; no binary admission, new worker or service.
+
 ## Proof ceiling and unresolved gates
 
 - Native presentation ABI v4 digest pair not admitted; standard dev/package/new launch held. Exact DLLs require independent review; never substitute arbitrary bytes.

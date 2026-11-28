@@ -674,6 +674,12 @@ impl Sessions {
                 return Err(invalid("Minecraft session is not running"));
             }
         }
+        // Acquire all selected running slots before any close side effect.
+        // On contention already acquired leases drop without closing a game.
+        let _capture_gates=mask.iter().enumerate()
+            .filter(|(index,selected)|**selected && self.running[*index].is_some())
+            .map(|(index,_)|crate::engine::native_clients_session::acquire_recording_close_gate(index as u32+1))
+            .collect::<io::Result<Vec<_>>>()?;
         self.exiting=true;
         let result=self.close_selected_sessions(mask);
         // Full exit preserves its terminal gate; selected exit never blocks

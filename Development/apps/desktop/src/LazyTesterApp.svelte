@@ -108,7 +108,8 @@
   // per-slot Stop command. Never authorize a new start on unknown state.
   $: canStopRecording=recordingWatch&&(!recordingStatusKnown||
     recordingActive(selectedRecording)&&selectedRecording?.state!=='Stopping');
-  $: canStartRecording=recordingStatusKnown&&!recordingActive(selectedRecording)&&page==='workspace'&&
+  $: recordingQuarantined=recordingStatusKnown&&recordings.some(r=>r.cleanupUnconfirmed);
+  $: canStartRecording=recordingStatusKnown&&!recordingQuarantined&&!recordingActive(selectedRecording)&&page==='workspace'&&
     available&&!!binding?.configured&&recordingTarget?.responding===true;
   async function refreshRecordingStatus(){
     if(!recordingAvailable||recordingStatusPending||disposed)return;
@@ -135,7 +136,7 @@
     const target=profiles.find(p=>p.slot===slot&&p.state==='RUNNING')?.process;
     if(recordingStatusKnown&&receipt?.state==='Stopping')return;
     const stop=!recordingStatusKnown||recordingActive(receipt);
-    if(!stop&&(!target?.responding||page!=='workspace'||!available||!binding?.configured))return;
+    if(!stop&&(recordings.some(r=>r.cleanupUnconfirmed)||!target?.responding||page!=='workspace'||!available||!binding?.configured))return;
     activeOperation = 'recording';recordingNotice=null;recordingWatch=true;
     try{
       if(stop)await lazyTester.stopRecording(slot);
@@ -155,7 +156,8 @@
     const state=known?(receipt?.state??'Idle'):'Status unavailable';
     const recovery=known&&receipt?.recoveryFile?' · Finalized file retained in save folder: '+receipt.recoveryFile:'';
     const detail=notice?.slot===slot?' · '+notice.message:'';
-    return 'MC0'+slot+' · '+state+recovery+detail;
+    const quarantine=known&&receipts.some(r=>r.cleanupUnconfirmed)?' · New recordings unavailable: cleanup unconfirmed':'';
+    return 'MC0'+slot+' · '+state+recovery+detail+quarantine;
   }
   let screenshotNotice:{slot:ProfileSlot;message:string}|null=null;
   async function saveScreenshot(){
@@ -1394,7 +1396,7 @@
             title={recordingNotice?.slot===recordingSlot?recordingNotice.message:recordingLabel(recordingSlot,recordings,recordingStatusKnown,null)}
             disabled={busy||refreshing||resizing||recordingStatusPending||closeReviewPending||navigationReviewOpen||
               (!canStopRecording&&!canStartRecording)}
-            on:click={()=>void recordingAction()}>{recordingStatusKnown&&selectedRecording?.state==='Stopping'?'Stopping…':canStopRecording?'Stop':'Record'}</button>
+            on:click={()=>void recordingAction()}>{recordingStatusKnown&&selectedRecording?.state==='Stopping'?'Stopping…':canStopRecording?'Stop':recordingQuarantined?'Recording unavailable':'Record'}</button>
           <span class="lazytester-visually-hidden" role="status">{recordingLabel(recordingSlot,recordings,recordingStatusKnown,recordingNotice)}</span>
         </div>
       {/if}

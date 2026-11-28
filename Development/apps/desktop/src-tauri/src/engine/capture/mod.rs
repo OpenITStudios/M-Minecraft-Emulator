@@ -22,7 +22,7 @@ pub use recording::RecordingReceipt;
 #[cfg(not(windows))]
 #[derive(Serialize)]
 #[serde(rename_all="camelCase")]
-pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub recovery_file:Option<String>}
+pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub recovery_file:Option<String>,pub cleanup_unconfirmed:bool}
 
 #[derive(Serialize)]
 #[serde(rename_all="camelCase")]

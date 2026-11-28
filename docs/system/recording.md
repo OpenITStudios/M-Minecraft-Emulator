@@ -102,12 +102,21 @@ file, which is not marked Saved or auto-deleted by storage maintenance.
 Immediate job assignment has a small spawn-to-assignment race; binary
 approval requires review of this boundary. No game process is in the job.
 Desktop close commands refuse active recordings before game/workspace
-mutation; external game exit invalidates the worker. The gated topbar
+mutation. The retained controller acquires per-slot named existence leases
+for selected running profiles before managed close, including Agent CLI.
+Recording retains the same lease from final post-dialog target validation
+through cleanup; contended CloseAll refuses before closing any slot.
+Unknown cleanup quarantines new starts but releases the close lease so
+ordinary game close is not indefinitely blocked. External game exit still
+invalidates the worker. Named leases are cooperative, not protection from
+external exits or another process precreating a name. The gated topbar
 slot selector projects only bounded native status receipts and Record/Stop
 commands. Stop is independent of workspace selection and available from
 Settings; start is limited to Play with a responding profile. The existing
 2 s observer reads recording status only while active or uncertain. Unknown
-status never authorizes another Start; explicit per-slot Stop remains
+status never authorizes another Start; a terminal Failed receipt exposes
+cleanupUnconfirmed and disables new starts across all slots without another
+query. Explicit per-slot Stop remains
 available while a recording may be active. Close
 controls for a known active slot are disabled; native CloseOne/CloseAll
 still enforce admission. A successful same-slot Saved observation resolves the prior recording

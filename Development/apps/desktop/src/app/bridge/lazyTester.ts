@@ -473,7 +473,7 @@ export function parseScreenshotReceipt(value:unknown,slot:ProfileSlot):Screensho
   return value as unknown as ScreenshotReceipt;
 }
 export type RecordingState='Starting'|'Recording'|'Stopping'|'Saved'|'Failed';
-export interface RecordingReceipt {slot:ProfileSlot; state:RecordingState; frames:number; recoveryFile:string|null}
+export interface RecordingReceipt {slot:ProfileSlot; state:RecordingState; frames:number; recoveryFile:string|null; cleanupUnconfirmed:boolean}
 export function recordingActive(receipt:RecordingReceipt|undefined):boolean {
   return receipt!==undefined&&['Starting','Recording','Stopping'].includes(receipt.state);
 }
@@ -481,12 +481,13 @@ export function parseRecordingStatus(value:unknown):RecordingReceipt[] {
   if(!Array.isArray(value)||value.length>5)throw new TypeError('Invalid recording status');
   const seen=new Set<number>();
   return value.map((item:unknown)=>{
-    if(!record(item)||!exact(item,['slot','state','frames','recoveryFile'])||
+    if(!record(item)||!exact(item,['slot','state','frames','recoveryFile','cleanupUnconfirmed'])||
       !profileSlots.includes(item.slot as ProfileSlot)||seen.has(item.slot as number)||
       typeof item.state!=='string'||!['Starting','Recording','Stopping','Saved','Failed'].includes(item.state)||
       typeof item.frames!=='number'||!Number.isSafeInteger(item.frames)||item.frames<0||
       ((item.state==='Recording'||item.state==='Saved')&&item.frames===0)||
       (item.state==='Starting'&&item.frames!==0)||
+      typeof item.cleanupUnconfirmed!=='boolean'||(item.cleanupUnconfirmed&&item.state!=='Failed')||
       (item.recoveryFile!==null&&(item.state!=='Failed'||item.frames===0||typeof item.recoveryFile!=='string'||
         !/^\.lazy-tester-video-[A-Za-z0-9_-]{1,64}\.part$/.test(item.recoveryFile))))
       throw new TypeError('Invalid recording status');

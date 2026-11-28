@@ -26,7 +26,7 @@ const PROCESS_CLEANUP_MS:u32=2000;
 
 #[derive(Clone,Serialize)]
 #[serde(rename_all="camelCase")]
-pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub recovery_file:Option<String>}
+pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub recovery_file:Option<String>,pub cleanup_unconfirmed:bool}
 struct Run{state:AtomicU8,stop:AtomicBool,terminal_progress:AtomicBool,cleanup_unconfirmed:AtomicBool,frames:AtomicU64,pixel_rate:u64,recovery_file:OnceLock<String>}
 impl Run{
     fn active(&self)->bool{self.state.load(Ordering::Acquire)<SAVED}
@@ -39,7 +39,8 @@ impl Run{
         // Starting receipt valid rather than reporting conflicting proof.
         let frames=if observed==STARTING{0}else{self.frames.load(Ordering::Acquire)};
         let recovery_file=if observed==FAILED{self.recovery_file.get().cloned()}else{None};
-        RecordingReceipt{slot,state,frames,recovery_file}
+        RecordingReceipt{slot,state,frames,recovery_file,
+            cleanup_unconfirmed:observed==FAILED&&self.cleanup_unconfirmed.load(Ordering::Acquire)}
     }
 }
 static SLOTS:Mutex<[Option<Arc<Run>>;5]>=Mutex::new([const{None};5]);
@@ -91,6 +92,8 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     if !path.extension().is_some_and(|x|x.eq_ignore_ascii_case("mkv"))||path.exists(){
         return Err(io::Error::other("Choose a new .mkv file; existing files are not replaced"));
     }
+    // Final target validation must occur under the same close exclusion.
+    let close_gate=crate::engine::native_clients_session::acquire_recording_close_gate(slot)?;
     verified_target(slot,&expected)?;
     target.verify()?;
     let image=worker::reviewed_image("ffmpeg.exe",video::REVIEWED_FFMPEG_SHA256)?;
@@ -105,6 +108,9 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     thread::Builder::new().name(format!("recording-{slot:02}")).spawn(move||{
         let success=std::panic::catch_unwind(std::panic::AssertUnwindSafe(||
             record(target,image,temp,path,&active))).is_ok_and(|r|r.is_ok());
+        // After cleanup, release close exclusion even on failure; unknown
+        // cleanup still quarantines new recordings, not normal game close.
+        drop(close_gate);
         active.state.store(if success{SAVED}else{FAILED},Ordering::Release);
     })?;
     all[idx]=Some(run);
@@ -355,6 +361,7 @@ mod tests{
         let old=run(1);
         old.state.store(FAILED,Ordering::Release);
         old.cleanup_unconfirmed.store(true,Ordering::Release);
+        assert!(old.receipt(1).cleanup_unconfirmed);
         slots[0]=Some(old);
         assert!(admit(&slots,0,1).is_err());
         assert!(admit(&slots,1,1).is_err());
