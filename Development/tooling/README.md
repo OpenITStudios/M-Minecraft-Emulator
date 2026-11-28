@@ -129,7 +129,10 @@ can inspect an explicit absolute path to an authorized, unchanged offline
 "/absolute/path/Minecraft Education.app"` (one command from the checkout root).
 Requires macOS standard tools and available `lipo` (Command Line Tools).
 No install, mount, game launch, credential access or profile data scan occurs.
-The report includes bundle metadata, executable SHA-256 and architecture-specific
+The collector requires the observed Education bundle ID `com.microsoft.minecraft-edu`
+and executable `minecraft-edu`, not a filename-only match. These are metadata
+expectations, not verified publisher pins. The report includes bundle metadata,
+executable SHA-256 and architecture-specific
 signature/entitlement summaries; it does not expose local paths or raw group
 values. Empty entitlement output remains unknown. Codesign integrity is not a
 Microsoft publisher pin, official DMG verification, loaded-image proof or

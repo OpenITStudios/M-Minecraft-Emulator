@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-06: offline artifact evidence handoff)
+## Current status — cross-platform-native (MAC-06a: observed bundle metadata)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,52 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-06a — user-supplied 1.26.33.0 bundle metadata
+
+The operator supplied Info.plist after the Drive DMG (810354021 bytes)
+was readable as metadata but raw transfer refused HTTP 413 (268435456-byte
+limit). Parsed the complete uploaded 8041-byte plist as data with Python
+plistlib; SHA-256 of **plist only**:
+d97ab0c8b33cc580bdd781996a037d44d97a3292fa32ed469d85b2026ff025c2.
+The file is user-supplied extracted metadata, not independent proof of
+the original DMG hash, official signature or installed image. No private
+Drive link, original plist or proprietary binary is committed.
+
+Observed fields: CFBundleIdentifier=com.microsoft.minecraft-edu,
+CFBundleExecutable=minecraft-edu, CFBundleName=minecraft-edu,
+CFBundlePackageType=APPL, CFBundleShortVersionString=1.26.33,
+CFBundleVersion=1.26.33.0, CFBundleSupportedPlatforms=[MacOSX],
+LSMinimumSystemVersion=10.15, DTSDKName=macosx26.1,
+NSPrincipalClass=MCEApplication. URL scheme minecraftedu and document
+type declarations for mcworld/mcshortcut/mcpack/mctemplate/mcaddon are
+present. LSMultipleInstancesProhibited and LSRequiresNativeExecution
+are absent; preserve unknown, not a proven absence of internal
+singleton or architecture restrictions. No declared per-instance
+profile route in these metadata fields. Entitlements, CPU slices,
+actual executable signer and account storage are not in this plist.
+The product manager's proposed macOS 14 floor is unchanged; a game's
+minimum OS does not prove the capture/manager platform floor.
+
+Use the observed exact bundle ID/executable in both existing discovery
+and offline artifact collector; require numeric version/build (no
+version admission pin), reject different identities before native
+signature observation. Add the expected signed code identifier to the
+existing one-shot Developer ID team requirement; actual signed identifier
+must still be corroborated from the executable. Keep the same unreleased
+wire status and existing IPC, update its UI wording. No generic fallback,
+new package, new runtime route, profile or launch mutation. Authored
+Rust and JS refusal fixtures NOT_EXECUTED; no build, CI or native test.
+
+Next smallest artifact inputs: original DMG SHA-256 and the unchanged
+`Contents/MacOS/minecraft-edu` Mach-O if transferable, not a renamed
+or patched file. Static inspection can establish declared architecture,
+embedded code-signing metadata and entitlement indications, but cannot
+substitute Security.framework signature verification or live profile
+isolation. If the executable exceeds transfer limits, request only
+bounded metadata or agreed smaller evidence chunks instead of repeating
+the failed DMG transfer. Mandatory five-client one-workspace parity,
+all runtime/CI/test/release holds remain.
 
 ### MAC-06 — Windows-compatible artifact evidence route (2026-11-28)
 
@@ -793,7 +839,8 @@ MAC-05c tightens candidate signature observation with reviewed expected team
 and adds the historical Microsoft Intune installation name;
 MAC-05d records current-release external binary evidence and prioritizes
 OS-user isolation feasibility without changing product acceptance;
-MAC-06 records the offline Windows artifact intake and virtual-desktop limits.
+MAC-06 records the offline Windows artifact intake and virtual-desktop limits;
+MAC-06a records actual user-supplied bundle metadata and exact discovery identity.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

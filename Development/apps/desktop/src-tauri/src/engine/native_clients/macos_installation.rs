@@ -19,11 +19,16 @@ use std::{
 // Current Homebrew/original bundle names plus Microsoft's historical Intune
 // sample install name. These are discovery hints, not product identity.
 const CANDIDATES: [&str; 3] = ["Minecraft Education.app", "minecraft-edu.app", "Minecraft EE.app"];
+// User-supplied 1.26.33.0 Info.plist establishes the expected metadata
+// identity, not the cryptographically verified signer or loaded image.
+const EXPECTED_BUNDLE_ID: &str = "com.microsoft.minecraft-edu";
+const EXPECTED_EXECUTABLE: &str = "minecraft-edu";
 // Installomator's reviewed minecraftedu label expects UBF8T346G9, also
 // documented by Microsoft for other products. Not yet checked against
-// the actual official Education DMG. Restrict to Developer ID Application
-// using Apple's certificate OIDs (TN3127), not arbitrary Apple-issued code.
-const EXPECTED_TEAM_REQUIREMENT: &str = r#"anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "UBF8T346G9""#;
+// the actual official Education DMG. Require the expected code identifier
+// and Developer ID Application certificate OIDs (TN3127), not team alone.
+// The code identifier must be corroborated against the actual signed binary.
+const EXPECTED_TEAM_REQUIREMENT: &str = r#"identifier "com.microsoft.minecraft-edu" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "UBF8T346G9""#;
 const MAX_PLIST: u64 = 256 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -77,6 +82,8 @@ struct BundleMetadata {
     executable: String,
     #[serde(rename = "CFBundleShortVersionString")]
     version: String,
+    #[serde(rename = "CFBundleVersion")]
+    build: String,
     #[serde(rename = "LSMultipleInstancesProhibited")]
     multiple_instances_prohibited: Option<bool>,
 }
@@ -113,28 +120,21 @@ fn valid_version(value: &str) -> bool {
         && value.split('.').all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
 }
 
-fn valid_executable(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 128
-        && value.as_bytes()[0].is_ascii_alphanumeric()
-        && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b' '))
-}
-
 fn parse_metadata(bytes: &[u8]) -> io::Result<BundleMetadata> {
     let metadata: BundleMetadata = plist::from_reader(Cursor::new(bytes)).map_err(|_| invalid())?;
     if metadata.package_type != "APPL"
-        || metadata.identifier.is_empty() || metadata.identifier.len() > 255
-        || !metadata.identifier.as_bytes()[0].is_ascii_alphanumeric()
-        || !metadata.identifier.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-'))
-        || !valid_executable(&metadata.executable) || !valid_version(&metadata.version)
+        || metadata.identifier != EXPECTED_BUNDLE_ID
+        || metadata.executable != EXPECTED_EXECUTABLE
+        || !valid_version(&metadata.version) || !valid_version(&metadata.build)
     {
         return Err(invalid());
     }
     Ok(metadata)
 }
 
-// An expected Developer ID team match is stronger than a generic Apple
-// anchor, but does not pin the specific Education product, prove
-// notarization, or admit launch. No generic fallback or second expensive check.
+// Expected identifier + Developer ID team is stronger than a generic Apple
+// anchor or team alone, but cannot establish the actual official distribution
+// pin, notarization or launch admission. No generic fallback or second check.
 // No private signing data is serialized. The caller owns a blocking,
 // explicitly requested operation and repeats metadata checks afterwards.
 fn observe_static_signature(path: &Path) -> SignatureObservation {
@@ -255,12 +255,13 @@ mod tests {
         let xml = format!(r#"<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0"><dict>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleIdentifier</key><string>com.example.fixture</string>
+<key>CFBundleIdentifier</key><string>com.microsoft.minecraft-edu</string>
 <key>CFBundleExecutable</key><string>{exe}</string>
-<key>CFBundleShortVersionString</key><string>26.33</string>
+<key>CFBundleShortVersionString</key><string>1.26.33</string>
+<key>CFBundleVersion</key><string>1.26.33.0</string>
 </dict></plist>"#);
         fs::write(contents.join("Info.plist"), xml).unwrap();
-        let file = contents.join("MacOS/fixture");
+        let file = contents.join("MacOS").join(EXPECTED_EXECUTABLE);
         fs::write(&file, b"synthetic metadata only").unwrap();
         fs::set_permissions(&file, fs::Permissions::from_mode(0o700)).unwrap();
     }
@@ -275,23 +276,23 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().canonicalize().unwrap();
         assert_eq!(inspect_at(&root, unconfirmed).status, CandidateStatus::Missing);
-        fixture(&root, CANDIDATES[0], "fixture");
+        fixture(&root, CANDIDATES[0], EXPECTED_EXECUTABLE);
         let observed = inspect_at(&root, unconfirmed);
         assert_eq!(observed.status, CandidateStatus::Candidate);
-        assert_eq!(observed.version.as_deref(), Some("26.33"));
+        assert_eq!(observed.version.as_deref(), Some("1.26.33"));
         assert!(!observed.runtime_admission);
         let wire = serde_json::to_value(observed).unwrap();
         assert_eq!(wire, serde_json::json!({"schema":1,"platform":"macos","status":"Candidate",
-            "version":"26.33","signature":"Unconfirmed","publisher":"NotPinned",
+            "version":"1.26.33","signature":"Unconfirmed","publisher":"NotPinned",
             "multipleInstancesProhibited":null,"runtimeAdmission":false}));
-        // An expected-team observation still cannot pin the exact game
-        // publisher or authorize launch, even with the singleton key absent.
+        // An expected identity/team observation still cannot pin the official
+        // distribution or authorize launch, even with the singleton key absent.
         let matched = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);
         assert_eq!(matched.signature, SignatureObservation::ExpectedTeamMatched);
         assert_eq!(matched.publisher, "NotPinned");
         assert!(!matched.runtime_admission);
         assert_eq!(matched.multiple_instances_prohibited, None);
-        fixture(&root, CANDIDATES[1], "fixture");
+        fixture(&root, CANDIDATES[1], EXPECTED_EXECUTABLE);
         let ambiguous = inspect_at(&root, |_| panic!("must not inspect ambiguous bundles"));
         assert_eq!(ambiguous.status, CandidateStatus::Ambiguous);
         assert_eq!(ambiguous.signature, SignatureObservation::NotChecked);
@@ -301,22 +302,41 @@ mod tests {
     fn intune_install_name_is_a_candidate_and_conflicting_names_refuse() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().canonicalize().unwrap();
-        fixture(&root, CANDIDATES[2], "fixture");
+        fixture(&root, CANDIDATES[2], EXPECTED_EXECUTABLE);
         let observed = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);
         assert_eq!(observed.status, CandidateStatus::Candidate);
         assert_eq!(observed.publisher, "NotPinned");
         assert!(!observed.runtime_admission);
-        fixture(&root, CANDIDATES[0], "fixture");
+        fixture(&root, CANDIDATES[0], EXPECTED_EXECUTABLE);
         let conflict = inspect_at(&root, |_| panic!("multiple names must not verify a signature"));
         assert_eq!(conflict.status, CandidateStatus::Ambiguous);
         assert_eq!(conflict.signature, SignatureObservation::NotChecked);
     }
 
     #[test]
+    fn exact_metadata_identity_is_required_before_signature_observation() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        fixture(&root, CANDIDATES[0], EXPECTED_EXECUTABLE);
+        let info = root.join(CANDIDATES[0]).join("Contents/Info.plist");
+        let original = fs::read_to_string(&info).unwrap();
+        for changed in [
+            original.replace(EXPECTED_BUNDLE_ID, "com.microsoft.other"),
+            original.replace("<string>minecraft-edu</string>", "<string>other-executable</string>"),
+            original.replace("<key>CFBundleVersion</key><string>1.26.33.0</string>", ""),
+            original.replace("<string>1.26.33.0</string>", "<string>invalid</string>"),
+        ] {
+            fs::write(&info, changed).unwrap();
+            assert_eq!(inspect_at(&root, |_| panic!("incorrect metadata must not verify")).status,
+                CandidateStatus::Unconfirmed);
+        }
+    }
+
+    #[test]
     fn explicit_singleton_flag_and_replaced_metadata_are_not_launch_authority() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().canonicalize().unwrap();
-        fixture(&root, CANDIDATES[0], "fixture");
+        fixture(&root, CANDIDATES[0], EXPECTED_EXECUTABLE);
         let info = root.join(CANDIDATES[0]).join("Contents/Info.plist");
         let original = fs::read_to_string(&info).unwrap();
         let with_flag = original.replace("</dict>", "<key>LSMultipleInstancesProhibited</key><true/></dict>");

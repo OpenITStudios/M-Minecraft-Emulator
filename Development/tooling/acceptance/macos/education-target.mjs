@@ -6,16 +6,17 @@ import {isAbsolute, join, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
 const dictionary = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-const identifier = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
+// Observed in the user-supplied 1.26.33.0 bundle metadata; not a signer pin.
+const expectedBundleId = 'com.microsoft.minecraft-edu';
+const expectedExecutable = 'minecraft-edu';
 const version = /^\d+(?:\.\d+){0,4}$/;
-const executableName = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,127}$/;
+const validVersion = value => typeof value==='string' && value.length<=64 && version.test(value);
 
 export function bundleMetadata(plist) {
   if (!dictionary(plist) || plist.CFBundlePackageType !== 'APPL' ||
-      typeof plist.CFBundleIdentifier !== 'string' || !identifier.test(plist.CFBundleIdentifier) ||
-      typeof plist.CFBundleExecutable !== 'string' || !executableName.test(plist.CFBundleExecutable) ||
-      typeof plist.CFBundleVersion !== 'string' || !version.test(plist.CFBundleVersion) ||
-      typeof plist.CFBundleShortVersionString !== 'string' || !version.test(plist.CFBundleShortVersionString))
+      plist.CFBundleIdentifier !== expectedBundleId ||
+      plist.CFBundleExecutable !== expectedExecutable ||
+      !validVersion(plist.CFBundleVersion) || !validVersion(plist.CFBundleShortVersionString))
     throw Error('INVALID_BUNDLE_METADATA');
   for (const key of ['LSMultipleInstancesProhibited','LSRequiresNativeExecution'])
     if (Object.hasOwn(plist,key) && typeof plist[key] !== 'boolean') throw Error('INVALID_BUNDLE_METADATA');

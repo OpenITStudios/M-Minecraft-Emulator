@@ -519,7 +519,7 @@
       if (disposed) return;
       macInstallationNotice=result.status==='Candidate'
         ? 'Installation candidate '+result.version+' found. '+
-          (result.signature==='ExpectedTeamMatched'?'Expected signing team matched. ':'Expected signing team or signature could not be confirmed. ')+
+          (result.signature==='ExpectedTeamMatched'?'Expected code identity and signing team matched. ':'Expected code identity or signature could not be confirmed. ')+
           (result.multipleInstancesProhibited===true?'Bundle prohibits multiple instances. ':'')+
           'Publisher and profile isolation are not verified; launch is unavailable.'
         : result.status==='Missing' ? 'No candidate at the checked Applications locations.'
