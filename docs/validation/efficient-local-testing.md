@@ -241,6 +241,34 @@ recovery; do not authorize input/capture/cleanup experiments by this
 runbook. Stop optimization when no additional proven duplicate work
 remains; OPT-07 persistent IPC remains measurement-dependent and held.
 
+### Blindspot and orphan cleanup acceptance (BS-01–10)
+
+Scoped source integration reviewed from audit baseline
+`d60a4cb4b983e5b8aea705e4de88b3a4295676ad` through implementation head
+`ec6ac4e0efba4f12eb7e9ea6cfe177e2b90b2c6b`. The current status and final
+continuation decision belong to [the development handoff](../../planning/development.md).
+The original full `DEV.cmd check` remains the verification owner. The
+same top-level agent fixture glob appears once in that full route and in
+the optional scoped `DEV.cmd check:agent-tests` route. Do not run both
+merely to duplicate evidence. Source inspection is not an executed test.
+
+| Work | Existing verification owner | Acceptance boundary for a later approved PC-local phase |
+| --- | --- | --- |
+| BS-01/02/04 | Developer controller, portable fixtures, verification routing and existing agent suite | Actual cross-module owners, scoped route and full fixture coverage; unknown/mixed/protected paths keep their existing refusal/escalation |
+| BS-03 | Repository verifier, desktop/native handler registrations | Retired notebook unavailable; no changes to existing Data/Coordinates records; original native commands and five profiles preserved |
+| BS-05 | MCP/Code Mode and Probe fixtures | Same checkpoint and expiry/invalidation for legacy and canonical tools; default catalogs unchanged; no dispatch or authority expansion |
+| BS-06 | Native session, bootstrap, startup-network and profile fixtures | No owner takeover or fresh registered pair fallback; reviewed replay, existing product profiles, explicit five-profile preparation and identity fences remain |
+| BS-07/08 | Knowledge graph, desktop and static help-pack fixtures | Historical guidance excluded by default, explicit historical lookup retained; actual source expectations and all distinct visual guards retained |
+| BS-09 | Portable toolchain fixture, existing offline builder tests only when separately relevant | Single compiler identity report; missing/wrong release or host still refuses; offline packs not part of product build |
+| BS-10 | Existing full source suite and original native acceptance inventory | Exact candidate SHA, unchanged holds, normal startup/launch/recovery and preservation; no unsupported gameplay or performance PASS |
+
+All fixtures and execution remain `NOT_EXECUTED` in ChatGPT/GitHub.
+Future validation requires the separate operator-selected actual PC-local
+phase. Preserve existing archives and user data; no optional pack install,
+new collector, test runner, CI, release or renewed optimization is
+authorized here. Runtime savings and OPT-07 persistent IPC remain unmeasured.
+Blanket Rust dead-code lint changes require actual compiler/feature coverage.
+
 ## Evidence policy — short, honest, reusable
 
 Record one session report privately under ignored `workspace/`, using the
