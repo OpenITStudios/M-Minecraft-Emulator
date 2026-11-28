@@ -327,8 +327,12 @@ The verified native target checks before/after capture and before delivery are
 intentionally separate freshness/ownership checks. Each target read now uses
 a private one-slot receipt from the existing actor (no unrelated roster or
 window relabeling); full Inspect remains unchanged. Selected target reads
-cannot spawn or reconcile an uncertain mutation and are not exposed to desktop
-commands. The same original process/window proof remains required.
+cannot spawn or reconcile an uncertain mutation. The generic desktop
+session command still refuses the private wire route. The existing trusted
+Rust workspace presentation handler also uses this exact-slot receipt for
+ordinary selection; an uncertain previous transport instead requires the
+original full Inspect under the same admission gate. The same original
+process/window proof remains required.
 The same-image native CLI uses authenticated IPC per request; a persistent
 replacement channel is not introduced without measured benefit and equivalent
 admission. Runtime connection latency and host compatibility remain unverified.

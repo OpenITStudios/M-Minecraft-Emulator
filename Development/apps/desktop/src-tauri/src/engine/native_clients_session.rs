@@ -1424,7 +1424,38 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
 
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
+    request_inner(request, false)
+}
+
+// Only the trusted Rust workspace presentation handler uses this entry.
+// The generic webview session command still refuses the private wire route.
+// Reuse the same actor, exact receipt and transport owner; never replay.
+#[cfg(windows)]
+pub(crate) fn request_workspace_target(slot:u32) -> io::Result<SessionSnapshot> {
+    request_inner(SessionRequest::InspectAgentTarget{slot}, true)
+}
+#[cfg(not(windows))]
+pub(crate) fn request_workspace_target(slot:u32) -> io::Result<SessionSnapshot> {
+    request(SessionRequest::InspectAgentTarget{slot})
+}
+
+#[cfg(windows)]
+fn workspace_observation_request(request:SessionRequest, workspace_selection:bool, uncertain:bool) -> SessionRequest {
+    if workspace_selection && uncertain && request.is_agent_target() {
+        SessionRequest::Inspect
+    } else {
+        request
+    }
+}
+
+#[cfg(windows)]
+fn request_inner(request: SessionRequest, workspace_selection:bool) -> io::Result<SessionSnapshot> {
     validate_request(&request)?;
+    let mut owner = admit_controller(&CONTROLLER)?;
+    owner.drain_previous_request()?;
+    // A prior uncertain mutation still requires the original full Inspect.
+    // Decide after draining while holding the existing admission gate.
+    let request=workspace_observation_request(request,workspace_selection,owner.uncertain);
     let selected_target=match &request {
         SessionRequest::InspectAgentTarget{slot}=>Some(*slot),_=>None,
     };
@@ -1440,8 +1471,6 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
         SessionRequest::AiLeasedInput {keys:0,dx:0,dy:0,..});
     #[cfg(not(feature="mc02-native-input"))]
     let neutral_mc02_release = false;
-    let mut owner = admit_controller(&CONTROLLER)?;
-    owner.drain_previous_request()?;
     // A failed heartbeat IPC may leave MC02 controls held until native
     // TTL expires. Do not let that uncertainty suppress a best-effort
     // exact-owner neutral write from the SAME batch CLI. An in-flight
@@ -2955,6 +2984,24 @@ mod tests {
         }
         assert!(!SessionRequest::Inspect.is_agent_target());
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectAgentTarget","slot":2,"pid":1}"#).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn workspace_selection_uses_exact_slot_unless_original_transport_needs_reconciliation() {
+        for slot in 1..=5 {
+            for uncertain in [false,true] {
+                let selected=workspace_observation_request(SessionRequest::InspectAgentTarget{slot},true,uncertain);
+                if uncertain {
+                    assert!(matches!(selected,SessionRequest::Inspect));
+                } else {
+                    assert!(matches!(selected,SessionRequest::InspectAgentTarget{slot:observed} if observed==slot));
+                }
+                // The agent's own selected observation never reconciles.
+                let agent=workspace_observation_request(SessionRequest::InspectAgentTarget{slot},false,uncertain);
+                assert!(matches!(agent,SessionRequest::InspectAgentTarget{slot:observed} if observed==slot));
+            }
+        }
     }
 
     #[test]

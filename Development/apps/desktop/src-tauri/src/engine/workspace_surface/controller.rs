@@ -910,9 +910,12 @@ pub(super) fn active_preview_slot(manager: u64) -> io::Result<Option<u32>> {
 }
 pub(super) fn adopt_preview_sources<'a>(manager: u64, viewport: Viewport,
     sources: impl Iterator<Item = &'a (u32, OwnedProcess)>) -> io::Result<Vec<(u32, String)>> {
-    let rect = native::rectangle(manager, viewport.validate()?)?;
+    let viewport = viewport.validate()?;
     let mut state = SURFACE.lock().map_err(|_| io::Error::other("Workspace state unavailable"))?;
     if state.closing { return Err(io::Error::other("Lazy Tester is closing")); }
+    // No native placement rectangle until an eligible background source
+    // actually needs Park. Cleanup and primary DWM still run independently.
+    let mut placement_rect = None;
     state.live_previews = true;
     let mut unavailable = Vec::new();
     // These are only diagnostics for the original, retained checkpoints.
@@ -969,6 +972,17 @@ pub(super) fn adopt_preview_sources<'a>(manager: u64, viewport: Viewport,
             unavailable.push((*slot, "Workspace already manages five clients".into()));
             continue;
         }
+        // One fresh rectangle for this admission batch; the earlier overlap
+        // sample is not placement authority. No geometry read if every
+        // source was absent, active, unavailable or refused.
+        let rect = match placement_rect {
+            Some(rect) => rect,
+            None => {
+                let rect = native::rectangle(manager, viewport)?;
+                placement_rect = Some(rect);
+                rect
+            }
+        };
         let mut lease = match existing {
             Some(index) => state.parked.remove(index),
             None => match prepare(manager, viewport, target.clone()) {

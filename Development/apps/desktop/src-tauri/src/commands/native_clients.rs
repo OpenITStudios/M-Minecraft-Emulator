@@ -68,7 +68,7 @@ pub async fn lazy_tester_session(
         return Err("Desktop cannot publish agent activity or arbitrate Testing runs".into());
     }
     if request.is_agent_target() {
-        return Err("Agent target inspection is restricted to the native agent CLI".into());
+        return Err("Private target inspection is not a desktop session command".into());
     }
     // The desktop's normal session command must never be an alternate
     // admission path for experimental game hooks. Only the explicitly
@@ -229,9 +229,8 @@ pub async fn lazy_tester_present(
     #[cfg(not(windows))]
     let manager = { let _ = window; 0 };
     tauri::async_runtime::spawn_blocking(move || run_manager_operation(|| {
-        let snapshot = crate::engine::native_clients_session::request(
-            crate::engine::native_clients_session::SessionRequest::Inspect)?;
-        let target = snapshot.profiles.into_iter().find(|p| p.slot == slot)
+        let snapshot = crate::engine::native_clients_session::request_workspace_target(slot)?;
+        let target = snapshot.profiles.into_iter().find(|p| p.slot == slot && p.state=="RUNNING")
             .and_then(|p| p.process).filter(|p| p.responding)
             .ok_or_else(|| io::Error::other("Minecraft has no verified responsive game window"))?;
         // Slot attribution comes from retained original bootstrap handles, never UI PID/title.

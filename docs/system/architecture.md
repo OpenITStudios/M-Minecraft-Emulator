@@ -180,7 +180,16 @@ disk space is still queried on the individual verified path. No persistent
 size cache, background traversal, or new watcher. Selected reads and opted-in mutation receipts require one exact requested storage row; full report/default mutation consumers still require five ordered rows.
 
 A selected workspace presentation uses one verified path and retains
-original recovery checkpoints where possible. Passive placement skips
+original recovery checkpoints where possible. The trusted Rust presentation
+handler uses the existing exact-slot target observation rather than a full
+roster for ordinary selection. Under the original transport gate, a pending
+request is refused and an uncertain prior result requires full Inspect
+instead; no second request or retry. The generic webview command still
+refuses the private target route. Full preview layout keeps its fresh
+roster because it owns peer and primary reconciliation. Background preview
+adoption reads a fresh placement rectangle only when the first eligible
+source needs Park, then reuses it within that admission batch. No extra
+native geometry read is needed for an empty or entirely refused source set. Passive placement skips
 only positively empty retained workspace state; DWM and native process
 liveness/recovery remain independent. DWM registrations retain one
 query/synchronize process pin. Visible refresh, selection and rollback
