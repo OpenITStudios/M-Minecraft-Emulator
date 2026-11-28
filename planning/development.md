@@ -2,6 +2,8 @@
 
 ## Current status
 
+**Modularity and efficiency (MOD-01, scoped source integration).** Baseline `ed320acd98065300e48dce9f574af0bfd7e7f18b`. Move the bounded agent activity wire contract and ingress fixture to a private transport child module; retain existing exported type paths, wire fields, one native controller and all admission checks. Replace the dynamic set for three kinds × five slots with fixed stack flags; add duplicate/different-kind/different-slot cases. No new worker, dependency, IPC, schema or native gate. Source reviewed; all fixtures, rustfmt, builds and native performance NOT_EXECUTED. Larger transport, bootstrap, lifecycle, identity and agent operation modules remain candidates for separate cohesive slices; no line-count-only splitting. Existing ABI and local/CI holds unchanged.
+
 **Source integration closed — Education update compatibility (UPD, scoped SOURCE_READY_FOR_LOCAL).** Baseline
 [`41e7eadd`](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/41e7eadde35bd72f215f0da983136a2817750c65).
 First slice: official Desktop updater state guard in the existing post-pin
