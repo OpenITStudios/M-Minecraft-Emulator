@@ -175,7 +175,10 @@ migrates to a new `Migrated/` child of the selected root with its own schema 2
 catalog; manager preferences stay in Data/Settings. The new catalog is written
 after the five copies, all five stores reopen, and only then the unchanged
 canonical locator selection is switched. Original data and catalog remain
-intact. Existing/partial destinations are never cleared, merged or overwritten.
+intact. Schema 1 destination creation is exclusive; replay may reuse only an
+ordinary unused default Data root with Settings/Cache. Source/destination
+subtree overlap refuses. Existing/partial destinations are never cleared,
+merged or overwritten. A canonical no-op reports zero migrated profiles.
 An interrupted cutover requires explicit Locate of a verified complete schema 2
 catalog; there is no automatic adoption or retry. Source preservation is recovery
 protection, not another active or bidirectionally synchronized data location.

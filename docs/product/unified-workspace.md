@@ -146,34 +146,24 @@ resume attempt, the existing started owner retains the game and its uncertain
 outcome. Disposable Windows fixtures cover the cleanup boundary; actual Minecraft
 failure/retry with live peers remains unexecuted.
 
-The automatic App/Data setup and preserved old-profile adoption are defined by
-[data layout](../system/data-layout.md). Fresh profiles use the product catalog;
-existing pilot stores remain in place. The legacy recovery fallback may ask the
-user to select the old launcher folder;
-the backend reads its fixed independent-bootstrap/replay-profile-five.bin only.
-Import is unavailable while a retained controller
-exists, checks the reviewed capability hash, original folder IDs and existing HKCU keys, and
-publishes only 288 bytes of identity metadata beneath the existing private
-MinecraftInstanceManager/NativePreview directory. No login/world contents are
-copied and no game is launched. Selecting the same bytes is idempotent; different
-or malformed preexisting metadata is preserved/refused instead of overwritten.
-For this legacy recovery route the installed product reads the private binding, with no fallback to capability
-files beside its executable. The private developer preview keeps its original
-adjacent-capability route. Existing profile inspection now opens TEMP only if it
-exists; it never creates missing profile directories during validation.
+The automatic App/Data setup is defined by [data layout](../system/data-layout.md).
+Only the verified schema 2 catalog is active. A historical pilot root or
+schema 1 catalog blocks fresh setup and requires explicit migration through
+the existing product migration command, not a runtime fallback. The retained
+source-selection command may record reviewed five-profile identity metadata
+only; it cannot make those old stores ready. The previous developer-preview
+replay launch is retired. Missing or replaced data is preserved/refused.
+The migration copies into an unused destination, retains original sources and
+publishes the canonical locator only after all five new stores reopen.
 
-The typed binding report says only whether the original profile identities can
-be opened; it is not account/sign-in/gameplay readiness. Launch controls wait for
-that report, and the bootstrap revalidates identities on every launch. A cancelled
-file picker leaves metadata unchanged. Publication uses a create-new temporary,
-flush and same-directory [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
-without replacement. An incomplete/different existing binding requires deliberate
-repair; no automatic reset is provided. Startup makes one automatic
+The typed binding report verifies storage identities, not account/sign-in or
+gameplay readiness. Launch controls require that report and the retained
+controller checks its own native admission. Startup makes one automatic
 initialization attempt, then offers explicit Retry connection if needed;
-the independent session observation still runs. The hidden WebView
-diagnostic only inspects existing binding/location metadata.
-Fresh product stores use the separate catalog and location owner described above. Actual new-machine login, first-run
-dialog/import and installed gameplay still need acceptance.
+independent session observation still runs. The hidden WebView diagnostic
+inspects existing canonical metadata only. Existing TEMP directories are
+opened without creating missing profile data. Actual migration, first-run
+sign-in and installed gameplay remain unverified.
 
 Full exit (user decision27October2026) restores presented windows, requests normal
 WM_CLOSE only for the controller's verified managed games, waits for normal exit,

@@ -7,10 +7,10 @@ use super::{
 };
 #[cfg(test)]
 use super::{pin_image, profile_binding};
-use std::{ffi::OsStr, fs::File, io, path::{Path, PathBuf}};
+use std::{fs::File, io, path::{Path, PathBuf}};
 use windows_sys::Win32::{
     Storage::FileSystem::{FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES},
-    UI::Shell::{FOLDERID_LocalAppData, FOLDERID_Profile, FOLDERID_RoamingAppData},
+    UI::Shell::FOLDERID_Profile,
 };
 
 // Existing pair remains immutable. Five-slot replay requires its own reviewed identity capability.
@@ -163,34 +163,7 @@ pub(super) fn five_replay_bytes(pair: &[u8], stores: &[SlotStorage]) -> io::Resu
 }
 
 pub(super) fn replay_roots() -> io::Result<(File, PathBuf)> {
-    let roaming = known_folder(&FOLDERID_RoamingAppData)?;
-    let local = known_folder(&FOLDERID_LocalAppData)?;
-    if roaming.file_name() != Some(OsStr::new("Roaming"))
-        || local.file_name() != Some(OsStr::new("Local"))
-    {
-        return Err(invalid(
-            "Redirected AppData layouts require explicit mediation",
-        ));
-    }
-    let a = open_directory(
-        roaming
-            .parent()
-            .ok_or_else(|| invalid("Missing AppData parent"))?,
-        FILE_READ_ATTRIBUTES,
-    )?;
-    let b = open_directory(
-        local
-            .parent()
-            .ok_or_else(|| invalid("Missing AppData parent"))?,
-        FILE_READ_ATTRIBUTES,
-    )?;
-    if !same_image(&directory_id(&a)?, &directory_id(&b)?) {
-        return Err(invalid(
-            "Split Roaming/Local roots are not supported by this DLL configuration",
-        ));
-    }
-    let parent = known_folder(&FOLDERID_Profile)?;
-    Ok((a, parent))
+    Ok((super::logical_appdata_root()?, known_folder(&FOLDERID_Profile)?))
 }
 
 // Historical source fixtures only; production migration uses the reviewed

@@ -93,9 +93,9 @@ function fingerprintPulsePlan(mode,plan) {
     .digest('hex');
 }
 
-function capabilities(mode,experimental=false,multi=false) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
+function capabilities(mode,experimental,multi,catalog) {return {schema:1,mode,hostSlot:1,humanSlots:mode==='human-plus-four-ai'?[1]:[],
   aiSlots:mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5],
-  available:toolsForMode(experimental,multi).filter(tool=>tool.name!=='agent_capabilities').map(tool=>tool.name),
+  available:catalog.filter(tool=>tool.name!=='agent_capabilities').map(tool=>tool.name),
   notAvailable:['parallel_independent_keyboard_mouse','automatic_world_host_join','send_minecraft_command'],
   visualCapture:'OPTIONAL_CUA_OR_PERSISTENT_WGC_SOURCE_NOT_RUNTIME_VERIFIED',
   independentInput:{state:'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND',
@@ -193,6 +193,7 @@ export function createOperationCore(config,{
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
     config.mode==='human-plus-four-ai';
   const multiEnabled=config.experimentalMultiClientInputEnabled===true;
+  const catalog=toolsForMode(mc02Enabled,multiEnabled);
   // Random stable ID for this ONE MCP stdio process; passed to native
   // CLI children only via private process environment, never argv.
   const writerId=multiEnabled?randomBytes(16).toString('hex'):null;
@@ -399,7 +400,7 @@ export function createOperationCore(config,{
   async function callTool(name,args) {
     requireOpen();
     if(name==='probe_qa') {
-      return probeQa.callProbeTool(name,args);
+      return probeQa.callProbeTool(args);
     }
     // All diagnostic calls are read-only, scoped to one configured Data/
     // Diagnostics root. A Codex/MCP caller cannot import or request a path.
@@ -896,7 +897,7 @@ export function createOperationCore(config,{
         ...probeQa.activitySnapshot(),
         visualSamplers:visualOperations.activity(),
       });
-      const result={...capabilities(config.mode,mc02Enabled,multiEnabled),activity,
+      const result={...capabilities(config.mode,mc02Enabled,multiEnabled,catalog),activity,
         ...(profileInspection!==null?{profileInspection}:{}),
         // Configuration is not provider liveness, runtime proof, or approval.
         configuredSources:{
@@ -957,7 +958,7 @@ export function createOperationCore(config,{
     }
     throw new Error('Unknown tool');
   }
-  return {callTool,listTools:()=>toolsForMode(mc02Enabled,multiEnabled),isClosed:()=>closed,shutdown:()=>{
+  return {callTool,listTools:()=>catalog,isClosed:()=>closed,shutdown:()=>{
     if(closed)return;
     closed=true;
     evidenceOperations.clear();

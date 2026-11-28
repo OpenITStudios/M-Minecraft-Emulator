@@ -176,8 +176,8 @@ export function createProbeQaOperations(config,{
   }
   // Only the existing core admits external calls. Nested target/capability
   // operations deliberately return through its same admission path.
-  async function callProbeTool(name,args) {
-    if(name==='probe_qa' && args && Object.hasOwn(args,'inspectRun')) {
+  async function callProbeTool(args) {
+    if(args && Object.hasOwn(args,'inspectRun')) {
       // No preparation, source ZIP, log, client capture, status write,
       // native game input, owner transfer or controller startup.
       keysExactly(args,['slot','inspectRun']);
@@ -233,7 +233,7 @@ export function createProbeQaOperations(config,{
         commandSentByLazyTester:false,
       };
     }
-    if(name==='probe_qa' && args && Object.hasOwn(args,'archivedRunId')) {
+    if(args && Object.hasOwn(args,'archivedRunId')) {
       // Historical summary is an explicit READ, never a new checkpoint,
       // test command, reservation, native reconnect or status publication.
       keysExactly(args,['archivedRunId']);
@@ -259,7 +259,7 @@ export function createProbeQaOperations(config,{
     // Calls without the flags use the same private checkpoint.
     // Desktop delivery is only a short-lived presentation mirror, never
     // another result store, runner, approval or proof of gameplay input.
-    if(name==='probe_qa' && args &&
+    if(args &&
        (Object.hasOwn(args,'publishToDesktop') ||
         Object.hasOwn(args,'coordinateNative'))) {
       keysExactly(args,['slot','restart','scope','publishToDesktop','coordinateNative']);
@@ -457,249 +457,246 @@ export function createProbeQaOperations(config,{
       return {...shaped,
         desktopDelivery:mirrored.desktopDelivery??'STATUS_DELIVERY_UNAVAILABLE'};
     }
-    if(name==='probe_qa') {
-      keysExactly(args,['slot','restart','scope']);
-      const slot=slotOf(args.slot??2);
-      if(args.scope!==undefined&&!['full','smoke','affected'].includes(args.scope)) {
-        throw new Error('Invalid tool arguments');
-      }
-      if(args.scope!==undefined&&!config.mapContractPath) {
+    keysExactly(args,['slot','restart','scope']);
+    const slot=slotOf(args.slot??2);
+    if(args.scope!==undefined&&!['full','smoke','affected'].includes(args.scope)) {
+      throw new Error('Invalid tool arguments');
+    }
+    if(args.scope!==undefined&&!config.mapContractPath) {
+      return {schema:1,slot,status:'BLOCKED',
+        reason:'MAP_CONTRACT_NOT_CONFIGURED',gameplayAcceptance:'NOT_VERIFIED'};
+    }
+    if(args.restart!==undefined&&typeof args.restart!=='boolean') {
+      throw new Error('Invalid tool arguments');
+    }
+    if(config.mode==='human-plus-four-ai'&&slot===1) {
+      throw new Error('MC01 human host is protected from AI computer-use targeting');
+    }
+    if(probeQaBusy.has(slot))return {schema:1,slot,status:'BLOCKED',
+      reason:'QA_OPERATION_IN_PROGRESS',gameplayAcceptance:'NOT_VERIFIED'};
+    probeQaBusy.add(slot);
+    try {
+      let plan=probeQaPlans.get(slot);
+      if(plan&&args.restart!==true&&args.scope!==undefined&&
+         args.scope!==plan.mapScope) {
         return {schema:1,slot,status:'BLOCKED',
-          reason:'MAP_CONTRACT_NOT_CONFIGURED',gameplayAcceptance:'NOT_VERIFIED'};
+          reason:'QA_SCOPE_CHANGE_REQUIRES_RESTART',gameplayAcceptance:'NOT_VERIFIED'};
       }
-      if(args.restart!==undefined&&typeof args.restart!=='boolean') {
-        throw new Error('Invalid tool arguments');
+      if(plan&&args.restart!==true&&config.mapContractPath&&
+         !plan.mapSourceRevision) {
+        return {schema:1,slot,status:'BLOCKED',
+          reason:'MAP_PLAN_RESTART_REQUIRED',gameplayAcceptance:'NOT_VERIFIED'};
       }
-      if(config.mode==='human-plus-four-ai'&&slot===1) {
-        throw new Error('MC01 human host is protected from AI computer-use targeting');
+      // A completed or stopped run is a historical snapshot, not new
+      // game readiness. Only explicit restart creates a new checkpoint.
+      if(plan?.terminalReport&&args.restart!==true) {
+        return plan.terminalReport;
       }
-      if(probeQaBusy.has(slot))return {schema:1,slot,status:'BLOCKED',
-        reason:'QA_OPERATION_IN_PROGRESS',gameplayAcceptance:'NOT_VERIFIED'};
-      probeQaBusy.add(slot);
-      try {
-        let plan=probeQaPlans.get(slot);
-        if(plan&&args.restart!==true&&args.scope!==undefined&&
-           args.scope!==plan.mapScope) {
-          return {schema:1,slot,status:'BLOCKED',
-            reason:'QA_SCOPE_CHANGE_REQUIRES_RESTART',gameplayAcceptance:'NOT_VERIFIED'};
-        }
-        if(plan&&args.restart!==true&&config.mapContractPath&&
-           !plan.mapSourceRevision) {
-          return {schema:1,slot,status:'BLOCKED',
-            reason:'MAP_PLAN_RESTART_REQUIRED',gameplayAcceptance:'NOT_VERIFIED'};
-        }
-        // A completed or stopped run is a historical snapshot, not new
-        // game readiness. Only explicit restart creates a new checkpoint.
-        if(plan?.terminalReport&&args.restart!==true) {
-          return plan.terminalReport;
-        }
-        // One user-facing tool; the caller never carries a private session ID.
-        if(!plan||args.restart===true) {
-          let mapPlan=null,mapSourceRevision=null;
-          const mapScope=args.scope??'full';
-          if(config.mapContractPath) {
-            try {
-              const loaded=await mapContract(config.mapContractPath);
-              const planned=compactMapTestPlan(
-                planMapTests(loaded.contract,{scope:mapScope}));
-              // Byte fingerprint is a historical source binding only,
-              // never an approval signature or proof of a live game.
-              mapPlan=Object.freeze({...planned,
-                ...(typeof loaded.contentSha256==='string'&&
-                  /^[a-f0-9]{64}$/.test(loaded.contentSha256)?
-                    {contractSha256:loaded.contentSha256}:{})});
-              mapSourceRevision=loaded.sourceRevision;
-            } catch {
-              return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
-                reason:'MAP_CONTRACT_REVIEW_REQUIRED',
-                commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED'};
-            }
-          }
-          let prepared;
-          try {prepared=await prepareProbeQa(slot);}
-          catch(error) {
-            const reason=error?.message==='PROBE_SOURCE_REVIEW_REQUIRED'?
-              'PROBE_SOURCE_REVIEW_REQUIRED':'PROBE_SOURCE_OR_CAPTURE_UNAVAILABLE';
+      // One user-facing tool; the caller never carries a private session ID.
+      if(!plan||args.restart===true) {
+        let mapPlan=null,mapSourceRevision=null;
+        const mapScope=args.scope??'full';
+        if(config.mapContractPath) {
+          try {
+            const loaded=await mapContract(config.mapContractPath);
+            const planned=compactMapTestPlan(
+              planMapTests(loaded.contract,{scope:mapScope}));
+            // Byte fingerprint is a historical source binding only,
+            // never an approval signature or proof of a live game.
+            mapPlan=Object.freeze({...planned,
+              ...(typeof loaded.contentSha256==='string'&&
+                /^[a-f0-9]{64}$/.test(loaded.contentSha256)?
+                  {contractSha256:loaded.contentSha256}:{})});
+            mapSourceRevision=loaded.sourceRevision;
+          } catch {
             return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
-              reason,commandSentByLazyTester:false,
-              gameplayAcceptance:'NOT_VERIFIED',
-              next:'Check the approved ZIP and local capture configuration; do not dispatch a command.',
-              ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
-                {schema:1,status:'BLOCKED',reason},probeQaProofGate())}:{})};
+              reason:'MAP_CONTRACT_REVIEW_REQUIRED',
+              commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED'};
           }
-          if(prepared.status!=='PREPARED_SOURCE_ONLY') {
-            return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
-              reason:prepared.status,commandSentByLazyTester:false,
-              gameplayAcceptance:'NOT_VERIFIED',
-              next:prepared.status==='CAPTURE_SLOT_COLLISION'?
-                'MC slots must use distinct original capture files; verify collection provenance before a new QA checkpoint.':
-                'Configure the approved ZIP and stable capture once; retry probe_qa.',
-              ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
-                {schema:1,status:'BLOCKED',reason:prepared.status},
-                probeQaProofGate())}:{})};
-          }
-          const activePlan=probeQaPlans.get(slot);
-          if(activePlan?.sessionId!==prepared.sessionId) {
-            return {schema:1,slot,status:'BLOCKED',
-              reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
-          }
-          activePlan.mapScope=mapScope;
-          if(mapPlan) {
-            activePlan.mapPlan=Object.freeze(mapPlan);
-            activePlan.mapSourceRevision=mapSourceRevision;
-            let fresh;
-            try {fresh=await mapRevisionStatus(config.mapContractPath,mapSourceRevision);}
-            catch {fresh='UNAVAILABLE';}
-            if(fresh!=='UNCHANGED') {
-              return settleProbeQa(slot,activePlan,{schema:1,slot,status:'BLOCKED',
-                reason:fresh==='CHANGED'?'MAP_CONTRACT_CHANGED_STOP':
-                  'MAP_CONTRACT_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
-            }
-          }
-          let targetStatus='NATIVE_TARGET_NOT_CONFIGURED';
-          let targetHandoff=null;
-          // Reuse the existing strict PID/HWND/birth gate. A source-only
-          // plan never authorizes keyboard input or infers a loaded world.
-          if(config.executable) {
-            targetStatus='NATIVE_TARGET_UNAVAILABLE';
-            try {
-              const target=await callTool('get_computer_use_target',{slot});
-              if(target?.verification===
-                 'NATIVE_PROCESS_AND_WINDOW_VERIFIED_AT_READ_TIME'&&
-                 target.identity?.pid>0&&target.identity?.windowId>0&&
-                 /^\d{1,20}$/.test(target.identity.createdFileTime??'')) {
-                const active=probeQaPlans.get(slot);
-                if(active?.sessionId===prepared.sessionId) {
-                  active.targetIdentity={
-                    pid:target.identity.pid,
-                    windowId:target.identity.windowId,
-                    createdFileTime:target.identity.createdFileTime};
-                  targetHandoff={
-                    window:{kind:'window',pid:target.identity.pid,
-                      window_id:target.identity.windowId},
-                    identity:{...active.targetIdentity,
-                      sessionId:target.identity.sessionId},
-                    verification:'PROCESS_WINDOW_ONLY_NOT_GAME_WORLD',
-                    input:'NOT_AVAILABLE_OR_AUTHORIZED'};
-                  targetStatus='NATIVE_TARGET_OBSERVED_NOT_GAME_READY';
-                }
-              }
-            } catch { /* Native read-only target may be unavailable. */ }
-          }
-          if(probeQaPlans.get(slot)?.sessionId!==prepared.sessionId) {
-            return {schema:1,slot,status:'BLOCKED',
-              reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
-          }
-          // The gate is a source-only readiness report, never a caller
-          // claim of Player/admin, world or live debugger provenance.
-          const proofGate=probeQaProofGate({
-            sourceReady:true,captureReady:true,
-            targetBound:targetHandoff!==null,
-          });
-          activePlan.proofGate=proofGate;
-          return {schema:1,slot,phase:'AWAITING_AUTHORIZED_COMMAND',
-            status:'BLOCKED',reason:'COMMAND_DISPATCH_NOT_ENABLED',
-            sourceCapture:'APPROVED_SOURCE_LOG_FILE_PRESENT',gameExecution:'NOT_VERIFIED',
-            probeCount:prepared.autoProbeCount,target:targetStatus,
-            ...(targetHandoff?{targetHandoff}:{}),
-            command:prepared.command,
-            requires:'AUTHORIZED_PLAYER_ADMIN_AND_QA_WORLD',
-            commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
-            proofGate,
+        }
+        let prepared;
+        try {prepared=await prepareProbeQa(slot);}
+        catch(error) {
+          const reason=error?.message==='PROBE_SOURCE_REVIEW_REQUIRED'?
+            'PROBE_SOURCE_REVIEW_REQUIRED':'PROBE_SOURCE_OR_CAPTURE_UNAVAILABLE';
+          return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
+            reason,commandSentByLazyTester:false,
+            gameplayAcceptance:'NOT_VERIFIED',
+            next:'Check the approved ZIP and local capture configuration; do not dispatch a command.',
             ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
-              {schema:1,status:'BLOCKED',
-                reason:'COMMAND_DISPATCH_NOT_ENABLED'},proofGate)}:{})};
+              {schema:1,status:'BLOCKED',reason},probeQaProofGate())}:{})};
         }
-        // Do NOT read/hash/parse the ZIP again on every result query.
-        // Only compare cheap filesystem change tokens against the pinned
-        // source revision. A changed ZIP is reviewed on NEXT prepare.
-        let revision;
-        try {revision=await probeRevisionStatus(config.probeZip,plan.sourceRevision);}
-        catch {revision='UNAVAILABLE';}
-        if(revision!=='UNCHANGED') {
-          return settleProbeQa(slot,plan,{schema:1,slot,status:'BLOCKED',
-            reason:revision==='CHANGED'?'QA_SOURCE_CHANGED_STOP':
-              'QA_SOURCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
+        if(prepared.status!=='PREPARED_SOURCE_ONLY') {
+          return {schema:1,slot,phase:'PREFLIGHT',status:'BLOCKED',
+            reason:prepared.status,commandSentByLazyTester:false,
+            gameplayAcceptance:'NOT_VERIFIED',
+            next:prepared.status==='CAPTURE_SLOT_COLLISION'?
+              'MC slots must use distinct original capture files; verify collection provenance before a new QA checkpoint.':
+              'Configure the approved ZIP and stable capture once; retry probe_qa.',
+            ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
+              {schema:1,status:'BLOCKED',reason:prepared.status},
+              probeQaProofGate())}:{})};
         }
-        if(plan.mapSourceRevision&&config.mapContractPath) {
-          let sourceStatus;
-          try {sourceStatus=await mapRevisionStatus(config.mapContractPath,
-            plan.mapSourceRevision);}catch{sourceStatus='UNAVAILABLE';}
-          if(sourceStatus!=='UNCHANGED') {
-            return settleProbeQa(slot,plan,{schema:1,slot,status:'BLOCKED',
-              reason:sourceStatus==='CHANGED'?'MAP_CONTRACT_CHANGED_STOP':
+        const activePlan=probeQaPlans.get(slot);
+        if(activePlan?.sessionId!==prepared.sessionId) {
+          return {schema:1,slot,status:'BLOCKED',
+            reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+        }
+        activePlan.mapScope=mapScope;
+        if(mapPlan) {
+          activePlan.mapPlan=Object.freeze(mapPlan);
+          activePlan.mapSourceRevision=mapSourceRevision;
+          let fresh;
+          try {fresh=await mapRevisionStatus(config.mapContractPath,mapSourceRevision);}
+          catch {fresh='UNAVAILABLE';}
+          if(fresh!=='UNCHANGED') {
+            return settleProbeQa(slot,activePlan,{schema:1,slot,status:'BLOCKED',
+              reason:fresh==='CHANGED'?'MAP_CONTRACT_CHANGED_STOP':
                 'MAP_CONTRACT_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
           }
         }
-        let raw;
-        try {
-          raw=await readProbeQaResult(slot,plan.sessionId);
-        } catch {
-          return {schema:1,slot,status:'INCOMPLETE',
-            reason:'EVIDENCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'};
-        }
-        let compact=compactProbeQaResult(raw,slot);
-        // Waiting/incomplete evidence needs no native IPC or window probe.
-        // Revalidate only when there is an actual Probe outcome to report.
-        if(probeQaPlans.get(slot)?.sessionId!==plan.sessionId) {
-          return {schema:1,slot,status:'BLOCKED',
-            reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
-        }
-        if(raw.status==='QA_PLAN_EXPIRED') {
-          return settleProbeQa(slot,plan,compact);
-        }
-        // Runner markers that are missing, duplicated, suppressed or
-        // inconsistent cannot be repaired by rereading the same bytes.
-        // A new run (restart=true) is required for fresh provenance.
-        if(/^INCOMPLETE_[A-Z_]+$/.test(raw.status??'')) {
-          return settleProbeQa(slot,plan,compact);
-        }
-        // A rotated/replaced/truncated or lost Probe capture boundary
-        // cannot be repaired within this session. A torn concurrent read
-        // may recover, so only these explicit reasons are terminal.
-        if(raw.status==='CAPTURE_FILE_UNSTABLE'&&
-           ['PROBE_CAPTURE_REPLACED','PROBE_CAPTURE_TRUNCATED',
-            'PROBE_CAPTURE_TAIL_GAP','PROBE_CAPTURE_PREFIX_CHANGED',
-            'PROBE_MARKER_VOLUME_EXCEEDED'].includes(raw.captureIssue)) {
-          return settleProbeQa(slot,plan,compact);
-        }
-        if(['WAITING','INCOMPLETE','BLOCKED'].includes(compact.status)) {
-          return compact;
-        }
-        let target='NOT_PINNED_AT_PREPARE';
-        if(plan.targetIdentity) {
-          target='CHANGED_OR_UNAVAILABLE';
+        let targetStatus='NATIVE_TARGET_NOT_CONFIGURED';
+        let targetHandoff=null;
+        // Reuse the existing strict PID/HWND/birth gate. A source-only
+        // plan never authorizes keyboard input or infers a loaded world.
+        if(config.executable) {
+          targetStatus='NATIVE_TARGET_UNAVAILABLE';
           try {
-            const checked=await callTool('revalidate_computer_use_target',{
-              slot,...plan.targetIdentity});
-            if(checked?.matched===true) {
-              target='NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY';
+            const target=await callTool('get_computer_use_target',{slot});
+            if(target?.verification===
+               'NATIVE_PROCESS_AND_WINDOW_VERIFIED_AT_READ_TIME'&&
+               target.identity?.pid>0&&target.identity?.windowId>0&&
+               /^\d{1,20}$/.test(target.identity.createdFileTime??'')) {
+              const active=probeQaPlans.get(slot);
+              if(active?.sessionId===prepared.sessionId) {
+                active.targetIdentity={
+                  pid:target.identity.pid,
+                  windowId:target.identity.windowId,
+                  createdFileTime:target.identity.createdFileTime};
+                targetHandoff={
+                  window:{kind:'window',pid:target.identity.pid,
+                    window_id:target.identity.windowId},
+                  identity:{...active.targetIdentity,
+                    sessionId:target.identity.sessionId},
+                  verification:'PROCESS_WINDOW_ONLY_NOT_GAME_WORLD',
+                  input:'NOT_AVAILABLE_OR_AUTHORIZED'};
+                targetStatus='NATIVE_TARGET_OBSERVED_NOT_GAME_READY';
+              }
             }
-          } catch { /* No game input or inferred fallback. */ }
+          } catch { /* Native read-only target may be unavailable. */ }
         }
-        // Never display a report from a superseded concurrent plan.
-        if(probeQaPlans.get(slot)?.sessionId!==plan.sessionId&&
-           raw.status!=='QA_PLAN_EXPIRED') {
+        if(probeQaPlans.get(slot)?.sessionId!==prepared.sessionId) {
           return {schema:1,slot,status:'BLOCKED',
             reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
         }
-        if(plan.targetIdentity&&target==='CHANGED_OR_UNAVAILABLE') {
-          compact={...compact,status:'INCOMPLETE',
-            reason:'QA_NATIVE_TARGET_CHANGED',
-            ...(plan.mapPlan?{probeReportedStatus:compact.status}:{}),
-            gameplayAcceptance:'NOT_VERIFIED'};
-        } else if(!plan.targetIdentity) {
-          // Preserve the original Probe's limited reported outcome for
-          // troubleshooting without presenting it as map/world acceptance.
-          compact={...compact,status:'INCOMPLETE',
-            reason:'QA_NATIVE_TARGET_NOT_BOUND',
-            ...(plan.mapPlan?{probeReportedStatus:compact.status}:{}),
-            gameplayAcceptance:'NOT_VERIFIED'};
+        // The gate is a source-only readiness report, never a caller
+        // claim of Player/admin, world or live debugger provenance.
+        const proofGate=probeQaProofGate({
+          sourceReady:true,captureReady:true,
+          targetBound:targetHandoff!==null,
+        });
+        activePlan.proofGate=proofGate;
+        return {schema:1,slot,phase:'AWAITING_AUTHORIZED_COMMAND',
+          status:'BLOCKED',reason:'COMMAND_DISPATCH_NOT_ENABLED',
+          sourceCapture:'APPROVED_SOURCE_LOG_FILE_PRESENT',gameExecution:'NOT_VERIFIED',
+          probeCount:prepared.autoProbeCount,target:targetStatus,
+          ...(targetHandoff?{targetHandoff}:{}),
+          command:prepared.command,
+          requires:'AUTHORIZED_PLAYER_ADMIN_AND_QA_WORLD',
+          commandSentByLazyTester:false,gameplayAcceptance:'NOT_VERIFIED',
+          proofGate,
+          ...(mapPlan?{mapPlan,qaReport:composeMapQaReport(mapPlan,
+            {schema:1,status:'BLOCKED',
+              reason:'COMMAND_DISPATCH_NOT_ENABLED'},proofGate)}:{})};
+      }
+      // Do NOT read/hash/parse the ZIP again on every result query.
+      // Only compare cheap filesystem change tokens against the pinned
+      // source revision. A changed ZIP is reviewed on NEXT prepare.
+      let revision;
+      try {revision=await probeRevisionStatus(config.probeZip,plan.sourceRevision);}
+      catch {revision='UNAVAILABLE';}
+      if(revision!=='UNCHANGED') {
+        return settleProbeQa(slot,plan,{schema:1,slot,status:'BLOCKED',
+          reason:revision==='CHANGED'?'QA_SOURCE_CHANGED_STOP':
+            'QA_SOURCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
+      }
+      if(plan.mapSourceRevision&&config.mapContractPath) {
+        let sourceStatus;
+        try {sourceStatus=await mapRevisionStatus(config.mapContractPath,
+          plan.mapSourceRevision);}catch{sourceStatus='UNAVAILABLE';}
+        if(sourceStatus!=='UNCHANGED') {
+          return settleProbeQa(slot,plan,{schema:1,slot,status:'BLOCKED',
+            reason:sourceStatus==='CHANGED'?'MAP_CONTRACT_CHANGED_STOP':
+              'MAP_CONTRACT_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'});
         }
-        return settleProbeQa(slot,plan,{...compact,target});
-      } finally {probeQaBusy.delete(slot);}
-    }
-    throw new Error('Unknown Probe QA tool');
+      }
+      let raw;
+      try {
+        raw=await readProbeQaResult(slot,plan.sessionId);
+      } catch {
+        return {schema:1,slot,status:'INCOMPLETE',
+          reason:'EVIDENCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'};
+      }
+      let compact=compactProbeQaResult(raw,slot);
+      // Waiting/incomplete evidence needs no native IPC or window probe.
+      // Revalidate only when there is an actual Probe outcome to report.
+      if(probeQaPlans.get(slot)?.sessionId!==plan.sessionId) {
+        return {schema:1,slot,status:'BLOCKED',
+          reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+      }
+      if(raw.status==='QA_PLAN_EXPIRED') {
+        return settleProbeQa(slot,plan,compact);
+      }
+      // Runner markers that are missing, duplicated, suppressed or
+      // inconsistent cannot be repaired by rereading the same bytes.
+      // A new run (restart=true) is required for fresh provenance.
+      if(/^INCOMPLETE_[A-Z_]+$/.test(raw.status??'')) {
+        return settleProbeQa(slot,plan,compact);
+      }
+      // A rotated/replaced/truncated or lost Probe capture boundary
+      // cannot be repaired within this session. A torn concurrent read
+      // may recover, so only these explicit reasons are terminal.
+      if(raw.status==='CAPTURE_FILE_UNSTABLE'&&
+         ['PROBE_CAPTURE_REPLACED','PROBE_CAPTURE_TRUNCATED',
+          'PROBE_CAPTURE_TAIL_GAP','PROBE_CAPTURE_PREFIX_CHANGED',
+          'PROBE_MARKER_VOLUME_EXCEEDED'].includes(raw.captureIssue)) {
+        return settleProbeQa(slot,plan,compact);
+      }
+      if(['WAITING','INCOMPLETE','BLOCKED'].includes(compact.status)) {
+        return compact;
+      }
+      let target='NOT_PINNED_AT_PREPARE';
+      if(plan.targetIdentity) {
+        target='CHANGED_OR_UNAVAILABLE';
+        try {
+          const checked=await callTool('revalidate_computer_use_target',{
+            slot,...plan.targetIdentity});
+          if(checked?.matched===true) {
+            target='NATIVE_PROCESS_MATCH_AT_READ_TIME_ONLY';
+          }
+        } catch { /* No game input or inferred fallback. */ }
+      }
+      // Never display a report from a superseded concurrent plan.
+      if(probeQaPlans.get(slot)?.sessionId!==plan.sessionId&&
+         raw.status!=='QA_PLAN_EXPIRED') {
+        return {schema:1,slot,status:'BLOCKED',
+          reason:'QA_PLAN_SUPERSEDED',gameplayAcceptance:'NOT_VERIFIED'};
+      }
+      if(plan.targetIdentity&&target==='CHANGED_OR_UNAVAILABLE') {
+        compact={...compact,status:'INCOMPLETE',
+          reason:'QA_NATIVE_TARGET_CHANGED',
+          ...(plan.mapPlan?{probeReportedStatus:compact.status}:{}),
+          gameplayAcceptance:'NOT_VERIFIED'};
+      } else if(!plan.targetIdentity) {
+        // Preserve the original Probe's limited reported outcome for
+        // troubleshooting without presenting it as map/world acceptance.
+        compact={...compact,status:'INCOMPLETE',
+          reason:'QA_NATIVE_TARGET_NOT_BOUND',
+          ...(plan.mapPlan?{probeReportedStatus:compact.status}:{}),
+          gameplayAcceptance:'NOT_VERIFIED'};
+      }
+      return settleProbeQa(slot,plan,{...compact,target});
+    } finally {probeQaBusy.delete(slot);}
   }
 
   function activitySnapshot() {

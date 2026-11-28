@@ -1,13 +1,16 @@
 //! Bootstrap-owned directory and registry handles; no independent profile lifecycle.
 //! Existing product/replay owners retain all admission and mutation ordering.
-use super::{invalid, wide, MAX_EDUCATION_SLOTS};
+use super::{invalid, same_image, wide, MAX_EDUCATION_SLOTS};
 use std::{ffi::{c_void, OsStr, OsString}, fs::{File, OpenOptions}, io, mem, os::windows::{ffi::OsStringExt, fs::OpenOptionsExt, io::AsRawHandle}, path::{Path, PathBuf}, ptr};
 use windows_sys::Win32::{
     Foundation::{DuplicateHandle, DUPLICATE_SAME_ACCESS, HANDLE},
     Storage::FileSystem::{GetFileInformationByHandleEx, FILE_ID_INFO, FILE_ATTRIBUTE_DIRECTORY, FILE_ATTRIBUTE_REPARSE_POINT, FILE_SHARE_READ, FILE_SHARE_WRITE, FileCaseSensitiveInfo, GetFinalPathNameByHandleW, FILE_CASE_SENSITIVE_INFO, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, VOLUME_NAME_DOS},
-    System::{Com::{CoCreateGuid, CoTaskMemFree}, LibraryLoader::{GetModuleHandleW, GetProcAddress}, Registry::{RegCloseKey, RegCreateKeyExW, RegOpenCurrentUser, RegOpenKeyExW, HKEY, KEY_ALL_ACCESS, KEY_READ, REG_CREATED_NEW_KEY, REG_OPTION_NON_VOLATILE}},
-    UI::Shell::SHGetKnownFolderPath,
+    System::{Com::{CoCreateGuid, CoTaskMemFree}, LibraryLoader::{GetModuleHandleW, GetProcAddress}, Registry::{RegCloseKey, RegOpenCurrentUser, RegOpenKeyExW, HKEY, KEY_ALL_ACCESS, KEY_READ}},
+    UI::Shell::{FOLDERID_RoamingAppData, FOLDERID_LocalAppData, SHGetKnownFolderPath},
 };
+
+#[cfg(test)]
+use windows_sys::Win32::System::Registry::{RegCreateKeyExW, REG_CREATED_NEW_KEY, REG_OPTION_NON_VOLATILE};
 
 pub(super) struct RegistryKey(pub(super) HKEY);
 impl Drop for RegistryKey {
@@ -207,10 +210,12 @@ pub(super) fn open_private_temporary(private: &File, mode: PrivateTemporaryMode)
     Ok([local, temporary]) // Never follow a reparse, clear a cache or copy a profile.
 }
 
+#[cfg(test)]
 pub(super) fn create_private_slot(logical: &File, root: &Path, slot: u32) -> io::Result<SlotStorage> {
     create_private_slot_at(logical, &root.join(format!("MC{slot:02}")), slot)
 }
 
+#[cfg(test)]
 pub(super) fn create_private_slot_at(logical: &File, private_path: &Path, slot: u32) -> io::Result<SlotStorage> {
     if !(1..=MAX_EDUCATION_SLOTS).contains(&slot) {
         return Err(invalid("Invalid Education slot"));
@@ -283,6 +288,36 @@ pub(super) fn fresh_slots(logical: File, parent: &Path) -> io::Result<[SlotStora
     slots
         .try_into()
         .map_err(|_| invalid("Missing private slot"))
+}
+
+pub(super) fn logical_appdata_root() -> io::Result<File> {
+    let roaming = known_folder(&FOLDERID_RoamingAppData)?;
+    let local = known_folder(&FOLDERID_LocalAppData)?;
+    if roaming.file_name() != Some(OsStr::new("Roaming"))
+        || local.file_name() != Some(OsStr::new("Local"))
+    {
+        return Err(invalid(
+            "Redirected AppData layouts require explicit mediation",
+        ));
+    }
+    let a = open_directory(
+        roaming
+            .parent()
+            .ok_or_else(|| invalid("Missing AppData parent"))?,
+        FILE_READ_ATTRIBUTES,
+    )?;
+    let b = open_directory(
+        local
+            .parent()
+            .ok_or_else(|| invalid("Missing AppData parent"))?,
+        FILE_READ_ATTRIBUTES,
+    )?;
+    if !same_image(&directory_id(&a)?, &directory_id(&b)?) {
+        return Err(invalid(
+            "Split Roaming/Local roots are not supported by this DLL configuration",
+        ));
+    }
+    Ok(a)
 }
 
 pub(super) fn known_folder(id: &windows_sys::core::GUID) -> io::Result<PathBuf> {

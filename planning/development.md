@@ -30,7 +30,16 @@ input gates, private checkpoint, full metadata and native authorities remain.
 Explicit WebP requests share compact visual receipts; no auto-format fallback.
 Source fixtures authored/adapted NOT_EXECUTED. Old host configurations require
 operator review; no automatic permission widening.
-Next: CONTINUE ZLR-04 final affected-consumer and source integration review.
+ZLR-04: compare baseline 15cd0072 to 76cc5d77 (3 commits, 31 paths); review
+selected active Rust storage/controller, MCP/SDK/type/catalog, fixtures,
+package/verifier and recovery documentation consumers. Canonical logical
+AppData validation no longer resolves a legacy replay parent; legacy HKCU
+creation fixture-only. Migration no-op receipt reports 0, destination creation
+and identity pins tightened, overlapping source/destination refused. One agent
+catalog selected per core; Probe schema and private entry reconciled. Fixtures
+NOT_EXECUTED. No new dependency/worker. Source phase closed at scoped proof;
+external host configurations and exhaustive semantic review not verified.
+Next: STOP (SOURCE_READY_FOR_LOCAL at scoped source proof only, not execution approval).
 No compiler, test, CI, runtime, data migration or performance execution.
 No release or version bump.
 

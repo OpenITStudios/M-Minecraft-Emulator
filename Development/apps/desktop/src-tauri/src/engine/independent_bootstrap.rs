@@ -656,7 +656,7 @@ pub(super) fn maybe_run_native_entrypoint() -> bool {
         use std::io::Write;
         let result=std::thread::spawn(product_profiles::migrate_reviewed).join().unwrap_or_else(|_|Err(io::Error::other("Data migration task failed")));
         let ready=result.is_ok();
-        let value=match result {Ok(())=>serde_json::json!({"schema":1,"configured":true,"migratedProfiles":5,"sourcePreserved":true,"gameLaunched":false}),Err(error)=>serde_json::json!({"error":error.to_string(),"sourcePreserved":true,"gameLaunched":false})};
+        let value=match result {Ok(migrated_profiles)=>serde_json::json!({"schema":1,"configured":true,"migratedProfiles":migrated_profiles,"sourcePreserved":true,"gameLaunched":false}),Err(error)=>serde_json::json!({"error":error.to_string(),"sourcePreserved":true,"gameLaunched":false})};
         let _=writeln!(io::stdout(),"{value}");std::process::exit(if ready{0}else{2});
     }
     #[cfg(feature = "lazy-tester-package")]
@@ -745,10 +745,10 @@ mod profile_storage_handles;
 use self::profile_storage_handles::{
     RegistryKey, SlotStorage, directory_id, open_directory, directory_path,
     fresh_root, registry_leaf, open_existing_registry_store, user_registry_path,
-    open_private_temporary, PrivateTemporaryMode, create_private_slot, known_folder,
+    open_private_temporary, PrivateTemporaryMode, known_folder, logical_appdata_root,
 };
 #[cfg(test)]
-use self::profile_storage_handles::fresh_slots;
+use self::profile_storage_handles::{fresh_slots, create_private_slot};
 
 
 #[path = "independent_bootstrap/reviewed_profile_replay.rs"]

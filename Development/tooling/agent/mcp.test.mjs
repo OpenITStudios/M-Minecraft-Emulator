@@ -5154,6 +5154,11 @@ test('unified MCP catalog refuses retired and ambiguous operations without nativ
   try {
     const tools=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
     assert.deepEqual(tools,TOOL_LIST);
+    const probe=tools.find(t=>t.name==='probe_qa').inputSchema;
+    assert.equal(probe.properties.inspectRun.const,true);
+    assert.deepEqual(probe.oneOf.map(branch=>branch.required??[]),[[],['inspectRun'],['archivedRunId']]);
+    assert.deepEqual(probe.oneOf[1].not.anyOf.map(x=>x.required[0]),['restart','scope','publishToDesktop','coordinateNative','archivedRunId']);
+    assert.deepEqual(probe.oneOf[2].not.anyOf.map(x=>x.required[0]),['slot','inspectRun','restart','scope','publishToDesktop','coordinateNative']);
     for(const [name,args] of [
       ['prepare_probe_qa',{slot:2}],['read_probe_qa_result',{slot:2,sessionId:'a'.repeat(24)}],
       ['close_profile',{slot:2}],['probe_qa',{slot:2,inspectRun:false}],

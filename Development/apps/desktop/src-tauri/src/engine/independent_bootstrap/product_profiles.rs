@@ -362,7 +362,7 @@ fn disjoint(logical: &File, data: &Path) -> io::Result<()> {
         .to_ascii_lowercase();
     let data = data.to_string_lossy().to_ascii_lowercase();
     if Path::new(&logical).starts_with(&data) || Path::new(&data).starts_with(&logical) {
-        return Err(invalid("Choose a data location outside Windows AppData"));
+        return Err(invalid("Data destination overlaps a protected source directory"));
     }
     Ok(())
 }
@@ -460,7 +460,7 @@ fn resolve_saved_location(home: &Path) -> io::Result<(PathBuf, bool, bool)> {
 }
 fn open_mode(home: &Path, persist_location: bool) -> io::Result<Option<(PathBuf, [SlotStorage; 5])>> {
     let (root, default, legacy_locator) = resolve_saved_location(home)?;
-    let (logical, _) = replay_roots()?;
+    let logical = logical_appdata_root()?;
     if persist_location {recover_confirmed(&root);}
     match open_at(logical, &root) {
         Ok(stores) => {
@@ -684,7 +684,7 @@ fn copy_tree_at(base: &Path, source: &Path, destination: &Path) -> io::Result<()
     }
     Ok(())
 }
-pub(super) fn migrate_reviewed() -> io::Result<()> {
+pub(super) fn migrate_reviewed() -> io::Result<usize> {
     let _instance = crate::engine::app_instance::acquire().map_err(io::Error::other)?;
     // Retain the SAME existence gate throughout source copy and locator cutover.
     let _gate = acquire_startup_gate(crate::engine::native_clients_session::CONTROLLER_GATE_NAME,
@@ -694,9 +694,9 @@ pub(super) fn migrate_reviewed() -> io::Result<()> {
     drop(BootstrapLibrary::reviewed()?);
     let home = home()?;
     let selected = resolve_saved_location(&home)?;
-    let (logical, _) = replay_roots()?;
+    let logical = logical_appdata_root()?;
     let (sources, target, app_preferences) = match open_at(logical.try_clone()?, &selected.0) {
-        Ok(_) => return Ok(()), // Already canonical; do not copy or create a second store.
+        Ok(_) => return Ok(0), // Already canonical; no data migrated.
         Err(error) if error.kind() == io::ErrorKind::Unsupported && error.to_string() == MIGRATION_REQUIRED => {
             let sources = open_catalog(logical, &selected.0, 1)?;
             // Keep the original catalog and profile directories intact.
@@ -714,12 +714,13 @@ pub(super) fn migrate_reviewed() -> io::Result<()> {
     };
     migrate_sources(&target, &sources, app_preferences.as_deref())?;
     require_no_games()?;
-    publish_migrated_location(&home, &selected, &target, sources[0].logical.try_clone()?)
+    publish_migrated_location(&home, &selected, &target, sources[0].logical.try_clone()?)?;
+    Ok(sources.len())
 }
 fn publish_migrated_location(home: &Path, selected: &(PathBuf, bool, bool), target: &Path, logical: File) -> io::Result<()> {
     let _pins = pin_chain(target)?;
     // Never switch the active pointer before all five new hive/directory IDs reopen.
-    drop(open_at(logical, target)?);
+    let _stores = open_at(logical, target)?; // Retain validated directories/hives through publication.
     if &resolve_saved_location(home)? != selected {
         return Err(invalid("Saved data location changed during migration; both sources were preserved"));
     }
@@ -741,9 +742,15 @@ fn migrate_sources(root: &Path, sources: &[SlotStorage], app_preferences: Option
             "Migration requires the original five launcher stores",
         ));
     }
+    let parent = root.parent().ok_or_else(|| invalid("Missing migration destination parent"))?;
+    let parent_pins = pin_chain(parent)?;
+    let destination = directory_path(parent_pins.last().unwrap())?
+        .join(root.file_name().ok_or_else(|| invalid("Missing migration destination name"))?);
+    let root = destination.as_path();
     disjoint(&sources[0].logical, root)?;
     let mut source_pins = Vec::new();
     for store in sources {
+        disjoint(&store.private, root)?;
         let pins = pin_chain(&store.private_path)?;
         if !same_image(&directory_id(pins.last().unwrap())?, &directory_id(&store.private)?) {
             return Err(invalid("Migration source directory changed"));
@@ -755,16 +762,22 @@ fn migrate_sources(root: &Path, sources: &[SlotStorage], app_preferences: Option
             check_copy_tree(&path)?;
         }
     }
-    if !empty_default(&root)? {
-        return Err(invalid(
-            "Existing Data folder was preserved; migration requires an unused launcher destination",
-        ));
+    // Schema-1 cutover is create-new only. The replay-to-default Data
+    // destination alone may already contain ordinary Settings/Cache.
+    if app_preferences.is_none() {
+        std::fs::create_dir(root)?;
+    } else {
+        match std::fs::create_dir(root) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error),
+        }
     }
-    if !root.try_exists()? {
-        std::fs::create_dir(&root)?;
+    let _pins = pin_chain(root)?;
+    if !empty_default(root)? {
+        return Err(invalid("Existing Data folder was preserved; migration requires an unused launcher destination"));
     }
-    let _pins = pin_chain(&root)?;
-    protect_data(&root)?;
+    protect_data(root)?;
     std::fs::create_dir(root.join("Launchers"))?;
     let mut stores = Vec::new();
     for source in sources {
@@ -864,7 +877,7 @@ pub(super) fn prepare() -> io::Result<()> {
             "The saved data folder is unavailable; locate it instead of creating new profiles",
         ));
     }
-    let (logical, _) = replay_roots()?;
+    let logical = logical_appdata_root()?;
     initialize_at(&logical, &path)?;
     std::fs::create_dir_all(home.join("Data/Settings"))?;
     write_json(
@@ -920,10 +933,10 @@ pub(crate) fn location(action: DataLocationAction, persist_location: bool) -> io
                 }
                 drop(registered_image(true)?);
                 drop(BootstrapLibrary::reviewed()?);
-                let (logical, _) = replay_roots()?;
+                let logical = logical_appdata_root()?;
                 initialize_at(&logical, &selected)?;
             }
-            let (logical, _) = replay_roots()?;
+            let logical = logical_appdata_root()?;
             verify_selected_location(logical, &selected)?;
             require_idle()?;
             let relative = selected == home.join("Data");
@@ -1063,6 +1076,13 @@ mod tests {
         let selected = resolve_saved_location(&fixture.root).unwrap();
         let sources = open_catalog(logical.try_clone().unwrap(), &root, 1).unwrap();
         let target = root.join("Migrated");
+        let overlapping = sources[0].private_path.join("Roaming").join("must-not-create");
+        assert!(migrate_sources(&overlapping, &sources, None).is_err());
+        assert!(!overlapping.exists());
+        std::fs::create_dir(&target).unwrap();
+        assert!(migrate_sources(&target, &sources, None).is_err());
+        assert!(std::fs::read_dir(&target).unwrap().next().is_none());
+        std::fs::remove_dir(&target).unwrap(); // Disposable fixture only.
         // A missing/partial target must never publish a new pointer.
         assert!(publish_migrated_location(&fixture.root, &selected, &target,
             logical.try_clone().unwrap()).is_err());
