@@ -370,9 +370,11 @@ protocol conformance tests executed.
 ### Source ownership
 
 - `operation-core.mjs` is the single coordinator for session-bound
-  state, admission, QA checkpoints and recovery. Canonical `probe_qa` uses
-  the private prepare/read operations directly; the two legacy Probe tool
-  names remain supported ingress to those same operations.
+  state, admission and recovery. `agent-configuration.mjs` owns operator
+  configuration. `probe-qa-operations.mjs` owns one private checkpoint set
+  per core; canonical and legacy Probe tools share the same prepare/read
+  operations. `evidence-operations.mjs` owns the separate explicit capture
+  baselines and bounded evidence projection. No new worker or transport.
 - `tool-catalog.mjs` owns the one descriptor inventory. `code-mode.mjs`
   declares the shared SDK routes and projects the playtest/compatibility subsets
   from the original descriptor catalog.

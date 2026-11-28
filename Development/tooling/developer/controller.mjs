@@ -269,6 +269,8 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/tooling/agent/mcp.mjs',
         'Development/tooling/agent/mcp.test.mjs',
         'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/agent-configuration.mjs',
+        'Development/tooling/agent/probe-qa-operations.mjs',
         'Development/tooling/agent/native-transport.mjs',
         'Development/tooling/agent/agent-contract.mjs',
         'Development/tooling/agent/tool-catalog.mjs',
@@ -284,6 +286,8 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/tooling/agent/visual-observer.test.mjs'
       ],inspectFiles:[
         'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/agent-configuration.mjs',
+        'Development/tooling/agent/probe-qa-operations.mjs',
         'Development/tooling/agent/native-transport.mjs',
         'Development/tooling/agent/input-delivery.mjs'
       ]},
@@ -406,6 +410,8 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/tooling/agent/mcp.mjs',
         'Development/tooling/agent/mcp.test.mjs',
         'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/agent-configuration.mjs',
+        'Development/tooling/agent/probe-qa-operations.mjs',
         'Development/tooling/agent/native-transport.mjs',
         'Development/tooling/agent/agent-contract.mjs',
         'Development/tooling/agent/tool-catalog.mjs',
@@ -414,6 +420,8 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
       ],inspectFiles:[
         'Development/tooling/agent/activity-status.mjs',
         'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/agent-configuration.mjs',
+        'Development/tooling/agent/probe-qa-operations.mjs',
         'Development/tooling/agent/native-transport.mjs'
       ]},
       {id:'native-controller',sourcePaths:[
@@ -456,6 +464,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/tooling/agent/mcp.mjs',
         'Development/tooling/agent/mcp.test.mjs',
         'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/agent-configuration.mjs',
         'Development/tooling/agent/native-transport.mjs',
         'Development/tooling/agent/agent-contract.mjs',
         'Development/tooling/agent/tool-catalog.mjs',
@@ -466,6 +475,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs'
       ],inspectFiles:[
         'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/agent-configuration.mjs',
         'Development/tooling/agent/native-transport.mjs',
         'Development/tooling/agent/mc02-action-sequence.mjs',
         'Development/tooling/agent/input-timeline.mjs',

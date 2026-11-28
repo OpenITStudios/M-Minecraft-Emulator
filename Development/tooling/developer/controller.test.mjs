@@ -525,6 +525,21 @@ test('extracted agent owners retain cross-module review after MCP modularization
   }
 });
 
+test('agent configuration and Probe QA owners retain scoped review routes',()=>{
+  const root='Development/tooling/agent/';
+  for(const [file,expected] of [
+    ['agent-configuration.mjs',['agent-input-lease','agent-activity-mirror','native-input-v4']],
+    ['probe-qa-operations.mjs',['agent-input-lease','agent-activity-mirror']],
+    ['evidence-operations.mjs',[]],
+  ]){
+    const path=root+file;
+    const review=qualityReviewForPaths([path],SHA);
+    assert.deepEqual(review.crossModuleReviews.map(seam=>seam.id),expected,file);
+    assert.ok(review.crossModuleReviews.every(seam=>seam.reviewParties.some(p=>
+      p.selectedInChangeSet&&p.inspectFiles.includes(path))));
+  }
+});
+
 test('extracted session owners retain their precise cross-module review routes',()=>{
   const root='Development/apps/desktop/src-tauri/src/engine/native_clients_session/';
   const cases=[
