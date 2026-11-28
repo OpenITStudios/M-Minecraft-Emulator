@@ -54,6 +54,8 @@ export function verifyNativeProfileLayout(profiles) {
       !profiles.includes('home.join("Data/Settings").join(LOCATOR)') ||
       !profiles.includes(canonicalFirst) ||
       !profiles.includes('root.join(format!("Launchers/Minecraft-{slot}"))') ||
+      !profiles.includes('fn open_at(logical: File, root: &Path) -> io::Result<[SlotStorage; 5]> {\n    open_catalog(logical, root, 2)\n}') ||
+      !profiles.includes('if catalog.schema != expected_schema {') ||
       !profiles.includes('let profiles = if catalog.schema == 2 {\n        "Launchers"\n    } else {\n        "Profiles"\n    };')) {
     throw new Error('LAZY_TESTER_PACKAGE_REFUSED: Native private profile owner differs from package policy');
   }

@@ -212,13 +212,17 @@ terminate Minecraft, sign in, reset profiles or replace their data.
 - Current schema 2 profiles: `Data/Launchers/Minecraft-1..5`.
 - Catalog: `Data/profiles.json`.
 - Canonical pointer: `Data/Settings/data-location.json`.
-- Legacy schema 1 profiles: `Data/Profiles/Minecraft-1..5`.
+- Legacy schema 1 profiles: `Data/Profiles/Minecraft-1..5` are migration-only, never active launch storage.
 - Legacy flat App pointer: `App/data-location.json`, consulted only when
   the canonical pointer is absent and retained by packaging preservation.
 - Preferences: `Data/Settings/`, with first-run 144/10 FPS limits.
 
-These are storage identities, not instructions to copy, reset, relocate,
-or regenerate any account or world data. Read
+Runtime and Data Storage open only verified schema 2. The existing explicit
+`--lazy-tester-migrate-data` route copies verified schema 1 to an unused
+`Migrated/Launchers` child of the selected catalog root, or reviewed replay to
+an unused default Data root, then publishes the canonical pointer after all
+five stores reopen. Original sources and incomplete destinations are preserved.
+These are storage identities, not permission to run a migration. Read
 [Data layout](../../../docs/system/data-layout.md) before any migration.
 
 ## Developer commands

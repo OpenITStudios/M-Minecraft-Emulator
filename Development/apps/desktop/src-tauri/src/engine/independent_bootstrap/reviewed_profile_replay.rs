@@ -2,9 +2,11 @@
 //! Existing identity checks remain for preserved stores and migration.
 use super::{
     directory_id, directory_path, invalid, known_folder, open_directory,
-    open_existing_registry_store, open_private_temporary, pin_image, profile_binding, same_image,
+    open_existing_registry_store, open_private_temporary, same_image,
     user_registry_path, PrivateTemporaryMode, SlotStorage,
 };
+#[cfg(test)]
+use super::{pin_image, profile_binding};
 use std::{ffi::OsStr, fs::File, io, path::{Path, PathBuf}};
 use windows_sys::Win32::{
     Storage::FileSystem::{FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES},
@@ -19,14 +21,9 @@ pub(super) const REVIEWED_FIVE_REPLAY: Option<[u8; 32]> = Some([
     0xaa, 0x04, 0xa0, 0x71, 0x52, 0xfb, 0x1b, 0x5f, 0x43, 0xdd, 0xcc, 0xe4, 0x49, 0x8b, 0x3c, 0xa9,
     0xb7, 0x84, 0x9d, 0x7e, 0x79, 0xb4, 0x0d, 0x7a, 0x42, 0x8c, 0x18, 0xbd, 0x1d, 0xd0, 0xfa, 0x0b,
 ]);
-// One reviewed acceptance pair only; no profile discovery, migration or token/world copying.
+// Pair-only policy is retained solely for disposable fixtures; no production admission.
 #[cfg(test)]
 pub(super) const REVIEWED_REPLAY: Option<[u8; 32]> = None;
-#[cfg(not(test))]
-pub(super) const REVIEWED_REPLAY: Option<[u8; 32]> = Some([
-    0x41, 0xdb, 0xc7, 0xdb, 0x44, 0xd2, 0x91, 0xcd, 0x5e, 0xb9, 0xc7, 0xfc, 0x60, 0x90, 0x54, 0xa8,
-    0xbb, 0x0c, 0x76, 0x37, 0xc1, 0x04, 0xfa, 0x85, 0xe8, 0xdc, 0x42, 0x70, 0xa9, 0xa4, 0xa8, 0xaf,
-]);
 
 #[cfg(test)]
 pub(super) fn reopen_slots(
@@ -196,8 +193,9 @@ pub(super) fn replay_roots() -> io::Result<(File, PathBuf)> {
     Ok((a, parent))
 }
 
-// The caller may already have established product catalog absence in the
-// same observation. Do not reopen that catalog on the legacy fallback.
+// Historical source fixtures only; production migration uses the reviewed
+// five-slot source reader in profile_binding, never this old entrypoint.
+#[cfg(test)]
 pub(super) fn registered_replay_slots<const N: usize>() -> io::Result<[SlotStorage; N]> {
     if N != 2 && N != 5 {
         return Err(invalid("Unsupported replay slot count"));

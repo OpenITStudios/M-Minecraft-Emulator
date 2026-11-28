@@ -14,10 +14,16 @@ removed; shared controller journal and test-only historical observer preserved.
 Reviewed existing data/replay retained until safe storage cutover. Pair-only
 historical data preserved, no automatic expansion. Source fixture NOT_EXECUTED.
 
-Next: CONTINUE ZLR-02 canonical storage cutover: trace schema 1, reviewed
-replay/binding, migration and fresh-setup refusal; do not disable recovery
-before a safe explicit migration path exists. Then ZLR-03 one agent contract
-with retained safety/capability gates, ZLR-04 consumer cleanup/integration.
+ZLR-02: product runtime/binding/location admit verified schema 2 only; non-product
+managed launch refused. Explicit existing migration command accepts verified
+schema 1 or five-slot replay only, holds original manager/controller gates,
+preserves source catalog/data and switches the canonical locator after five
+target stores reopen. Schema 1 destination is selected-root/Migrated; old
+replay uses unused default Data. Partial target refuses; explicit Locate of
+verified complete schema 2 is recovery. Old root/binding presence prevents
+fresh setup; no auto-import, fallback or pair expansion. Fixtures NOT_EXECUTED.
+Next: CONTINUE ZLR-03 one agent contract with retained safety/capability gates,
+then ZLR-04 consumer cleanup/integration.
 No compiler, test, CI, runtime, data migration or performance execution.
 No release or version bump.
 

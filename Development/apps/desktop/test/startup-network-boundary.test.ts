@@ -22,12 +22,12 @@ describe("Active native-first startup boundary", () => {
     expect(diagnostic).toContain("startup_diagnostic_result");
     expect(normal).not.toMatch(/lazy_tester_(?:screenshot|recording)_available/);
     expect(bootstrap).toContain('if !startup_diagnostic_mode() { return Err("Startup diagnostic is not active".into()); }');
-    expect(active).toContain("if (!disposed) { binding = result; bindingIssue = ''; }");
+    expect(active).toContain("if (!disposed) { binding = result; bindingIssue = result.issue ?? ''; }");
     const mount = active.split("onMount(() => {")[1]!.split("</script>")[0]!;
     expect(mount.indexOf("lazy-tester-close-review")).toBeLessThan(mount.indexOf("void initializeLaunchers()"));
   });
 
-  it("does not start a presentation hook in the diagnostic and validates existing legacy binding bytes once", () => {
+  it("does not start a presentation hook in the diagnostic or admit historical profile data", () => {
     const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
     const diagnostic = bootstrap.split("fn check_webview_binding(")[1]!.split("fn create_main_window(")[0]!;
     expect(diagnostic).not.toContain("workspace_foreground::start(");
@@ -36,11 +36,13 @@ describe("Active native-first startup boundary", () => {
     expect(bootstrap).toContain("workspace_foreground::shutdown();");
     expect(bootstrap).toContain("native_clients_session::CONTROLLER_GATE_NAME");
     const binding = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/profile_binding.rs", import.meta.url), "utf8");
-    expect(binding).toContain("Ok(bytes) => return Ok(binding_status(Ok(bytes), validate))");
+    const inspection = binding.split("fn inspect_existing() -> ProfileBinding {")[1]!.split("pub(crate) fn run(")[0]!;
+    expect(inspection).toContain("product_profiles::inspect_existing()");
+    expect(inspection).not.toMatch(/migration_sources\(|discover_reviewed\(|publish\(/);
     expect(binding).toContain("existing_controller_gate(CONTROLLER_GATE_NAME)");
   });
 
-  it("keeps startup diagnostic read-only and avoids a second product lookup in legacy location fallback", () => {
+  it("keeps startup diagnostic read-only and admits only the canonical catalog outside migration", () => {
     const native = readFileSync(new URL("../src-tauri/src/engine/native_clients.rs", import.meta.url), "utf8");
     const binding = native.split("pub fn profile_binding(import: bool)")[1]!.split("#[cfg(")[0]!;
     expect(binding.indexOf("startup_diagnostic_mode()")).toBeLessThan(binding.indexOf("profile_binding::run(import)"));
@@ -51,20 +53,27 @@ describe("Active native-first startup boundary", () => {
     const location = profiles.split("pub(crate) fn location(")[1]!.split("#[cfg(test)]")[0]!;
     expect(location).toContain("if !persist_location && !matches!(action, DataLocationAction::Inspect)");
     expect(location).toContain("open_mode(&home, persist_location)?");
-    expect(location).toContain("None => match registered_replay_slots::<5>()");
-    expect(location).not.toMatch(/\bregistered_slots::<5>\s*\(/);
-    const bootstrap = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap.rs", import.meta.url), "utf8");
-    const normal = bootstrap.split("fn registered_slots<const N: usize>")[1]!.split("struct InheritList")[0]!;
+    expect(location).toContain("None => (None, Vec::new())");
+    expect(location).not.toMatch(/registered_(?:replay_)?slots|migration_sources/);
+    const controller = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/session_controller.rs", import.meta.url), "utf8");
+    const prepare = controller.split("fn prepare() -> io::Result<Self> {")[1]!.split("fn reap(")[0]!;
+    expect(prepare).toContain('!cfg!(feature = "lazy-tester-package")');
+    expect(prepare).toContain("product_profiles::open()?");
+    expect(prepare).not.toMatch(/registered_(?:replay_)?slots|migration_sources/);
+    expect(profiles).toContain("open_catalog(logical, root, 2)");
+    const migration = profiles.split("fn migrate_reviewed() -> io::Result<()> {")[1]!.split("fn publish_migrated_location(")[0]!;
+    expect(migration).toContain("open_catalog(logical, &selected.0, 1)?");
+    expect(migration).toContain("profile_binding::migration_sources()?");
+    expect(migration.indexOf("acquire_startup_gate(")).toBeLessThan(migration.indexOf("migrate_sources(&target"));
+    expect(migration.indexOf("migrate_sources(&target")).toBeLessThan(migration.indexOf("publish_migrated_location("));
+    const publish = profiles.split("fn publish_migrated_location(")[1]!.split("fn migrate_sources(")[0]!;
+    expect(publish.indexOf("drop(open_at(logical, target)?);")).toBeLessThan(publish.indexOf("write_json("));
+    const bindSource = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/profile_binding.rs", import.meta.url), "utf8");
+    const normal = bindSource.split("pub(crate) fn run(")[1]!.split("// Explicit prior-launcher selection")[0]!;
+    expect(normal).toContain("if has_legacy_source()? { return Ok(migration_required()); }");
+    expect(normal).not.toMatch(/migration_sources\(|discover_reviewed\(/);
     const replaySource = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/reviewed_profile_replay.rs", import.meta.url), "utf8");
-    const replay = replaySource.split("fn registered_replay_slots<const N: usize>")[1]!;
-    expect(bootstrap).toContain('mod reviewed_profile_replay;');
-    expect(normal).toContain("product_profiles::open()?");
-    expect(normal).toContain("registered_replay_slots::<N>()");
-    expect(replay).not.toContain("product_profiles::open()");
-    expect(replay).not.toContain("fresh_slots(");
-    expect(replay).toContain("No reviewed existing Education profile pair");
-    expect(replay.indexOf("No reviewed existing Education profile pair")).toBeLessThan(replay.indexOf("replay_roots()?"));
-    expect(replay).toContain("reopen_slots_for::<N>(a, &parent, &bytes, expected)");
+    expect(replaySource).toContain("#[cfg(test)]\npub(super) fn registered_replay_slots");
     const mounted = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
     const locationUi = mounted.split("async function loadLocation(")[1]!.split("async function openFolder(")[0]!;
     expect(locationUi).toContain("if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();");

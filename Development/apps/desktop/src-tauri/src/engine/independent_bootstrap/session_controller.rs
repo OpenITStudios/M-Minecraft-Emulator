@@ -38,6 +38,9 @@ struct Sessions {
 }
 impl Sessions {
     fn prepare() -> io::Result<Self> {
+        if !cfg!(feature = "lazy-tester-package") {
+            return Err(io::Error::new(io::ErrorKind::Unsupported, "Managed profiles require the Lazy Tester product build"));
+        }
         // Do not adopt arbitrary games or infer a profile from window titles.
         // Resolve once for this initial observation and the image to be pinned.
         // The existing post-pin RegisteredOnly check still runs before profile work.
@@ -62,7 +65,9 @@ impl Sessions {
         // persist the data-location pointer. Reject missing/unreviewed DLLs
         // BEFORE any of those profile-side effects or a game launch.
         drop(BootstrapLibrary::reviewed()?);
-        let stores = registered_slots::<5>()?.into_iter().map(Some).collect();
+        let stores = product_profiles::open()?
+            .ok_or_else(|| invalid("No current profile catalog; initialize or migrate through Lazy Tester first"))?
+            .into_iter().map(Some).collect();
         Ok(Self {
             stores,
             running: (0..5).map(|_| None).collect(),

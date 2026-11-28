@@ -119,43 +119,50 @@ fn discover_reviewed(parent: &Path, expected: [u8; 32]) -> io::Result<Option<Vec
     Ok(None)
 }
 
-fn connect_reviewed_existing() -> io::Result<ProfileBinding> {
-    let existing = binding_path(false).and_then(|(path, _pins)| read_binding(&path));
-    match existing {
-        // Validate the exact just-read bytes; status() would reopen the same
-        // binding file before validating. Invalid bindings remain preserved.
-        Ok(bytes) => return Ok(binding_status(Ok(bytes), validate)),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+// Only explicit migration opens reviewed historical profiles. Discovery never
+// publishes a binding or provisions a missing profile.
+pub(super) fn migration_sources() -> io::Result<[SlotStorage; 5]> {
+    let expected = REVIEWED_FIVE_REPLAY.ok_or_else(|| invalid("No reviewed five-profile policy"))?;
+    let (logical, parent) = replay_roots()?;
+    let bytes = match binding_path(false).and_then(|(path, _pins)| read_binding(&path)) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound =>
+            discover_reviewed(&parent, expected)?.ok_or_else(|| invalid("No reviewed five-profile migration source; original data was preserved"))?,
         Err(error) => return Err(error),
-    }
-    if existing_controller_gate(CONTROLLER_GATE_NAME)? {
-        return Ok(status());
-    }
-    let expected =
-        REVIEWED_FIVE_REPLAY.ok_or_else(|| invalid("No reviewed five-profile policy"))?;
-    let (_, parent) = replay_roots()?;
-    let Some(bytes) = discover_reviewed(&parent, expected)? else {
-        return Ok(status());
     };
-    validate(&bytes)?; // Includes existing Roaming/Local/TEMP and HKCU validation.
-    if existing_controller_gate(CONTROLLER_GATE_NAME)? {
-        return Ok(status());
-    }
-    let (_, pins) = binding_path(true)?;
-    publish(
-        pins.last()
-            .ok_or_else(|| invalid("Missing binding directory"))?,
-        &bytes,
-    )?;
-    Ok(status())
+    reopen_slots_for::<5>(logical, &parent, &bytes, expected)
 }
-
-pub(super) fn has_legacy_binding() -> io::Result<bool> {
-    match binding_path(false) {
-        Ok((path, _pins)) => path.try_exists(),
+fn path_present(path: &Path) -> io::Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
         Err(error) => Err(error),
     }
+}
+// Fresh setup must not replace even an unreviewed/partial historical root.
+fn pilot_present(parent: &Path) -> io::Result<bool> {
+    let _pin = open_directory(parent, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY)?;
+    for (index, entry) in std::fs::read_dir(parent)?.enumerate() {
+        if index >= 1024 { return Err(invalid("Profile discovery exceeded its directory limit")); }
+        if entry?.file_name().to_string_lossy().to_ascii_lowercase().starts_with("mivubieducationpilot_") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+pub(super) fn has_legacy_source() -> io::Result<bool> {
+    match binding_path(false) {
+        Ok((path, _pins)) if path_present(&path)? => return Ok(true),
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+    let exe = std::env::current_exe()?;
+    let payload = exe.parent().ok_or_else(|| invalid("Missing replay payload root"))?.join("independent-bootstrap");
+    for name in ["replay-profile-pair.bin", "replay-profile-five.bin"] {
+        if path_present(&payload.join(name))? { return Ok(true); }
+    }
+    pilot_present(&known_folder(&FOLDERID_Profile)?)
 }
 
 // Create-once, same-byte idempotent publication. Never replace an existing binding.
@@ -220,102 +227,80 @@ fn publish(directory: &File, bytes: &[u8]) -> io::Result<()> {
     }
     result
 }
+fn ready() -> ProfileBinding {
+    ProfileBinding { schema:1, required:true, configured:true, issue:None }
+}
+fn unavailable(issue: &str) -> ProfileBinding {
+    ProfileBinding { schema:1, required:true, configured:false, issue:Some(issue.into()) }
+}
+fn migration_required() -> ProfileBinding {
+    unavailable(super::product_profiles::MIGRATION_REQUIRED)
+}
+fn is_migration_required(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported && error.to_string() == super::product_profiles::MIGRATION_REQUIRED
+}
 pub(in crate::engine::native_clients) fn inspect_existing() -> ProfileBinding {
-    match super::product_profiles::inspect_existing() {
-        Ok(Some(_)) => ProfileBinding { schema:1,required:true,configured:true,issue:None },
-        Ok(None) => status(),
-        Err(error) => ProfileBinding {schema:1,required:true,configured:false,issue:Some(format!("The saved data folder could not be verified: {error}. Existing data was preserved."))},
+    if !cfg!(feature = "lazy-tester-package") {
+        return unavailable("Managed profiles require the Lazy Tester product build.");
     }
-}
-fn status() -> ProfileBinding {
-    let metadata = (|| {
-        let (path, _pins) = binding_path(false)?;
-        read_binding(&path)
-    })();
-    binding_status(metadata, validate)
-}
-fn binding_status(metadata: io::Result<Vec<u8>>, validate: impl FnOnce(&[u8])->io::Result<()>) -> ProfileBinding {
-    let (configured, issue) = match metadata {
-        Ok(bytes) => match validate(&bytes) {
-            Ok(()) => (true,None),
-            Err(error) => (false,Some(format!("Saved launcher data could not be reopened: {error}. Existing data was preserved. Use Locate existing data or reconnect the previous launcher."))),
-        },
-        Err(error) if error.kind() == io::ErrorKind::NotFound =>
-            (false, Some("No saved launcher connection was found after automatic reconnection. Existing data has not been replaced.".into())),
-        Err(error) => (false, Some(format!("The saved launcher connection could not be read: {error}. Your data has been preserved."))),
-    };
-    ProfileBinding {
-        schema: 1,
-        required: true,
-        configured,
-        issue,
+    match super::product_profiles::inspect_existing() {
+        Ok(Some(_)) => ready(),
+        Ok(None) => unavailable("No current profile catalog was found. Existing data was not changed."),
+        Err(error) if is_migration_required(&error) => migration_required(),
+        Err(_) => unavailable("The saved data folder could not be verified. Existing data was preserved."),
     }
 }
 pub(crate) fn run(import: bool) -> io::Result<ProfileBinding> {
+    match super::product_profiles::open() {
+        Ok(Some(_)) if import => return Err(invalid("Product profiles already exist; import cannot replace them")),
+        Ok(Some(_)) => return Ok(ready()),
+        Err(error) if is_migration_required(&error) => return Ok(migration_required()),
+        Err(error) => return Err(error),
+        Ok(None) => {}
+    }
     if !import {
-        if super::product_profiles::open()?.is_some() {
-            return Ok(ProfileBinding {
-                schema: 1,
-                required: true,
-                configured: true,
-                issue: None,
-            });
-        }
-        let legacy = connect_reviewed_existing()?;
-        if legacy.configured || has_legacy_binding()? {
-            return Ok(legacy);
-        }
+        if has_legacy_source()? { return Ok(migration_required()); }
         super::product_profiles::prepare()?;
-        return Ok(ProfileBinding {
-            schema: 1,
-            required: true,
-            configured: true,
-            issue: None,
-        });
+        return Ok(ready());
     }
-    if super::product_profiles::open()?.is_some() {
-        return Err(invalid(
-            "Product profiles already exist; previous-launcher import cannot replace them",
-        ));
-    }
+    // Explicit prior-launcher selection records only the migration source,
+    // never a second active runtime binding.
     if existing_controller_gate(CONTROLLER_GATE_NAME)? {
-        return Err(invalid(
-            "Close all Minecraft sessions and the previous controller normally before connecting profiles",
-        ));
+        return Err(invalid("Close all Minecraft sessions and the previous controller before selecting a migration source"));
     }
     let Some(folder) = rfd::FileDialog::new()
         .set_title("Select the previous Minecraft launcher folder")
         .pick_folder()
     else {
-        return Ok(status());
+        return Ok(inspect_existing());
     };
     let source = folder.join("independent-bootstrap/replay-profile-five.bin");
     let bytes = read_binding(&source)?;
-    validate(&bytes)?; // Existing reviewed IDs and existing HKCU stores; no fresh data.
+    validate(&bytes)?;
     if existing_controller_gate(CONTROLLER_GATE_NAME)? {
-        return Err(invalid(
-            "The controller started; profile connection was cancelled without changing your data",
-        ));
+        return Err(invalid("The controller started; source selection was cancelled without changing your data"));
     }
     let (_, pins) = binding_path(true)?;
-    publish(
-        pins.last()
-            .ok_or_else(|| invalid("Missing binding directory"))?,
-        &bytes,
-    )?;
-    Ok(status())
+    publish(pins.last().ok_or_else(|| invalid("Missing binding directory"))?, &bytes)?;
+    Ok(migration_required())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn missing_connection_and_missing_saved_data_have_distinct_recovery_messages() {
-        let missing=binding_status(Err(io::Error::from(io::ErrorKind::NotFound)),|_|panic!("missing metadata cannot validate"));
-        assert!(!missing.configured);assert!(missing.issue.unwrap().contains("No saved launcher connection"));
-        let stale=binding_status(Ok(vec![0;SIZE]),|_|Err(io::Error::new(io::ErrorKind::NotFound,"Minecraft - 2: temporary folder is unavailable")));
-        let issue=stale.issue.unwrap();assert!(!stale.configured);assert!(issue.contains("Minecraft - 2"));assert!(issue.contains("Existing data was preserved"));assert!(!issue.contains("new PC"));
-        let valid=binding_status(Ok(vec![0;SIZE]),|_|Ok(()));assert!(valid.configured);assert!(valid.issue.is_none());
+    fn old_profile_presence_is_not_runtime_readiness_or_fresh_setup() {
+        let report = migration_required();
+        assert!(!report.configured);
+        assert!(report.required);
+        assert!(report.issue.unwrap().contains("--lazy-tester-migrate-data"));
+        let fixture = Fixture::new();
+        assert!(!pilot_present(&fixture.0).unwrap());
+        let root = fresh_root(&fixture.0).unwrap();
+        // Even incomplete two-slot data must block fresh setup.
+        std::fs::create_dir(root.join("MC01")).unwrap();
+        assert!(pilot_present(&fixture.0).unwrap());
+        assert!(migration_sources().is_err()); // Empty reviewed test policy; no host lookup.
     }
     struct Fixture(PathBuf);
     impl Fixture {

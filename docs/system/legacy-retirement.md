@@ -9,6 +9,19 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired legacy profile runtime fallback — 28 November 2026
+
+The retained controller, binding readiness and Data Storage admit only the
+verified schema 2 product catalog. Schema 1 and reviewed five-profile replay
+are explicit migration sources, not active fallback. Legacy root/binding
+presence blocks fresh setup even if partial or unreviewed. The existing
+migration command holds the original controller gate, copies into an unused
+destination, validates all five new stores and switches the canonical pointer
+last. Schema 1 catalog and source data are preserved; incomplete destinations
+refuse rather than automatically resume. Non-product builds cannot launch
+managed profiles. Fixtures authored NOT_EXECUTED. No actual migration,
+account/world operation, native validation or release executed.
+
 ## Retired executable pair/five startup and profile preparation — 28 November 2026
 
 The three historical `--education-*-once` startup/preparation flags now refuse

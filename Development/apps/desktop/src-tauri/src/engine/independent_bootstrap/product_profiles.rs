@@ -12,6 +12,7 @@ use windows_sys::Win32::Storage::FileSystem::{
 const CATALOG: &str = "profiles.json";
 const LOCATOR: &str = "data-location.json";
 const LIMIT: u64 = 16 * 1024;
+pub(super) const MIGRATION_REQUIRED: &str = "Existing launcher data requires explicit migration. Close Lazy Tester and use --lazy-tester-migrate-data. Original data is preserved.";
 
 #[path = "product_profiles/clear.rs"]
 pub(super) mod clear;
@@ -366,6 +367,10 @@ fn disjoint(logical: &File, data: &Path) -> io::Result<()> {
     Ok(())
 }
 fn open_at(logical: File, root: &Path) -> io::Result<[SlotStorage; 5]> {
+    open_catalog(logical, root, 2)
+}
+// Schema 1 is admitted only by the explicit migration route.
+fn open_catalog(logical: File, root: &Path, expected_schema: u32) -> io::Result<[SlotStorage; 5]> {
     let pins = pin_chain(root)?;
     let catalog: Catalog = read_json(&root.join(CATALOG))?;
     if !matches!(catalog.schema, 1 | 2)
@@ -376,6 +381,13 @@ fn open_at(logical: File, root: &Path) -> io::Result<[SlotStorage; 5]> {
         return Err(invalid(
             "This data folder does not match the saved Windows user and directory identity",
         ));
+    }
+    if catalog.schema != expected_schema {
+        return if expected_schema == 2 && catalog.schema == 1 {
+            Err(io::Error::new(io::ErrorKind::Unsupported, MIGRATION_REQUIRED))
+        } else {
+            Err(invalid("Unexpected migration source schema; existing data was preserved"))
+        };
     }
     disjoint(&logical, &directory_path(pins.last().unwrap())?)?;
     let profiles = if catalog.schema == 2 {
@@ -674,18 +686,50 @@ fn copy_tree_at(base: &Path, source: &Path, destination: &Path) -> io::Result<()
 }
 pub(super) fn migrate_reviewed() -> io::Result<()> {
     let _instance = crate::engine::app_instance::acquire().map_err(io::Error::other)?;
-    require_idle()?;
+    // Retain the SAME existence gate throughout source copy and locator cutover.
+    let _gate = acquire_startup_gate(crate::engine::native_clients_session::CONTROLLER_GATE_NAME,
+        invalid("Close Minecraft and its session controller normally before migrating"))?;
+    require_no_games()?;
     drop(registered_image(true)?);
     drop(BootstrapLibrary::reviewed()?);
-    if open()?.is_some() {
-        return Ok(());
-    }
-    let sources = registered_slots::<5>()?;
-    migrate_sources(&home()?.join("Data"), &sources)?;
-    drop(open()?.ok_or_else(|| invalid("Migrated profiles did not reopen"))?);
-    Ok(())
+    let home = home()?;
+    let selected = resolve_saved_location(&home)?;
+    let (logical, _) = replay_roots()?;
+    let (sources, target, app_preferences) = match open_at(logical.try_clone()?, &selected.0) {
+        Ok(_) => return Ok(()), // Already canonical; do not copy or create a second store.
+        Err(error) if error.kind() == io::ErrorKind::Unsupported && error.to_string() == MIGRATION_REQUIRED => {
+            let sources = open_catalog(logical, &selected.0, 1)?;
+            // Keep the original catalog and profile directories intact.
+            let target = selected.0.join("Migrated");
+            match std::fs::symlink_metadata(&target) {
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+                Ok(_) => return Err(invalid("Migration destination already exists; preserve it and Locate only a verified complete catalog")),
+            }
+            (sources, target, None)
+        }
+        Err(error) if selected.1 && error.kind() == io::ErrorKind::NotFound && empty_default(&selected.0)? =>
+            (super::profile_binding::migration_sources()?, selected.0.clone(), Some(home.join("App"))),
+        Err(error) => return Err(error),
+    };
+    migrate_sources(&target, &sources, app_preferences.as_deref())?;
+    require_no_games()?;
+    publish_migrated_location(&home, &selected, &target, sources[0].logical.try_clone()?)
 }
-fn migrate_sources(root: &Path, sources: &[SlotStorage]) -> io::Result<()> {
+fn publish_migrated_location(home: &Path, selected: &(PathBuf, bool, bool), target: &Path, logical: File) -> io::Result<()> {
+    let _pins = pin_chain(target)?;
+    // Never switch the active pointer before all five new hive/directory IDs reopen.
+    drop(open_at(logical, target)?);
+    if &resolve_saved_location(home)? != selected {
+        return Err(invalid("Saved data location changed during migration; both sources were preserved"));
+    }
+    std::fs::create_dir_all(home.join("Data/Settings"))?;
+    write_json(&locator_path(home), &Locator {
+        schema: 1,
+        path: if target == home.join("Data") { "Data".into() } else { target.to_string_lossy().into_owned() },
+    }, !selected.1 && !selected.2)
+}
+fn migrate_sources(root: &Path, sources: &[SlotStorage], app_preferences: Option<&Path>) -> io::Result<()> {
     use windows_sys::Win32::System::Registry::{RegFlushKey, RegSetValueExW, REG_BINARY};
     if sources.len() != 5
         || sources
@@ -697,9 +741,18 @@ fn migrate_sources(root: &Path, sources: &[SlotStorage]) -> io::Result<()> {
             "Migration requires the original five launcher stores",
         ));
     }
+    disjoint(&sources[0].logical, root)?;
+    let mut source_pins = Vec::new();
     for store in sources {
+        let pins = pin_chain(&store.private_path)?;
+        if !same_image(&directory_id(pins.last().unwrap())?, &directory_id(&store.private)?) {
+            return Err(invalid("Migration source directory changed"));
+        }
+        source_pins.extend(pins);
         for name in ["Roaming", "Local"] {
-            check_copy_tree(&store.private_path.join(name))?;
+            let path = store.private_path.join(name);
+            source_pins.push(open_directory(&path, FILE_READ_ATTRIBUTES)?);
+            check_copy_tree(&path)?;
         }
     }
     if !empty_default(&root)? {
@@ -758,28 +811,27 @@ fn migrate_sources(root: &Path, sources: &[SlotStorage]) -> io::Result<()> {
         }
         stores.push(target);
     }
-    let settings = root.join("Settings");
-    if !settings.try_exists()? {
-        std::fs::create_dir(&settings)?;
-    }
-    for name in ["performance.json", "graphics.json"] {
-        let source = root
-            .parent()
-            .ok_or_else(|| invalid("Project root unavailable"))?
-            .join("App")
-            .join(name);
-        let destination = settings.join(name);
-        if source.try_exists()? && !destination.try_exists()? {
-            let _source = pin_image(&source)?;
-            if unsafe {
-                windows_sys::Win32::Storage::FileSystem::CopyFileW(
-                    wide(source.as_os_str())?.as_ptr(),
-                    wide(destination.as_os_str())?.as_ptr(),
-                    1,
-                )
-            } == 0
-            {
-                return Err(io::Error::last_os_error());
+    // Preferences remain in the manager's Data/Settings. Copy only on the
+    // original replay-to-default-root migration, never into a nested profile root.
+    if let Some(app) = app_preferences {
+        let settings = root.join("Settings");
+        if !settings.try_exists()? {
+            std::fs::create_dir(&settings)?;
+        }
+        for name in ["performance.json", "graphics.json"] {
+            let source = app.join(name);
+            let destination = settings.join(name);
+            if source.try_exists()? && !destination.try_exists()? {
+                let _source = pin_image(&source)?;
+                if unsafe {
+                    windows_sys::Win32::Storage::FileSystem::CopyFileW(
+                        wide(source.as_os_str())?.as_ptr(),
+                        wide(destination.as_os_str())?.as_ptr(),
+                        1,
+                    )
+                } == 0 {
+                    return Err(io::Error::last_os_error());
+                }
             }
         }
     }
@@ -788,11 +840,13 @@ fn migrate_sources(root: &Path, sources: &[SlotStorage]) -> io::Result<()> {
     Ok(())
 }
 fn require_idle() -> io::Result<()> {
-    if existing_controller_gate("Local\\MivubiEducationStartupObservation")?
-        || !super::super::inspect_native_workspace()?
-            .processes
-            .is_empty()
-    {
+    if existing_controller_gate(crate::engine::native_clients_session::CONTROLLER_GATE_NAME)? {
+        return Err(invalid("Close Minecraft and its session controller normally before changing data locations"));
+    }
+    require_no_games()
+}
+fn require_no_games() -> io::Result<()> {
+    if !super::super::inspect_native_workspace()?.processes.is_empty() {
         return Err(invalid(
             "Close Minecraft and its session controller normally before changing data locations",
         ));
@@ -861,7 +915,7 @@ pub(crate) fn location(action: DataLocationAction, persist_location: bool) -> io
                 ));
             }
             if matches!(action, DataLocationAction::Choose) {
-                if open()?.is_some() || super::profile_binding::has_legacy_binding()? {
+                if open()?.is_some() || super::profile_binding::has_legacy_source()? {
                     return Err(invalid("Existing profile data was preserved. Use Locate data after moving the same data folder; creating a replacement is not allowed."));
                 }
                 drop(registered_image(true)?);
@@ -900,24 +954,7 @@ pub(crate) fn location(action: DataLocationAction, persist_location: bool) -> io
                 })
                 .collect(),
         ),
-        // Product absence was already observed above. Use only the
-        // existing reviewed replay path; no second product open/recovery.
-        None => match registered_replay_slots::<5>() {
-            Ok(stores) => {
-                let current = stores[0].private_path.parent().map(Path::to_path_buf);
-                (
-                    current,
-                    stores
-                        .into_iter()
-                        .map(|store| ProfilePath {
-                            slot: store.slot,
-                            path: store.private_path.to_string_lossy().into_owned(),
-                        })
-                        .collect(),
-                )
-            }
-            Err(_) => (None, Vec::new()),
-        },
+        None => (None, Vec::new()),
     };
     if matches!(action, DataLocationAction::Open) {
         let path = current
@@ -983,8 +1020,8 @@ mod tests {
             .unwrap();
         }
         let target = fixture.root.join("Data");
-        migrate_sources(&target, &stores).unwrap();
-        assert!(migrate_sources(&target, &stores).is_err());
+        migrate_sources(&target, &stores, None).unwrap();
+        assert!(migrate_sources(&target, &stores, None).is_err());
         let moved = open_at(logical, &target).unwrap();
         for (old, new) in stores.iter().zip(&moved) {
             assert!(!same_image(
@@ -995,6 +1032,52 @@ mod tests {
                 std::fs::read(old.private_path.join("Roaming/world-fixture")).unwrap(),
                 std::fs::read(new.private_path.join("Roaming/world-fixture")).unwrap()
             );
+        }
+    }
+    #[test]
+    fn schema_one_is_migration_only_and_locator_cutover_preserves_original_catalog() {
+        let mut fixture = Fixture::new();
+        let logical = fixture.logical();
+        let root = fixture.root.join("Data");
+        std::fs::create_dir_all(root.join("Profiles")).unwrap();
+        let mut original = Vec::new();
+        for slot in 1..=5 {
+            let store = super::super::profile_storage_handles::create_private_slot_at(
+                &logical, &root.join(format!("Profiles/Minecraft-{slot}")), slot).unwrap();
+            fixture.keys.push(registry_leaf(&directory_id(&store.private).unwrap(), slot).unwrap());
+            std::fs::write(store.private_path.join("Roaming/world-fixture"), [slot as u8]).unwrap();
+            original.push(store);
+        }
+        let catalog = Catalog {
+            schema: 1, owner: owner().unwrap(),
+            root: Identity::read(&open_directory(&root, FILE_READ_ATTRIBUTES).unwrap()).unwrap(),
+            profiles: original.iter().map(|store| Identity::read(&store.private).unwrap())
+                .collect::<Vec<_>>().try_into().ok().unwrap(),
+            hives: None,
+        };
+        write_json(&root.join(CATALOG), &catalog, false).unwrap();
+        let original_catalog = std::fs::read(root.join(CATALOG)).unwrap();
+        drop(original);
+        assert!(matches!(open_at(logical.try_clone().unwrap(), &root), Err(error)
+            if error.kind() == io::ErrorKind::Unsupported));
+        let selected = resolve_saved_location(&fixture.root).unwrap();
+        let sources = open_catalog(logical.try_clone().unwrap(), &root, 1).unwrap();
+        let target = root.join("Migrated");
+        // A missing/partial target must never publish a new pointer.
+        assert!(publish_migrated_location(&fixture.root, &selected, &target,
+            logical.try_clone().unwrap()).is_err());
+        assert!(!locator_path(&fixture.root).exists());
+        migrate_sources(&target, &sources, None).unwrap();
+        assert!(migrate_sources(&target, &sources, None).is_err());
+        assert_eq!(resolve_saved_location(&fixture.root).unwrap(), selected);
+        publish_migrated_location(&fixture.root, &selected, &target, logical.try_clone().unwrap()).unwrap();
+        assert_eq!(resolve_saved_location(&fixture.root).unwrap().0, target);
+        assert_eq!(std::fs::read(root.join(CATALOG)).unwrap(), original_catalog);
+        let current = open_at(logical, &target).unwrap();
+        for (old, new) in sources.iter().zip(&current) {
+            assert_eq!(std::fs::read(old.private_path.join("Roaming/world-fixture")).unwrap(),
+                std::fs::read(new.private_path.join("Roaming/world-fixture")).unwrap());
+            assert!(!same_image(&directory_id(&old.private).unwrap(), &directory_id(&new.private).unwrap()));
         }
     }
     #[test]

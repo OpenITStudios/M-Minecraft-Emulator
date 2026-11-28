@@ -17,7 +17,7 @@ describe('Lazy Tester native package',()=>{
     expect(end).toBeGreaterThan(start);
     const startup=source.slice(start,end);
     const native=startup.indexOf('drop(BootstrapLibrary::reviewed()?);');
-    const profiles=startup.indexOf('registered_slots::<5>()?');
+    const profiles=startup.indexOf('product_profiles::open()?');
     expect(native).toBeGreaterThanOrEqual(0);
     expect(profiles).toBeGreaterThan(native);
   });
@@ -117,6 +117,8 @@ describe('Lazy Tester native package',()=>{
       source.replace('home.join("Data/Settings").join(LOCATOR)','home.join("App").join(LOCATOR)'),
       source.replace('if !missing { return Ok((root, false, false)); }','if missing { return Ok((root, false, false)); }'),
       source.replace('let profiles = if catalog.schema == 2 {','let profiles = if catalog.schema == 1 {'),
+      source.replace('open_catalog(logical, root, 2)','open_catalog(logical, root, 1)'),
+      source.replace('if catalog.schema != expected_schema {','if catalog.schema == expected_schema {'),
       source.replace('const CATALOG: &str = "profiles.json";','const CATALOG: &str = "other.json";'),
     ]) {
       expect(changed).not.toBe(source);

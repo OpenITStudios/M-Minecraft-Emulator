@@ -753,18 +753,12 @@ use self::profile_storage_handles::fresh_slots;
 
 #[path = "independent_bootstrap/reviewed_profile_replay.rs"]
 mod reviewed_profile_replay;
-use self::reviewed_profile_replay::{
-    registered_replay_slots, replay_roots, reopen_slots_for, REVIEWED_FIVE_REPLAY,
-};
+use self::reviewed_profile_replay::{replay_roots, reopen_slots_for, REVIEWED_FIVE_REPLAY};
 #[cfg(test)]
-use self::reviewed_profile_replay::{five_replay_bytes, reopen_slots};
+use self::reviewed_profile_replay::{five_replay_bytes, reopen_slots, registered_replay_slots};
 
+#[cfg(test)]
 fn registered_slots<const N: usize>() -> io::Result<[SlotStorage; N]> {
-    if N == 5 && cfg!(feature = "lazy-tester-package") {
-        if let Some(stores) = product_profiles::open()? {
-            return Vec::from(stores).try_into().map_err(|_| invalid("Invalid product profile count"));
-        }
-    }
     registered_replay_slots::<N>()
 }
 

@@ -1098,7 +1098,7 @@
   async function checkBinding(importProfiles = false) {
     try {
       const result = await lazyTester.binding(importProfiles);
-      if (!disposed) { binding = result; bindingIssue = ''; }
+      if (!disposed) { binding = result; bindingIssue = result.issue ?? ''; }
     } catch (error) {
       if (!disposed) { binding = null; bindingIssue = userMessage('binding'); }
     }

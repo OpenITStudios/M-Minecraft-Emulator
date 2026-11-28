@@ -86,8 +86,9 @@ The canonical pointer is `Data/Settings/data-location.json`.
 `App/data-location.json` is a historical flat-install pointer; the native
 owner only reads it when the canonical pointer is missing and publishes the
 canonical location after valid stores reopen. Installer layout detection and
-local App refresh preserve the legacy pointer. Catalog schema 1 uses
-`Data/Profiles/`; new schema 2 profiles use `Data/Launchers/`.
+local App refresh preserve the legacy pointer. Only schema 2 is active:
+`Launchers/` under the selected catalog root. Schema 1 `Profiles/` and reviewed
+pilot replay are migration-only and cannot make the controller ready.
 This compatibility route never grants permission to move, overwrite, copy
 or recreate private account/world data. Opening, inspecting and preparing
 profiles share the same canonical-first locator selection; an existing invalid
@@ -95,8 +96,8 @@ or nonordinary pointer is refused, not treated as a missing pointer. A selected
 pointer that disappears during reading fails rather than admitting fresh setup.
 A legacy pointer does not admit fresh setup. The Data Storage report uses the exact catalog
 root returned by that successful open, not an independent earlier lookup.
-The UI shows Project Data (manager root), connected launcher data (catalog
-root or preserved legacy location) and the selected profile folder. The
+The UI shows Project Data (manager root), connected launcher data (verified
+schema 2 catalog root) and the selected profile folder. The
 existing Open action opens only the reported, native-checked launcher root.
 These are locations, not account or gameplay evidence.
 
@@ -139,8 +140,8 @@ original session controller alone owns games and admission. No parallel ready fl
 registry gateway or profile catalog is introduced.
 
 Catalog schema2 binds the Windows-user digest, five directory identities and five
-hive-file identities. Retained schema1 catalogs still use Profiles and ordinary
-HKCU validation. Missing/replaced catalogs, directories and registry files fail
+hive-file identities. Schema 1 uses Profiles and ordinary HKCU validation
+only inside explicit migration. Missing/replaced catalogs, directories and registry files fail
 closed. Reopening checks that HKCU.dat exists before RegLoadAppKey can be called,
 preventing accidental empty account stores. Data gets a protected user/System/
 Administrators ACL before any profile contents are created.
@@ -153,9 +154,12 @@ loads a hive file; it checks metadata on the already inherited handle.
 
 ## Explicit migration
 
-The fixed product-only --lazy-tester-migrate-data route requires the original
-reviewed five-profile capability, supported image, reviewed payload, idle
-controller and no games. It does not run from an installer hook or launch games.
+The fixed product-only `--lazy-tester-migrate-data` route requires either a
+verified selected schema 1 catalog or the original reviewed five-profile replay
+capability, supported image, reviewed payload, exclusive manager/controller
+gates and no games. It does not run from an installer hook, normal startup or
+launch games. Pair-only, incomplete, replaced or unreviewed data refuse; their
+presence also blocks automatic fresh profile creation.
 Source trees are checked for links before creating target launchers.
 Exception: an observed Local/Microsoft/Windows/INetCache/Content.IE5 directory
 junction becomes an empty ordinary cache directory at the destination. Its
@@ -165,10 +169,15 @@ CopyFileW copies the same slot's Roaming/Local files opaquely; SHCopyKeyW copies
 registry values/subkeys while retaining the uniform destination hive descriptor.
 No account values or world contents are printed, parsed or exported to logs.
 
-Saved App preferences are copied into Data/Settings without replacing saved
-settings. The complete catalog is published last and reopening is checked.
-Original data remains intact. Existing/partial destinations are never cleared,
-merged into replacement profiles or overwritten. Source preservation is recovery
+Replay migrates only to an unused default Data root; saved App preferences
+are copied into Data/Settings without replacing saved settings. Schema 1
+migrates to a new `Migrated/` child of the selected root with its own schema 2
+catalog; manager preferences stay in Data/Settings. The new catalog is written
+after the five copies, all five stores reopen, and only then the unchanged
+canonical locator selection is switched. Original data and catalog remain
+intact. Existing/partial destinations are never cleared, merged or overwritten.
+An interrupted cutover requires explicit Locate of a verified complete schema 2
+catalog; there is no automatic adoption or retry. Source preservation is recovery
 protection, not another active or bidirectionally synchronized data location.
 The earlier proposal to transfer into native HKCU remains unused; the user's
 subsequent project-local Data instruction defines this migration's destination.

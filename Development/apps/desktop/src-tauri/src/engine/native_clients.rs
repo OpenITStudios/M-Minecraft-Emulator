@@ -39,8 +39,8 @@ pub struct DataLocation {
     pub schema:u32, pub default_path:String, pub path:Option<String>,
     pub profiles:Vec<ProfilePath>, pub can_locate:bool,
 }
-// Only the reviewed Windows package may inspect/modify its five saved profile
-// identities. Keep the existing Windows source/preview fallback unchanged.
+// Only the reviewed Windows product may inspect/modify its five saved profile
+// identities. Non-product builds do not admit managed profile storage.
 #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
 pub fn data_location(action: DataLocationAction) -> io::Result<DataLocation> {
     independent_bootstrap::product_profiles::location(action, !crate::app_bootstrap::startup_diagnostic_mode())
@@ -82,7 +82,7 @@ pub fn profile_binding(import: bool) -> io::Result<ProfileBinding> {
 #[cfg(all(windows, not(all(target_arch = "x86_64", feature = "lazy-tester-package"))))]
 pub fn profile_binding(import: bool) -> io::Result<ProfileBinding> {
     let _ = import;
-    Ok(ProfileBinding { schema: 1, required: false, configured: true, issue: None })
+    Ok(ProfileBinding { schema: 1, required: true, configured: false, issue: Some("Managed profiles require the Lazy Tester product build.".into()) })
 }
 
 // A non-Windows GUI must never show five profiles as ready merely because no

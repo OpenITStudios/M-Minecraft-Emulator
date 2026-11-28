@@ -135,8 +135,10 @@ the existing explicit Retry connection action rather than automatically
 replaying a potentially mutating initializer. The hidden WebView startup
 diagnostic observes existing binding metadata only and its location
 inspection does not publish locators or recover interrupted cutovers.
-Location fallback after a verified absent product catalog opens only
-the reviewed legacy replay, without repeating product discovery.
+The controller and Data Storage open only schema 2. Missing canonical data
+never falls back to replay; historical profile presence blocks fresh creation.
+Explicit migration retains the original manager/controller gates and changes
+the canonical locator only after all five target stores reopen.
 Explicit Locate/Choose retain their independent post-selection binding
 check; neither location text nor a previous UI snapshot authorizes launch.
 Explicit refresh, focus/visibility hints and mutations retain their
