@@ -921,7 +921,7 @@ pub fn maybe_run() -> bool {
         return false;
     }
     // Malformed arguments cannot fall through to launching the ordinary manager.
-    let args: Option<Vec<String>> = argv.map(|a| a.to_str().map(str::to_owned)).collect();
+    let args: Option<Vec<String>> = argv.map(|a| a.into_string().ok()).collect();
     let result = match args {
         Some(values) => execute(&values),
         None => Err("INVALID_ARGUMENTS"),

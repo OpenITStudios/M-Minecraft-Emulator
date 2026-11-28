@@ -419,14 +419,23 @@ fn acknowledge_confirmed_reply(writer:&mut impl Write,reply:SessionReply)->Sessi
     reply
 }
 
+// Serialize one complete, bounded frame before writing to the byte-mode pipe.
+fn write_request(writer: &mut impl Write, request: &SessionRequest) -> io::Result<()> {
+    let mut frame = serde_json::to_vec(request)?;
+    if frame.len() >= 32768 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Session request exceeded its limit"));
+    }
+    frame.push(b'\n');
+    writer.write_all(&frame)
+}
+
 pub(crate) fn exchange(
     endpoint: &Endpoint,
     mut pipe: File,
     request: &SessionRequest,
 ) -> io::Result<SessionReply> {
     let peer = endpoint.verify(pipe.as_raw_handle() as _, false)?;
-    serde_json::to_writer(&mut pipe, request)?;
-    pipe.write_all(b"\n")?;
+    write_request(&mut pipe, request)?;
     let mut reader = BufReader::new(pipe.try_clone()?);
     let text = read_message(&mut reader)?
         .ok_or_else(|| io::Error::other("Controller disconnected before its reply"))?;
@@ -822,6 +831,45 @@ mod tests {
             (0, 0),
             "The client must not create another server instance"
         );
+    }
+
+    #[test]
+    fn request_frame_preserves_wire_and_refuses_oversize_before_write() {
+        #[derive(Default)]
+        struct CountingWriter { bytes: Vec<u8>, writes: usize }
+        impl Write for CountingWriter {
+            fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+                self.writes += 1;
+                self.bytes.extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> io::Result<()> { Ok(()) }
+        }
+        let mut writer = CountingWriter::default();
+        write_request(&mut writer, &SessionRequest::InspectAgentTarget { slot: 3 }).unwrap();
+        assert_eq!(writer.writes, 1);
+        assert_eq!(writer.bytes.as_slice(), b"{\"operation\":\"InspectAgentTarget\",\"slot\":3}\n");
+        assert!(matches!(
+            serde_json::from_slice::<SessionRequest>(&writer.bytes).unwrap(),
+            SessionRequest::InspectAgentTarget { slot: 3 }
+        ));
+
+        // Exercise the framing limit independently of semantic request admission.
+        let request = |name: String| SessionRequest::ClearProfileData {
+            slot: 1, confirmation_token: "a".repeat(64),
+            confirmation_name: name, selected_storage: None,
+        };
+        let overhead = serde_json::to_vec(&request(String::new())).unwrap().len();
+        let mut boundary = CountingWriter::default();
+        write_request(&mut boundary, &request("x".repeat(32767 - overhead))).unwrap();
+        assert_eq!(boundary.bytes.len(), 32768);
+        assert_eq!(boundary.writes, 1);
+        assert!(read_message(&mut io::Cursor::new(&boundary.bytes)).unwrap().is_some());
+
+        let mut rejected = CountingWriter::default();
+        assert_eq!(write_request(&mut rejected, &request("x".repeat(32768 - overhead)))
+            .unwrap_err().kind(), io::ErrorKind::InvalidInput);
+        assert_eq!(rejected.writes, 0);
     }
 
     #[test]
