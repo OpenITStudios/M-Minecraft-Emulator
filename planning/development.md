@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-12b: selected-window capture boundary)
+## Current status — cross-platform-native (MAC-13a: OneAuth binary evidence)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,60 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-13a — actual OneAuth binary narrows the account route
+
+Reused operator-supplied extracted OneAuth 3.5.4 binary (14,069,648 bytes).
+Unlike earlier inaccessible container transfers, bounded Drive raw fetch
+returned complete bytes; inspected in-memory as data only. Fat Mach-O
+magic 0xcafebabe, two 64-bit slices, bounded LC_SYMTAB/nlist64/string
+ranges. x86_64: 2228 symbols, 626 external undefined. arm64: 2025
+symbols, 631 external undefined. Both slices contain the same relevant
+external undefined symbols: NSObject classes NSFileManager, NSProcessInfo,
+NSURL, NSUserDefaults; SecItemAdd/CopyMatching/Delete/Update;
+kSecUseDataProtectionKeychain, kSecAttrAccessGroup, kSecAttrAccount,
+kSecAttrService, kSecAttrAccessible, kSecClassGenericPassword.
+Selected kSecUseKeychain, kSecMatchSearchList, SecKeychainSetDefault,
+SecKeychainSetSearchList, SecKeychainOpen/Create/CopySearchList/CopyDefault,
+NSHomeDirectory, getenv and selected CFPreferences function imports not
+found in the examined undefined-symbol lists. Absence does not exclude
+other modules, dynamic resolution or indirect implementation. Exact
+NUL-delimited lexical indications across the binary additionally include
+containerURLForSecurityApplicationGroupIdentifier:, standardUserDefaults,
+objectForKey:, setObject:forKey:, login_hint, loginHint, accountIdentifier,
+homeAccountId, keychainAccessGroup, cacheConfig. These are not launch
+flags, actual settings keys, call sites or observed query attributes.
+No raw bytes, credential data, actual group names, private Drive URLs,
+or arbitrary strings committed. No signature/digest verification or
+native execution; symbol observations are bounded static evidence.
+
+[Apple TN3137](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+distinguishes user-scoped data-protection Keychain from file-based
+Keychain; SecItem may address either, and access groups follow host
+signing entitlements. Import evidence makes a custom file-Keychain
+strategy particularly weak; do not create/switch/delete Keychains,
+alter signing or bypass licensing. Prefer app-owned active account
+selection with existing licensed authentication/cache if independence
+is established. Official [Manage Accounts](https://edusupport.minecraft.net/hc/en-us/articles/360061382672-Sign-Into-Minecraft-Education)
+documents switching accounts and remembering the last player, not
+persistent slot-specific selection. Official [world locations](https://edusupport.minecraft.net/hc/en-us/articles/4404785703316-Location-of-World-Files)
+remain OS-user-scoped on Mac; [Cloud Update](https://edusupport.minecraft.net/hc/en-us/articles/23323615654164-What-s-New-in-The-Cloud-Update-v1-21-10)
+documents account-filtered teacher worlds and new Mac sign-in libraries,
+not independent local storage or concurrent account proof.
+
+Plan A unchanged. AppKit multi-instance + per-process data routing +
+app-owned licensed account selection is the minimal candidate, not yet
+an implementation recipe. No separate credentials store, global
+preferences changes, symlink swapping, multi-user or new synthetic
+fixtures. Main executable remains unread: container ClientError, no
+bounded raw range connector, do not fetch 512 MB inline or repeat full
+transfer. The existing compact MAC-09 offline report (or a supported
+vendor profile/launch contract) remains decisive for choosing a game
+storage mechanism; static imports still cannot prove behavior.
+Acceptance remains two concurrent instances with separate mutable data,
+correct accounts surviving close/reopen and peer sign-out, then five.
+No relaxation of test/CI/release holds, no new runtime, no request to
+resend the bundle. Native integration BLOCKED; NOT_EXECUTED.
 
 ### MAC-12b — bounded selected-window capture in the existing fixture
 
