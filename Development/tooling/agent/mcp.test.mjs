@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,readFile,writeFile,symlink,rm,open,rename,appendFile} from
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createOperationCore,createMcpHandler} from './mcp.mjs';
-import {createCodeModeClient} from './code-mode.mjs';
+import {createCodeModeClient,createCodeModeSurface} from './code-mode.mjs';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
   matchesNativeMultiClientBatchReceipt,
@@ -5147,6 +5147,10 @@ test('Code Mode surface selection is explicit and incompatible with input experi
   assert.equal(parseConfiguration([],{}).surface,'legacy');
   assert.equal(parseConfiguration(['--surface','code-mode'],{}).surface,'code-mode');
   assert.throws(()=>parseConfiguration(['--surface','other'],{}),/Unknown agent surface/);
+  assert.throws(()=>parseConfiguration(['--surface','code-mode','--surface','playtest'],{}),
+    /Select exactly one agent surface/);
+  assert.throws(()=>parseConfiguration(['--surface','playtest','--surface','playtest'],{}),
+    /Select exactly one agent surface/);
   assert.throws(()=>parseConfiguration(['--surface','code-mode','--multi-client-input-experimental','on'],{}),
     /does not admit experimental input/);
   assert.throws(()=>createHandler({...config(),surface:'code-mode',experimentalMc02InputEnabled:true}),
@@ -5568,5 +5572,22 @@ test('playtest cached image receipts are compact while core and legacy metadata 
     assert.equal(Object.hasOwn(small.metadata,'captureIdentity'),false);
     assert.ok(JSON.stringify(small.metadata).length<JSON.stringify(full.metadata).length);
     assert.equal(frame.metadata.captureIdentity.pid,42);
+  }finally{core.shutdown();}
+});
+
+test('optional MCP projections reject duplicate or missing canonical tool descriptors',()=>{
+  const core=createOperationCore(config());
+  try {
+    const catalog=core.listTools();
+    const missing=catalog.filter(t=>t.name!=='inspect_profiles');
+    const duplicate=[...missing,catalog.find(t=>t.name==='agent_capabilities')];
+    for(const profile of ['code-mode','playtest']) {
+      assert.throws(()=>createCodeModeSurface(missing,core.callTool,profile),/catalog incomplete/);
+      assert.throws(()=>createCodeModeSurface(duplicate,core.callTool,profile),/catalog incomplete/);
+      const projected=createCodeModeSurface(catalog,core.callTool,profile).listTools();
+      assert.equal(projected.length,profile==='playtest'?15:13);
+      const probe=projected.find(t=>t.name==='probe_qa').inputSchema;
+      assert.equal(JSON.stringify(probe.oneOf).includes('"restart"'),profile==='playtest');
+    }
   }finally{core.shutdown();}
 });

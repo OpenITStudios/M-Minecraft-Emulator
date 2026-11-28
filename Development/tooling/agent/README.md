@@ -14,37 +14,68 @@ was archived without deleting the technical notes. Use the
 [single current handoff](../../../planning/development.md) for status and
 one next action; old archived "Next" entries are not authorization.
 
-## Playtest-first operation (Unreleased, source-only)
+## Optional AI integration (Unreleased, source-only)
 
-Lazy Tester remains a manual Windows application. A separately authorized
-local Code Mode host can use the SAME existing session controller and
-observation/evidence owners through one stdio MCP connection. The product
-goal is Launch -> Play -> Observe -> Report, not a separate AI game engine.
+Lazy Tester is a standalone manual Windows application. No MCP server,
+Codex subscription, local LLM, Code Mode feature, Node host or capture worker
+is required for manual operation. Do not start a bridge, register tools,
+install packages or change the user's host settings automatically.
 
-### Recommended local connection
+### Choose whether to connect
 
-Select `--surface playtest` explicitly for new playtesting workflows. The
-existing `legacy` default and restricted `code-mode` surface remain
-compatibility profiles; do not run them alongside playtest or silently
-upgrade the old read/plan permissions. Codex's existing Code Mode host
-composes the selected MCP tools. No new server, sandbox or dependency.
+| User workflow | Connection |
+| --- | --- |
+| Manual application only | No MCP connection; nothing to configure |
+| AI-assisted playtest | Explicit `--surface playtest` (15 MCP tools) |
+| Restricted analysis/planning | Explicit `--surface code-mode` (13 MCP tools) |
+| Existing MCP client | `--surface legacy` (25 default tools; retained compatibility) |
 
-Example for a separately authorized PC-local Codex configuration (replace
-all illustrative paths with reviewed absolute local paths):
+The profile names select Lazy Tester's **tool contract**, not a host
+feature switch. In particular, `--surface code-mode` is the restricted
+read/plan profile, not a request to turn on Codex Code Mode. Playtest tools
+can be called using ordinary MCP or composed using a host's supported Code
+Mode feature. The host owns code execution, script budgets, model usage
+and approvals. Users choose whether to enable that feature; no change
+to host settings is made by Lazy Tester.
+
+Use one connection for the chosen workflow. The manual application
+and optional MCP connection reuse the same controller. Do not run duplicate
+bridges for the same task or silently widen a restricted profile.
+Independent keyboard/mouse execution is still blocked; there is no
+production autonomous gameplay tool or automatic close. The intended
+future control contract remains Execute / Observe / Stop, not a preset
+game engine. No new server, sandbox or dependency.
+
+### Optional local connection
+
+Only if the user chooses to connect an AI host, configure an explicit
+stdio MCP entry. The following is an illustrative PC-local Codex entry,
+not an installed configuration. Replace paths with reviewed absolute
+local paths, and retain host-controlled approval settings:
 
 ```toml
 [mcp_servers.lazy_tester]
 command = 'C:\Tools\node.exe'
-args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'playtest', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe', '--gpu-capture-exe', 'D:\ReviewedTools\lazy-tester-gpu-capture.exe']
+args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'playtest', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe']
 default_tools_approval_mode = 'prompt'
 ```
 
-Configure only the explicitly selected capture, evidence, diagnostic,
-Probe or map-contract paths needed for the session. No automatic startup,
-credentials, account signin, map import, world join or command dispatch.
-Use the installed Codex host's supported Code Mode setting if available;
-do not change global features or permissions automatically. No configuration
-has been installed or tested on a user PC.
+For visual observation, add `--gpu-capture-exe` and the reviewed absolute
+path to the matching WebP-capable WGC worker; without it, Playtest image
+requests refuse explicitly. Configure other capture, evidence, diagnostic,
+Probe or map-contract paths only if needed. Native app capture approval
+remains held. No automatic startup, credentials, sign-in, world join,
+map import or command dispatch.
+
+First call `agent_capabilities({inspectProfiles:true})` when an actual
+native controller is configured. A configured source is not proof that
+its provider works. Code Mode may be enabled separately in the host
+if that host supports it; ordinary MCP still uses the same catalog.
+To stop using the integration, stop the optional sampler if active and
+disconnect/remove or disable the MCP entry in the host. Closing the
+bridge ends its local observer and in-memory checkpoints, not the
+manual game lifecycle. No configuration has been installed or tested
+on a user PC.
 
 ### One product catalog, existing operations only
 
@@ -65,7 +96,7 @@ Legacy and restricted Code Mode retain the old single-slot method.
 The same descriptor catalog and projection serve both standard MCP and
 Codex Code Mode on this connection. The independent trusted Node SDK
 below stays read/plan-only; it does not transport images or grant writes.
-The old 13-tool restricted profile is retained unchanged. Legacy also accepts
+The 13-tool restricted profile is retained (including compact input previews). Legacy also accepts
 optional inspectProfiles=true; publication and combined inspection cannot
 both be requested in the same call. No public
 planning, duplicate context, old Probe aliases, low-level HWND targeting,
@@ -160,7 +191,7 @@ where applicable); native identity and validation remain in the core. Full
 legacy responses and the existing multi-client metadata/baseline contract
 are preserved. No native capture or encoding work is claimed saved by
 one-shot deduplication; it avoids sending a repeated image to the host.
- WebP reduces potential encoded payload size, not a guaranteed model
+WebP reduces potential encoded payload size, not a guaranteed model
 token discount; dimensions and number of delivered images affect vision
 context according to the actual model/host. Use the host's supported low-detail
 option only when appropriate. OpenAI API vision accepts WebP and documents

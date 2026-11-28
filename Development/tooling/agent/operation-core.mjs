@@ -80,6 +80,7 @@ export const MAX_MCP_IMAGE_CHARS = OBSERVATION_LIMITS.maximumEncodedFrameChars; 
 export function parseConfiguration(argv, env = process.env) {
   let mode = 'human-plus-four-ai';
   let surface = 'legacy';
+  let surfaceSelected=false;
   let executable = env.LAZY_TESTER_AGENT_EXE ?? '';
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
   let diagnosticsDirectory = env.LAZY_TESTER_DIAGNOSTICS_DIR ?? '';
@@ -97,7 +98,13 @@ export function parseConfiguration(argv, env = process.env) {
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
-    if (flag==='--surface') surface=value;
+    if (flag==='--surface') {
+      // Optional connection profile selection must never silently override
+      // an earlier restricted profile.
+      if(surfaceSelected)throw new Error('Select exactly one agent surface');
+      surfaceSelected=true;
+      surface=value;
+    }
     if (flag==='--exe') executable=value;
     if (flag==='--evidence-dir') evidenceDirectory=value;
     if (flag==='--diagnostics-dir') diagnosticsDirectory=value;

@@ -41,11 +41,12 @@ normal exit. Window presentation/DWM previews are a separate concern.
 Minecraft itself owns accounts, rendering, worlds, gameplay and networking.
 A process or preview is not evidence of a signed-in playable world.
 
-**MCP:** the optional local stdio bridge reuses that same controller.
-New playtesting workflows select `--surface playtest` explicitly; manual
-desktop operation remains independent. Code Mode composes launch, observation
-and evidence using existing MCP operations; actual autonomous gameplay
-input is not verified.
+**MCP / Code Mode (optional):** manual desktop use requires no AI host,
+MCP connection or Code Mode setting. If the user chooses AI assistance,
+select `--surface playtest` explicitly; ordinary MCP and host-provided
+Code Mode use the same tool contract and retained controller. The restricted
+`--surface code-mode` profile is read/plan-only, not a host feature toggle.
+No automatic activation; actual autonomous gameplay input is not verified.
 Normal tools inspect profiles, explicitly request launches, plan actions,
 read bounded evidence, and optionally capture windows. Independent
 keyboard/mouse AI input is an **OFF-by-default, not runtime-verified**

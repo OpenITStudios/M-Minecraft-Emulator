@@ -79,7 +79,13 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
     allowedByTool.get('summarize_test_evidence').add('window');
     allowedByTool.get('agent_capabilities').add('inspectProfiles');
   }
-  const tools=descriptors.filter(tool=>allowedByTool.has(tool.name)).map(tool=>{
+  // A duplicate could otherwise hide a missing route behind the same count.
+  const selected=descriptors.filter(tool=>allowedByTool.has(tool.name));
+  if(selected.length!==allowedByTool.size||
+     new Set(selected.map(tool=>tool.name)).size!==allowedByTool.size) {
+    throw new Error('Code Mode tool catalog incomplete');
+  }
+  const tools=selected.map(tool=>{
     const allowed=allowedByTool.get(tool.name);
     // The canonical capability schema's mutually exclusive flags cannot
     // coexist in either projected surface; omit the inapplicable constraint.
@@ -91,7 +97,7 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
       if(!Object.hasOwn(properties,key))throw new Error('Code Mode schema mismatch');
     }
     // probe_qa has three explicit branches. The core enforces their
-    // mutually exclusive keys, and no restart/reservation/publication.
+    // mutually exclusive keys and each surface's actual admission.
     if(tool.name==='probe_qa') {
       properties.inspectRun={const:true,type:'boolean'};
     }
@@ -113,12 +119,11 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
             .map(([key,required])=>[key,required.filter(member=>allowed.has(member))]))}:{}),
         ...(tool.name==='probe_qa'?{oneOf:[
           {not:{anyOf:[{required:['inspectRun']},{required:['archivedRunId']}]}},
-          {required:['inspectRun'],not:{anyOf:[{required:['archivedRunId']},{required:['scope']},{required:['restart']}]}},
-          {required:['archivedRunId'],not:{anyOf:[{required:['slot']},{required:['scope']},{required:['inspectRun']},{required:['restart']}]}},
+          {required:['inspectRun'],not:{anyOf:[{required:['archivedRunId']},{required:['scope']},...(playtest?[{required:['restart']}]:[])]}},
+          {required:['archivedRunId'],not:{anyOf:[{required:['slot']},{required:['scope']},{required:['inspectRun']},...(playtest?[{required:['restart']}]:[])]}},
         ]}:{}),
         additionalProperties:false}};
   });
-  if(tools.length!==allowedByTool.size)throw new Error('Code Mode tool catalog incomplete');
   const names=tools.map(tool=>tool.name).filter(name=>name!=='agent_capabilities');
   return {
     listTools:()=>tools,
