@@ -285,7 +285,15 @@ all 25 default legacy tool names remain compatible. No arbitrary-code execution
 tool, Deno/Node guest, dependency, new controller or PC permission is added.
 Direct SDK call budgets apply per client facade; Codex owns its own cell budget.
 MCP retains its existing request/response limits, not the direct SDK's per-script
-64-call budget.
+64-call budget. Use unique JSON-RPC IDs and one connection per workflow.
+Duplicate in-flight IDs are ignored (the original retains its only reply);
+there is no replay cache, automatic retry, second dispatcher or serial queue
+that delays an independent stop. Closing the core suppresses late tool replies.
+The verified native target checks before/after capture and before delivery are
+intentionally separate freshness/ownership checks, not duplicate work to remove.
+The same-image native CLI uses authenticated IPC per request; a persistent
+replacement channel is not introduced without measured benefit and equivalent
+admission. Runtime connection latency and host compatibility remain unverified.
 
 Prefer the existing combined `tester.testing.context({slots:[2,3,4,5]})`
 instead of separate profile, peer and evidence reads. Compose diagnostics,

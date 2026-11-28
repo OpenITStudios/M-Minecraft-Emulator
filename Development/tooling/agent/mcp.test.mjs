@@ -5591,3 +5591,50 @@ test('optional MCP projections reject duplicate or missing canonical tool descri
     }
   }finally{core.shutdown();}
 });
+
+test('one MCP connection does not dispatch a duplicate in-flight request ID',async()=>{
+  let finish,calls=0;
+  const h=createHandler({...config(),surface:'playtest'},{
+    native:async(_exe,operation)=>{
+      assert.equal(operation,'inspect');calls++;
+      await new Promise(resolve=>{finish=resolve;});
+      return snapshot(operation);
+    },
+  });
+  const request={jsonrpc:'2.0',id:42,method:'tools/call',
+    params:{name:'inspect_profiles',arguments:{}}};
+  try{
+    const original=h.handle(request);
+    assert.equal(calls,1);
+    assert.equal(await h.handle(request),null);
+    // A conflicting method with the same pending ID must not emit a
+    // competing reply. Other IDs (including string vs numeric) stay live.
+    assert.equal(await h.handle({jsonrpc:'2.0',id:42,method:'ping'}),null);
+    assert.deepEqual(await h.handle({jsonrpc:'2.0',id:'42',method:'ping'}),
+      {jsonrpc:'2.0',id:'42',result:{}});
+    assert.equal(calls,1);
+    finish();
+    const reply=await original;
+    assert.equal(reply.id,42);
+    assert.equal(reply.result.isError,false);
+    assert.equal(calls,1);
+    assert.equal(await h.handle({...request,id:null}),null);
+    assert.equal(calls,1);
+  }finally{h.shutdown();}
+});
+
+test('closed MCP connection does not publish a late native reply',async()=>{
+  let finish;
+  const h=createHandler({...config(),surface:'playtest'},{
+    native:async(_exe,operation)=>{
+      await new Promise(resolve=>{finish=resolve;});
+      return snapshot(operation);
+    },
+  });
+  const pending=h.handle({jsonrpc:'2.0',id:1,method:'tools/call',
+    params:{name:'inspect_profiles',arguments:{}}});
+  h.shutdown();
+  finish();
+  assert.equal(await pending,null);
+  assert.equal(await h.handle({jsonrpc:'2.0',id:2,method:'ping'}),null);
+});

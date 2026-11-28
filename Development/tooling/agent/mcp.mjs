@@ -14,11 +14,18 @@ const SUPPORTED_PROTOCOLS = new Set(['2025-06-18','2025-11-25']);
 export function createMcpHandler(core,surface='legacy') {
   assertAgentSurface(surface);
   const route=surface==='legacy'?core:createCodeModeSurface(core.listTools(),core.callTool,surface);
+  const pendingIds=new Set();
   async function handle(message) {
     if(core.isClosed())return null;
     if (!message || message.jsonrpc!=='2.0' || typeof message.method!=='string') return null;
     if (!Object.hasOwn(message,'id')) return null;
     const id=message.id;
+    if(typeof id!=='string'&&!Number.isSafeInteger(id))return null;
+    // A duplicate in-flight ID is invalid on this connection. Preserve the
+    // original request and its only reply; never dispatch or queue it twice.
+    // This is not a completed-request replay cache or a retry mechanism.
+    if(pendingIds.has(id))return null;
+    pendingIds.add(id);
     const result=(value)=>({jsonrpc:'2.0',id,result:value});
     const err=(code,message)=>({jsonrpc:'2.0',id,error:{code,message}});
     try {
@@ -34,6 +41,7 @@ export function createMcpHandler(core,surface='legacy') {
         if (typeof name!=='string') return err(-32602,'Tool name is required');
         try {
           const data=await route.callTool(name,message.params?.arguments??{});
+          if(core.isClosed())return null;
           if (name==='observe_client' || name==='read_visual_observation') {
             // Cached rolling observation returns metadata alone unless a
             // newer frame is explicitly requested by the model.
@@ -53,11 +61,13 @@ export function createMcpHandler(core,surface='legacy') {
           }
           return result({content:[{type:'text',text:boundedMcpText(data)}],isError:false});
         } catch(error) {
+          if(core.isClosed())return null;
           return result({content:[{type:'text',text:publicToolError(error)}],isError:true});
         }
       }
       return err(-32601,'Method not found');
     }catch {return err(-32603,'Internal error');}
+    finally {pendingIds.delete(id);}
   }
 
   return {handle,callTool:route.callTool,shutdown:core.shutdown};
