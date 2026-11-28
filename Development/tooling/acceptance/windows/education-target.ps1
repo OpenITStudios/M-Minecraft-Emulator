@@ -2,9 +2,37 @@
 foreach($name in @('Utility','Security','Management')) {
     Import-Module (Join-Path $PSHOME ('Modules/Microsoft.PowerShell.'+$name+'/Microsoft.PowerShell.'+$name+'.psd1')) -ErrorAction Stop
 }
+# Observe the existing Windows Desktop updater only. No task creation, changes,
+# invocation, installer downloads or elevation. State is a point-in-time hint;
+# the original image pin/registration checks still own executable admission.
+function Get-ManagerEducationUpdaterState {
+    try {
+        $scheduler=New-Object -ComObject 'Schedule.Service' -ErrorAction Stop
+        $scheduler.Connect()
+        $tasks=$scheduler.GetFolder('\').GetTasks(1)
+        $found=$false
+        $ready=$false
+        $unknown=$false
+        foreach($task in $tasks) {
+            if($task.Name -notin @('Minecraft Education Automatic Updater','Minecraft Education Edition Automatic Updater')){continue}
+            $found=$true
+            switch([int]$task.State) {
+                1 {}
+                2 {return 'Busy'}
+                3 {$ready=$true}
+                4 {return 'Busy'}
+                default {$unknown=$true}
+            }
+        }
+        if($unknown){return 'Unknown'}
+        if($ready){return 'Ready'}
+        if($found){return 'Disabled'}
+        return 'Missing'
+    } catch {return 'Unknown'}
+}
 # One installation resolver for native and owned manager operations.
 function Resolve-ManagerEducationTarget {
-    param([switch]$RegisteredOnly)
+    param([switch]$RegisteredOnly,[switch]$RequireUpdaterIdle)
     $registered=@(foreach($view in @([Microsoft.Win32.RegistryView]::Registry32,[Microsoft.Win32.RegistryView]::Registry64)){
         $key=[Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine,$view)
         try {$entry=$key.OpenSubKey('SOFTWARE\Microsoft\Microsoft Studios\Minecraft Education Edition');if($entry){try{$path=[string]$entry.GetValue('Path','');if($path){Join-Path $path 'Minecraft.Windows.exe'}}finally{$entry.Dispose()}}}finally{$key.Dispose()}
@@ -24,6 +52,11 @@ function Resolve-ManagerEducationTarget {
     }
     $signature=Get-AuthenticodeSignature -LiteralPath $selected
     if($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch '^CN=Microsoft Corporation,'){throw 'Registered Minecraft Education executable has an invalid Microsoft signature.'}
+    if($RequireUpdaterIdle) {
+        $state=Get-ManagerEducationUpdaterState
+        if($state -eq 'Busy'){throw 'Minecraft Education updater is queued or running. Wait for the update to finish before launching.'}
+        if($state -eq 'Unknown'){throw 'Minecraft Education updater state could not be checked. Refresh after checking Windows Task Scheduler.'}
+    }
     return $selected
 }
 function Assert-ManagerRegisteredAppId([string]$appId,[string]$selectedTarget) {

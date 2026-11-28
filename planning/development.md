@@ -2,6 +2,22 @@
 
 ## Current status
 
+**Active source work — Education update compatibility (UPD).** Baseline
+[`41e7eadd`](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/41e7eadde35bd72f215f0da983136a2817750c65).
+First slice: official Desktop updater state guard in the existing post-pin
+registered resolver; one query per managed launch, no task changes, updater
+execution, downloader, polling, new service or dependency. Preserve the
+existing signature/image/ABI checks; extract reviewed image recipe data
+without admitting new bytes. Compare candidate identity against all retained
+active child image pins before profile mutation, and clear only stale
+unsupported-image issues on verified compatible admission. Authored synthetic
+generation fixture NOT_EXECUTED. Updater state is a point-in-time observation,
+not an installer lock; missing/disabled tasks may be managed policy.
+Pending: verify native updater/task behavior and costs, explicit refresh and
+version/updater Settings projection, official check action only after safe
+coordination evidence, capability-specific admission and future recipe review.
+No new binary is admitted, and the ABI v4/local-test holds below remain.
+
 Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).
 
 - RPT-01–04: selective desktop and Rust request-client report, 48+16 rows, bounded counts and receipt-grounded recovery/recurrence; no routine logs, polling, raw data or inferred mutation outcomes. [Exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/35e652489d1ba297aff3845ec51964f5018678b8/planning/development.md).
@@ -10,7 +26,7 @@ Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Bas
 - RPT-07 integration audit: typed Rust operation/code vocabulary reused for full prior-checkpoint validation before replacement; explicit native-only Check/Copy with nullable UI checkpoint, no healthy report or false absence on failed native read; cross-language vocabulary and regression fixtures authored NOT_EXECUTED. Native failure checkpoint I/O is synchronous after transport gate release; outer manager gate can remain held. No new poll, service, dependency or session-wire change.
 - Standalone process failures, crash before checkpoint, unsubmitted UI repeats, historical UI read, exact build identity, correlation and measured overhead remain unresolved. [Checkpoint contract](../Development/apps/desktop/README.md#bounded-local-checkpoint). Native/TS fixtures authored NOT_EXECUTED. ICE-01–04 and prior PLA/source scopes closed; ICE-05/OPT-07 held.
 
-**Next — SOURCE_READY_FOR_LOCAL (scoped source handoff).** The operator requested preparation for the PC-local phase, not execution on this surface. Use the single staged handoff below; native ABI v4 digest approval still blocks standard dev/package/new launch. All tests/builds/benchmarks/native acceptance NOT_EXECUTED. No CI or unapproved local validation.
+**Prior handoff — SOURCE_READY_FOR_LOCAL (scoped source handoff, re-pin after UPD changes).** The operator requested preparation for the PC-local phase, not execution on this surface. Use the single staged handoff below; native ABI v4 digest approval still blocks standard dev/package/new launch. All tests/builds/benchmarks/native acceptance NOT_EXECUTED. No CI or unapproved local validation.
 
 ## Unreleased — Rust-first integration
 

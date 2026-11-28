@@ -152,7 +152,22 @@ the stopped profiles marked as needing attention. Launch remains blocked
 until its exact image/callsite is reviewed. The idle controller retains no
 game executable handle; each launch resolves the current signed installation
 again. Running games retain their original image pins until they exit.
+The official Windows Desktop updater remains the only game update provider.
+The existing post-pin launch preflight reads the registered updater task
+state once (no additional PowerShell process, no background polling).
+Queued/running or unobservable updater state defers new launch; a missing
+or disabled task may be intentional organization policy and is not changed.
+This observation is not an installer lock. Active managed games retain
+their original image pins; a different installation generation is refused
+until the original sessions close normally. Unknown executable hashes remain
+unsupported; recipe data stays in the reviewed build, not an unsigned
+download. No automatic uninstall/reinstall or world/account migration.
+
+Official guidance: [Update to a new version](https://edusupport.minecraft.net/hc/en-us/articles/360047705032-Update-to-a-New-Version-of-Minecraft-Education)
+and [Windows installation](https://edusupport.minecraft.net/hc/en-us/articles/13106858087956-Windows-Installation-Guide).
 This does not promise automatic compatibility with future Minecraft builds.
+Task visibility, installer coordination and runtime acceptance remain
+NOT_EXECUTED; no task is started, enabled, disabled or created by Lazy Tester.
 
 The reviewed Education 1.26.33.0 image selects its own observed mutex caller;
 the earlier reviewed image retains its original recipe. The existing one-shot

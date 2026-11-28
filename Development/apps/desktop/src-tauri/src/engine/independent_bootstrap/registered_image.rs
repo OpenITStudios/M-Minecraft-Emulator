@@ -3,9 +3,19 @@ use super::{file_digest, image_id, invalid, pin_image, same_image};
 use std::{fs::File, io, path::Path};
 
 pub(super) fn registered_image(observe: bool) -> io::Result<(String, File, u32)> {
-    registered_image_with(observe, || crate::engine::native_clients::resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly"))
+    use crate::engine::native_clients::resolve_registered_education_target;
+    let target = resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly")?;
+    // Query the updater once in the existing post-pin resolver, not in a new
+    // PowerShell process or passive Inspect loop. This is not an installer lock.
+    let selector = if observe {
+        "Resolve-ManagerEducationTarget -RegisteredOnly -RequireUpdaterIdle"
+    } else {
+        "Resolve-ManagerEducationTarget -RegisteredOnly"
+    };
+    pin_registered_image_with(target, observe, || resolve_registered_education_target(selector))
 }
 
+#[cfg(test)]
 fn registered_image_with(observe: bool, mut resolve: impl FnMut() -> io::Result<String>) -> io::Result<(String, File, u32)> {
     let target = resolve()?;
     pin_registered_image_with(target, observe, resolve)
@@ -44,27 +54,42 @@ fn validate_registered_image_with(target:&str,image:&File,observe:bool,resolve:i
     Ok(0)
 }
 
-pub(super) fn reviewed_singleton_recipe(digest: [u8; 32]) -> io::Result<u32> {
-    // Publisher identity alone cannot authorize a version-specific callsite.
-    let previous_image = [
+pub(super) const UNREVIEWED_IMAGE_MESSAGE: &str =
+    "This Minecraft Education version is not yet supported for managed launch. Update Lazy Tester compatibility before launching. Saved launcher data is preserved.";
+
+// Reviewed data only. A Microsoft signature or version label cannot admit a
+// version-specific recipe. New entries require exact-image native review.
+const REVIEWED_IMAGE_RECIPES: [([u8; 32], u32); 2] = [
+    ([
         0x04, 0x16, 0x4c, 0x1c, 0x64, 0x45, 0x8a, 0x5d, 0x98, 0x4d, 0xbc, 0x16, 0x87, 0xd0, 0xe8,
         0x02, 0x3d, 0x18, 0x08, 0xc4, 0x4e, 0xe7, 0xbe, 0x03, 0x51, 0x9c, 0xdf, 0x83, 0x55, 0x23,
         0x3e, 0xaa,
-    ];
-    if digest == previous_image {
-        return Ok(0x2cdc30);
-    }
-    // Education 1.26.33.0: transparent native startup observed this caller's
-    // initially owned GUID mutex returning 0, then 183 in the rejected second process.
-    let education_12633 = [
+    ], 0x2cdc30),
+    // Education 1.26.33.0: previously observed native startup recipe.
+    ([
         0x59,0xfa,0xc4,0x8c,0xfb,0x6b,0x2c,0xf8,0xd0,0x82,0x1e,0x9a,0x0a,0xe6,0xd5,0x86,
         0x48,0x1a,0xb1,0xe7,0x3c,0xee,0xf4,0x6c,0xea,0x53,0xec,0xee,0x3a,0xc4,0x8b,0x43,
-    ];
-    if digest == education_12633 {
-        return Ok(0x2cf0f0);
+    ], 0x2cf0f0),
+];
+
+pub(super) fn reviewed_singleton_recipe(digest: [u8; 32]) -> io::Result<u32> {
+    REVIEWED_IMAGE_RECIPES.iter().find_map(|(known, recipe)| (*known == digest).then_some(*recipe))
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Unsupported, UNREVIEWED_IMAGE_MESSAGE))
+}
+
+// Existing child image pins deny write/delete sharing. Do not mix installations
+// if official registration moves while an original managed child remains alive.
+pub(super) fn require_same_generation<'a>(
+    image: &File, active: impl IntoIterator<Item = &'a File>,
+) -> io::Result<()> {
+    let candidate = image_id(image)?;
+    for original in active {
+        if !same_image(&candidate, &image_id(original)?) {
+            return Err(io::Error::new(io::ErrorKind::WouldBlock,
+                "Minecraft Education installation changed. Close existing games normally before launching the new installation."));
+        }
     }
-    Err(io::Error::new(io::ErrorKind::Unsupported,
-        "This Minecraft Education version is not yet supported for managed launch. Update Lazy Tester compatibility before launching. Saved launcher data is preserved."))
+    Ok(())
 }
 
 #[cfg(test)]
@@ -125,6 +150,24 @@ mod launch_preflight_measurement {
         assert_eq!(reviewed_singleton_recipe(updated).unwrap(),0x2cf0f0);
         let mut changed=digest;changed[31]^=1;
         assert_eq!(reviewed_singleton_recipe(changed).unwrap_err().kind(),io::ErrorKind::Unsupported);
+    }
+    #[test]
+    fn changed_image_is_refused_until_original_generation_is_closed() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("first.exe");
+        let second = root.path().join("second.exe");
+        std::fs::write(&first, [7u8; 128]).unwrap();
+        std::fs::write(&second, [7u8; 128]).unwrap();
+        let original = pin_image(&first).unwrap();
+        let same = pin_image(&first).unwrap();
+        let replacement = pin_image(&second).unwrap();
+        assert!(require_same_generation(&same, [&original]).is_ok());
+        assert_eq!(require_same_generation(&replacement, [&original]).unwrap_err().kind(), io::ErrorKind::WouldBlock);
+        assert!(require_same_generation(&replacement, std::iter::empty::<&File>()).is_ok());
+        assert!(OpenOptions::new().write(true).open(&first).is_err());
+        drop(same);
+        drop(original);
+        assert!(OpenOptions::new().write(true).open(&first).is_ok());
     }
     #[test]
     fn retained_launch_validation_checks_fresh_registration_identity_and_bytes() {

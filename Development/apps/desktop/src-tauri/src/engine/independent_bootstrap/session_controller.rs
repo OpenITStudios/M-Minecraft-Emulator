@@ -254,6 +254,21 @@ impl Sessions {
             Ok(target) => target,
             Err(error) => { self.issues[index] = Some(error.to_string()); return Err(error); }
         };
+        if let Err(error) = registered_image::require_same_generation(
+            &image, self.running.iter().flatten().map(|started| &started.children[0]._image),
+        ) {
+            self.issues[index] = Some(error.to_string());
+            return Err(error);
+        }
+        // A positively reviewed replacement resolves only stale compatibility
+        // issues, not unrelated profile errors or uncertain live processes.
+        for other in 0..self.issues.len() {
+            if self.running[other].is_none() && self.stores[other].is_some()
+                && self.issues[other].as_deref() == Some(registered_image::UNREVIEWED_IMAGE_MESSAGE)
+            {
+                self.issues[other] = None;
+            }
+        }
         self.path = path.clone();
         let store = self.stores[index]
             .as_mut()
