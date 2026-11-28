@@ -124,7 +124,7 @@ every smoke. No smoke result proves absence of untested P0 failures.
 | RL-01 | `source.preflight` separately approved | Full exact-SHA source checks not actually passed |
 | RL-02 | `build.candidate` with separate package approval | Missing reviewed DLL, corrupt/stale manifest/hash |
 | RL-03 | Real installer/repair/uninstall on disposable environment | Any private profile/world loss, foreign process effect |
-| EX-01 | Synthetic MCP/visual/observed-action fixtures (`MCP`, `VIS`, `OBS`) | Incorrect trust, identity, source PNG admission |
+| EX-01 | Synthetic MCP/visual/observed-action fixtures (`MCP`, `VIS`, `OBS`) | Incorrect trust, identity, source image admission or Code Mode/MCP contract parity |
 | EX-02 | Reviewed opt-in AI DLL/feature/ABI separate from standard | Missing reviewed experimental pair = BLOCKED |
 | EX-03 | Human MC01 + actual AI MC02 input, camera, neutral (`AI`) | An IPC ACK or PNG without game action is INCONCLUSIVE |
 | EX-04 | Four/five AI and original Skills Probe/map (`AI`, `QA`) | Requires EX-03 live PASS and separate original Probe evidence |
@@ -148,8 +148,9 @@ telemetry daemon, CI, screenshot recorder or installer is needed.
 | Dimension | Existing observation/measurement route | What to compare |
 | --- | --- | --- |
 | Source iteration | Existing `source.quick` receipt and registered `benchmark.frontend`/`benchmark.rust` tasks | Measured wall time and first failed stage for the exact same toolchain and SHA, not inferred compile gains |
-| Visual payload | One requested CUA/WGC PNG and existing `inspectPng` size, dimensions and SHA-256; MCP `read_visual_observation` only upon demand | Source PNG bytes, accepted/refused oversize, frame deliveries and their total bounded base64 bytes; never claim token counts from bytes |
-| Frame freshness and contention | Existing observer `frameAgeMs`, `successfulSamples`, `repeatedPngBytes`, `duplicateGpuReads`, `skippedBusy` and `captureErrors` | Same 30-second window: sample age, useful frames delivered, busy skips and stale/invalid frames per slot |
+| Visual payload | Existing CUA PNG or WGC fitted WebP path, encoded size, dimensions and SHA-256; images only upon request | Encoded bytes, accepted/refused oversize, frame deliveries and total Base64 bytes; never claim token counts from bytes |
+| Frame freshness and contention | Existing observer `frameAgeMs`, `successfulSamples`, `repeatedFrameBytes`/legacy `repeatedPngBytes`, `duplicateGpuReads`, `skippedBusy` and `captureErrors` | Same 30-second window: sample age, useful frames delivered, busy skips and stale/invalid frames per slot |
+| Read-only native IPC (OPT-07) | Time the existing exact-slot target and observation calls on the approved PC; use independently observed CLI process counts if available | Median/p95 wall time and invocation counts for matched single-slot workloads; separate cold and warm observations. Count unknown process/pipe metrics as UNKNOWN |
 | Native actions | Existing bounded MCP/native transport receipts and per-client neutral/release/reconciliation statuses | Aborted/uncertain/rejected transactions and actual acknowledged neutral release; an ACK alone does not prove a Minecraft action |
 | Windows CPU/RAM/GPU/FPS | Existing manual native performance acceptance, sanitized per-process Windows resource samples, and PresentMon report where available | Real per-process CPU, private bytes/working set, GPU load and frame-time percentile; use `UNKNOWN` for any unmeasured dimension |
 
@@ -173,6 +174,36 @@ cannot claim lower CPU, latency, memory usage, token cost or higher FPS.
 A candidate that weakens native identity/lease/neutral guarantees is
 rejected regardless of performance. If no measurable problem is shown,
 **make no new optimization or abstraction**.
+
+### Optimization source acceptance (OPT-01–09)
+
+The completed source batch uses existing fixtures under
+`Development/tooling/agent/`. The current `Development/package.json`
+registers all of the following suites in `test:localtest`, included in
+`verify:source` (the existing `DEV.cmd check` route). The quick
+`verify:quick` and repository-only tests do **not** execute those agent
+fixtures. No new test runner is required. Every row is
+`TEST_AUTHORED_NOT_RUN` / `NOT_EXECUTED` until separately approved
+PC-local execution.
+
+| Scope | Existing fixture owners | Acceptance focus |
+| --- | --- | --- |
+| OPT-01, 04 | `mcp.test.mjs`; native controller/CLI fixtures | Selected target, exact identity, bounded stdio, duplicate IDs, backpressure and closure |
+| OPT-02, 03 | `gpu-frame-source.test.mjs`, `visual-observer.test.mjs`, `mcp.test.mjs` | Lazy payload, identical frames, no overlapping preview, freshness and cancellation |
+| OPT-05, 06 | `input-route.test.mjs`, `control-plan.test.mjs`, `input-timeline.test.mjs`, `mc02-action-sequence.test.mjs`, `mcp.test.mjs` | Compile once, compact/explicit parity, immutable per-call intent, native bounds and disabled input |
+| OPT-08 | `mcp.test.mjs`, `diagnostics-local.test.mjs`, `evidence-summary.test.mjs`, `probe-qa.test.mjs` | Stable append cursor, UTF-8, partial lines, volume, checksums and bounded summary |
+| Code Mode, OPT-09 | `mcp.test.mjs` and the affected suites above | 15-operation Playtest parity, restricted/legacy compatibility, no new input permission, no unfenced delivery or post-disconnect provider work |
+
+For a future approved IPC comparison, retain the existing
+`agent_cli.rs` -> authenticated controller route and compare exact baseline
+and candidate SHAs using the same configured slot, worker, WebP dimensions
+(640x360 default), interval and workload. Source call counts are **not**
+observed process counts: metadata-only and unchanged cached reads require
+zero native target calls; newly delivered cached frames require one;
+one-shot capture requires two. Record refusals, actual counts, timings and
+freshness separately. No persistent IPC rewrite or removal of identity
+fences without measured benefit and equivalent safety. OPT-07 performance
+evidence remains deferred, not a source defect or a runtime PASS.
 
 ## Evidence policy — short, honest, reusable
 

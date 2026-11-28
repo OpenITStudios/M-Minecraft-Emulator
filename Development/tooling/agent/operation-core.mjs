@@ -1449,6 +1449,7 @@ export function createOperationCore(config,{
           // review, even if the timestamp still falls within 3.5 seconds.
           throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
         }
+        requireOpen();
         if(!sameNativeVisualTarget(live,first.metadata.captureIdentity)){
           // Positive replacement: revoke just this slot's stale observer
           // frame/worker. Native game process and other slots are untouched.
@@ -1483,11 +1484,9 @@ export function createOperationCore(config,{
            typeof observation.imageBase64!=='string')){
           throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
         }
-      } else if(wantsImage) {
-        // No new PNG requested or no usable cached frame: retain the
-        // cheap metadata-only behavior without probing native windows.
-        observation=visualObserver.read(slot,{afterSequence,includeImage:true});
       }
+      // No new image or usable frame: return the first metadata-only
+      // receipt. Never attempt an unfenced second read.
       // This remains an ephemeral cache READ, not a screenshot, game input,
       // player/world attribution or automatic clipboard operation.
       const metadata={...observation.metadata,
@@ -1547,7 +1546,9 @@ export function createOperationCore(config,{
       visualReadBusy=true;
       try {
         const before=await readNative('target',slot);
+        requireOpen();
         const ui=await inspectCua(config.cuaExecutable,before);
+        requireOpen();
         const after=await readNative('target',slot);
         requireOpen();
         if(!sameNativeVisualTarget(after,before)) {
@@ -1589,6 +1590,7 @@ export function createOperationCore(config,{
       inFlight=true;
       try {
         const current=await readNative('target',slot);
+        requireOpen();
         if (name==='get_computer_use_target') {
           return computerUseTarget(current,slot,config.mode);
         }
@@ -2053,6 +2055,7 @@ export function createOperationCore(config,{
         const observed=[];
         for (const slot of required.observedSlots) {
           observed.push(await readNative('target',slot));
+          requireOpen();
         }
         const elapsed=Date.now()-started;
         return {

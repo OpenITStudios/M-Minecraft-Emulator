@@ -2848,6 +2848,8 @@ test('an explicit cached PNG read revalidates the exact live native window once'
   });
   assert.equal(duplicate.imageBase64,null);
   assert.equal(nativeReads,1,'no new image means no native lookup');
+  assert.deepEqual(fixture.reads,[false,false,false,true,false],
+    'no new image reuses the first metadata-only receipt');
   handler.shutdown();
 });
 
@@ -3423,7 +3425,7 @@ test('MCP feedback evaluation cannot enable multi-client input or evaluate human
     {visualObserverFactory:fixture.factory});
   await assert.rejects(()=>enabled.callTool('evaluate_experimental_multi_client_outcomes',{
     actions:[aiMove(1)],receipt:{},after:[null],
-  }),/human-owned/);
+  }),/MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS/);
   enabled.shutdown();
 });
 
@@ -6067,4 +6069,80 @@ test('Probe byte scan refuses the 201st complete marker, never returns a truncat
     assert.equal(overflow.reason,'PROBE_MARKER_VOLUME_EXCEEDED');
     assert.deepEqual(overflow.events,[]);
   }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('cached image without a fresh first receipt never attempts unfenced delivery',async()=>{
+  let reads=0,nativeReads=0;
+  const core=createOperationCore(config(),{
+    native:async()=>{nativeReads++;throw Error('Unexpected native read');},
+    visualObserverFactory:()=>({read(_slot,{includeImage}){
+      reads++;
+      // A second read must not turn a previously unavailable frame
+      // into image delivery without passing the native identity fence.
+      if(includeImage)throw Error('Unfenced image read');
+      return {metadata:{schema:1,slot:2,sequence:0,
+        freshFrameAvailable:false,hasNewImage:false,active:true},imageBase64:null};
+    },shutdown(){}}),
+  });
+  try {
+    const result=await core.callTool('read_visual_observation',{slot:2});
+    assert.equal(result.imageBase64,null);
+    assert.equal(result.metadata.hasNewImage,false);
+    assert.deepEqual([reads,nativeReads],[1,0]);
+  }finally{core.shutdown();}
+});
+
+test('disconnect during cached image target inspection cannot mark pixels delivered',async()=>{
+  const fixture=deliveredVisualFixture();
+  let enter,finish;
+  const entered=new Promise(resolve=>{enter=resolve;});
+  const gate=new Promise(resolve=>{finish=resolve;});
+  const core=createOperationCore(config(),{
+    visualObserverFactory:fixture.factory,
+    native:async(...args)=>{enter();await gate;return fixture.native(...args);},
+  });
+  try {
+    const pending=core.callTool('read_visual_observation',{slot:2});
+    const rejected=assert.rejects(pending,/MCP_CONNECTION_CLOSED/);
+    await entered;
+    core.shutdown();
+    finish();
+    await rejected;
+    assert.deepEqual(fixture.reads,[false]);
+    assert.equal(fixture.wasDelivered(),false);
+  }finally{core.shutdown();}
+});
+
+test('disconnect during UIA or route inspection prevents subsequent native or provider work',async()=>{
+  for(const phase of ['uia-target','uia-provider','route-target','target-only']) {
+    let enter,finish;
+    const entered=new Promise(resolve=>{enter=resolve;});
+    const gate=new Promise(resolve=>{finish=resolve;});
+    const calls=[];
+    const core=createOperationCore({...config(),cuaExecutable:path.resolve('cua-driver.exe')},{
+      native:async(_exe,operation,slot)=>{
+        calls.push(['target',slot]);
+        if(phase!=='uia-provider'){enter();await gate;}
+        return {schema:1,ok:true,operation,slot,pid:400+slot,windowId:1200+slot,
+          createdFileTime:'134000000000000001',sessionId:1,foreground:slot===1,
+          visible:true,minimized:false,verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',
+          gameplayInput:'NOT_VERIFIED'};
+      },
+      inspectCua:async()=>{calls.push(['uia']);enter();await gate;return {
+        schema:1,status:'UIA_ELEMENTS_READ_UNVERIFIED',elements:[],actionPermitted:false};},
+    });
+    try {
+      const pending=phase==='route-target'?
+        core.callTool('assess_input_route',{actions:[aiMove(2)]}):
+        phase==='target-only'?core.callTool('get_computer_use_target',{slot:2}):
+          core.callTool('inspect_client_ui',{slot:2});
+      const rejected=assert.rejects(pending,/MCP_CONNECTION_CLOSED/);
+      await entered;
+      core.shutdown();
+      finish();
+      await rejected;
+      assert.deepEqual(calls,phase==='uia-provider'?[['target',2],['uia']]:
+        [['target',phase==='route-target'?1:2]]);
+    }finally{core.shutdown();}
+  }
 });

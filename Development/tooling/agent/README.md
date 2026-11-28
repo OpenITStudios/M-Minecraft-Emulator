@@ -342,8 +342,12 @@ Each facade permits 64 attempted calls, one in flight, 64 KiB input,
 image delivery does not stringify and parse Base64 again. The trusted
 host must independently enforce script time, memory, output and OS
 permissions. Closing a facade does not cancel native operations or an
-active sampler: stop it explicitly when finished; core shutdown remains
-host-owned.
+active sampler: stop it explicitly when finished. If the script budget
+is exhausted, the trusted host must stop the sampler through its existing
+core owner or shut down its dedicated core; never retry a mutation to
+recover an unavailable result. Core shutdown remains host-owned. No-image
+reads reuse the initial metadata receipt, and closing the core fences
+pending target/UIA/route reads before further provider work or image delivery.
 
 The stdio adapter negotiates the retained initialize-era revisions
 2025-06-18 and 2025-11-25; 2026-07-28 is not claimed until its stateless
