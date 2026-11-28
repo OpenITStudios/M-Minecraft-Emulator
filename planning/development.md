@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-04d: native isolation decision)
+## Current status — cross-platform-native (MAC-04e: staged workspace parity design)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,100 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-04e — full workspace parity, staged design (2026-11-28)
+
+Operator decision: the final Mac product must match the Windows five-instance
+single-workspace workflow. Manual fast user switching is a feasibility step
+only, not a final Mac-specific reduction in acceptance. No Mac test host is
+available during the current source phase. The operator authorizes staged
+design, not native execution, installation, privilege changes or release.
+This decision supersedes the open workspace-choice question in MAC-04d/U5;
+the earlier evidence and alternative feasibility constraints remain valid.
+
+#### Choose the minimum complete topology, not a new provider system
+
+A — Preferred if a supported same-user private profile route exists:
+one manager, retained native controller, one verified game installation,
+five owned game processes with independent persistent data/authentication,
+native presentation and selected human interaction in the existing workspace.
+Use AppKit/Accessibility and a window-specific ScreenCaptureKit preview only
+if needed; macOS has no established equivalent to the current Win32/DWM
+embedding contract. Do not assume window capture supplies gameplay input.
+
+B — Conditional if same-user isolation cannot be established:
+one shared game bundle, distinct explicitly consented standard users and
+logged-in GUI sessions. Manual switching establishes isolation/persistence
+first. A later minimal per-session native endpoint may observe and operate
+only the game originally launched by that endpoint in its own login session;
+one central manager remains the only five-slot catalog, command router,
+selection owner and MCP/SDK authority. Endpoints are OS-bound leaves, not
+five full Tauri apps, independent schedulers, provider plugins or alternate
+catalogs. Reuse the same endpoint executable; no root daemon, no auto-login,
+no installation or persistent service registration at this design stage.
+The operator's parity decision does not authorize enabling a cross-user
+control service. Candidate only: the endpoint topology must pass inactive
+session capture AND selected interactive input feasibility before it can
+replace A. If it cannot, B is not an acceptable final product.
+
+Apple [Fast User Switching](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/FastUserSwitching.html)
+states switched-out processes can continue but lose physical input; the
+display appears asleep. [Security login sessions](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/SystemContexts.html)
+have distinct identities that change on re-login. [XPC service types](https://developer.apple.com/documentation/XPC)
+and [Service Management](https://developer.apple.com/documentation/servicemanagement/)
+describe per-user agents and system-context daemons; these do not establish
+direct cross-login-session connectivity. A local Unix socket with explicit
+peer/user and session binding is a transport candidate, not a permission
+grant; design only. No unauthenticated listener, global writable socket,
+network exposure, shared credentials or PID-only ownership. A future
+connection must bind the consented slot, peer identity, login generation,
+reviewed code and exact retained target; reject replay, wrong slot,
+disconnection, stale process or re-login. No retry of ambiguous mutation.
+Disconnect disables input and marks status unavailable, not STOPPED.
+
+Apple [window filter](https://developer.apple.com/documentation/screencapturekit/sccontentfilter)
+supports a selected window; [capture guide](https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-in-macos)
+and [Accessibility trust](https://developer.apple.com/documentation/applicationservices/1459186-axisprocesstrustedwithoptions)
+require explicit permission and distinct capture/control verification.
+Neither proves usable inactive-session Minecraft pixels or gameplay input.
+[Apple high-performance screen sharing](https://support.apple.com/en-az/guide/mac-help/mchl1883115d/27/mac/27)
+allows only one high-performance session per Mac; do not adopt it as the
+five-client workspace. [RustDesk discussion 13869](https://github.com/rustdesk/rustdesk/discussions/13869)
+reports fast-user-switch freezes/disconnects; independent counterevidence,
+not authoritative proof that all cross-session APIs fail. Do not copy its
+root/watchdog workaround or add a general remote desktop stack.
+
+#### Sequential implementation design and evidence gates
+
+| Stage | Scope / smallest acceptance |
+| --- | --- |
+| P0 — shared source | MAC-03a–d shared UI/status/identity; MAC-04a diagnostic shell and MAC-03b artifact inspector; existing MAC-04b/c fixture. Source committed, not executed. |
+| P1 — target / isolation | Exact official Mac bundle metadata and supported A mechanism, or U1–U3 for two explicitly consented existing users. No account/world reads in collector; actual persistence and manual independent licensed sign-in must later be observed. No fake recipe. |
+| P2 — native lifecycle | Narrow launch/inspect/normal-close for two owned sessions, reuse five-slot selection and receipt rules. Missing identity, unknown launch/exit or peer loss blocks mutation. B uses only the minimum session-local endpoint after separately approved design; no automatic service. |
+| P3 — decisive workspace feasibility | With two disposable synthetic windows first, verify simultaneous fresh, correct window-specific previews while selected interactive input reaches only its intended app, including switched-out sessions for B. Verify permission refusal, locked/logged-out/changed session, no stale frame or input redirection. Then repeat for real licensed game windows; normal switch must not require changing the console user. A preview alone or fast user switching is not a pass. |
+| P4 — integrate 2 to 5 | One controller/UI/catalog/agent core, one selected playable viewport, four visible preview tiles, explicit independent launch/close/recovery; same path for MC01–MC05. Preserve Windows contract and source tests. No automatic cross-host data migration. |
+| P5 — optimize and distribute | Measure startup, manager and total system memory/CPU/GPU, latency, frame times and background multiplayer with equivalent workload. Only then choose preview/frame/audio policy and Mac package signing/notarization; release separate. |
+
+Efficiency rule: prefer native placement for the selected game wherever it
+meets interaction acceptance, avoid encoding if not needed. If capture is
+necessary, select the exact owned window, use one active high-quality
+view and lower-cost visible preview streams, suspend hidden views, and
+reuse bounded latest-frame buffers rather than an unbounded frame backlog.
+[SCStreamConfiguration.minimumFrameInterval](https://developer.apple.com/documentation/ScreenCaptureKit/SCStreamConfiguration/minimumFrameInterval)
+and [queueDepth](https://developer.apple.com/documentation/ScreenCaptureKit/SCStreamConfiguration/queuedepth)
+are capture throttles, NOT Minecraft render/FPS controls; start from the
+platform default bounded queue and adjust only after measurement. Audio,
+recording, optional AI input and hardware encoding remain separately gated;
+no fixed performance claims or five encoders by default.
+
+Stop condition for source design: no speculative production adapter or
+duplicated state owner until the decisive isolation and workspace route is
+selected on real evidence. Next bounded source task, if useful, is a
+synthetic two-window workspace feasibility fixture with explicit user consent
+and no Minecraft dependency; design now, execution remains held. Do not
+silently implement B or demand localtest. All product runtime, build,
+capture/input, CI and release gates remain unchanged. No new runtime source
+or dependency in this design checkpoint.
 
 ### MAC-04d — native isolation decision and alternate topology (2026-11-28)
 
@@ -72,8 +166,9 @@ synthetic paths; alternate route cannot be approved solely from OS login
 semantics. Preserve all prior source/activation/CI/test/release holds.
 No new source module or test fixture: decision checkpoint only. Do not
 spend further source effort on speculative game-independent abstractions.
-Next decision is workspace acceptance for the alternate route, while
-actual artifact and live validation remain deferred; no localtest request.
+Workspace acceptance decision resolved by MAC-04e above: manual switching
+is interim only; full shared workspace remains mandatory. Actual artifact
+and live validation remain deferred; no localtest request.
 
 ### MAC-04c — one bundle, two synthetic profile contexts (source only)
 
@@ -402,7 +497,8 @@ MAC-03d centralizes active frontend window identity comparisons;
 MAC-04a adds the explicit non-product Mac development shell route;
 MAC-04b authors a synthetic AppKit lifecycle acceptance fixture;
 MAC-04c extends it with explicit two-instance path observations;
-MAC-04d records authentication counterevidence and alternate native topology.
+MAC-04d records authentication counterevidence and alternate native topology;
+MAC-04e records operator-confirmed final workspace parity and staged design.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
