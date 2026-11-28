@@ -61,15 +61,15 @@ unverified games.
 
 General Settings shows **Issue report / Copy report** only after a problem
 has been observed in the current desktop lifetime. This is a local,
-sanitized support summary, not native instrumentation, a security audit
-log, crash dump or gameplay acceptance. No new polling, IPC, service,
+sanitized support summary, not a security audit log, crash dump or gameplay
+acceptance. No new polling, background IPC, service,
 disk writes, upload, raw error text, screenshots, process identifiers,
 account or world data. Existing feedback, recovery and native admission
 remain unchanged. Reports are ephemeral until manually copied; app
 exit/crash loses unsaved observations. Clipboard failure leaves selectable
 JSON text. The report is not available before General Settings can open.
 
-Compact JSON schema 1: `v` schema; `scope` desktop-observed; `issues`
+Compact combined export schema 2: `v` schema; `scope` desktop-process; `issues`
 contains at most 48 distinct code/slot entries, first observed wall-clock
 Unix seconds `t`, optional launcher slot `s`. State observations are
 deduplicated across the current desktop lifetime and do not have a count.
@@ -92,8 +92,10 @@ codes:
 | LT-AGT-03 / 04 / 05 | Probe checkpoint unavailable / Probe reported attention / earlier agent status stale |
 | LT-SET-07 | Web cache preference save unconfirmed |
 
+The optional `native` section is one explicit read of a 16-row, current-process Rust request-client summary. `native:null` means no retained native rows; `nativeUnavailable:true` means the read failed. Together with 48 UI rows, the report retains at most 64 distinct rows. Native `c` is the source-classified code, `op` is the actual admitted request name, optional `s` is the slot, optional `os` is the raw numeric OS error (not a message), `t`/`l` are observed Unix seconds (zero if unavailable), and `n` counts discrete failed attempts. Source owner: `native_clients_session.rs`, with `issue_report.rs` retaining bounded evidence. `IPC_WORKER_START_FAILED` means no worker started; `IPC_REPLY_TIMEOUT`, `IPC_REPLY_LOST`, `IPC_TRANSPORT_FAILED`, `IPC_INPUT_RECEIPT_INVALID`, `IPC_TARGET_RECEIPT_INVALID` and `IPC_INSPECT_RECEIPT_INVALID` preserve unconfirmed outcome; no automatic retry or inferred cause. UI and native rows are separate observations, not additive incident counts. This read cannot collect another CLI/controller process's memory. No report persistence or exact build identity yet; no new wire fields, no new periodic reads.
+
 The summary does not include success denominators, unobserved native
-failures, exact native error causes or historical process exits. It cannot
+failures, exact root causes or historical process exits. It cannot
 measure performance, availability or failure rates. Existing developer
 performance collectors and private evidence remain their original owners.
 Reference patterns: [OWASP logging guidance](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html),

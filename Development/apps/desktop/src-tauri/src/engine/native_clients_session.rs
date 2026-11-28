@@ -1434,6 +1434,58 @@ fn request_inner(request: SessionRequest, desktop_target:bool) -> io::Result<Ses
 }
 
 #[cfg(windows)]
+fn issue_context(request: &SessionRequest) -> super::issue_report::Context {
+    use SessionRequest::*;
+    let (operation, slot) = match request {
+        Inspect => ("inspect", None),
+        InspectAgentTarget {slot,..} => ("target", Some(*slot)),
+        PublishAgentActivity {..} => ("agent_activity", None),
+        TestingReserve {slot,..} => ("testing_reserve", Some(*slot)),
+        TestingFinalize {slot,..} => ("testing_finalize", Some(*slot)),
+        TestingInspect {slot,..} => ("testing_inspect", Some(*slot)),
+        InspectSettings => ("inspect_settings", None),
+        ApplyPreset => ("apply_preset", None),
+        ApplyGraphicsPreset {slot,..} => ("apply_graphics_preset", Some(*slot)),
+        SavePerformance {..} => ("save_performance", None),
+        SaveAudio {..} => ("save_audio", None),
+        SaveStoragePreferences {..} => ("save_storage_preferences", None),
+        InspectStorage => ("inspect_storage", None),
+        InspectProfileStorage {slot,..} => ("inspect_profile_storage", Some(*slot)),
+        InspectSelectiveInventory {slot,..} => ("inspect_selective_inventory", Some(*slot)),
+        ReviewSelectiveInventory {slot,..} => ("review_selective_inventory", Some(*slot)),
+        ConfirmSelectedWorlds {slot,..} => ("confirm_selected_worlds", Some(*slot)),
+        ConfirmSelectedPacks {slot,..} => ("confirm_selected_packs", Some(*slot)),
+        OpenProfileFolder {slot,..} => ("open_profile_folder", Some(*slot)),
+        ClearProfileCache {slot,..} => ("clear_profile_cache", Some(*slot)),
+        ClearProfileDownloadCache {slot,..} => ("clear_profile_download_cache", Some(*slot)),
+        ResetGameSettings {slot,..} => ("reset_game_settings", Some(*slot)),
+        RestoreGameSettings {slot,..} => ("restore_game_settings", Some(*slot)),
+        DisableImprovedInputResponse {slot,..} => ("disable_improved_input_response", Some(*slot)),
+        EnableTextureStreaming {slot,..} => ("enable_texture_streaming", Some(*slot)),
+        DisableTextureStreaming {slot,..} => ("disable_texture_streaming", Some(*slot)),
+        ClearProfileData {slot,..} => ("clear_profile_data", Some(*slot)),
+        Launch {slot,..} => ("launch", Some(*slot)),
+        #[cfg(feature="mc02-native-input")]
+        LaunchMc02Experiment {slot,..} => ("launch_mc02_experiment", Some(*slot)),
+        #[cfg(feature="mc02-native-input")]
+        LaunchAiExperiment {slot,..} => ("launch_ai_experiment", Some(*slot)),
+        #[cfg(feature="mc02-native-input")]
+        Mc02Input {slot,..} => ("mc02_input", Some(*slot)),
+        #[cfg(feature="mc02-native-input")]
+        AiLeasedInput {slot,..} => ("ai_leased_input", Some(*slot)),
+        #[cfg(feature="mc02-native-input")]
+        AiLeaseAcquire {..} => ("ai_lease_acquire", None),
+        #[cfg(feature="mc02-native-input")]
+        AiLeaseRelease {..} => ("ai_lease_release", None),
+        #[cfg(feature="mc02-native-input")]
+        AiInputGroup {..} => ("ai_input_group", None),
+        CloseOne {slot,..} => ("close_one", Some(*slot)),
+        CloseAll => ("close_all", None),
+    };
+    super::issue_report::Context { operation, slot }
+}
+
+#[cfg(windows)]
 fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::time::Instant)
     -> io::Result<SessionSnapshot> {
     let selected_target=match &request {
@@ -1468,11 +1520,16 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
         return Err(io::Error::new(io::ErrorKind::TimedOut,
             "Session observation budget expired before the next request"));
     }
+    use super::issue_report::{self, Code};
+    let context = issue_context(&request);
     let (sender, replies) = std::sync::mpsc::sync_channel(1);
     // A failed OS thread allocation must not panic while the transport
     // mutex is held. No worker or mutation was admitted on spawn failure.
     let worker = std::thread::Builder::new().spawn(move || {
         let _ = sender.send(transact(request));
+    }).map_err(|error| {
+        issue_report::note(Code::IpcWorkerStartFailed, context, error.raw_os_error());
+        error
     })?;
     owner.pending = Some(PendingRequest { replies, worker });
     let outcome = classify_pending_worker_wait(
@@ -1491,12 +1548,14 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
                     if reply.as_ref().is_ok_and(|snapshot|
                        input_receipt_expected!=snapshot.is_input_receipt()) {
                         owner.uncertain=true;
+                        issue_report::note(Code::IpcInputReceiptInvalid, context, None);
                         return Err(io::Error::new(io::ErrorKind::BrokenPipe,
                             "Invalid native input receipt; outcome uncertain"));
                     }
                     if let Some(slot)=selected_target {
                         if reply.as_ref().is_ok_and(|snapshot|!snapshot.is_agent_target_receipt(slot)) {
                             owner.uncertain=true;
+                            issue_report::note(Code::IpcTargetReceiptInvalid, context, None);
                             return Err(io::Error::new(io::ErrorKind::BrokenPipe,
                                 "Invalid selected target receipt; outcome uncertain"));
                         }
@@ -1504,6 +1563,7 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
                     if reconciling {
                         if reply.as_ref().is_ok_and(|snapshot|!snapshot.is_full_inspect_receipt()) {
                             owner.uncertain=true;
+                            issue_report::note(Code::IpcInspectReceiptInvalid, context, None);
                             return Err(io::Error::new(io::ErrorKind::BrokenPipe,
                                 "Invalid full Inspect receipt; outcome uncertain"));
                         }
@@ -1513,6 +1573,7 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
                 }
                 Err(error) => {
                     owner.uncertain = true;
+                    issue_report::note(Code::IpcTransportFailed, context, error.raw_os_error());
                     Err(error)
                 }
             }
@@ -1522,6 +1583,7 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
             // Retain its receiver, buffers, peer pin and thread. Never
             // start a second worker or blindly resend its mutation.
             owner.uncertain = true;
+            issue_report::note(Code::IpcReplyTimeout, context, None);
             Err(io::Error::new(
                 io::ErrorKind::TimedOut,
                 "Session request is still pending; refresh to observe its eventual outcome",
@@ -1535,6 +1597,7 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
             // no old reply can be synthesized or retried here.
             owner.join_finished_request();
             owner.uncertain = true;
+            issue_report::note(Code::IpcReplyLost, context, None);
             Err(io::Error::new(
                 io::ErrorKind::BrokenPipe,
                 "Original session request worker returned no result; outcome uncertain",

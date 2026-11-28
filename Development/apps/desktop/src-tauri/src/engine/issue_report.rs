@@ -1,0 +1,117 @@
+//! Bounded native request-client issue evidence. No I/O, timers, or game authority.
+use serde::Serialize;
+use std::sync::Mutex;
+
+const LIMIT: usize = 16;
+fn is_false(value: &bool) -> bool { !*value }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(crate) enum Code {
+    IpcWorkerStartFailed,
+    IpcTransportFailed,
+    IpcInputReceiptInvalid,
+    IpcTargetReceiptInvalid,
+    IpcInspectReceiptInvalid,
+    IpcReplyTimeout,
+    IpcReplyLost,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Context {
+    pub operation: &'static str,
+    pub slot: Option<u32>,
+}
+
+#[derive(Clone, Serialize)]
+struct Entry {
+    c: Code,
+    op: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    s: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    os: Option<i32>,
+    t: u64,
+    n: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    l: Option<u64>,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct NativeIssueReport {
+    v: u8,
+    issues: Vec<Entry>,
+    #[serde(skip_serializing_if = "is_false")]
+    truncated: bool,
+}
+
+impl NativeIssueReport {
+    const fn new() -> Self {
+        Self { v: 1, issues: Vec::new(), truncated: false }
+    }
+
+    fn record(&mut self, code: Code, context: Context, os: Option<i32>, now: u64) {
+        // Never admit an arbitrary ID into the report.
+        let slot = context.slot.filter(|s| (1..=5).contains(s));
+        if let Some(row) = self.issues.iter_mut().find(|row|
+            row.c == code && row.op == context.operation && row.s == slot && row.os == os) {
+            row.n = row.n.saturating_add(1);
+            row.l = Some(now);
+        } else if self.issues.len() < LIMIT {
+            self.issues.push(Entry { c: code, op: context.operation, s: slot, os, t: now, n: 1, l: None });
+        } else {
+            self.truncated = true;
+        }
+    }
+}
+
+static REPORT: Mutex<NativeIssueReport> = Mutex::new(NativeIssueReport::new());
+
+// Called only at the original failed request boundary. Never format raw errors,
+// serialize requests, query OS resources, write files, or change failure results.
+#[cfg(windows)]
+pub(crate) fn note(code: Code, context: Context, os: Option<i32>) {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    if let Ok(mut report) = REPORT.lock() {
+        report.record(code, context, os, now);
+    }
+}
+
+pub(crate) fn read() -> Result<Option<NativeIssueReport>, &'static str> {
+    let report = REPORT.lock().map_err(|_| "Native issue report unavailable")?;
+    Ok((!report.issues.is_empty()).then(|| report.clone()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn report_aggregates_actual_failures_without_raw_context() {
+        let mut report = NativeIssueReport::new();
+        let context = Context { operation: "close_one", slot: Some(2) };
+        report.record(Code::IpcReplyTimeout, context, None, 100);
+        report.record(Code::IpcReplyTimeout, context, None, 120);
+        report.record(Code::IpcReplyLost, context, None, 130);
+        assert_eq!(serde_json::to_value(&report).unwrap(), serde_json::json!({
+            "v":1,"issues":[
+                {"c":"IPC_REPLY_TIMEOUT","op":"close_one","s":2,"t":100,"n":2,"l":120},
+                {"c":"IPC_REPLY_LOST","op":"close_one","s":2,"t":130,"n":1}
+            ]
+        }));
+    }
+
+    #[test]
+    fn report_preserves_bound_and_distinct_os_codes() {
+        let mut report = NativeIssueReport::new();
+        let context = Context { operation: "inspect", slot: None };
+        for os in 0..17 {
+            report.record(Code::IpcTransportFailed, context, Some(os), 100);
+        }
+        assert_eq!(report.issues.len(), LIMIT);
+        assert!(report.truncated);
+        report.record(Code::IpcTransportFailed, context, Some(0), 110);
+        assert_eq!(report.issues[0].n, 2);
+    }
+}

@@ -2,13 +2,14 @@
 
 ## Current status
 
-Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01). Baseline [27d993d](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/27d993d03aa3bb9c3966d0ebc676153f7b57762d).
+Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–03). Baseline [27d993d](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/27d993d03aa3bb9c3966d0ebc676153f7b57762d).
 
 - User narrowed reporting to problems only, no routine metrics or dump. Existing desktop feedback codes, verified receipt projections and discrete capture/preference failure sites feed one bounded in-memory summary; no extra native request, polling, timer, service, dependency or automatic disk/network output. Settings exposes Copy report only after a problem; JSON compact and manually copyable even when Clipboard API fails. 48 code/slot entries; state deduplicated, counted attempts only for explicit capture/preference failures, overflow explicit. Raw error, identity, world, account, file and image data excluded. Native guards, receipts, gameplay evidence and performance collectors unchanged.
-- This is desktop-observed coverage, not full native/CLI crash capture; app close/crash loses unsaved summary, Settings access required, native cause and build identity not established by report. No performance rate or success proof. Source contract and fixtures authored NOT_EXECUTED; [desktop report guide](../Development/apps/desktop/README.md#selective-issue-report).
+- RPT-02/03: native request-client owner emits seven typed issue codes at exact failure boundaries, with actual operation, optional slot/OS code, first/latest seconds and bounded failed-attempt count. No normal-operation log, wire change, error-message classification, replay or new background read. Existing Settings Copy report reads native summary once on demand and exports schema 2 with separate UI/native provenance (48+16 rows), explicit unavailable native read, no inferred correlation.
+- Current-process coverage only; other CLI/controller memory, hidden native failures, durable storage, exact build identity, recovery correlation and performance rates are not established. App exit/crash loses unsaved summary; Settings access and observed UI issue still required. Source contract and fixtures authored NOT_EXECUTED; [desktop report guide](../Development/apps/desktop/README.md#selective-issue-report).
 - Earlier ICE-01–04 scoped source review remains closed; [exact previous handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/27d993d03aa3bb9c3966d0ebc676153f7b57762d/planning/development.md) preserves its full detail. ICE-05/OPT-07 still held. PLA and prior source work unchanged.
 
-**Next — STOP at scoped source ceiling.** No claim of runtime reporting success or zero overhead. Standard native ABI v4 digest approval missing; standard dev/package/new launch remains blocked. Tests, builds, benchmarks and native acceptance NOT_EXECUTED; CI and verified PC-local validation holds unchanged.
+**Next — STOP at scoped RPT-01–03 source ceiling.** No claim of runtime reporting success or zero overhead. Standard native ABI v4 digest approval missing; standard dev/package/new launch remains blocked. Tests, builds, benchmarks and native acceptance NOT_EXECUTED; CI and verified PC-local validation holds unchanged.
 
 ## Unreleased — Rust-first integration
 

@@ -186,7 +186,10 @@
   function noteIssue(code: IssueCode, slot?: ProfileSlot, countAttempt=false) {
     if (issueReport.note(code,slot,countAttempt)) issueReportAvailable=true;
   }
-  function readIssueReport() { return issueReport.read(); }
+  async function readIssueReport() {
+    try { return issueReport.readCombined(await lazyTester.issueReport()); }
+    catch { return issueReport.readCombined(undefined); }
+  }
   let previewIssue = '', selectedIdentity = '';
   // Optional native controller mirror; no new timer or MCP process.
   let agentActivity:AgentActivityReport|null=null;

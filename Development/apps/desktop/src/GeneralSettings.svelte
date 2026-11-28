@@ -24,17 +24,22 @@
   export let onRequestPerformanceSave: () => void;
   export let onSaveAudio: (mode: BackgroundAudio) => Promise<void>;
   export let issueReportAvailable = false;
-  export let onReadIssueReport: () => string | null;
-  let issueReportText = '', issueReportNotice = '';
+  export let onReadIssueReport: () => Promise<string | null>;
+  let issueReportText = '', issueReportNotice = '', issueReportPending = false;
   async function copyIssueReport() {
-    issueReportText = onReadIssueReport() ?? '';
-    if (!issueReportText) return;
+    if (issueReportPending) return;
+    issueReportPending=true;
+    issueReportNotice='';
     try {
-      await navigator.clipboard.writeText(issueReportText);
-      issueReportNotice='Issue report copied.';
-    } catch {
-      issueReportNotice='Select and copy the report text below.';
-    }
+      issueReportText = (await onReadIssueReport()) ?? '';
+      if (!issueReportText) {issueReportNotice='No issue report available.';return;}
+      try {
+        await navigator.clipboard.writeText(issueReportText);
+        issueReportNotice='Issue report copied.';
+      } catch {
+        issueReportNotice='Select and copy the report text below.';
+      }
+    } finally {issueReportPending=false;}
   }
 
   // Preserve a deliberate user's keyboard context when an existing save
@@ -104,7 +109,7 @@
             <section class="lazytester-group" aria-labelledby="lazytester-issue-report-section">
               <h2 id="lazytester-issue-report-section">Issue report</h2>
               <p class="lazytester-help">Problems observed since this app opened. Nothing is sent automatically.</p>
-              <button type="button" class="lazytester-secondary" on:click={copyIssueReport}>Copy report</button>
+              <button type="button" class="lazytester-secondary" disabled={issueReportPending} on:click={copyIssueReport}>Copy report</button>
               {#if issueReportNotice}<p role="status">{issueReportNotice}</p>{/if}
               {#if issueReportText}<textarea aria-label="Issue report JSON" readonly rows="4" value={issueReportText}></textarea>{/if}
             </section>

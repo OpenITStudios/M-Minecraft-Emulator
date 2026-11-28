@@ -1,5 +1,5 @@
 // Selective, desktop-observed issue summary. Not a native audit log or telemetry.
-import type {ProfileSlot} from '../bridge/lazyTester.js';
+import type {NativeIssueReport, ProfileSlot} from '../bridge/lazyTester.js';
 import {userFeedback, type UserMessageKey} from './sessionFeedback.js';
 
 export type IssueCode = ReturnType<typeof userFeedback>['code'] |
@@ -42,7 +42,15 @@ export class IssueReport {
     return true;
   }
 
-  // No report when healthy; serialize once only on explicit user request.
+  // One export; keep observations of different producers separate unless correlated.
+  readCombined(native: NativeIssueReport | null | undefined): string | null {
+    if (!this.entries.size && !native) return null;
+    return JSON.stringify({v:2,scope:'desktop-process',issues:[...this.entries.values()],
+      ...(this.truncated ? {truncated:true} : {}),
+      ...(native === undefined ? {nativeUnavailable:true} : {native})});
+  }
+
+  // Legacy desktop-only format; serialize once only on explicit user request.
   read(): string | null {
     if (!this.entries.size) return null;
     return JSON.stringify({v:1,scope:'desktop-observed',issues:[...this.entries.values()],

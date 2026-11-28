@@ -481,7 +481,40 @@ export function parseRecordingStatus(value:unknown):RecordingReceipt[] {
     return item as unknown as RecordingReceipt;
   });
 }
+const nativeIssueCodes = ["IPC_WORKER_START_FAILED","IPC_TRANSPORT_FAILED","IPC_INPUT_RECEIPT_INVALID","IPC_TARGET_RECEIPT_INVALID","IPC_INSPECT_RECEIPT_INVALID","IPC_REPLY_TIMEOUT","IPC_REPLY_LOST"] as const;
+const nativeIssueOperations = ["inspect","target","agent_activity","testing_reserve","testing_finalize","testing_inspect","inspect_settings","apply_preset","apply_graphics_preset","save_performance","save_audio","save_storage_preferences","inspect_storage","inspect_profile_storage","inspect_selective_inventory","review_selective_inventory","confirm_selected_worlds","confirm_selected_packs","open_profile_folder","clear_profile_cache","clear_profile_download_cache","reset_game_settings","restore_game_settings","disable_improved_input_response","enable_texture_streaming","disable_texture_streaming","clear_profile_data","launch","launch_mc02_experiment","launch_ai_experiment","mc02_input","ai_leased_input","ai_lease_acquire","ai_lease_release","ai_input_group","close_one","close_all"] as const;
+export interface NativeIssueReport {
+  v:1;
+  issues:{c:typeof nativeIssueCodes[number];op:typeof nativeIssueOperations[number];s?:ProfileSlot;os?:number;t:number;n:number;l?:number}[];
+  truncated?:true;
+}
+export function parseNativeIssueReport(value:unknown):NativeIssueReport|null {
+  if(value===null)return null;
+  const uint=(v:unknown,max=Number.MAX_SAFE_INTEGER)=>typeof v==='number'&&Number.isSafeInteger(v)&&v>=0&&v<=max;
+  if(!record(value)||!exact(value,['v','issues',...(Object.hasOwn(value,'truncated')?['truncated']:[])])||
+      value.v!==1||Object.hasOwn(value,'truncated')&&value.truncated!==true||
+      !Array.isArray(value.issues)||value.issues.length<1||value.issues.length>16)
+    throw new TypeError('Invalid native issue report');
+  const seen=new Set<string>();
+  for(const row of value.issues) {
+    if(!record(row)||!exact(row,['c','op','t','n',...['s','os','l'].filter(k=>Object.hasOwn(row,k))])||
+       !nativeIssueCodes.includes(row.c as typeof nativeIssueCodes[number])||
+       !nativeIssueOperations.includes(row.op as typeof nativeIssueOperations[number])||
+       !uint(row.t)||!uint(row.n,0xffffffff)||row.n===0||
+       Object.hasOwn(row,'s')&&!profileSlots.includes(row.s as ProfileSlot)||
+       Object.hasOwn(row,'os')&&(typeof row.os!=='number'||!Number.isInteger(row.os)||row.os< -2147483648||row.os>2147483647)||
+       Object.hasOwn(row,'l')&&!uint(row.l)||
+       (Number(row.n)>1)!==Object.hasOwn(row,'l'))
+      throw new TypeError('Invalid native issue entry');
+    const key=JSON.stringify([row.c,row.op,row.s??null,row.os??null]);
+    if(seen.has(key))throw new TypeError('Duplicate native issue entry');
+    seen.add(key);
+  }
+  return value as unknown as NativeIssueReport;
+}
+
 export const lazyTester = {
+  issueReport:async()=>parseNativeIssueReport(await invokeRuntime<unknown>('lazy_tester_issue_report')),
   recordingStatus:async()=>parseRecordingStatus(await invokeRuntime<unknown>('lazy_tester_recording_status')),
   startRecording:async(slot:ProfileSlot,expected:OwnedProcess)=>{
     const result=await invokeRuntime<unknown>('lazy_tester_start_recording',{slot,expected});

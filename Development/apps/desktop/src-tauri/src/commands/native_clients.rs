@@ -93,6 +93,12 @@ pub async fn lazy_tester_session(
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
 
+// Read only the current process's bounded report, not a native session request.
+#[tauri::command]
+pub(crate) fn lazy_tester_issue_report() -> Result<Option<crate::engine::issue_report::NativeIssueReport>, &'static str> {
+    crate::engine::issue_report::read()
+}
+
 // This receipt distinguishes a refusal before managed-window mutation from
 // an unconfirmed close AFTER the selected workspace was released. The
 // retained session controller, never the UI, validates live game ownership.

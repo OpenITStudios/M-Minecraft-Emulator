@@ -2,7 +2,7 @@ import {describe,expect,it} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {IssueReport,MAX_ISSUES,reportableFeedback} from '../src/app/presentation/issueReport.js';
 import {userFeedback,type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
-import type {ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {parseNativeIssueReport,type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 
 describe('Selective desktop issue report',()=>{
   it('creates no report without an issue and deduplicates state without counting polls',()=>{
@@ -38,6 +38,19 @@ describe('Selective desktop issue report',()=>{
     for(const key of ['graphicsBlocked','performanceBlocked','closeRejected','closeAll'] as const)
       expect(reportableFeedback(key)).toBe(false);
   });
+  it('combines bounded native evidence with UI observations without claiming correlation',()=>{
+    const report=new IssueReport(()=>100);
+    expect(report.readCombined(null)).toBeNull();
+    report.note('LT-CON-01');
+    const native=parseNativeIssueReport({v:1,issues:[{c:'IPC_REPLY_TIMEOUT',op:'close_one',s:2,t:100,n:2,l:120}]});
+    expect(JSON.parse(report.readCombined(native)!)).toEqual({v:2,scope:'desktop-process',
+      issues:[{c:'LT-CON-01',t:100}],native});
+    expect(JSON.parse(report.readCombined(undefined)!)).toMatchObject({nativeUnavailable:true});
+    expect(JSON.parse(report.readCombined(null)!)).toMatchObject({native:null});
+    for(const change of [{op:'unknown'},{c:'unknown'},{s:9},{raw:'secret'},{n:0},{l:null}])
+      expect(()=>parseNativeIssueReport({v:1,issues:[{...native!.issues[0],...change}]})).toThrow();
+    expect(()=>parseNativeIssueReport({v:1,issues:Array(17).fill(native!.issues[0])})).toThrow();
+  });
   it('mounts explicit copy only after a problem and uses existing feedback without exporting raw data',()=>{
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
     const settings=readFileSync(new URL('../src/GeneralSettings.svelte',import.meta.url),'utf8');
@@ -46,6 +59,8 @@ describe('Selective desktop issue report',()=>{
     expect(app).toContain('{issueReportAvailable} onReadIssueReport={readIssueReport}');
     expect(settings).toContain('{#if issueReportAvailable}');
     expect(settings).toContain('await navigator.clipboard.writeText(issueReportText)');
+    expect(app).toContain('await lazyTester.issueReport()');
+    expect(settings).toContain('await onReadIssueReport()');
     expect(settings).toContain('readonly rows="4" value={issueReportText}');
   });
 });
