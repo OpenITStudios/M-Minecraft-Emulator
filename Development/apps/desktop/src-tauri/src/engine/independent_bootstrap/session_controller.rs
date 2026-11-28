@@ -1621,6 +1621,7 @@ enum ReplySnapshot {
     Full,
     Close,
     Receipt,
+    AgentReceipt,
     #[cfg(feature="mc02-native-input")]
     InputReceipt,
     Selected(u32),
@@ -1643,7 +1644,7 @@ impl ReplySnapshot {
             SessionRequest::PublishAgentActivity { .. } |
             SessionRequest::TestingReserve { .. } |
             SessionRequest::TestingFinalize { .. } |
-            SessionRequest::TestingInspect { .. } => Self::Receipt,
+            SessionRequest::TestingInspect { .. } => Self::AgentReceipt,
             _ => Self::Full,
         }
     }
@@ -1653,8 +1654,9 @@ impl ReplySnapshot {
             Self::Full => sessions.snapshot(),
             Self::Close => sessions.snapshot_without_reaping(true),
             Self::Receipt => sessions.snapshot_without_reaping(false),
+            Self::AgentReceipt => SessionSnapshot::empty_receipt(),
             #[cfg(feature="mc02-native-input")]
-            Self::InputReceipt => SessionSnapshot::input_receipt(),
+            Self::InputReceipt => SessionSnapshot::empty_receipt(),
             Self::Selected(slot) | Self::AgentTarget(slot) => sessions.snapshot_slots(false, (slot as usize - 1)..slot as usize),
         }
     }
@@ -2035,6 +2037,18 @@ fn run() -> io::Result<()> {
             if matches!(reply_snapshot,ReplySnapshot::AgentTarget(_)) {
                 return Ok(snapshot); // No unrelated status/activity payload.
             }
+            if reply_snapshot==ReplySnapshot::AgentReceipt {
+                // Testing correlation uses only its own result. Activity
+                // publication echoes the admitted report, not a game roster
+                // or a later UI freshness projection. This also keeps its
+                // receipt distinct from the empty experimental input ACK.
+                if testing_reply.is_none() && inspection_reply.is_none() {
+                    snapshot.agent_activity=agent_activity.as_ref().map(|(report,_)|report.clone());
+                }
+                snapshot.testing_run=testing_reply;
+                snapshot.testing_inspection=inspection_reply;
+                return Ok(snapshot);
+            }
             // Both Settings observation and post-save replies share this
             // full snapshot's reap. No actor request can change its roster
             // between these observations. Saves still use fresh registration;
@@ -2284,8 +2298,12 @@ mod tests {
             SessionRequest::TestingFinalize { slot: 1, owner_id: String::new(),
                 run_id: String::new(), reported_status: String::new(), report_digest: String::new() },
         ] {
-            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Receipt);
+            assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::AgentReceipt);
         }
+        let empty=SessionSnapshot::empty_receipt();
+        assert!(empty.profiles.is_empty());
+        assert!(empty.agent_activity.is_none());
+        assert!(empty.testing_run.is_none() && empty.testing_inspection.is_none());
         #[cfg(feature="mc02-native-input")]
         {
             let frame=crate::engine::native_clients_session::AiInputFrame {

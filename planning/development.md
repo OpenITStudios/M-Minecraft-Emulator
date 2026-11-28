@@ -2,6 +2,8 @@
 
 ## Current status
 
+Work: `prelocal-efficiency-and-correctness-audit` (PLA-02 private agent receipts; legacy inventory initial pass) — authorized source cleanup after BS closure. Baseline f7bcf68309c92c68536dd32a931b2c6b7b5900cb. TestingInspect/Reserve/Finalize and PublishAgentActivity now select a private roster-free receipt using the same empty constructor as the held input ACK; only the matching Testing result or admitted activity report is attached. Desktop receipt/Inspect/selection paths, original actor and admission, wire fields, agent CLI public output and input ACK distinction remain. Existing pure routing fixture extended NOT_EXECUTED. Legacy tree and selected package/manifest/native owners reviewed: no executable VMware/Sandboxie provider found there; retain historical provenance and negative package/structure guards, no data deletion. Broad audit remains partial; PLA-01 recovery and remaining PLA-03–08 open; OPT-07 measured IPC and all execution holds unchanged. Unreleased; CONTINUE.
+
 Branch `Local`; source-only work, Unreleased. Baseline `9b285c2110b7cdf91eda7e26c315a0b850eab82c`.
 The earlier non-MCP FLOW-01–09 and MCP-01–08 source scopes remain closed. The operator separately clarified Lazy Tester's product goal: manual or automated map playtesting, followed by evidence-grounded issue reporting. The authorized `blindspot-and-orphan-cleanup` source follow-up is now closed; native experiments, CI, localtest, release and data changes remain outside its authority.
 

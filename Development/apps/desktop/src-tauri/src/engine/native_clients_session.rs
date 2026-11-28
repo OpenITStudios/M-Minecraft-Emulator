@@ -614,11 +614,9 @@ impl SessionSnapshot {
         self.testing_run.is_none() && self.testing_inspection.is_none()
     }
 
-    // Private experimental input/lease ACK, never a roster observation.
-    // The same authenticated request/reply envelope carries the result.
-    // No fabricated STOPPED entries, settings, issues or agent activity.
-    #[cfg(feature="mc02-native-input")]
-    pub(crate) fn input_receipt() -> Self {
+    // Private receipts start without a roster. The caller attaches only
+    // the operation-specific result; never fabricate STOPPED entries.
+    pub(crate) fn empty_receipt() -> Self {
         Self {
             schema:1, profiles:Vec::new(), storage:None,
             selective_inventory:None, selective_review:None, settings:None,
@@ -2842,7 +2840,7 @@ mod tests {
     #[cfg(feature="mc02-native-input")]
     #[test]
     fn private_input_receipt_is_not_a_session_roster_or_status_report() {
-        let receipt=SessionSnapshot::input_receipt();
+        let receipt=SessionSnapshot::empty_receipt();
         assert!(receipt.is_input_receipt());
         assert_eq!(serde_json::to_value(&receipt).unwrap(),
             serde_json::json!({"schema":1,"profiles":[],"storage":null}));
