@@ -698,6 +698,107 @@ export function createOperationCore(config,{
       }
     }
   }
+  // One private Probe checkpoint owner, shared by canonical and legacy ingress.
+  async function prepareProbeQa(slot) {
+    requireOpen();
+    if(config.mode==='human-plus-four-ai'&&slot===1) {
+      throw new Error('MC01 human host is protected from AI computer-use targeting');
+    }
+    // Preparing again invalidates any older result token for the same slot.
+    // A direct legacy prepare cannot inherit a previous native run ID.
+    // The coordinated wrapper reattaches its admitted ID to the new
+    // canonical plan after the ONE original probe_qa call completes.
+    probeQaPlans.delete(slot);
+    testingRunIds.delete(slot);
+    if(!config.probeZip)return {schema:1,slot,status:'PROBE_ZIP_NOT_CONFIGURED',
+      needed:'Set LAZY_TESTER_PROBE_ZIP once to the approved local Skills Probe ZIP',
+      commandSent:false};
+    if(!config.evidenceDirectory)return {schema:1,slot,status:'CAPTURE_NOT_CONFIGURED',
+      needed:'Configure the existing per-profile evidence directory once',
+      commandSent:false};
+    if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
+    const catalog=await probeCatalog(config.probeZip);
+    if(!catalog||!Array.isArray(catalog.autoIds)||
+      catalog.autoIds.length<1||catalog.autoIds.length>80||
+      catalog.autoCount!==catalog.autoIds.length||
+      !/^[a-f0-9]{64}$/.test(catalog.sourceRevision??'')||
+      new Set(catalog.autoIds).size!==catalog.autoIds.length||
+      catalog.autoIds.some(id=>typeof id!=='string'||
+        !/^P[0-9]{1,3}[A-Z0-9]{0,12}$/.test(id))||
+      !/^[a-f0-9]{64}$/.test(catalog.archiveSha256??'')||
+      !/^[a-f0-9]{64}$/.test(catalog.runnerSha256??'')) {
+      throw new Error('PROBE_SOURCE_REVIEW_REQUIRED');
+    }
+    const existing=await evidence(config.evidenceDirectory,slot,EVIDENCE_LIMIT,{
+      probeOnly:true});
+    if(existing.status!=='CAPTURE_FILE_PRESENT') {
+      return {schema:1,slot,status:'CAPTURE_NOT_READY',
+        captureStatus:existing.status,commandSent:false};
+    }
+    if(existing.captureCursor?.kind!=='STABLE_CAPTURE_CURSOR_V1') {
+      return {schema:1,slot,status:'CAPTURE_CHECKPOINT_UNAVAILABLE',
+        commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
+    }
+    // Two supposedly independent MC slots must never accept the SAME
+    // underlying log inode as independent probe evidence. This detects
+    // a misconfigured hard-link/shared capture, not world authenticity.
+    const captureFileIdentity=existing.captureCursor.fileIdentity;
+    if(typeof captureFileIdentity==='string'&&
+       /^[a-f0-9]{64}$/.test(captureFileIdentity)&&
+       [...probeQaPlans.entries()].some(([otherSlot,other])=>
+         otherSlot!==slot&&
+         other.captureCursor?.fileIdentity===captureFileIdentity)) {
+      return {schema:1,slot,status:'CAPTURE_SLOT_COLLISION',
+        commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
+    }
+    const sessionId=randomBytes(12).toString('hex');
+    const preparedAt=new Date(qaClock()).toISOString();
+    probeQaPlans.set(slot,{sessionId,slot,preparedAt,autoIds:catalog.autoIds,
+      sourceRevision:catalog.sourceRevision,
+      captureCursor:existing.captureCursor});
+    return {schema:1,slot,status:'PREPARED_SOURCE_ONLY',
+      sessionId,preparedAt,autoProbeCount:catalog.autoCount,
+      autoProbeIds:catalog.autoIds,
+      catalogCache:catalog.cache,
+      sourceZipSha256:catalog.archiveSha256,
+      command:'/scriptevent probe:run auto',
+      dispatch:'NOT_AVAILABLE_IN_LAZY_TESTER',
+      computerUse:{input:'NOT_VERIFIED',approvedWorldRequired:true,
+        playerAdminRequired:true,requiresExactTarget:true,
+        existingTargetTool:'get_computer_use_target',
+        revalidationTool:'revalidate_computer_use_target',
+        commandInputTool:'NOT_AVAILABLE'},
+      requirements:'Copied QA world; Skills Probe installed; approved Player/admin; confirmed target profile and command-entry capability',
+      next:'After an authorized operator or verified AI Computer Use executes the original command, call read_probe_qa_result for this sessionId.',
+      commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
+  }
+  async function readProbeQaResult(slot,sessionId) {
+    requireOpen();
+    const session=probeQaPlans.get(slot);
+    if(!session||session.sessionId!==sessionId) {
+      return {schema:1,slot,status:'NOT_PREPARED_OR_EXPIRED',
+        gameplayAcceptance:'NOT_VERIFIED'};
+    }
+    // Do not reuse an old source plan indefinitely; no timer/worker needed.
+    if(session.expired===true||
+       qaClock()-Date.parse(session.preparedAt)>20*60*1000) {
+      // Retain an expired tombstone so the preferred one-entry tool
+      // cannot silently start a new QA run on the next poll.
+      session.expired=true;
+      return {schema:1,slot,status:'QA_PLAN_EXPIRED',
+        gameplayAcceptance:'NOT_VERIFIED'};
+    }
+    const report=await evidence(config.evidenceDirectory,slot,EVIDENCE_LIMIT,{
+      probeCheckpoint:session.captureCursor});
+    if(probeQaPlans.get(slot)?.sessionId!==session.sessionId) {
+      return {schema:1,slot,status:'QA_PLAN_SUPERSEDED',
+        gameplayAcceptance:'NOT_VERIFIED'};
+    }
+    return {slot,sessionId:session.sessionId,
+      ...reviewProbeRun(report.probeEvents??[],session,{
+        captureStatus:report.status,captureReason:report.reason,
+        captureTruncated:report.truncated})};
+  }
   async function callTool(name,args) {
     requireOpen();
     if(name==='probe_qa' && args && Object.hasOwn(args,'inspectRun')) {
@@ -1040,7 +1141,7 @@ export function createOperationCore(config,{
             }
           }
           let prepared;
-          try {prepared=await callTool('prepare_probe_qa',{slot});}
+          try {prepared=await prepareProbeQa(slot);}
           catch(error) {
             const reason=error?.message==='PROBE_SOURCE_REVIEW_REQUIRED'?
               'PROBE_SOURCE_REVIEW_REQUIRED':'PROBE_SOURCE_OR_CAPTURE_UNAVAILABLE';
@@ -1157,8 +1258,7 @@ export function createOperationCore(config,{
         }
         let raw;
         try {
-          raw=await callTool('read_probe_qa_result',{
-            slot,sessionId:plan.sessionId});
+          raw=await readProbeQaResult(slot,plan.sessionId);
         } catch {
           return {schema:1,slot,status:'INCOMPLETE',
             reason:'EVIDENCE_UNAVAILABLE',gameplayAcceptance:'NOT_VERIFIED'};
@@ -1227,76 +1327,7 @@ export function createOperationCore(config,{
     if(name==='prepare_probe_qa') {
       keysExactly(args,['slot']);
       const slot=slotOf(args.slot??2);
-      if(config.mode==='human-plus-four-ai'&&slot===1) {
-        throw new Error('MC01 human host is protected from AI computer-use targeting');
-      }
-      // Preparing again invalidates any older result token for the same slot.
-      // A direct legacy prepare cannot inherit a previous native run ID.
-      // The coordinated wrapper reattaches its admitted ID to the new
-      // canonical plan after the ONE original probe_qa call completes.
-      probeQaPlans.delete(slot);
-      testingRunIds.delete(slot);
-      if(!config.probeZip)return {schema:1,slot,status:'PROBE_ZIP_NOT_CONFIGURED',
-        needed:'Set LAZY_TESTER_PROBE_ZIP once to the approved local Skills Probe ZIP',
-        commandSent:false};
-      if(!config.evidenceDirectory)return {schema:1,slot,status:'CAPTURE_NOT_CONFIGURED',
-        needed:'Configure the existing per-profile evidence directory once',
-        commandSent:false};
-      if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
-      const catalog=await probeCatalog(config.probeZip);
-      if(!catalog||!Array.isArray(catalog.autoIds)||
-        catalog.autoIds.length<1||catalog.autoIds.length>80||
-        catalog.autoCount!==catalog.autoIds.length||
-        !/^[a-f0-9]{64}$/.test(catalog.sourceRevision??'')||
-        new Set(catalog.autoIds).size!==catalog.autoIds.length||
-        catalog.autoIds.some(id=>typeof id!=='string'||
-          !/^P[0-9]{1,3}[A-Z0-9]{0,12}$/.test(id))||
-        !/^[a-f0-9]{64}$/.test(catalog.archiveSha256??'')||
-        !/^[a-f0-9]{64}$/.test(catalog.runnerSha256??'')) {
-        throw new Error('PROBE_SOURCE_REVIEW_REQUIRED');
-      }
-      const existing=await evidence(config.evidenceDirectory,slot,EVIDENCE_LIMIT,{
-        probeOnly:true});
-      if(existing.status!=='CAPTURE_FILE_PRESENT') {
-        return {schema:1,slot,status:'CAPTURE_NOT_READY',
-          captureStatus:existing.status,commandSent:false};
-      }
-      if(existing.captureCursor?.kind!=='STABLE_CAPTURE_CURSOR_V1') {
-        return {schema:1,slot,status:'CAPTURE_CHECKPOINT_UNAVAILABLE',
-          commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
-      }
-      // Two supposedly independent MC slots must never accept the SAME
-      // underlying log inode as independent probe evidence. This detects
-      // a misconfigured hard-link/shared capture, not world authenticity.
-      const captureFileIdentity=existing.captureCursor.fileIdentity;
-      if(typeof captureFileIdentity==='string'&&
-         /^[a-f0-9]{64}$/.test(captureFileIdentity)&&
-         [...probeQaPlans.entries()].some(([otherSlot,other])=>
-           otherSlot!==slot&&
-           other.captureCursor?.fileIdentity===captureFileIdentity)) {
-        return {schema:1,slot,status:'CAPTURE_SLOT_COLLISION',
-          commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
-      }
-      const sessionId=randomBytes(12).toString('hex');
-      const preparedAt=new Date(qaClock()).toISOString();
-      probeQaPlans.set(slot,{sessionId,slot,preparedAt,autoIds:catalog.autoIds,
-        sourceRevision:catalog.sourceRevision,
-        captureCursor:existing.captureCursor});
-      return {schema:1,slot,status:'PREPARED_SOURCE_ONLY',
-        sessionId,preparedAt,autoProbeCount:catalog.autoCount,
-        autoProbeIds:catalog.autoIds,
-        catalogCache:catalog.cache,
-        sourceZipSha256:catalog.archiveSha256,
-        command:'/scriptevent probe:run auto',
-        dispatch:'NOT_AVAILABLE_IN_LAZY_TESTER',
-        computerUse:{input:'NOT_VERIFIED',approvedWorldRequired:true,
-          playerAdminRequired:true,requiresExactTarget:true,
-          existingTargetTool:'get_computer_use_target',
-          revalidationTool:'revalidate_computer_use_target',
-          commandInputTool:'NOT_AVAILABLE'},
-        requirements:'Copied QA world; Skills Probe installed; approved Player/admin; confirmed target profile and command-entry capability',
-        next:'After an authorized operator or verified AI Computer Use executes the original command, call read_probe_qa_result for this sessionId.',
-        commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
+      return prepareProbeQa(slot);
     }
     if(name==='read_probe_qa_result') {
       keysExactly(args,['slot','sessionId']);
@@ -1304,30 +1335,7 @@ export function createOperationCore(config,{
       if(typeof args.sessionId!=='string'||!/^[a-f0-9]{24}$/.test(args.sessionId)) {
         throw new Error('Invalid tool arguments');
       }
-      const session=probeQaPlans.get(slot);
-      if(!session||session.sessionId!==args.sessionId) {
-        return {schema:1,slot,status:'NOT_PREPARED_OR_EXPIRED',
-          gameplayAcceptance:'NOT_VERIFIED'};
-      }
-      // Do not reuse an old source plan indefinitely; no timer/worker needed.
-      if(session.expired===true||
-         qaClock()-Date.parse(session.preparedAt)>20*60*1000) {
-        // Retain an expired tombstone so the preferred one-entry tool
-        // cannot silently start a new QA run on the next poll.
-        session.expired=true;
-        return {schema:1,slot,status:'QA_PLAN_EXPIRED',
-          gameplayAcceptance:'NOT_VERIFIED'};
-      }
-      const report=await evidence(config.evidenceDirectory,slot,EVIDENCE_LIMIT,{
-        probeCheckpoint:session.captureCursor});
-      if(probeQaPlans.get(slot)?.sessionId!==session.sessionId) {
-        return {schema:1,slot,status:'QA_PLAN_SUPERSEDED',
-          gameplayAcceptance:'NOT_VERIFIED'};
-      }
-      return {slot,sessionId:session.sessionId,
-        ...reviewProbeRun(report.probeEvents??[],session,{
-          captureStatus:report.status,captureReason:report.reason,
-          captureTruncated:report.truncated})};
+      return readProbeQaResult(slot,args.sessionId);
     }
     // All diagnostic calls are read-only, scoped to one configured Data/
     // Diagnostics root. A Codex/MCP caller cannot import or request a path.

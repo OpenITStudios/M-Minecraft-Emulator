@@ -280,6 +280,38 @@ test('QA MCP requires one pinned ZIP and cannot target human MC01',async()=>{
   assert.equal(nativeCalls,0);
 });
 
+test('legacy Probe tokens and canonical restart share one checkpoint owner',async()=>{
+  let prepares=0,nativeCalls=0;
+  const h=createHandler({...config(),executable:'',
+    probeZip:path.resolve('skills-probe.zip'),
+    evidenceDirectory:path.resolve('capture')},{
+    native:async()=>{nativeCalls++;throw Error('unexpected native call');},
+    probeCatalog:async()=>({autoCount:1,autoIds:['P01'],
+      archiveSha256:'a'.repeat(64),runnerSha256:'b'.repeat(64),
+      sourceRevision:'c'.repeat(64),cache:'FRESH_SOURCE_REVIEW'}),
+    evidence:async(_dir,slot,_limit,options)=>{
+      if(options.probeOnly)prepares++;
+      return {slot,status:'CAPTURE_FILE_PRESENT',
+        captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1'},probeEvents:[]};
+    },
+  });
+  try {
+    const old=await h.callTool('prepare_probe_qa',{slot:2});
+    assert.equal(old.status,'PREPARED_SOURCE_ONLY');
+    const ready=await h.callTool('probe_qa',{slot:2,restart:true});
+    assert.equal(ready.phase,'AWAITING_AUTHORIZED_COMMAND');
+    assert.equal(ready.commandSentByLazyTester,false);
+    assert.equal((await h.callTool('read_probe_qa_result',{
+      slot:2,sessionId:old.sessionId})).status,'NOT_PREPARED_OR_EXPIRED');
+    const latest=await h.callTool('prepare_probe_qa',{slot:2});
+    assert.equal(latest.status,'PREPARED_SOURCE_ONLY');
+    const read=await h.callTool('read_probe_qa_result',{slot:2,sessionId:latest.sessionId});
+    assert.equal(read.sessionId,latest.sessionId);
+    assert.equal(prepares,3);
+    assert.equal(nativeCalls,0);
+  } finally {h.shutdown();}
+});
+
 test('one AI QA MCP entry performs source/capture/target readiness then compact read',async()=>{
   let targetBirth='1234567';
   const nativeCalls=[];

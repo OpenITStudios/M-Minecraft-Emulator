@@ -224,7 +224,10 @@ existing owners, not a second result database or test/score engine.
 
 Without a configured map contract, old `probe_qa`, its legacy
 `prepare_probe_qa`/`read_probe_qa_result` tools and normal output
-shape remain compatible; no `mapPlan` or `qaReport` is added.
+shape remain compatible; no `mapPlan` or `qaReport` is added. The legacy
+names are ingress adapters to the same private prepare/read operations in
+`operation-core.mjs`; the preferred `probe_qa` route calls those operations
+directly, without redispatching a compatibility tool name.
 
 ## Boundaries and next runtime proof
 
