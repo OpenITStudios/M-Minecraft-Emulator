@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-06b: bounded Mach-O evidence intake)
+## Current status — cross-platform-native (MAC-06c: provisioning and authentication framework evidence)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,66 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-06c — extracted bundle provisioning and authentication framework evidence
+
+The operator-provided extracted app directory is accessible through Drive.
+Observed actual Contents inventory: main executable 512129360 bytes,
+Frameworks, Resources, _CodeSignature, Info.plist (8041 bytes), and
+embedded.provisionprofile (12937 bytes). Some framework root entries
+are represented as zero-byte files after extraction; actual binaries
+and metadata are in Versions/A. Do not regard the Windows/Drive copy
+as a complete installable or signature-verifiable macOS bundle.
+
+Read complete framework Info.plists:
+- OneAuth.framework/Versions/A/Resources/Info.plist:
+  executable OneAuth, com.microsoft.authentication, version/build 3.5.4.
+- msalsdk.framework/Versions/A/Resources/Info.plist:
+  executable msalsdk, com.microsoft.msalsdk, version/build 1.1.0.
+- MinecraftSwift.framework/Versions/A/Resources/Info.plist:
+  executable MinecraftSwift, com.mojang.minecraftpe.minecraftswift,
+  version 1.0.0, build 1.0.0.0, SDK macosx26.1.
+These establish bundled components, not their runtime use.
+
+Retrieved the bounded 12937-byte embedded.provisionprofile as data through
+Drive. Parsed the DER CMS SignedData encapsulated XML payload (8460 bytes),
+without evaluating instructions, executing game code or validating the
+CMS signature. Observed TeamIdentifier matches UBF8T346G9;
+com.apple.application-identifier matches
+UBF8T346G9.com.microsoft.minecraft-edu; developer team entitlement matches.
+The profile has two app-group entries and one keychain-access-groups
+entry. That entry has the expected team prefix and wildcard form; it
+covers the documented macOS MSAL default group, but is not an exact
+match to it. Raw group values, certificate data, private Drive links,
+and proprietary bundle bytes are intentionally not committed.
+ProvisionsAllDevices=true; no ProvisionedDevices array observed.
+App Sandbox, get-task-allow, disable-library-validation and
+allow-dyld-environment-variables were absent from this XML entitlement
+dictionary, not proven false in executable. No CMS signature verification,
+certificate trust evaluation or effective entitlement verification.
+
+Apple [TN3125](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles)
+distinguishes profile authorization from actual claimed code-signature
+entitlements, including macOS unrestricted entitlement exceptions.
+[Microsoft MSAL macOS keychain documentation](https://learn.microsoft.com/en-us/entra/msal/objc/howto-v2-keychain-objc)
+documents the default group and app-owned configuration.
+[Apple TN3137](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+explains that data protection keychain selection uses user login context,
+and library access depends on host main executable entitlements.
+Thus actual bundle evidence strengthens the shared-authentication risk,
+but neither a wildcard nor bundled SDK proves active shared cache use.
+Do not substitute framework signing metadata for the main executable.
+
+Decision: retain distinct existing standard macOS users as the strongest
+isolation feasibility candidate; same-user route remains preferable only
+if supported, with independent sign-in/data proven. No selection of B as
+final topology or relaxation of shared interactive five-instance workspace.
+No token/credential access, injection, re-signing or private app copies.
+The next decisive static evidence is the existing MAC-06b main Mach-O
+report (not another binary upload). Container access still fails; large
+executable bytes remain unread. No new runtime or parser, no native
+execution, no build/test/CI; all holds preserved. This is an evidence
+checkpoint, not a new implementation milestone.
 
 ### MAC-06b — bounded offline Mach-O evidence intake
 
@@ -875,7 +935,8 @@ MAC-05d records current-release external binary evidence and prioritizes
 OS-user isolation feasibility without changing product acceptance;
 MAC-06 records the offline Windows artifact intake and virtual-desktop limits;
 MAC-06a records actual user-supplied bundle metadata and exact discovery identity;
-MAC-06b adds bounded cross-platform Mach-O evidence intake after transfer failure.
+MAC-06b adds bounded cross-platform Mach-O evidence intake after transfer failure;
+MAC-06c records observed provisioning allowlist and authentication framework metadata.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
