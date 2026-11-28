@@ -13,7 +13,7 @@ DEV.cmd catalog --json
 DEV.cmd plan --json
 DEV.cmd review --json
 DEV.cmd review --base-sha <40-char-ancestor-SHA> --json
-DEV.cmd review --json --paths Development/tooling/agent/check-education-native-hud-source.mjs
+DEV.cmd review --json --paths Development/tooling/agent/operation-core.mjs
 DEV.cmd plan --profile local-smoke --json
 DEV.cmd smoke start --expect-sha <40-char-Local-SHA> --json
 DEV.cmd smoke record --run <smoke-run-id> --case LT-01 --result PASS --observed --expect-sha <40-char-Local-SHA> --json
@@ -38,12 +38,11 @@ It refuses protected, repeated, absolute and traversal paths and cannot run comm
 start agents, install REA, modify Minecraft, or mark any test PASS.
 
 `review` returns a bounded list of canonical owner areas and concrete risk
-checks. The HUD source checker, its authored regression fixture, the optional
-Resource Pack files and the canonical HUD guide deliberately map to the same
-`education-hud` review area, even when only the test or guide changed.
-A docs-only HUD review still recommends the existing documentation validation
-task; a fixture/source change still recommends the existing source validation
-task. Neither recommendation means the task ran.
+checks. Agent source is reviewed under `agent-mcp`; retired HUD prototype
+source and its checker are no longer active review targets. Historical HUD
+documentation remains a documentation-only review. The separate offline
+particle and texture previews are not automatic product or developer tasks.
+Neither a review nor its validation recommendation means a task ran.
 
 For critical MCP/native/UI source boundaries, the same read-only result also
 includes `crossModuleReviews`. Each source-selected seam lists the affected

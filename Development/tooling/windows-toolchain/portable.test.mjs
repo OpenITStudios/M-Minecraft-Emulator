@@ -126,7 +126,7 @@ test('developer commands isolate HOME/cache/temp, require local runtime and pres
   assert.match(developer,/workspace\/toolchains\/node\/npm\.cmd/);
   assert.match(developer, /resolves outside workspace\/toolchains/);
   assert.match(developer,/& \$LocalNpm @NpmArguments/);
-  assert.match(developer,/if \(\$Command -in @\("setup", "check", "check:quick", "check:repository-tests", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package"\)\)/);
+  assert.match(developer,/if \(\$Command -in @\("setup", "check", "check:quick", "check:repository-tests", "check:agent-tests", "check:frontend", "check:rust", "bench:frontend", "bench:rust", "test", "dev", "package"\)\)/);
   assert.match(developer,/if \(\$Command -in @[\s\S]*?Test-DeveloperToolchain[\s\S]*?switch \(\$Command\)/);
   for(const snippet of [
     '$env:CARGO_HOME', '$env:RUSTUP_HOME', '$env:NPM_CONFIG_CACHE',
@@ -135,6 +135,319 @@ test('developer commands isolate HOME/cache/temp, require local runtime and pres
   assert.match(environment,/no global fallback/i);
   assert.match(environment,/Do not override USERPROFILE\/APPDATA\/LOCALAPPDATA/);
   assert.doesNotMatch(environment,/\[Environment\]::SetEnvironmentVariable\([^)]*,\s*'Machine'/);
+});
+test('toolchain doctor reads one Rust identity report and independently requires release and host', () => {
+  const doctor=developer.split('function Test-DeveloperToolchain {')[1].split('function New-DesktopCargoLock {')[0];
+  assert.equal((doctor.match(/& rustc -vV/g)??[]).length,1);
+  assert.doesNotMatch(doctor,/& rustc --version/);
+  assert.ok(doctor.includes('if ($LASTEXITCODE -ne 0)'));
+  assert.ok(doctor.includes("$rustcReport -notmatch '(?m)^release:[ \\t]*(\\S+)[ \\t]*\\r?
+  const inventory=read('tooling/storage/inventory.mjs');
+  const planner=read('tooling/storage/retention.mjs');
+  assert.match(developer,/\[string\]\$StorageMode = "report"/);
+  assert.match(developer,/ValidateSet\("report", "explain", "plan", "cargo"\)/);
+  assert.match(developer,/if \(\$Command -eq "storage"\)/);
+  assert.match(developer,/tooling\/storage\/inventory\.mjs/);
+  assert.match(developer,/tooling\/storage\/retention\.mjs/);
+  assert.match(developer,/tooling\/storage\/cargo-footprint\.mjs/);
+  assert.ok(developer.indexOf('if ($Command -eq "storage")') <
+    developer.indexOf('Set-LocalDeveloperEnvironment -Root $Root'),
+    'read-only inventory must bypass developer cache initialization');
+  assert.match(developer,/if \(\$PSBoundParameters\.ContainsKey\('StorageMode'\)\)/);
+  assert.match(inventory,/lstatSync/);
+  assert.match(inventory,/opendirSync/);
+  assert.doesNotMatch(inventory,/\b(?:rmSync|unlinkSync|writeFileSync|readFileSync|execFileSync|spawnSync)\b/);
+  assert.match(planner,/destructiveCapability:false/);
+  assert.match(planner,/no --apply mode/);
+  assert.doesNotMatch(planner,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|execFileSync|spawnSync)\b/);
+  const cargo=read('tooling/storage/cargo-footprint.mjs');
+  assert.match(cargo,/x86_64-pc-windows-msvc/);
+  assert.match(cargo,/opendirSync/);
+  assert.match(cargo,/lstatSync/);
+  assert.doesNotMatch(cargo,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|readFileSync|execFileSync|spawnSync)\b/);
+});
+
+test('developer Cargo target directory is canonical and refuses ambient overrides', () => {
+  assert.match(environment,/\$canonicalCargoTarget = \[IO\.Path\]::GetFullPath/);
+  // Cargo 1.99 checks three inherited path settings through one shared guard.
+  // Pin the complete set and the exact validation/error path rather than
+  // expecting the retired single-variable check.
+  assert.match(environment,/foreach \(\$overrideName in @\('CARGO_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR'\)\)/);
+  assert.match(environment,/\[IO\.Path\]::GetFullPath\(\$overrideValue\) -ine \$canonicalCargoTarget/);
+  assert.match(environment,/external \$overrideName overrides are refused/);
+  assert.match(environment,/\[IO\.FileAttributes\]::ReparsePoint/);
+  assert.match(environment,/\$env:CARGO_TARGET_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/\$env:CARGO_BUILD_TARGET_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/\$env:CARGO_BUILD_BUILD_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/GetEnvironmentVariable\(\$overrideName,'Process'\)/);
+  assert.match(environment,/CARGO_BUILD_BUILD_DIR/);
+  assert.ok(environment.indexOf('$canonicalCargoTarget') <
+    environment.indexOf('New-Item -ItemType Directory'),
+    'invalid Cargo override should fail before cache directories are created');
+  assert.match(launcher,/DEV\.cmd storage cargo/);
+  const scripts=JSON.parse(read('package.json')).scripts;
+  assert.equal(scripts['storage:cargo'],'node tooling/storage/cargo-footprint.mjs');
+  assert.match(scripts['test:localtest'],/tooling\/storage\/cargo-footprint\.test\.mjs/);
+});
+
+test('scoped frontend and native source checks avoid accidental full verification', () => {
+  const rootManifest=JSON.parse(read('package.json'));
+  const desktopManifest=JSON.parse(read('apps/desktop/package.json'));
+  const rootScripts=rootManifest.scripts, desktopScripts=desktopManifest.scripts;
+  assert.equal(rootScripts['check:frontend'], 'npm --prefix apps/desktop run check:frontend');
+  assert.match(developer,/"check:repository-tests" \{ Invoke-RepositoryNpm -NpmArguments @\("run", "test:repository"\) \}/);
+  assert.equal(desktopScripts['check:frontend'], 'npm run typecheck && npm run test');
+  assert.doesNotMatch(desktopScripts['check:frontend'], /cargo|tauri|build:frontend|verify:source/i);
+  assert.equal(rootScripts['check:rust'],
+    'npm --prefix apps/desktop run check:rust:target && cargo check --locked --target x86_64-pc-windows-msvc --manifest-path engine/runtime-core/Cargo.toml');
+  assert.ok(desktopScripts['check:rust:target'].includes('cargo check --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(desktopScripts['check:rust:target'].includes('prepare:icons'));
+  assert.ok(!desktopScripts['check:rust:target'].includes('--all-targets'));
+  assert.ok(desktopScripts['check:rust'].includes('cargo check --all-targets --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(desktopScripts['test:rust'].includes('cargo test --all-targets --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['check:runtime'].includes('cargo check --locked --all-targets --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['test:runtime'].includes('cargo test --locked --all-targets --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['verify:source'].startsWith('npm run verify:repository -- --require-committed-desktop-lock && '));
+  assert.doesNotMatch(rootScripts['verify:source'], /npm run check:(?:structure|dependencies)(?:\s|$)/);
+  assert.ok(rootScripts['verify:quick'].includes('npm run check:structure && npm run check:dependencies'));
+  assert.ok(rootScripts['verify:source'].includes('npm run check:desktop'));
+  assert.ok(desktopScripts['verify:source'].includes('npm run build:frontend'));
+  assert.ok(desktopScripts['verify:source'].includes('npm run test:rust'));
+  assert.ok(rootScripts['verify:source'].includes('npm run test:runtime'));
+});
+
+test('benchmark uses exact Local checkout and two cache-preserving passes', () => {
+  const section=developer.slice(developer.indexOf('function Invoke-SourceBenchmark {'),
+    developer.indexOf('Push-Location $DevelopmentRoot'));
+  assert.ok(section.startsWith('function Invoke-SourceBenchmark {'));
+  assert.match(section,/Assert-LocalCheckout/);
+  assert.match(section,/Assert-CleanSourceAtHead -ExpectedSha \$sha/);
+  assert.match(section,/foreach \(\$pass in 1\.\.2\)/);
+  assert.match(section,/Stopwatch\]::StartNew\(\)/);
+  assert.match(section,/Invoke-RepositoryNpm -NpmArguments @\("run", \$scriptName\)/);
+  assert.match(section,/no PASS recorded/);
+  assert.match(section,/No cold\/warm classification/);
+  assert.doesNotMatch(section,/\b(?:Remove-Item|Clear-Content|cargo clean|rm -rf|Start-Process)\b/i);
+  for (const cmd of ['check:frontend','check:rust','bench:frontend','bench:rust']) {
+    assert.ok(developer.includes('"'+cmd+'"'), 'missing developer route: '+cmd);
+  }
+  assert.match(developer,/Test-DeveloperToolchain/);
+  assert.match(launcher,/DEV\.cmd bench:frontend/);
+  assert.match(launcher,/DEV\.cmd bench:rust/);
+});
+
+
+test('Rust benchmark compares active-target logical bytes outside timed source passes', () => {
+  const inspector=read('tooling/storage/cargo-footprint.mjs');
+  const section=developer.slice(developer.indexOf('function Get-CargoTargetSnapshot {'),
+    developer.indexOf('Push-Location $DevelopmentRoot'));
+  assert.ok(section.startsWith('function Get-CargoTargetSnapshot {'));
+  assert.match(section,/--active-json/);
+  assert.match(section,/scope -cne 'active-cargo-target'/);
+  assert.match(section,/complete -cne \$true/);
+  assert.match(section,/ConvertFrom-Json/);
+  assert.match(section,/UNKNOWN \(read-only scan failed or was partial\)/);
+  assert.match(section,/logical-byte change after pass/);
+  assert.match(section,/Observed size change is not attributable savings/);
+  assert.match(inspector,/schema:1,scope:'active-cargo-target'/);
+  assert.match(inspector,/maxDurationMs:15000,maxEntries:250000/);
+  assert.doesNotMatch(section,/\b(?:Remove-Item|Clear-Content|cargo clean|Start-Process)\b/i);
+  const start=section.indexOf('$watch = [System.Diagnostics.Stopwatch]::StartNew()');
+  const stop=section.indexOf('$watch.Stop()',start);
+  assert.ok(start>=0&&stop>start);
+  assert.ok(!section.slice(start,stop).includes('Get-CargoTargetSnapshot'),
+    'file scans must not be included in compilation timing');
+});
+test('portable setup scripts parse in Windows PowerShell without running downloads', {
+  skip: process.platform !== 'win32',
+}, () => {
+  for (const name of [
+    'tooling/windows-toolchain/bootstrap.ps1',
+    'tooling/windows-toolchain/local-env.ps1',
+    'tooling/windows-toolchain/dev.ps1',
+    'tooling/windows-toolchain/local-readiness.ps1',
+  ]) {
+    const file=resolve(root,name).replace(/'/g,"''");
+    const command = "$tokens=$null;$errors=$null;" +
+      "[System.Management.Automation.Language.Parser]::ParseFile('" + file +
+      "',[ref]$tokens,[ref]$errors)|Out-Null;" +
+      "if($errors.Count){$errors|ForEach-Object{Write-Error $_};exit 1}";
+    const result=spawnSync('powershell.exe',
+      ['-NoProfile','-NonInteractive','-Command',command],
+      {encoding:'utf8',windowsHide:true,timeout:30000});
+    assert.equal(result.status,0, name+' parser errors: '+(result.stderr||result.error));
+  }
+});
+
+test('retired G0 refuses before developer environment initialization or build dispatch', () => {
+  const refusal = developer.match(/if \(\$Command -eq "g0"\) \{\s*throw "LEGACY_G0_RETIRED:[^"]+"\s*\}/);
+  assert.ok(refusal);
+  assert.ok(refusal.index < developer.indexOf('Set-LocalDeveloperEnvironment'));
+  assert.doesNotMatch(developer, /Invoke-G0SourcePackage|Assert-BuiltWindowsPackage|virtual-guest-agent\.exe|virtual-clients-x86_64-pc-windows-msvc\.exe/);
+  assert.match(developer, /"preflight"\s*\{ Invoke-NativeSourcePreflight \}/);
+  assert.match(developer, /"package"\s*\{ Invoke-RepositoryNpm -NpmArguments @\("run", "package:windows"\) \}/);
+});
+"));
+  assert.ok(doctor.includes("$rustcReport -notmatch '(?m)^host:[ \\t]*(\\S+)[ \\t]*\\r?
+  const inventory=read('tooling/storage/inventory.mjs');
+  const planner=read('tooling/storage/retention.mjs');
+  assert.match(developer,/\[string\]\$StorageMode = "report"/);
+  assert.match(developer,/ValidateSet\("report", "explain", "plan", "cargo"\)/);
+  assert.match(developer,/if \(\$Command -eq "storage"\)/);
+  assert.match(developer,/tooling\/storage\/inventory\.mjs/);
+  assert.match(developer,/tooling\/storage\/retention\.mjs/);
+  assert.match(developer,/tooling\/storage\/cargo-footprint\.mjs/);
+  assert.ok(developer.indexOf('if ($Command -eq "storage")') <
+    developer.indexOf('Set-LocalDeveloperEnvironment -Root $Root'),
+    'read-only inventory must bypass developer cache initialization');
+  assert.match(developer,/if \(\$PSBoundParameters\.ContainsKey\('StorageMode'\)\)/);
+  assert.match(inventory,/lstatSync/);
+  assert.match(inventory,/opendirSync/);
+  assert.doesNotMatch(inventory,/\b(?:rmSync|unlinkSync|writeFileSync|readFileSync|execFileSync|spawnSync)\b/);
+  assert.match(planner,/destructiveCapability:false/);
+  assert.match(planner,/no --apply mode/);
+  assert.doesNotMatch(planner,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|execFileSync|spawnSync)\b/);
+  const cargo=read('tooling/storage/cargo-footprint.mjs');
+  assert.match(cargo,/x86_64-pc-windows-msvc/);
+  assert.match(cargo,/opendirSync/);
+  assert.match(cargo,/lstatSync/);
+  assert.doesNotMatch(cargo,/\b(?:rmSync|unlinkSync|renameSync|writeFileSync|readFileSync|execFileSync|spawnSync)\b/);
+});
+
+test('developer Cargo target directory is canonical and refuses ambient overrides', () => {
+  assert.match(environment,/\$canonicalCargoTarget = \[IO\.Path\]::GetFullPath/);
+  // Cargo 1.99 checks three inherited path settings through one shared guard.
+  // Pin the complete set and the exact validation/error path rather than
+  // expecting the retired single-variable check.
+  assert.match(environment,/foreach \(\$overrideName in @\('CARGO_TARGET_DIR','CARGO_BUILD_TARGET_DIR','CARGO_BUILD_BUILD_DIR'\)\)/);
+  assert.match(environment,/\[IO\.Path\]::GetFullPath\(\$overrideValue\) -ine \$canonicalCargoTarget/);
+  assert.match(environment,/external \$overrideName overrides are refused/);
+  assert.match(environment,/\[IO\.FileAttributes\]::ReparsePoint/);
+  assert.match(environment,/\$env:CARGO_TARGET_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/\$env:CARGO_BUILD_TARGET_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/\$env:CARGO_BUILD_BUILD_DIR = \$canonicalCargoTarget/);
+  assert.match(environment,/GetEnvironmentVariable\(\$overrideName,'Process'\)/);
+  assert.match(environment,/CARGO_BUILD_BUILD_DIR/);
+  assert.ok(environment.indexOf('$canonicalCargoTarget') <
+    environment.indexOf('New-Item -ItemType Directory'),
+    'invalid Cargo override should fail before cache directories are created');
+  assert.match(launcher,/DEV\.cmd storage cargo/);
+  const scripts=JSON.parse(read('package.json')).scripts;
+  assert.equal(scripts['storage:cargo'],'node tooling/storage/cargo-footprint.mjs');
+  assert.match(scripts['test:localtest'],/tooling\/storage\/cargo-footprint\.test\.mjs/);
+});
+
+test('scoped frontend and native source checks avoid accidental full verification', () => {
+  const rootManifest=JSON.parse(read('package.json'));
+  const desktopManifest=JSON.parse(read('apps/desktop/package.json'));
+  const rootScripts=rootManifest.scripts, desktopScripts=desktopManifest.scripts;
+  assert.equal(rootScripts['check:frontend'], 'npm --prefix apps/desktop run check:frontend');
+  assert.match(developer,/"check:repository-tests" \{ Invoke-RepositoryNpm -NpmArguments @\("run", "test:repository"\) \}/);
+  assert.equal(desktopScripts['check:frontend'], 'npm run typecheck && npm run test');
+  assert.doesNotMatch(desktopScripts['check:frontend'], /cargo|tauri|build:frontend|verify:source/i);
+  assert.equal(rootScripts['check:rust'],
+    'npm --prefix apps/desktop run check:rust:target && cargo check --locked --target x86_64-pc-windows-msvc --manifest-path engine/runtime-core/Cargo.toml');
+  assert.ok(desktopScripts['check:rust:target'].includes('cargo check --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(desktopScripts['check:rust:target'].includes('prepare:icons'));
+  assert.ok(!desktopScripts['check:rust:target'].includes('--all-targets'));
+  assert.ok(desktopScripts['check:rust'].includes('cargo check --all-targets --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(desktopScripts['test:rust'].includes('cargo test --all-targets --locked --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['check:runtime'].includes('cargo check --locked --all-targets --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['test:runtime'].includes('cargo test --locked --all-targets --target x86_64-pc-windows-msvc'));
+  assert.ok(rootScripts['verify:source'].startsWith('npm run verify:repository -- --require-committed-desktop-lock && '));
+  assert.doesNotMatch(rootScripts['verify:source'], /npm run check:(?:structure|dependencies)(?:\s|$)/);
+  assert.ok(rootScripts['verify:quick'].includes('npm run check:structure && npm run check:dependencies'));
+  assert.ok(rootScripts['verify:source'].includes('npm run check:desktop'));
+  assert.ok(desktopScripts['verify:source'].includes('npm run build:frontend'));
+  assert.ok(desktopScripts['verify:source'].includes('npm run test:rust'));
+  assert.ok(rootScripts['verify:source'].includes('npm run test:runtime'));
+});
+
+test('benchmark uses exact Local checkout and two cache-preserving passes', () => {
+  const section=developer.slice(developer.indexOf('function Invoke-SourceBenchmark {'),
+    developer.indexOf('Push-Location $DevelopmentRoot'));
+  assert.ok(section.startsWith('function Invoke-SourceBenchmark {'));
+  assert.match(section,/Assert-LocalCheckout/);
+  assert.match(section,/Assert-CleanSourceAtHead -ExpectedSha \$sha/);
+  assert.match(section,/foreach \(\$pass in 1\.\.2\)/);
+  assert.match(section,/Stopwatch\]::StartNew\(\)/);
+  assert.match(section,/Invoke-RepositoryNpm -NpmArguments @\("run", \$scriptName\)/);
+  assert.match(section,/no PASS recorded/);
+  assert.match(section,/No cold\/warm classification/);
+  assert.doesNotMatch(section,/\b(?:Remove-Item|Clear-Content|cargo clean|rm -rf|Start-Process)\b/i);
+  for (const cmd of ['check:frontend','check:rust','bench:frontend','bench:rust']) {
+    assert.ok(developer.includes('"'+cmd+'"'), 'missing developer route: '+cmd);
+  }
+  assert.match(developer,/Test-DeveloperToolchain/);
+  assert.match(launcher,/DEV\.cmd bench:frontend/);
+  assert.match(launcher,/DEV\.cmd bench:rust/);
+});
+
+
+test('Rust benchmark compares active-target logical bytes outside timed source passes', () => {
+  const inspector=read('tooling/storage/cargo-footprint.mjs');
+  const section=developer.slice(developer.indexOf('function Get-CargoTargetSnapshot {'),
+    developer.indexOf('Push-Location $DevelopmentRoot'));
+  assert.ok(section.startsWith('function Get-CargoTargetSnapshot {'));
+  assert.match(section,/--active-json/);
+  assert.match(section,/scope -cne 'active-cargo-target'/);
+  assert.match(section,/complete -cne \$true/);
+  assert.match(section,/ConvertFrom-Json/);
+  assert.match(section,/UNKNOWN \(read-only scan failed or was partial\)/);
+  assert.match(section,/logical-byte change after pass/);
+  assert.match(section,/Observed size change is not attributable savings/);
+  assert.match(inspector,/schema:1,scope:'active-cargo-target'/);
+  assert.match(inspector,/maxDurationMs:15000,maxEntries:250000/);
+  assert.doesNotMatch(section,/\b(?:Remove-Item|Clear-Content|cargo clean|Start-Process)\b/i);
+  const start=section.indexOf('$watch = [System.Diagnostics.Stopwatch]::StartNew()');
+  const stop=section.indexOf('$watch.Stop()',start);
+  assert.ok(start>=0&&stop>start);
+  assert.ok(!section.slice(start,stop).includes('Get-CargoTargetSnapshot'),
+    'file scans must not be included in compilation timing');
+});
+test('portable setup scripts parse in Windows PowerShell without running downloads', {
+  skip: process.platform !== 'win32',
+}, () => {
+  for (const name of [
+    'tooling/windows-toolchain/bootstrap.ps1',
+    'tooling/windows-toolchain/local-env.ps1',
+    'tooling/windows-toolchain/dev.ps1',
+    'tooling/windows-toolchain/local-readiness.ps1',
+  ]) {
+    const file=resolve(root,name).replace(/'/g,"''");
+    const command = "$tokens=$null;$errors=$null;" +
+      "[System.Management.Automation.Language.Parser]::ParseFile('" + file +
+      "',[ref]$tokens,[ref]$errors)|Out-Null;" +
+      "if($errors.Count){$errors|ForEach-Object{Write-Error $_};exit 1}";
+    const result=spawnSync('powershell.exe',
+      ['-NoProfile','-NonInteractive','-Command',command],
+      {encoding:'utf8',windowsHide:true,timeout:30000});
+    assert.equal(result.status,0, name+' parser errors: '+(result.stderr||result.error));
+  }
+});
+
+test('retired G0 refuses before developer environment initialization or build dispatch', () => {
+  const refusal = developer.match(/if \(\$Command -eq "g0"\) \{\s*throw "LEGACY_G0_RETIRED:[^"]+"\s*\}/);
+  assert.ok(refusal);
+  assert.ok(refusal.index < developer.indexOf('Set-LocalDeveloperEnvironment'));
+  assert.doesNotMatch(developer, /Invoke-G0SourcePackage|Assert-BuiltWindowsPackage|virtual-guest-agent\.exe|virtual-clients-x86_64-pc-windows-msvc\.exe/);
+  assert.match(developer, /"preflight"\s*\{ Invoke-NativeSourcePreflight \}/);
+  assert.match(developer, /"package"\s*\{ Invoke-RepositoryNpm -NpmArguments @\("run", "package:windows"\) \}/);
+});
+"));
+  assert.ok(doctor.includes('$Matches[1] -ne [string]$toolchain.rust.version'));
+  assert.ok(doctor.includes('$Matches[1] -ne "x86_64-pc-windows-msvc"'));
+  assert.match(doctor,/if \(\$errors\.Count -gt 0\)[\s\S]*?throw "Developer toolchain doctor found/);
+});
+test('offline resource previews stay outside product and automatic developer routes', () => {
+  const registry=read('tooling/developer/tasks.json');
+  const productRoutes=[
+    read('package.json'),read('apps/desktop/package.json'),
+    read('apps/desktop/scripts/package-lazy-tester.mjs'),developer,registry,
+  ];
+  for(const source of productRoutes) {
+    assert.doesNotMatch(source,/lazytester-particles|lazytester-textures/);
+  }
 });
 test('developer storage route supports report, explain, and non-destructive retention plan', () => {
   const inventory=read('tooling/storage/inventory.mjs');

@@ -92,7 +92,10 @@ Direct Cargo from an unrelated shell is not governed by these settings.
 
 These **separate, explicit build tools are retained** for possible future
 operator-approved testing; they are not runtime services and neither is
-installed or activated by LazyTester. The [current closed scope, proof limits,
+installed or activated by LazyTester. Their builders and dedicated fixtures
+are outside the normal product npm/build/package and DEV.cmd task routes;
+Python/Pillow is not a product prerequisite. The existing full developer
+verification contract and pinned toolchain gate remain unchanged. The [current closed scope, proof limits,
 and reopen gates](../../planning/development.md) override historical research.
 
 From the repository root, optional **source-only synthetic checks** are:
