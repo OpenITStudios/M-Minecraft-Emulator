@@ -2,14 +2,15 @@
 
 ## Current status
 
-Branch `Local`; Unreleased. Work: `intermodule-communication-efficiency` (ICE-01/02). Baseline [c7bc043](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/c7bc04300882e10274951fe0adbcdfc0ec4a2c12).
+Branch `Local`; Unreleased. Work: `intermodule-communication-efficiency` (ICE-01–03). Baseline [c7bc043](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/c7bc04300882e10274951fe0adbcdfc0ec4a2c12).
 
 - ICE-01: existing one-shot Rust agent CLI consumes owned OS arguments rather than explicitly copying valid UTF-8 strings. Invalid arguments still refuse; operation/receipt/exit contracts unchanged. No extra CLI, process, wrapper or runtime owner.
 - ICE-02: existing authenticated byte-mode session pipe writes a complete newline-delimited JSON request buffer with one `write_all` invocation; reject frames above the existing 32 KiB inclusive limit before writing. Existing request validation, peer verification, reply/ACK, timeout, uncertainty/no-replay, ingress and original actor unchanged. Partial OS writes remain possible. One extra bounded buffer trades memory for fewer small writes; actual latency/CPU benefit unmeasured. Authored pure frame fixture covers exact bytes, one full writer call, inclusive limit and oversize refusal; NOT_EXECUTED.
 - Earlier PLA-01–08 source review remains closed; [exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/c7bc04300882e10274951fe0adbcdfc0ec4a2c12/planning/development.md) preserves previous detailed scope and proof. No reopening of retired providers, data changes or native/ABI gates.
-- ICE-03/04 remain proposed only where current source reveals real redundant observation or event reuse; no duplicate state or watcher. ICE-05/OPT-07 persistent IPC, CLI process lifecycle and worker replacement remain measurement-dependent and held. No new dependencies or protocol changes.
+- ICE-03: existing UI inspection equality compares the complete validated agent activity fields directly, instead of serializing two reports to JSON strings. Timestamp, stale, ordered items, optional outcomes/counts and all current contract fields remain significant; object key order alone is not a change. Existing native reads, epoch/admission and scheduler cadence unchanged. Fixtures authored NOT_EXECUTED. No new cache or state owner.
+- ICE-04 remains proposed only where current source reveals concrete event reuse; no duplicate watcher. ICE-05/OPT-07 persistent IPC, CLI process lifecycle and worker replacement remain measurement-dependent and held. No new dependencies or protocol changes.
 
-**Next — STOP at scoped ICE-01/02 source proof ceiling.** No claim of zero overhead or measured improvement. Standard native ABI v4 digest approval missing; standard dev/package/new launch remains blocked. All tests, builds, benchmarks and native acceptance NOT_EXECUTED. Existing verified PC-local authorization and CI/test holds unchanged.
+**Next — STOP at scoped ICE-01–03 source proof ceiling.** No claim of zero overhead or measured improvement. Standard native ABI v4 digest approval missing; standard dev/package/new launch remains blocked. All tests, builds, benchmarks and native acceptance NOT_EXECUTED. Existing verified PC-local authorization and CI/test holds unchanged.
 
 ## Unreleased — Rust-first integration
 

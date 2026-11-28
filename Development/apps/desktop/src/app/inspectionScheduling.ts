@@ -47,11 +47,25 @@ export function sameSettingsObservation(a: SettingsReport | null, b: SettingsRep
 }
 
 export function sameAgentObservation(a: AgentActivityReport | null, b: AgentActivityReport | null): boolean {
-  if (a === null || b === null) return a === b;
-  // Validated, bounded JSON records; compare the entire report, including
-  // snapshotAt and stale. Different serialization order may cause an extra
-  // update but can never suppress a changed field.
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  // Compare the complete validated report without allocating JSON strings.
+  // Property insertion order is irrelevant; item order and freshness are not.
+  return a.schema === b.schema && a.source === b.source &&
+    a.snapshotAt === b.snapshotAt && a.displayHint === b.displayHint &&
+    a.desktopControl === b.desktopControl &&
+    a.minecraftInputEffect === b.minecraftInputEffect &&
+    a.mapGameplayAcceptance === b.mapGameplayAcceptance && a.stale === b.stale &&
+    a.items.length === b.items.length && a.items.every((item, index) => {
+      const next = b.items[index]!;
+      const x = item.probeCounts, y = next.probeCounts;
+      return item.kind === next.kind && item.slot === next.slot &&
+        item.status === next.status && item.importance === next.importance &&
+        item.evidence === next.evidence && item.reportedOutcome === next.reportedOutcome &&
+        (x === y || (x !== undefined && y !== undefined &&
+          x.expected === y.expected && x.pass === y.pass && x.fail === y.fail &&
+          x.info === y.info && x.look === y.look));
+    });
 }
 
 // Only healthy live Play uses this hint. Routine local observation is not
