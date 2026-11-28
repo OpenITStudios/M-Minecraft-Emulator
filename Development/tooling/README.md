@@ -255,6 +255,20 @@ result applies only to this synthetic domain; authentication, game
 storage, native workspace and runtime admission remain unverified.
 This is future held acceptance source, not a localtest request.
 
+The explicit `--fixed-home-probe` variant reuses the preference probe's
+entire lifecycle and comparison. It additionally sets the process-local
+`CFFIXED_USER_HOME` to each synthetic profile root. Historical public
+CoreFoundation source prioritizes this value before the account home;
+modern macOS behavior is not established, and this is not a supported
+Minecraft profile parameter or a security boundary. The receipt labels
+the recipe and reports whether the variable was present/matched on both
+launches, together with the original path and preference checks. A
+positive fixed-home result requires every private path, actual environment
+match and independent preference persistence. The baseline remains
+available separately; each invocation uses a fresh synthetic domain.
+No daemon override, global environment change, game launch or credential
+access. No additional product mode. NOT_EXECUTED.
+
 The explicit `--rendezvous-probe` mode is a separate one-shot synthetic
 cross-user feasibility witness in the same source file. It requires two
 already-consented, distinct standard users in graphical login sessions,

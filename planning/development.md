@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-08a: same-user priority and preference witness)
+## Current status — cross-platform-native (MAC-08b: native home-routing candidate)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,53 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-08b — native home-routing candidate, not a game profile recipe
+
+Reviewed current [Minecraft Education world locations](https://edusupport.minecraft.net/hc/en-us/articles/4404785703316-Location-of-World-Files):
+macOS world root is under the device user's Library/Application Support/
+Minecraftpe/Games/com.mojang, not the Minecraft sign-in account. The
+[Microsoft Education deep link reference](https://learn.microsoft.com/en-us/minecraft/creator/reference/content/deep-links?view=minecraft-bedrock-stable)
+documents opening/joining worlds and servers, not per-instance storage
+roots; its handlers are internal and can change. Java Edition --gameDir
+does not establish an Education option. No supported Education-specific
+CLI data-root override found in reviewed sources. Main binary remains
+unread (container access failed again); no assertion about its internal
+argument handling or actual Foundation file-path calls.
+
+New bounded candidate: historical Apple open-source CoreFoundation
+[CFPlatform.c](https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFPlatform.c)
+prioritizes CFFIXED_USER_HOME for non-setugid home resolution before
+the account home and optional HOME fallback. The same pinned
+[CFPreferences.c](https://github.com/apple-oss-distributions/CF/blob/dc54c6bb1c1e5e0b9486c1d26dd5bef110b20bf3/CFPreferences.c)
+derives a preferences path from the resolved home.
+This is historical implementation evidence, not a documented stable
+macOS 14+/26 contract. Modern preference daemon, Foundation, caches,
+account identity and app-specific storage can still use the actual
+user context; [Apple NSHomeDirectory](https://developer.apple.com/documentation/foundation/nshomedirectory())
+and [Preferences Utilities](https://developer.apple.com/documentation/corefoundation/preferences-utilities)
+describe home/preferences scope, not a supported per-process profile
+isolation API.
+
+Decision: extend only the existing opt-in synthetic preference witness
+with --fixed-home-probe; same bundle/lifecycle/markers, adds only
+process-local CFFIXED_USER_HOME per synthetic child. Keep HOME/TMPDIR
+baseline and report actual fixed-home presence and match across write
+and reopen. Candidate success requires private paths in all four
+observations, matching override and independent markers. Neither
+result proves real game data, Keychain, cloud destinations or account
+isolation. No preference-daemon override, global environment change,
+injection, new helper, runtime dependency or game launch. Synthetic
+domain side-effect caveat from MAC-08a remains; no auto-cleanup.
+Source NOT_EXECUTED, no compile/test/CI.
+
+Next decisive input remains the existing small main Mach-O metadata
+report or documented game-owned storage route; no repeated large
+transfer. If no supported route is found, only actual held native
+observations can determine whether this candidate is viable. No further
+generic launch/profile fixtures without decision-changing evidence.
+MAC-07e and multi-user transport remain paused; all native, Windows,
+test/CI and release holds preserved. Not SOURCE_READY_FOR_LOCAL.
 
 ### MAC-08a — restore same-user native priority; synthetic preference witness
 
@@ -1305,7 +1352,8 @@ MAC-07a reviews Standard-session transport and exact-target admission boundaries
 MAC-07b adds a test-only synthetic transport admission contract;
 MAC-07c maps public native APIs and identifies the remaining trusted rendezvous gate;
 MAC-07d prepares a one-shot cooperative cross-session rendezvous witness;
-MAC-08a restores same-user priority and adds an opt-in synthetic preference witness.
+MAC-08a restores same-user priority and adds an opt-in synthetic preference witness;
+MAC-08b reviews a historical native home-routing candidate and adds a comparison variant.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
