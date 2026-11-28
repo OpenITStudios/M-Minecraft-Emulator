@@ -663,42 +663,70 @@ struct LifecycleFixture {
         return (marker, image)
     }
 
+    // Resolve the entire pair before requesting any pixels. This is scoped
+    // to the self-created fixture bundle, never arbitrary user applications.
     @available(macOS 14.0, *)
-    private static func capturePair(_ applications: [NSRunningApplication], id: String,
-                                    bundle: URL, exe: URL, expectedIDs: [CGWindowID]?)
-        throws -> (ids: [CGWindowID], markers: [String], frames: [CGImage]) {
+    private static func selectFixtureWindows(_ windows: [SCWindow],
+                                             applications: [NSRunningApplication],
+                                             id: String, bundle: URL, exe: URL,
+                                             expectedIDs: [CGWindowID]?) throws -> [SCWindow] {
         guard applications.count == slots.count,
+              expectedIDs == nil || expectedIDs?.count == slots.count,
+              Set(applications.map { $0.processIdentifier }).count == slots.count,
               applications.allSatisfy({ exactLiveApplication($0, id: id, bundle: bundle, exe: exe) })
         else { throw FixtureFailure(status: "OWNERSHIP_UNCONFIRMED") }
-        guard CGPreflightScreenCaptureAccess()
-        else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
-        let windows = try shareableWindows()
-        var ids: [CGWindowID] = []
-        var markers: [String] = []
-        var frames: [CGImage] = []
+        var selected: [SCWindow] = []
         for (index, application) in applications.enumerated() {
-            // Retained app identity plus exactly one owned window; title is
-            // a fixture discriminator, not authority. Recheck before capture.
+            // Do not discard ambiguous siblings to manufacture a unique target.
             let candidates = windows.filter {
                 $0.owningApplication?.processID == application.processIdentifier
             }
             guard candidates.count == 1, let window = candidates.first,
+                  window.owningApplication?.bundleIdentifier == id,
                   window.title == "Lazy Tester Fixture " + slots[index],
-                  window.windowID != 0,
-                  expectedIDs == nil || expectedIDs?[index] == window.windowID,
-                  exactLiveApplication(application, id: id, bundle: bundle, exe: exe)
+                  window.isOnScreen, window.windowLayer == 0, window.windowID != 0,
+                  expectedIDs == nil || expectedIDs?[index] == window.windowID
             else { throw FixtureFailure(status: "WINDOW_IDENTITY_UNCONFIRMED") }
-            ids.append(window.windowID)
-            let frame = try captureMarker(window)
-            markers.append(frame.marker)
-            frames.append(frame.image)
+            selected.append(window)
+        }
+        guard Set(selected.map { $0.windowID }).count == slots.count
+        else { throw FixtureFailure(status: "WINDOW_IDENTITY_UNCONFIRMED") }
+        return selected
+    }
+
+    @available(macOS 14.0, *)
+    private static func capturePair(_ applications: [NSRunningApplication], id: String,
+                                    bundle: URL, exe: URL, expectedIDs: [CGWindowID]?)
+        throws -> (ids: [CGWindowID], markers: [String], frames: [CGImage]) {
+        guard CGPreflightScreenCaptureAccess()
+        else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
+        let selected = try selectFixtureWindows(shareableWindows(), applications: applications,
+                                                id: id, bundle: bundle, exe: exe,
+                                                expectedIDs: expectedIDs)
+        let ids = selected.map { $0.windowID }
+        var markers: [String] = []
+        var frames: [CGImage] = []
+        for (index, application) in applications.enumerated() {
+            guard CGPreflightScreenCaptureAccess()
+            else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
             guard exactLiveApplication(application, id: id, bundle: bundle, exe: exe)
             else { throw FixtureFailure(status: "OWNERSHIP_UNCONFIRMED") }
+            // A fresh completion, one target, no ongoing stream or encoder.
+            let frame = try captureMarker(selected[index])
+            guard exactLiveApplication(application, id: id, bundle: bundle, exe: exe)
+            else { throw FixtureFailure(status: "OWNERSHIP_UNCONFIRMED") }
+            markers.append(frame.marker)
+            frames.append(frame.image)
         }
-        guard Set(ids).count == slots.count else {
-            throw FixtureFailure(status: "WINDOW_IDENTITY_UNCONFIRMED")
-        }
-        // These are sequential bounded snapshots, not simultaneous live streams.
+        // Re-enumerate once for the pair; reject a lost, replaced or newly
+        // ambiguous window before publishing either frame. The two API
+        // snapshots are not atomic and cannot rule out every intervening race.
+        guard CGPreflightScreenCaptureAccess()
+        else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
+        _ = try selectFixtureWindows(shareableWindows(), applications: applications,
+                                     id: id, bundle: bundle, exe: exe, expectedIDs: ids)
+        guard CGPreflightScreenCaptureAccess()
+        else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
         return (ids, markers, frames)
     }
 

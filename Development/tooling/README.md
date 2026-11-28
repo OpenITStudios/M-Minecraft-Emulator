@@ -233,7 +233,12 @@ report, not local paths or PIDs. Preferences/authentication remain NOT_OBSERVED.
 The workspace mode requires macOS 14+ and already-authorized screen capture
 permission; it does not request or grant permission. It opens only its own
 two windows and samples five interior pixels of each exact owned window with
-ScreenCaptureKit. The operator manually clicks A then B; the expected color
+ScreenCaptureKit. Resolve both original applications and distinct, on-screen
+normal-layer window IDs before capture, then re-enumerate once for the pair
+and refuse changed or ambiguous IDs before publishing either frame. Check
+existing capture permission and original application identity around the
+requests. These non-atomic observations cannot prove uninterrupted ownership.
+The operator manually clicks A then B; the expected color
 changes in the chosen window only. No desktop capture, images written to disk,
 input injection, Accessibility access or cross-user transport. Three pairs of
 sequential screenshots and two bounded manual waits are not live simultaneous

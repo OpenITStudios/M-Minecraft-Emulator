@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-12a: native window candidate observation)
+## Current status — cross-platform-native (MAC-12b: selected-window capture boundary)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,37 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-12b — bounded selected-window capture in the existing fixture
+
+Reviewed Apple's [SCWindow](https://developer.apple.com/documentation/screencapturekit/scwindow),
+[SCRunningApplication](https://developer.apple.com/documentation/screencapturekit/scrunningapplication)
+and [SCScreenshotManager](https://developer.apple.com/documentation/screencapturekit/scscreenshotmanager)
+contracts and original lifecycle-fixture.swift. Use the existing macOS 14+
+single-frame capture (desktopIndependentWindow, fixed 320x240) rather
+than adding a stream, encoder, worker or new binding package before a
+managed target is admitted. Apple’s [stream sample](https://developer.apple.com/documentation/screencapturekit/capturing-screen-content-in-macos)
+documents a queue-depth/memory tradeoff; continuous active preview is
+a later measured requirement, not proven cheaper by a screenshot API.
+
+Correct the existing capturePair path: resolve the entire original app
+pair before requesting pixels, require exactly one window per original
+PID with expected fixture bundle, title, on-screen normal layer and
+distinct nonzero IDs; reject wrong expected-ID cardinality. Recheck
+original app identity and existing permission around captures. One fresh
+shareable-content enumeration after the pair rejects changed or ambiguous
+window targets before returning either image to the original marker/panel
+consumer. Keep fixed image bounds, sequential snapshots and no disk/IPC
+pixels, polling, synthetic input, permission prompt or external app capture.
+Existing marker checks still require the selected A/B window to change
+without the peer changing. Observations are non-atomic; this cannot prove
+kernel ownership or rule out all transient replacements. Source only,
+NOT_EXECUTED; no new product adapter, no Windows change.
+Plan A remains exclusive. The product shell still refuses managed
+launch/presentation. Next unresolved product-critical work is retained
+native launch ownership and game-owned private data/account isolation
+(MAC-13); do not keep adding synthetic capture features as a substitute.
+All native/test/CI/release holds remain.
 
 ### MAC-12a — same-desktop Quartz window candidates
 
