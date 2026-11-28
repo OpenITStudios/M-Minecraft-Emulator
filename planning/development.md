@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-08b: native home-routing candidate)
+## Current status — cross-platform-native (MAC-08c: native profile boundary)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,45 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-08c — keep the native profile boundary small
+
+Decision unchanged: same user/desktop, one original signed Education
+installation, five private profiles, one existing lifecycle/workspace
+authority. No production adapter, additional fixture, transport or
+dependency until the game's actual private storage/account route is known.
+
+- Original [Bedrock Launcher UI](https://github.com/minecraft-linux/mcpelauncher-ui-qt/blob/3f955bf59e72311b8709b0b96567bd7c86682190/gamelauncher.cpp)
+  passes the profile data directory to its own client; that
+  [client](https://github.com/minecraft-linux/mcpelauncher-client/blob/78904982c13d7bcec7af4b572b18cac83d930d31/src/main.cpp)
+  separately parses game/assets, data and cache directories and implements
+  Android-path translation. [Prism Launcher](https://github.com/PrismLauncher/PrismLauncher/blob/88c670d143435007d1757436d38e393d063bc82b/launcher/minecraft/MinecraftInstance.cpp)
+  derives a Java instance game root. Both illustrate explicit data ownership;
+  neither supplies an Education native CLI contract. Do not import their
+  compatibility layers or forward their arguments to Education by analogy.
+- Apple [launch environment](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/environment)
+  is ignored for a sandboxed caller; the existing Swift fixture already
+  requests a new instance and disables running-app substitution. These
+  are launch controls, not file/account isolation. Do not add another
+  launch helper or relax sandboxing to make a candidate pass.
+- Microsoft [MSAL SSO guidance](https://learn.microsoft.com/en-us/entra/msal/objc/single-sign-on-macos-ios)
+  explicitly warns that shared-cache removal operations can affect other
+  applications. This is library-level counterevidence, not proof of
+  Education behavior. Require peer account survival on sign-out and reopen,
+  not merely simultaneous sign-in. [Education cloud saving](https://edusupport.minecraft.net/hc/en-us/articles/19632132361748-Cloud-Upload-and-Download)
+  also binds uploads to the user's OneDrive; verify independent cloud
+  destinations when available, without accessing tokens or disabling backup
+  as a workaround.
+
+Minimal acceptance order remains: actual original image and two retained
+native processes → private game storage and independently persistent
+licensed identities → exact-window capture/input → five-slot measured
+workspace. Keep existing MAC-08a/b fixtures as research only.
+No supported Education data-root override established by this review.
+Existing small main Mach-O report or documented game-owned route remains
+the next decision-changing source input; metadata alone cannot prove
+runtime independence. Source review only, NOT_EXECUTED; all holds remain.
+Native integration BLOCKED, not SOURCE_READY_FOR_LOCAL.
 
 ### MAC-08b — native home-routing candidate, not a game profile recipe
 
