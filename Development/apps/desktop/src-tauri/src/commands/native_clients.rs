@@ -99,6 +99,18 @@ pub(crate) fn lazy_tester_issue_report() -> Result<Option<crate::engine::issue_r
     crate::engine::issue_report::read()
 }
 
+// Fixed report destination, not caller-selected file access.
+#[tauri::command]
+pub(crate) async fn lazy_tester_checkpoint_issues(ui: String) -> Result<(), &'static str> {
+    #[cfg(windows)]
+    {
+        tauri::async_runtime::spawn_blocking(move || crate::engine::report_store::checkpoint_ui(&ui))
+            .await.map_err(|_| "Issue report checkpoint task unavailable")?
+    }
+    #[cfg(not(windows))]
+    { let _ = ui; Err("Issue report checkpoint unavailable") }
+}
+
 // This receipt distinguishes a refusal before managed-window mutation from
 // an unconfirmed close AFTER the selected workspace was released. The
 // retained session controller, never the UI, validates live game ownership.

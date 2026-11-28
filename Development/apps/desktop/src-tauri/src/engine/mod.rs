@@ -16,6 +16,8 @@ pub(crate) mod windows_process_time;
 pub(crate) mod windows_file_identity;
 pub mod native_clients_session;
 pub(crate) mod issue_report;
+#[cfg(windows)]
+pub(crate) mod report_store;
 // Optional same-executable read/launch adapter for local MCP; no second game owner.
 pub(crate) mod agent_cli;
 // Windows-only MC02 input feasibility experiment; not mounted as gameplay input.

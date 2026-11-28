@@ -40,6 +40,8 @@ M-Minecraft-Emulator/                 one Local checkout, not several app roots
         Local/Temp/
         Registry/HKCU.dat            private per-profile hive and sidecars
       Minecraft-2/ ... Minecraft-5/
+    Reports/issues.json              latest bounded desktop issue checkpoint
+    Reports/issues.pending           interrupted staging (preserved)
     Coordinates/bookmarks.json       dormant preserved legacy notes (no UI)
     Diagnostics/runs/<run-id>/        optional source-only imported evidence
       manifest.json                  committed after evidence
@@ -105,7 +107,11 @@ Existing manually saved XYZ notes and their native validation code remain
 unchanged to protect user data. Notes do not verify a player/world and
 must not be published to AI or installed in Minecraft automatically.
 
-All runtime files are ignored and never bundled or tracked. The optional
+All runtime files are ignored and never bundled or tracked. The desktop
+issue checkpoint uses the existing exclusive product instance lease and
+the separate project Data/Reports directory, never the launcher roots.
+See the [checkpoint contract](../../Development/apps/desktop/README.md#bounded-local-checkpoint).
+The optional
 Data/Diagnostics archive is created only by an explicit local import, not
 automatically when Lazy Tester starts or when Codex connects. Its files are
 private to the existing Data root and are not installed, bundled or uploaded.

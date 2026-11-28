@@ -116,7 +116,7 @@
       const result=await lazyTester.recordingStatus();
       if(disposed)return;
       recordings=result;recordingStatusKnown=true;recordingWatch=result.some(recordingActive);
-      issueReport.resolve('LT-CAP-03');
+      resolveIssue('LT-CAP-03');
     }catch{
       if(!disposed){recordingStatusKnown=false;recordingWatch=true;noteIssue('LT-CAP-03');}
     }finally{recordingStatusPending=false;}
@@ -162,7 +162,7 @@
       const receipt=await lazyTester.screenshot(slot,target);
       if(receipt&&!disposed){
         screenshotNotice={slot,message:`Screenshot saved · ${receipt.width} × ${receipt.height}`};
-        issueReport.resolve('LT-CAP-01',slot);
+        resolveIssue('LT-CAP-01',slot);
       }
     }catch{
       if(!disposed){
@@ -187,12 +187,44 @@
   let issueKey: UserMessageKey | null = null, connectionIssueKey: UserMessageKey | null = null;
   const issueReport = new IssueReport();
   let issueReportAvailable = false;
+  let issueCheckpoint: Promise<void> | null = null;
+  let issueCheckpointQueued = false, issueStorageUnavailable = false;
+  function queueIssueCheckpoint() {
+    if (disposed || nativeBackend==='Unsupported') return;
+    issueCheckpointQueued = true;
+    if (issueCheckpoint !== null) return;
+    // Coalesce one UI turn; only one issue-only snapshot in flight.
+    issueCheckpoint = Promise.resolve().then(async () => {
+      while (issueCheckpointQueued && !disposed) {
+        issueCheckpointQueued = false;
+        const ui = issueReport.read();
+        if (ui===null) continue;
+        try { await lazyTester.checkpointIssues(ui); issueStorageUnavailable=false; }
+        catch { issueStorageUnavailable=true; }
+      }
+    }).finally(() => {
+      issueCheckpoint = null;
+      if (issueCheckpointQueued && !disposed) queueIssueCheckpoint();
+    });
+  }
+  function checkpointIssueChange() {
+    if (issueReport.takeCheckpointDue()) queueIssueCheckpoint();
+  }
   function noteIssue(code: IssueCode, slot?: ProfileSlot, countAttempt=false) {
-    if (issueReport.note(code,slot,countAttempt)) issueReportAvailable=true;
+    if (issueReport.note(code,slot,countAttempt)) {
+      issueReportAvailable=true;
+      checkpointIssueChange();
+    }
+  }
+  function resolveIssue(code: IssueCode, slot?: ProfileSlot) {
+    issueReport.resolve(code,slot);
+    checkpointIssueChange();
   }
   async function readIssueReport() {
-    try { return issueReport.readCombined(await lazyTester.issueReport()); }
-    catch { return issueReport.readCombined(undefined); }
+    queueIssueCheckpoint();
+    await issueCheckpoint;
+    try { return issueReport.readCombined(await lazyTester.issueReport(),issueStorageUnavailable); }
+    catch { return issueReport.readCombined(undefined,issueStorageUnavailable); }
   }
   let previewIssue = '', selectedIdentity = '';
   // Optional native controller mirror; no new timer or MCP process.
@@ -509,7 +541,7 @@
       if(layoutChanged) {
         previewStatuses=[];pendingPreviewInvalidations.clear();dirty=true;
       }
-      if (isCurrentObservation(issued)) issueReport.resolve(userFeedback('connection').code);
+      if (isCurrentObservation(issued)) resolveIssue(userFeedback('connection').code);
     } catch (error) {
       if (isCurrentObservation(issued)) {
         if (available) dirty = true;
@@ -679,7 +711,7 @@
       const snapshot=await lazyTester.saveStoragePreferences({...settings.storagePreferences,autoClearWebCache:enabled});
       publishSettings(snapshot.settings);publishProfiles(snapshot.profiles);
       storageNotice='Web cache preference saved.';
-      if (!disposed) issueReport.resolve('LT-SET-07');
+      if (!disposed) resolveIssue('LT-SET-07');
     } catch {
       // An uncertain save must not be represented as the old or new value.
       if(settings)settings={...settings,storagePreferences:undefined};
@@ -791,7 +823,7 @@
         return;
       }
       uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, true);
-      if (!disposed) issueReport.resolve(userFeedback('recovery').code,slot);
+      if (!disposed) resolveIssue(userFeedback('recovery').code,slot);
       // Only a confirmed native restoration receipt permits a normal
       // selected close transition and automatic selection of another peer.
       const wasActive=active===slot;

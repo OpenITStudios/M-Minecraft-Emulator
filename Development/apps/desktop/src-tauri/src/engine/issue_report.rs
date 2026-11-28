@@ -1,4 +1,4 @@
-//! Bounded native request-client issue evidence. No I/O, timers, or game authority.
+//! Bounded native request-client issue evidence. Recording itself performs no I/O.
 use serde::Serialize;
 use std::sync::Mutex;
 
@@ -56,31 +56,37 @@ impl NativeIssueReport {
         Self { v: 1, issues: Vec::new(), truncated: false }
     }
 
-    fn record(&mut self, code: Code, context: Context, os: Option<i32>, now: u64) {
+    fn record(&mut self, code: Code, context: Context, os: Option<i32>, now: u64) -> bool {
         // Never admit an arbitrary ID into the report.
         let slot = context.slot.filter(|s| (1..=5).contains(s));
         if let Some(row) = self.issues.iter_mut().find(|row|
             row.c == code && row.op == context.operation && row.s == slot && row.os == os) {
             row.n = row.n.saturating_add(1);
             row.l = Some(now);
-            if row.r.take().is_some() {
-                row.e = Some(row.e.unwrap_or(0).saturating_add(1));
-            }
+            let recurrence = row.r.take().is_some();
+            if recurrence { row.e = Some(row.e.unwrap_or(0).saturating_add(1)); }
+            recurrence || row.n.is_power_of_two()
         } else if self.issues.len() < LIMIT {
             self.issues.push(Entry { c: code, op: context.operation, s: slot, os, t: now, n: 1, l: None, r: None, e: None });
+            true
         } else {
+            let changed = !self.truncated;
             self.truncated = true;
+            changed
         }
     }
 
     // The existing controller gate is authoritative: this only records the
     // transport reconciliation, never the success of the earlier operation.
-    fn reconcile_transport(&mut self, now: u64) {
+    fn reconcile_transport(&mut self, now: u64) -> bool {
+        let mut changed = false;
         for row in &mut self.issues {
             if row.c != Code::IpcWorkerStartFailed && row.r.is_none() {
                 row.r = Some(now);
+                changed = true;
             }
         }
+        changed
     }
 }
 
@@ -93,7 +99,7 @@ pub(crate) fn note(code: Code, context: Context, os: Option<i32>) {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());
     if let Ok(mut report) = REPORT.lock() {
-        report.record(code, context, os, now);
+        if report.record(code, context, os, now) { super::report_store::request_checkpoint(); }
     }
 }
 
@@ -102,7 +108,7 @@ pub(crate) fn reconcile_transport() {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |duration| duration.as_secs());
     if let Ok(mut report) = REPORT.lock() {
-        report.reconcile_transport(now);
+        if report.reconcile_transport(now) { super::report_store::request_checkpoint(); }
     }
 }
 

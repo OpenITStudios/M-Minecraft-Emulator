@@ -1424,13 +1424,16 @@ fn request_inner(request: SessionRequest, desktop_target:bool) -> io::Result<Ses
     // Decide after draining while holding the existing admission gate.
     let request=desktop_observation_request(request,desktop_target,owner.uncertain);
     let deadline=std::time::Instant::now()+std::time::Duration::from_secs(45);
-    if read_needs_reconciliation(&request,owner.uncertain) {
-        // Do not replay an older mutation or let the page-specific receipt
-        // clear uncertainty. A failed full Inspect stops this read.
-        // Both serial transactions share the original bounded wait budget.
-        request_locked(&mut owner,SessionRequest::Inspect,deadline)?;
-    }
-    request_locked(&mut owner,request,deadline)
+    let result = (|| {
+        if read_needs_reconciliation(&request,owner.uncertain) {
+            // Both serial transactions share the original deadline. Never replay.
+            request_locked(&mut owner,SessionRequest::Inspect,deadline)?;
+        }
+        request_locked(&mut owner,request,deadline)
+    })();
+    drop(owner); // Report publication must not hold the native request gate.
+    super::report_store::checkpoint_if_due();
+    result
 }
 
 #[cfg(windows)]

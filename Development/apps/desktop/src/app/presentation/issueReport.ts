@@ -18,6 +18,7 @@ export function reportableFeedback(key: UserMessageKey): boolean {
 export class IssueReport {
   private readonly entries = new Map<string, IssueEntry>();
   private truncated = false;
+  private checkpointDue = false;
 
   constructor(private readonly seconds = () => Math.floor(Date.now()/1000)) {}
 
@@ -35,15 +36,19 @@ export class IssueReport {
       }
       if (countAttempt) prior.n = Math.min((prior.n ?? 0) + 1, 0xffffffff);
       prior.l = this.seconds();
+      if (recurring || (countAttempt && prior.n !== undefined &&
+          (prior.n & (prior.n-1)) === 0)) this.checkpointDue = true;
       return true;
     }
     if (this.entries.size >= MAX_ISSUES) {
       const changed = !this.truncated;
       this.truncated = true;
+      if (changed) this.checkpointDue = true;
       return changed;
     }
     this.entries.set(key,{c:code,...(slot === undefined ? {} : {s:slot}),
       t:this.seconds(),...(countAttempt ? {n:1} : {})});
+    this.checkpointDue = true;
     return true;
   }
 
@@ -51,15 +56,24 @@ export class IssueReport {
   // No healthy record is created and repeated success cannot rewrite history.
   resolve(code: IssueCode, slot?: ProfileSlot): void {
     const prior = this.entries.get(code + ':' + (slot ?? 0));
-    if (prior && prior.r === undefined) prior.r = this.seconds();
+    if (prior && prior.r === undefined) {
+      prior.r = this.seconds();
+      this.checkpointDue = true;
+    }
+  }
+  takeCheckpointDue(): boolean {
+    const due = this.checkpointDue;
+    this.checkpointDue = false;
+    return due;
   }
 
   // One export; keep observations of different producers separate unless correlated.
-  readCombined(native: NativeIssueReport | null | undefined): string | null {
+  readCombined(native: NativeIssueReport | null | undefined, storageUnavailable = false): string | null {
     if (!this.entries.size && !native) return null;
     return JSON.stringify({v:2,scope:'desktop-process',issues:[...this.entries.values()],
       ...(this.truncated ? {truncated:true} : {}),
-      ...(native === undefined ? {nativeUnavailable:true} : {native})});
+      ...(native === undefined ? {nativeUnavailable:true} : {native}),
+      ...(storageUnavailable ? {storageUnavailable:true} : {})});
   }
 
   // Legacy desktop-only format; serialize once only on explicit user request.

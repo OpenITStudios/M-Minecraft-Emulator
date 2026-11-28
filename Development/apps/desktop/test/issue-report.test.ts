@@ -47,6 +47,20 @@ describe('Selective desktop issue report',()=>{
     report.note('LT-CAP-01',2,true);
     expect(JSON.parse(report.read()!).issues[1]).toEqual({c:'LT-CAP-01',s:2,t:120,n:2,e:1,l:130});
   });
+  it('checkpoints only meaningful changes and power-of-two counts',()=>{
+    const report=new IssueReport(()=>100);
+    expect(report.takeCheckpointDue()).toBe(false);
+    for(const due of [true,true,false,true,false]) {
+      report.note('LT-CAP-01',2,true);
+      expect(report.takeCheckpointDue()).toBe(due);
+    }
+    report.resolve('LT-CAP-01',2);
+    expect(report.takeCheckpointDue()).toBe(true);
+    report.resolve('LT-CAP-01',2);
+    expect(report.takeCheckpointDue()).toBe(false);
+    report.note('LT-CAP-01',2,true);
+    expect(report.takeCheckpointDue()).toBe(true);
+  });
   it('bounds the summary, preserves the first records and excludes expected refusals',()=>{
     const keys:UserMessageKey[]=['general','backend','binding','connection','launch','selection','workspace','location','storage','settings','performance'];
     const slots:ProfileSlot[]=[1,2,3,4,5];
@@ -86,9 +100,11 @@ describe('Selective desktop issue report',()=>{
     expect(settings).toContain('{#if issueReportAvailable}');
     expect(settings).toContain('await navigator.clipboard.writeText(issueReportText)');
     expect(app).toContain('await lazyTester.issueReport()');
-    expect(app).toContain("issueReport.resolve('LT-CAP-03')");
+    expect(app).toContain('await lazyTester.checkpointIssues(ui)');
+    expect(app).toContain('if (issueCheckpoint !== null) return;');
+    expect(app).toContain("resolveIssue('LT-CAP-03')");
     const shot=app.slice(app.indexOf('async function saveScreenshot()'),app.indexOf('let manualRefreshRequested'));
-    expect(shot.indexOf('if(receipt&&!disposed)')).toBeLessThan(shot.indexOf("issueReport.resolve('LT-CAP-01',slot)"));
+    expect(shot.indexOf('if(receipt&&!disposed)')).toBeLessThan(shot.indexOf("resolveIssue('LT-CAP-01',slot)"));
     const session=readFileSync(new URL('../src-tauri/src/engine/native_clients_session.rs',import.meta.url),'utf8');
     const locked=session.slice(session.indexOf('fn request_locked('),session.indexOf('// Only the desktop\'s passive idle lane'));
     expect(locked).toContain('if reply.is_ok() {\n                            if owner.uncertain {');

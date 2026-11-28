@@ -57,6 +57,9 @@ pub fn run() {
         }
     };
 
+    // Only the ordinary product desktop owns the existing exclusive lease.
+    #[cfg(all(windows, feature="lazy-tester-package"))]
+    crate::engine::report_store::enable();
     let result = tauri::Builder::default()
         .setup(|app|{
             #[cfg(windows)] {
@@ -85,6 +88,7 @@ pub fn run() {
             commands::native_clients::lazy_tester_startup_capabilities,
             commands::native_clients::lazy_tester_session,
             commands::native_clients::lazy_tester_issue_report,
+            commands::native_clients::lazy_tester_checkpoint_issues,
             commands::native_clients::lazy_tester_close_one,
             commands::native_clients::lazy_tester_profile_binding,
             commands::native_clients::lazy_tester_data_location,
@@ -208,6 +212,8 @@ pub fn run() {
     // neither a retained Minecraft workspace nor a foreground observer.
     #[cfg(windows)]
     crate::engine::instance_focus_events::shutdown();
+    #[cfg(windows)]
+    let _ = crate::engine::report_store::flush();
     result.expect("failed to run Minecraft Instance Manager desktop runtime");
 }
 

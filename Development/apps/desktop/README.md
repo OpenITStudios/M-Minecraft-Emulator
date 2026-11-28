@@ -62,12 +62,10 @@ unverified games.
 General Settings shows **Issue report / Copy report** only after a problem
 has been observed in the current desktop lifetime. This is a local,
 sanitized support summary, not a security audit log, crash dump or gameplay
-acceptance. No new polling, background IPC, service,
-disk writes, upload, raw error text, screenshots, process identifiers,
-account or world data. Existing feedback, recovery and native admission
-remain unchanged. Reports are ephemeral until manually copied; app
-exit/crash loses unsaved observations. Clipboard failure leaves selectable
-JSON text. The report is not available before General Settings can open.
+acceptance. No new polling, background IPC, service, upload, raw error
+text, screenshots, process identifiers, account or world data. Existing
+feedback, recovery and native admission remain unchanged. Clipboard
+failure leaves selectable JSON text; live copy requires General Settings.
 
 Compact combined export schema 2: `v` schema; `scope` desktop-process; `issues`
 contains at most 48 distinct code/slot entries, first observed wall-clock
@@ -92,9 +90,30 @@ codes:
 | LT-AGT-03 / 04 / 05 | Probe checkpoint unavailable / Probe reported attention / earlier agent status stale |
 | LT-SET-07 | Web cache preference save unconfirmed |
 
-The optional `native` section is one explicit read of a 16-row, current-process Rust request-client summary. `native:null` means no retained native rows; `nativeUnavailable:true` means the read failed. Together with 48 UI rows, the report retains at most 64 distinct rows. Native `c` is the source-classified code, `op` is the actual admitted request name, optional `s` is the slot, optional `os` is the raw numeric OS error (not a message), `t`/`l` are observed Unix seconds (zero if unavailable), and `n` counts discrete failed attempts. Source owner: `native_clients_session.rs`, with `issue_report.rs` retaining bounded evidence. `IPC_WORKER_START_FAILED` means no worker started; `IPC_REPLY_TIMEOUT`, `IPC_REPLY_LOST`, `IPC_TRANSPORT_FAILED`, `IPC_INPUT_RECEIPT_INVALID`, `IPC_TARGET_RECEIPT_INVALID` and `IPC_INSPECT_RECEIPT_INVALID` preserve unconfirmed outcome; no automatic retry or inferred cause. UI and native rows are separate observations, not additive incident counts. This read cannot collect another CLI/controller process's memory. No report persistence or exact build identity yet; no new wire fields, no new periodic reads.
+The optional `native` section is one explicit read of a 16-row, current-process Rust request-client summary. `native:null` means no retained native rows; `nativeUnavailable:true` means the read failed. Together with 48 UI rows, the report retains at most 64 distinct rows. Native `c` is the source-classified code, `op` is the actual admitted request name, optional `s` is the slot, optional `os` is the raw numeric OS error (not a message), `t`/`l` are observed Unix seconds (zero if unavailable), and `n` counts discrete failed attempts. Source owner: `native_clients_session.rs`, with `issue_report.rs` retaining bounded evidence. `IPC_WORKER_START_FAILED` means no worker started; `IPC_REPLY_TIMEOUT`, `IPC_REPLY_LOST`, `IPC_TRANSPORT_FAILED`, `IPC_INPUT_RECEIPT_INVALID`, `IPC_TARGET_RECEIPT_INVALID` and `IPC_INSPECT_RECEIPT_INVALID` preserve unconfirmed outcome; no automatic retry or inferred cause. UI and native rows are separate observations, not additive incident counts. This read cannot collect another CLI/controller process's memory. No exact build identity yet; no new session wire fields or periodic reads.
 
 Optional `r` is the observed recovery/reconciliation time for the current issue episode; absence means no matching positive evidence, not a proved continuing failure. Optional `e` counts recurrences after confirmed recovery (saturating); recurrence clears `r`, updates `l` and never erases the first timestamp. Native `r` is recorded only after the existing uncertainty gate accepts a full Inspect; this reconciles transport, not the prior mutation or gameplay. Worker-start failure is excluded from that reconciliation. Desktop recovery is limited to current successful Refresh, validated recording status, a non-cancelled screenshot receipt, confirmed selected-window restoration, and matched web-cache preference save. Recovery describes a later successful observation/operation at the same report scope, not success of the original failed action. Other codes remain without recovery evidence; UI warnings disappearing, partial replies and timeouts do not establish recovery. No extra polling or report rows for normal success.
+
+### Bounded local checkpoint
+
+Only the ordinary Windows product desktop enables writes after its existing
+exclusive instance lease. Native issue changes checkpoint after releasing
+the native request gate; UI submits one coalesced snapshot on new issues,
+recovery, recurrence, first overflow or power-of-two repeat counts.
+Copy retries current UI/native evidence; clean exit flushes native and
+last submitted UI counts. No new timer, service or automatic retry loop.
+Copy indicates `storageUnavailable:true` if saving fails.
+
+`Data/Reports/issues.json` holds the latest issue-bearing desktop lifetime:
+64 rows maximum, 16 KiB hard cap. Healthy runs preserve it; the next
+issue-bearing lifetime replaces it, without merging old recovery episodes.
+Identical snapshots skip publication. A fixed exclusive `issues.pending`
+stage is flushed and moved within the pinned directory; interrupted or
+unrecognized files block publication and require manual review, never
+automatic deletion. At most two reporter-created files (16 KiB each).
+Historical evidence is available on disk, not imported into live UI.
+A crash before checkpoint or between repeat checkpoints may lose evidence.
+CLI/controller/helper and startup diagnostic processes never write.
 
 The summary does not include success denominators, unobserved native
 failures, exact root causes or historical process exits. It cannot
