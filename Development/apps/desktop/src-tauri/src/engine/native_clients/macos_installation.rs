@@ -1,6 +1,13 @@
 //! Explicit Mac installation candidate inspection, never game admission.
 //! Only fixed Applications paths; no account/profile data, game execution,
-//! signature claim, updater operation, or arbitrary caller-supplied path.
+//! publisher pin, updater operation, or arbitrary caller-supplied path.
+use core_foundation::{base::{CFType, TCFType}, string::CFString, url::CFURL};
+use security_framework_sys::code_signing::{
+    kSecCSCheckAllArchitectures, kSecCSCheckNestedCode, kSecCSNoNetworkAccess,
+    kSecCSSingleThreaded, kSecCSStrictValidate, SecRequirementCreateWithString,
+    SecStaticCodeCheckValidity, SecStaticCodeCreateWithPath,
+    SecRequirementRef, SecStaticCodeRef,
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, Metadata, OpenOptions},
@@ -20,6 +27,13 @@ enum CandidateStatus {
     Unconfirmed,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+enum SignatureObservation {
+    NotChecked,
+    AppleAnchored,
+    Unconfirmed,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MacEducationInstallationReport {
@@ -27,6 +41,9 @@ pub struct MacEducationInstallationReport {
     platform: &'static str,
     status: CandidateStatus,
     version: Option<String>,
+    signature: SignatureObservation,
+    publisher: &'static str,
+    multiple_instances_prohibited: Option<bool>,
     runtime_admission: bool,
 }
 
@@ -36,6 +53,9 @@ fn report(status: CandidateStatus, version: Option<String>) -> MacEducationInsta
         platform: "macos",
         status,
         version,
+        signature: SignatureObservation::NotChecked,
+        publisher: "NotPinned",
+        multiple_instances_prohibited: None,
         runtime_admission: false,
     }
 }
@@ -50,6 +70,8 @@ struct BundleMetadata {
     executable: String,
     #[serde(rename = "CFBundleShortVersionString")]
     version: String,
+    #[serde(rename = "LSMultipleInstancesProhibited")]
+    multiple_instances_prohibited: Option<bool>,
 }
 
 fn invalid() -> io::Error {
@@ -103,7 +125,44 @@ fn parse_metadata(bytes: &[u8]) -> io::Result<BundleMetadata> {
     Ok(metadata)
 }
 
-fn inspect_bundle(path: &Path) -> io::Result<String> {
+// A generic Apple-issued signer requirement excludes ad-hoc signatures,
+// but it does not identify Microsoft, prove notarization, or admit launch.
+// No private signing data is serialized. The caller owns a blocking,
+// explicitly requested operation and repeats metadata checks afterwards.
+fn observe_static_signature(path: &Path) -> SignatureObservation {
+    let Some(url) = CFURL::from_path(path, true) else {
+        return SignatureObservation::Unconfirmed;
+    };
+    let text = CFString::new("anchor apple generic");
+    let mut requirement: SecRequirementRef = std::ptr::null_mut();
+    let mut code: SecStaticCodeRef = std::ptr::null_mut();
+    // Each successful Create returns one owned CF reference. The local
+    // CFType guards release exactly those references on every return path.
+    unsafe {
+        if SecRequirementCreateWithString(text.as_concrete_TypeRef(), 0, &mut requirement) != 0
+            || requirement.is_null()
+        {
+            return SignatureObservation::Unconfirmed;
+        }
+        let _requirement_owner = CFType::wrap_under_create_rule(requirement.cast());
+        if SecStaticCodeCreateWithPath(url.as_concrete_TypeRef(), 0, &mut code) != 0
+            || code.is_null()
+        {
+            return SignatureObservation::Unconfirmed;
+        }
+        let _code_owner = CFType::wrap_under_create_rule(code.cast());
+        let flags = kSecCSCheckAllArchitectures | kSecCSCheckNestedCode
+            | kSecCSStrictValidate | kSecCSNoNetworkAccess | kSecCSSingleThreaded;
+        if SecStaticCodeCheckValidity(code, flags, requirement) == 0 {
+            SignatureObservation::AppleAnchored
+        } else {
+            SignatureObservation::Unconfirmed
+        }
+    }
+}
+
+fn inspect_bundle(path: &Path, verify: impl FnOnce(&Path) -> SignatureObservation)
+    -> io::Result<(BundleMetadata, SignatureObservation)> {
     let bundle_before = ordinary_directory(path)?;
     let contents = path.join("Contents");
     let contents_before = ordinary_directory(&contents)?;
@@ -133,6 +192,7 @@ fn inspect_bundle(path: &Path) -> io::Result<String> {
     if image.len() == 0 || image.mode() & 0o111 == 0 {
         return Err(invalid());
     }
+    let signature = verify(path);
     if !same_metadata(&bundle_before, &ordinary_directory(path)?)
         || !same_metadata(&contents_before, &ordinary_directory(&contents)?)
         || !same_metadata(&macos_before, &ordinary_directory(&macos)?)
@@ -141,11 +201,11 @@ fn inspect_bundle(path: &Path) -> io::Result<String> {
     {
         return Err(invalid());
     }
-    // Metadata may be imitated. Publisher and loaded image are unverified.
-    Ok(metadata.version)
+    // Static code validation is not an atomic loaded-image pin.
+    Ok((metadata, signature))
 }
 
-fn inspect_at(applications: &Path) -> MacEducationInstallationReport {
+fn inspect_at(applications: &Path, verify: impl FnOnce(&Path) -> SignatureObservation) -> MacEducationInstallationReport {
     if ordinary_directory(applications).is_err() {
         return report(CandidateStatus::Unconfirmed, None);
     }
@@ -160,8 +220,12 @@ fn inspect_at(applications: &Path) -> MacEducationInstallationReport {
     }
     match present.as_slice() {
         [] => report(CandidateStatus::Missing, None),
-        [path] => match inspect_bundle(path) {
-            Ok(version) => report(CandidateStatus::Candidate, Some(version)),
+        [path] => match inspect_bundle(path, verify) {
+            Ok((metadata, signature)) => MacEducationInstallationReport {
+                signature,
+                multiple_instances_prohibited: metadata.multiple_instances_prohibited,
+                ..report(CandidateStatus::Candidate, Some(metadata.version))
+            },
             Err(_) => report(CandidateStatus::Unconfirmed, None),
         },
         _ => report(CandidateStatus::Ambiguous, None),
@@ -169,7 +233,7 @@ fn inspect_at(applications: &Path) -> MacEducationInstallationReport {
 }
 
 pub(super) fn inspect() -> MacEducationInstallationReport {
-    inspect_at(Path::new("/Applications"))
+    inspect_at(Path::new("/Applications"), observe_static_signature)
 }
 
 #[cfg(test)]
@@ -193,21 +257,59 @@ mod tests {
         fs::set_permissions(&file, fs::Permissions::from_mode(0o700)).unwrap();
     }
 
+    // Test input is a synthetic signature result, not an OS trust receipt.
+    fn unconfirmed(_: &Path) -> SignatureObservation {
+        SignatureObservation::Unconfirmed
+    }
+
     #[test]
     fn fixed_candidates_never_grant_admission() {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().canonicalize().unwrap();
-        assert_eq!(inspect_at(&root).status, CandidateStatus::Missing);
+        assert_eq!(inspect_at(&root, unconfirmed).status, CandidateStatus::Missing);
         fixture(&root, CANDIDATES[0], "fixture");
-        let observed = inspect_at(&root);
+        let observed = inspect_at(&root, unconfirmed);
         assert_eq!(observed.status, CandidateStatus::Candidate);
         assert_eq!(observed.version.as_deref(), Some("26.33"));
         assert!(!observed.runtime_admission);
         let wire = serde_json::to_value(observed).unwrap();
         assert_eq!(wire, serde_json::json!({"schema":1,"platform":"macos","status":"Candidate",
-            "version":"26.33","runtimeAdmission":false}));
+            "version":"26.33","signature":"Unconfirmed","publisher":"NotPinned",
+            "multipleInstancesProhibited":null,"runtimeAdmission":false}));
+        // A generic successful signature observation still cannot pin the
+        // publisher or authorize launch, even with the singleton key absent.
+        let anchored = inspect_at(&root, |_| SignatureObservation::AppleAnchored);
+        assert_eq!(anchored.signature, SignatureObservation::AppleAnchored);
+        assert_eq!(anchored.publisher, "NotPinned");
+        assert!(!anchored.runtime_admission);
+        assert_eq!(anchored.multiple_instances_prohibited, None);
         fixture(&root, CANDIDATES[1], "fixture");
-        assert_eq!(inspect_at(&root).status, CandidateStatus::Ambiguous);
+        let ambiguous = inspect_at(&root, |_| panic!("must not inspect ambiguous bundles"));
+        assert_eq!(ambiguous.status, CandidateStatus::Ambiguous);
+        assert_eq!(ambiguous.signature, SignatureObservation::NotChecked);
+    }
+
+    #[test]
+    fn explicit_singleton_flag_and_replaced_metadata_are_not_launch_authority() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        fixture(&root, CANDIDATES[0], "fixture");
+        let info = root.join(CANDIDATES[0]).join("Contents/Info.plist");
+        let original = fs::read_to_string(&info).unwrap();
+        let with_flag = original.replace("</dict>", "<key>LSMultipleInstancesProhibited</key><true/></dict>");
+        fs::write(&info, &with_flag).unwrap();
+        let observed = inspect_at(&root, |_| SignatureObservation::AppleAnchored);
+        assert_eq!(observed.multiple_instances_prohibited, Some(true));
+        assert!(!observed.runtime_admission);
+        let changed = inspect_at(&root, |_| {
+            fs::write(&info, &original).unwrap();
+            SignatureObservation::AppleAnchored
+        });
+        assert_eq!(changed.status, CandidateStatus::Unconfirmed);
+        assert_eq!(changed.signature, SignatureObservation::NotChecked);
+        let malformed = with_flag.replace("<true/>", "<string>true</string>");
+        fs::write(&info, malformed).unwrap();
+        assert_eq!(inspect_at(&root, |_| panic!("invalid plist")).status, CandidateStatus::Unconfirmed);
     }
 
     #[test]
@@ -215,10 +317,10 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let root = temporary.path().canonicalize().unwrap();
         fixture(&root, CANDIDATES[0], "../fixture");
-        assert_eq!(inspect_at(&root).status, CandidateStatus::Unconfirmed);
+        assert_eq!(inspect_at(&root, unconfirmed).status, CandidateStatus::Unconfirmed);
         let other = tempfile::tempdir().unwrap();
         let root = other.path().canonicalize().unwrap();
         symlink(temporary.path(), root.join(CANDIDATES[0])).unwrap();
-        assert_eq!(inspect_at(&root).status, CandidateStatus::Unconfirmed);
+        assert_eq!(inspect_at(&root, unconfirmed).status, CandidateStatus::Unconfirmed);
     }
 }

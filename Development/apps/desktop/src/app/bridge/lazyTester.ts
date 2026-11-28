@@ -54,11 +54,15 @@ export function parseStartupCapabilities(value: unknown): StartupCapabilities {
 }
 export interface MacEducationInstallationReport {
   schema:1; platform:'macos'; status:'Missing'|'Candidate'|'Ambiguous'|'Unconfirmed';
-  version:string|null; runtimeAdmission:false;
+  version:string|null; signature:'NotChecked'|'AppleAnchored'|'Unconfirmed';
+  publisher:'NotPinned'; multipleInstancesProhibited:boolean|null; runtimeAdmission:false;
 }
 export function parseMacEducationInstallation(value:unknown):MacEducationInstallationReport {
-  if (!record(value) || !exact(value,['schema','platform','status','version','runtimeAdmission']) ||
-      value.schema!==1 || value.platform!=='macos' || value.runtimeAdmission!==false ||
+  if (!record(value) || !exact(value,['schema','platform','status','version','signature','publisher','multipleInstancesProhibited','runtimeAdmission']) ||
+      value.schema!==1 || value.platform!=='macos' || value.runtimeAdmission!==false || value.publisher!=='NotPinned' ||
+      (value.multipleInstancesProhibited!==null && typeof value.multipleInstancesProhibited!=='boolean') ||
+      (value.status==='Candidate' ? !['AppleAnchored','Unconfirmed'].includes(value.signature as string) :
+        value.signature!=='NotChecked' || value.multipleInstancesProhibited!==null) ||
       typeof value.status!=='string' || !['Missing','Candidate','Ambiguous','Unconfirmed'].includes(value.status) ||
       (value.status==='Candidate' ? typeof value.version!=='string' || value.version.length>64 ||
         !/^[0-9]+(?:\.[0-9]+){0,4}$/.test(value.version) : value.version!==null))

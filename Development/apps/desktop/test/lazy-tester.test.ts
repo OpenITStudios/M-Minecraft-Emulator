@@ -34,13 +34,16 @@ describe('Education installation observation',()=>{
     expect(settings).toContain('{#if installationNotice}');
   });
   it('keeps Mac candidate observation separate from Windows and native admission',()=>{
-    const mac={schema:1,platform:'macos',status:'Candidate',version:'26.33',runtimeAdmission:false};
+    const mac={schema:1,platform:'macos',status:'Candidate',version:'26.33',signature:'Unconfirmed',publisher:'NotPinned',multipleInstancesProhibited:null,runtimeAdmission:false};
     expect(parseMacEducationInstallation(mac)).toEqual(mac);
     for(const status of ['Missing','Ambiguous','Unconfirmed'])
-      expect(parseMacEducationInstallation({...mac,status,version:null}).status).toBe(status);
+      expect(parseMacEducationInstallation({...mac,status,version:null,signature:'NotChecked'}).status).toBe(status);
+    expect(parseMacEducationInstallation({...mac,signature:'AppleAnchored',multipleInstancesProhibited:true}).runtimeAdmission).toBe(false);
     for(const invalid of [report,{...mac,runtimeAdmission:true},{...mac,path:'/private'},
       {...mac,version:null},{...mac,version:'1..2'},{...mac,status:'Missing'},
-      {...mac,status:'Ready'}])expect(()=>parseMacEducationInstallation(invalid)).toThrow();
+      {...mac,status:'Ready'},{...mac,signature:'NotChecked'},{...mac,publisher:'Microsoft'},
+      {...mac,multipleInstancesProhibited:'false'},{...mac,status:'Missing',version:null,signature:'AppleAnchored'},
+      {...mac,status:'Missing',version:null,signature:'NotChecked',multipleInstancesProhibited:false}])expect(()=>parseMacEducationInstallation(invalid)).toThrow();
     expect(()=>parseEducationInstallation(mac)).toThrow();
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
     expect(app).toContain('on:click={()=>void checkMacInstallation()}');

@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-05a: product installation discovery)
+## Current status — cross-platform-native (MAC-05b: static game identity observation)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,41 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-05b — static Mac signature and singleton evidence (P1 partial)
+
+Extend the existing explicitly requested installation observation, not
+another command, subprocess or controller. Use Apple Security.framework
+[static validity](https://developer.apple.com/documentation/security/secstaticcodecheckvalidity%28_%3A_%3A_%3A%29)
+with [all architectures, nested and strict validation flags](https://developer.apple.com/documentation/security/static-code-validation-flags),
+single-threaded validation and the no-network flag. The generic requirement
+`anchor apple generic` ([TN3127](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements/))
+requires an Apple-issued signing identity, not Microsoft; the requirement
+is deliberately not a publisher pin. No assumed Team ID, notarization or
+loaded-image proof. Use existing locked core-foundation 0.10.1 and
+security-framework-sys 2.17.0 direct Mac-only edges; exact
+[FFI source](https://docs.rs/security-framework-sys/2.17.0/src/security_framework_sys/code_signing.rs.html)
+and [CFURL API](https://docs.rs/core-foundation/0.10.1/core_foundation/url/struct.CFURL.html)
+reviewed. No new package version. The blocking native call has no hard
+wall-clock deadline; actual cost and SDK/lock resolution NOT_EXECUTED.
+
+Separate NotChecked (no unambiguous candidate), AppleAnchored (generic
+static validation succeeds), Unconfirmed (any failure); no raw path,
+certificate, signing IDs or error text returned. Recheck metadata after
+the native call; this is not atomic against concurrent changes. Preserve
+optional LSMultipleInstancesProhibited explicitly as true/false/unknown;
+absence or false is not permission or evidence of an internal singleton.
+The Mac wire parser and existing notice require publisher=NotPinned and
+runtimeAdmission=false. Windows wire and launch behavior unchanged.
+
+Authored synthetic signature outcome, ambiguity, singleton and metadata
+replacement cases and TS negative receipt fixtures, NOT_EXECUTED; synthetic
+callbacks do not prove platform validity. Actual unsigned/signed official
+artifact and native checks remain unobserved. The existing offline
+artifact collector remains the deeper provenance owner. No runtime
+activation until exact official bundle, signer and isolation mechanism
+are established. No CI, localtest, release or version change. Avoid
+further speculative admission layers absent that evidence.
 
 ### MAC-05a — product-facing Mac installation candidate (P1 partial, source only)
 
@@ -605,7 +640,8 @@ MAC-04d records authentication counterevidence and alternate native topology;
 MAC-04e records operator-confirmed final workspace parity and staged design;
 MAC-04f adds same-login synthetic window capture/interaction feasibility source;
 MAC-04g adds a bounded synthetic shared snapshot/selection panel;
-MAC-05a adds an explicit product-side Mac installation candidate observation.
+MAC-05a adds an explicit product-side Mac installation candidate observation;
+MAC-05b adds generic static signature and explicit singleton metadata observation.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

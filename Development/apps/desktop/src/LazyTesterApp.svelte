@@ -518,7 +518,10 @@
       const result=await lazyTester.macEducationInstallation();
       if (disposed) return;
       macInstallationNotice=result.status==='Candidate'
-        ? 'Installation candidate '+result.version+' found. Publisher and profile isolation are not verified; launch is unavailable.'
+        ? 'Installation candidate '+result.version+' found. '+
+          (result.signature==='AppleAnchored'?'Apple-issued signature check passed. ':'Signature could not be confirmed. ')+
+          (result.multipleInstancesProhibited===true?'Bundle prohibits multiple instances. ':'')+
+          'Publisher and profile isolation are not verified; launch is unavailable.'
         : result.status==='Missing' ? 'No candidate in the two standard Applications locations.'
         : result.status==='Ambiguous' ? 'Multiple installation candidates found. No installation selected.'
         : 'Installation metadata could not be confirmed.';
