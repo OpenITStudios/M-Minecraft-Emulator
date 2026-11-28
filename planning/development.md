@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-06c: provisioning and authentication framework evidence)
+## Current status — cross-platform-native (MAC-06d: bounded framework Mach-O observations)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,45 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-06d — bounded framework Mach-O observations (static only)
+
+Rechecked the supplied Drive root and Contents, and searched for
+minecraft-metadata.json in the accessible Drive and current conversation.
+No matching report found. Container access again failed ClientError.
+The main executable remains unread; no repeated large transfer.
+
+Read the actual two small framework files from the already supplied
+Versions/A paths, as bounded binary data (no execution):
+- msalsdk, 115360 bytes: 64-bit Mach-O dylib slices x86_64 and arm64.
+  Both primary CodeDirectories match com.microsoft.msalsdk and expected
+  team UBF8T346G9; hardened-runtime flag present, ad-hoc flag absent,
+  CMS signature blob present. Only one readable symbol per slice;
+  no supported profile-isolation route established.
+- MinecraftSwift, 345648 bytes: 64-bit Mach-O dylib slices x86_64 and arm64.
+  Both primary CodeDirectories match com.mojang.minecraftpe.minecraftswift
+  and expected team UBF8T346G9; hardened-runtime flag present, ad-hoc
+  flag absent, CMS signature blob present. Recognized Foundation,
+  CoreFoundation and libswiftFoundation linkage; bounded symbol
+  inspection (345 x86_64, 335 arm64 entries read) found no selected
+  direct Keychain, UserDefaults, home or App Group symbol indicators.
+  This negative result is not proof those APIs are unused: indirect
+  dispatch, stripped symbols, other modules and dynamic loading remain.
+
+Parsed only bounded headers/load commands, symbol names reduced to
+allowlisted indicators, and embedded CodeDirectory fields. No
+cryptographic validation, effective entitlements, main executable
+architecture or main signer proof. No framework binary or raw symbol,
+certificate, group value or private Drive URL committed. The larger
+OneAuth binary was not inspected. Actual account isolation remains unknown.
+The new framework-level observations corroborate prior evidence but
+cannot establish a supported same-user profile mechanism. Preserve
+distinct existing OS-user feasibility priority, mandatory shared
+interactive five-instance workspace, all Windows/native/test/CI/release
+holds. No runtime change or new fixture; further framework inspection
+without main image and native evidence is not a meaningful unblock.
+Next remains the existing small main Mach-O report, not another large
+upload or localtest request.
 
 ### MAC-06c — extracted bundle provisioning and authentication framework evidence
 
@@ -936,7 +975,8 @@ OS-user isolation feasibility without changing product acceptance;
 MAC-06 records the offline Windows artifact intake and virtual-desktop limits;
 MAC-06a records actual user-supplied bundle metadata and exact discovery identity;
 MAC-06b adds bounded cross-platform Mach-O evidence intake after transfer failure;
-MAC-06c records observed provisioning allowlist and authentication framework metadata.
+MAC-06c records observed provisioning allowlist and authentication framework metadata;
+MAC-06d records bounded Mach-O observations of two actual bundled frameworks.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
