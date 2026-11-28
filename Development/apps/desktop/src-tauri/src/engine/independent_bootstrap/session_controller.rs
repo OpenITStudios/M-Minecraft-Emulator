@@ -245,7 +245,9 @@ impl Sessions {
             return Err(invalid("Finish clearing this launcher's old data in Data Storage before starting it"));
         }
         let payload = BootstrapLibrary::reviewed()?;
-        crate::engine::manager_settings::load_performance()?;
+        // Freeze the validated launch preference before any profile mutation.
+        // The same value reaches the original presentation ABI.
+        let limits = crate::engine::manager_settings::load_performance()?;
         // Each attempt selects the current signed registration and pins its exact
         // reviewed bytes before touching settings or creating a game process.
         let (path, image, singleton_caller_rva) = match registered_image::registered_image(true) {
@@ -267,7 +269,7 @@ impl Sessions {
                 image.try_clone()?,
                 Some(self.stores[index].as_ref().unwrap().duplicate()?),
                 true,
-                Some(&payload),
+                Some((&payload, limits)),
                 Some(cleanup.clone()),
                 #[cfg(feature="mc02-native-input")]
                 experimental_input,
@@ -1097,12 +1099,14 @@ impl Sessions {
                 .processes.is_empty()))
     }
 
-    fn fresh_settings_report(&mut self) -> io::Result<SettingsReport> {
-        self.reap();
+    // Caller must first observe/reap the current roster. Unlike the
+    // read-only pinned-image hint, this still resolves fresh registration.
+    fn fresh_settings_report(&self) -> io::Result<SettingsReport> {
         self.settings_report(|_| Ok(super::super::inspect_native_workspace()?.processes.is_empty()))
     }
 
     fn apply_preset(&mut self) -> io::Result<SettingsReport> {
+        self.reap(); // Separate pre-mutation admission, not a reply observation.
         let mut report = self.fresh_settings_report()?;
         require_preset_idle(report.can_apply_preset)?;
         // Retain original directory/registry pins; never seed replacement profiles.
@@ -1837,6 +1841,10 @@ fn run() -> io::Result<()> {
             let mut settings = None;
             let reply_snapshot = ReplySnapshot::for_request(&envelope.request);
             let inspect_settings = matches!(&envelope.request, SessionRequest::InspectSettings);
+            let saved_settings = matches!(&envelope.request,
+                SessionRequest::SavePerformance { .. } |
+                SessionRequest::SaveStoragePreferences { .. } |
+                SessionRequest::SaveAudio { .. });
             let mut testing_reply=None;
             let mut inspection_reply=None;
             match envelope.request {
@@ -1880,12 +1888,10 @@ fn run() -> io::Result<()> {
                 SessionRequest::SavePerformance {active_fps,background_fps} => {
                     crate::engine::manager_settings::save_performance(crate::engine::manager_settings::PerformanceSettings {active_fps,background_fps})
                         .map_err(|error|error.to_string())?;
-                    settings=Some(sessions.fresh_settings_report().map_err(|error|error.to_string())?);
                 }
                 SessionRequest::SaveStoragePreferences {preferences}=>{
                     crate::engine::manager_settings::save_storage_preferences(preferences).map_err(|e|e.to_string())?;
                     if !preferences.has_maintenance() {sessions.pending_storage_maintenance=[false;5];}
-                    settings=Some(sessions.fresh_settings_report().map_err(|e|e.to_string())?);
                 }
                 SessionRequest::SaveAudio {mode}=>{
                     // Explicit user audio changes remain immediate and are
@@ -1897,7 +1903,6 @@ fn run() -> io::Result<()> {
                     crate::engine::manager_settings::save_audio(mode).map_err(|e|e.to_string())?;
                     audio_mode=mode;audio_issue=None;
                     audio_idle.success(Instant::now(),foreground,audio_roster(&sessions));
-                    settings=Some(sessions.fresh_settings_report().map_err(|e|e.to_string())?);
                 }
                 SessionRequest::Launch { slot } => {
                     sessions.launch(slot).map_err(|error| error.to_string())?
@@ -2030,12 +2035,15 @@ fn run() -> io::Result<()> {
             if matches!(reply_snapshot,ReplySnapshot::AgentTarget(_)) {
                 return Ok(snapshot); // No unrelated status/activity payload.
             }
-            // Read-only Settings shares the full snapshot's reap. No actor
-            // request can change its roster between these two observations.
-            // External process exit may still race; mutation admission reaps
-            // independently and uses the fresh registered-image inventory.
+            // Both Settings observation and post-save replies share this
+            // full snapshot's reap. No actor request can change its roster
+            // between these observations. Saves still use fresh registration;
+            // ApplyPreset's independent pre-mutation admission is unchanged.
+            // External process exit may still race any point-in-time report.
             if inspect_settings {
                 settings = Some(sessions.settings_observation().map_err(|error| error.to_string())?);
+            } else if saved_settings {
+                settings = Some(sessions.fresh_settings_report().map_err(|error| error.to_string())?);
             }
             if let Some(report)=settings.as_mut(){report.audio_issue=audio_issue.clone();}
             snapshot.storage = storage;

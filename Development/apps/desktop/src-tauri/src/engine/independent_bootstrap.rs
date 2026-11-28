@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 use crate::engine::instance_focus_events;
+use crate::engine::manager_settings::PerformanceSettings;
 #[cfg(test)]
 use windows_sys::Win32::System::Registry::HKEY_CURRENT_USER;
 use std::{
@@ -210,9 +211,7 @@ fn create_fixture_configured(
     presentation_library: Option<&BootstrapLibrary>,
     proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
-    create_suspended_process(path, image, storage, observe, presentation_library, None,
-        #[cfg(feature="mc02-native-input")] None,
-        proof)
+    create_fixture_tracked(path, image, storage, observe, presentation_library, None, proof)
 }
 
 #[cfg(test)]
@@ -225,7 +224,10 @@ fn create_fixture_tracked(
     cleanup: Option<UnstartedCleanup>,
     proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
-    create_suspended_process(path, image, storage, observe, presentation_library, cleanup,
+    let presentation_policy = presentation_library
+        .map(|library| crate::engine::manager_settings::load_performance().map(|limits|(library,limits)))
+        .transpose()?;
+    create_suspended_process(path, image, storage, observe, presentation_policy, cleanup,
         #[cfg(feature="mc02-native-input")] None,
         proof)
 }
@@ -237,12 +239,12 @@ fn create_suspended_process(
     image: File,
     storage: Option<SlotStorage>,
     observe: bool,
-    presentation_library: Option<&BootstrapLibrary>,
+    presentation_policy: Option<(&BootstrapLibrary, PerformanceSettings)>,
     cleanup: Option<UnstartedCleanup>,
     #[cfg(feature="mc02-native-input")] experimental_input: Option<crate::engine::native_clients_session::AgentControlMode>,
     #[cfg(test)] proof: Option<&tests::FixtureReceipt>,
 ) -> io::Result<PendingEducationBootstrap> {
-    if presentation_library.is_some() && storage.is_none() {
+    if presentation_policy.is_some() && storage.is_none() {
         return Err(invalid("Presentation policy requires configured storage"));
     }
     if observe && storage.is_none() {
@@ -270,7 +272,7 @@ fn create_suspended_process(
         .as_ref()
         .map(|_| Configuration::create())
         .transpose()?;
-    let presentation = presentation_library
+    let presentation = presentation_policy
         .map(|_| Configuration::create_sized(128))
         .transpose()?;
     let observation = if observe {
@@ -443,7 +445,7 @@ fn create_suspended_process(
         child.configuration = Some(config.publish(&child, &store)?);
         child.storage = Some(store);
     }
-    if let (Some(config), Some(library)) = (&presentation, presentation_library) {
+    if let (Some(config), Some((library, limits))) = (&presentation, presentation_policy) {
         if unsafe {
             SetHandleInformation(
                 config.readonly.as_raw_handle() as HANDLE,
@@ -459,7 +461,7 @@ fn create_suspended_process(
             child.pid,
             child.created,
         )?);
-        library.prepare_presentation(&child, config)?;
+        library.prepare_presentation(&child, config, limits)?;
     }
     child.identity()?;
     Ok(child)
@@ -512,6 +514,9 @@ fn prepare_registered_mode<const N: usize>(
     }
     let (target, image, singleton_caller_rva) = registered_image::registered_image(observe)?;
     let path = Path::new(&target);
+    let presentation_policy = presentation_library
+        .map(|library| crate::engine::manager_settings::load_performance().map(|limits|(library,limits)))
+        .transpose()?;
     let stores = registered_slots::<N>(observe)?;
     if observe {
         let changed = game_preset::apply(&stores)?;
@@ -528,7 +533,7 @@ fn prepare_registered_mode<const N: usize>(
             image.try_clone()?,
             Some(store),
             observe,
-            presentation_library,
+            presentation_policy,
             None,
             #[cfg(feature="mc02-native-input")]
             None,
@@ -801,6 +806,7 @@ impl BootstrapLibrary {
         &self,
         child: &PendingEducationBootstrap,
         section: &Configuration,
+        limits: PerformanceSettings,
     ) -> io::Result<()> {
         if child.resume_attempted {
             return Err(invalid("Presentation requires original unstarted child"));
@@ -828,7 +834,8 @@ impl BootstrapLibrary {
             u32,
             u32,
         ) -> u32;
-        let limits = crate::engine::manager_settings::load_performance()?;
+        // The transaction already validated the saved limits before creating
+        // the child. Never reopen a mutable preference during enrollment.
         let symbol = unsafe {
             GetProcAddress(
                 self.module,

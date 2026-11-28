@@ -144,6 +144,13 @@ validation remains. Equal, valid persisted preferences skip temporary-file
 creation, serialization, flush and rename. Missing preferences still allow
 an explicit first save; invalid inputs and saved files remain refused.
 Explicit audio application and native post-save observation are unchanged.
+Retained-controller Settings saves share the full response roster's reap
+and still use fresh registration for the report; the separate ApplyPreset
+pre-mutation admission remains. Each launch transaction reads and validates
+the saved FPS limits before profile mutation, then carries that same value
+into the native presentation preparation (one read for an enrolled cohort).
+An external preference edit after admission applies to a later launch, not
+an already admitted child. No preference cache or ABI change.
 Geometry-only resize/DPI events outside Play do not schedule
 preview cleanup; navigation, visibility transitions, failed preview recovery
 and native safety admission retain their original paths.

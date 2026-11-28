@@ -382,13 +382,29 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
     && gameSessions.includes('let inspect_settings = matches!(&envelope.request, SessionRequest::InspectSettings);')
     && gameSessions.includes('SessionRequest::Inspect | SessionRequest::InspectSettings => {}')
     && /let mut snapshot = reply_snapshot\.collect\(&mut sessions\);[\s\S]*?if inspect_settings \{\s*settings = Some\(sessions\.settings_observation\(\)/.test(gameSessions)
-    && /fn fresh_settings_report\(&mut self\) -> io::Result<SettingsReport> \{\s*self\.reap\(\);\s*self\.settings_report\(\|_\| Ok\(super::super::inspect_native_workspace\(\)\?\.processes\.is_empty\(\)\)\)/.test(gameSessions)
+    && /fn fresh_settings_report\(&self\) -> io::Result<SettingsReport> \{\s*self\.settings_report\(\|_\| Ok\(super::super::inspect_native_workspace\(\)\?\.processes\.is_empty\(\)\)\)/.test(gameSessions)
+    && /fn apply_preset\(&mut self\)[\s\S]*?self\.reap\(\);[^\n]*\n\s*let mut report = self\.fresh_settings_report\(\)\?;/.test(gameSessions)
+    && /let saved_settings = matches!\(&envelope\.request,\s*SessionRequest::SavePerformance \{ \.\. \} \|\s*SessionRequest::SaveStoragePreferences \{ \.\. \} \|\s*SessionRequest::SaveAudio \{ \.\. \}\);/.test(gameSessions)
+    && /let mut snapshot = reply_snapshot\.collect\(&mut sessions\);[\s\S]*?else if saved_settings \{\s*settings = Some\(sessions\.fresh_settings_report\(\)/.test(gameSessions)
+    && !/sessions\.fresh_settings_report\(\)/.test(gameSessions.slice(gameSessions.indexOf('SessionRequest::SavePerformance {active_fps,background_fps} =>'),gameSessions.indexOf('let mut snapshot = reply_snapshot.collect(&mut sessions);')))
     && /SessionRequest::ApplyPreset\s*=>\s*\{[\s\S]*?sessions\.apply_preset\(\)/.test(gameSessions)
     && /SessionRequest::ApplyGraphicsPreset\s*\{\s*\.\.\s*\}\s*=>\s*\{\s*return Err\("Individual graphics preferences are retired/.test(gameSessions)
     && !gameSessions.includes('fn apply_graphics_preset(')
     && !gamePreset.includes('fn apply_selected(')
     && gameSessions.includes('super::super::inspect_native_workspace()?.processes.is_empty()'),
     'Read-only Settings may reuse pinned image but all mutation admission must still perform fresh registration checks');
+  const gameBootstrap=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs');
+  const presentationPreparation=gameBootstrap.slice(gameBootstrap.indexOf('    fn prepare_presentation('),gameBootstrap.indexOf('    fn enroll('));
+  const managedLaunch=gameSessions.slice(gameSessions.indexOf('    fn launch_inner('),gameSessions.indexOf('    fn mc02_input('));
+  assert.ok((managedLaunch.match(/load_performance\(\)/g)??[]).length===1
+    && managedLaunch.indexOf('let limits = crate::engine::manager_settings::load_performance()?;')<managedLaunch.indexOf('game_preset::apply_inactive')
+    && managedLaunch.includes('Some((&payload, limits))')
+    && gameBootstrap.includes('library.prepare_presentation(&child, config, limits)?;')
+    && presentationPreparation.includes('limits: PerformanceSettings,')
+    && presentationPreparation.includes('limits.active_fps,')
+    && presentationPreparation.includes('limits.background_fps,')
+    && !presentationPreparation.includes('load_performance('),
+    'One validated launch preference must reach native presentation without a second preference read');
   // Inspect the live shared 0/1 parser, not the retired one-off parser:
   // the old guard falsely failed after the two options were consolidated.
   assert.ok(gamePreset.includes('fn observed_binary_option(bytes: &[u8], wanted: &str) -> Option<bool>')

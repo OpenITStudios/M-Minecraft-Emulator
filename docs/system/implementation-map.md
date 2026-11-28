@@ -46,7 +46,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | One raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Allowlisted native commands / heavy-operation admission | `src-tauri/src/commands/native_clients.rs` | Session and workspace owners |
 | App startup / normal manager exit | `src-tauri/src/app_bootstrap.rs` | `engine/app_instance.rs`, native close command |
-| Manual game launch / reaping / normal CloseOne and CloseAll | `src-tauri/src/engine/independent_bootstrap/session_controller.rs` | `independent_bootstrap.rs` |
+| Manual game launch / reaping / normal CloseOne and CloseAll | `src-tauri/src/engine/independent_bootstrap/session_controller.rs` | `independent_bootstrap.rs`; one validated FPS snapshot per launch transaction reaches original presentation preparation, no second settings read |
 | Registered Education image validation and version compatibility | `src-tauri/src/engine/independent_bootstrap/registered_image.rs` | Existing registered target resolver and retained file pin/digest helpers. |
 | Native enrollment and reviewed DLL checks | `src-tauri/src/engine/independent_bootstrap.rs` | `independent_bootstrap/owned_handoff.rs` |
 | Profile data, binding, settings and storage inspection | `src-tauri/src/engine/independent_bootstrap/` | `product_profiles.rs`, `profile_binding.rs`, `profile_storage.rs`, `game_preset.rs` |
@@ -57,7 +57,7 @@ All desktop paths below start at `Development/apps/desktop/`.
 | Window placement / restoration | `src-tauri/src/engine/workspace_surface.rs` | `workspace_surface/controller.rs`, `native.rs` |
 | Native foreground/background FPS priority on Play switch | `src-tauri/src/engine/instance_focus_events.rs` (one policy worker and original per-process events) | `src-tauri/src/engine/workspace_surface.rs`, `workspace_surface/controller.rs`, `workspace_surface/native.rs` supply only exact, confirmed native-aperture readback and one post-transition notification; Rust `frame_pacing.rs` consumes the original event handles and owns timer, wait loop, deadlines and sticky stop via `frame-pacing-ffi.h`; C++ `frame-pacing.h` is a thin adapter, no new FPS authority |
 | DWM preview scheduling and native Windows worker | `src-tauri/src/engine/workspace_surface/previews.rs` | `workspace_surface/previews/windows.rs` |
-| Persisted manager performance and storage preferences | `src-tauri/src/engine/manager_settings.rs` | Existing controller and typed SettingsReport; global `storage.json` preferences, unverified download/log targets held |
+| Persisted manager performance and storage preferences | `src-tauri/src/engine/manager_settings.rs` | Existing controller and typed SettingsReport; retained-controller saves reuse one post-save roster reap with fresh registration, global `storage.json` preferences, unverified download/log targets held |
 | Pure cross-platform domain contracts | `Development/engine/runtime-core/src/independent_engine/mod.rs` | Applicable Rust module only; not a second launcher |
 | Official Education target detection | `Development/tooling/acceptance/windows/education-target.ps1` | Verified native game-image owner |
 | Active native compatibility DLL source | `Development/tooling/acceptance/windows/bootstrap-ordering/` | `native_fps.rs` shared Rust static library, `presentation_policy.rs`, `presentation_image.rs`, `presentation_transport.rs`; retained typed COM/Detours C++ bridge; CMake fixture target is explicit build-only; reviewed v4 payload admission held |
