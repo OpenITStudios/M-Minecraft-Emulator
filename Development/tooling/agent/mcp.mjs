@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Single stdio adapter for playtesting and retained compatibility profiles.
 import {pathToFileURL} from 'node:url';
-import {createOperationCore,REQUEST_LIMIT,MAX_MCP_IMAGE_CHARS,boundedMcpText,publicToolError,parseConfiguration} from './operation-core.mjs';
+import {createOperationCore,REQUEST_LIMIT,boundedMcpText,publicToolError,parseConfiguration} from './operation-core.mjs';
 import {createCodeModeSurface} from './code-mode.mjs';
-import {assertAgentSurface} from './agent-contract.mjs';
+import {assertAgentSurface,mcpImageMime} from './agent-contract.mjs';
 export * from './operation-core.mjs';
 
 // The 2026-07-28 protocol removes initialize and requires per-request
@@ -45,17 +45,8 @@ export function createMcpHandler(core,surface='legacy') {
             // Cached rolling observation returns metadata alone unless a
             // newer frame is explicitly requested by the model.
             const content=[{type:'text',text:boundedMcpText(data.metadata)}];
-            if (typeof data.imageBase64==='string') {
-              if(data.imageBase64.length>MAX_MCP_IMAGE_CHARS) {
-                throw new Error('MCP_IMAGE_RESPONSE_TOO_LARGE');
-              }
-              const mimeType=data.metadata?.mimeType??'image/png';
-              if(!['image/png','image/webp'].includes(mimeType)||(surface==='playtest'&&mimeType!=='image/webp')) {
-                throw new Error('VISUAL_FORMAT_MISMATCH');
-              }
-              content.push({type:'image',mimeType,
-                data:data.imageBase64});
-            }
+            const mimeType=mcpImageMime(data,surface==='playtest');
+            if(mimeType!==null)content.push({type:'image',mimeType,data:data.imageBase64});
             return result({content,isError:false});
           }
           return result({content:[{type:'text',text:boundedMcpText(data)}],isError:false});

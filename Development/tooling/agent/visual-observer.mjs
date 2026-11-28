@@ -2,10 +2,11 @@
 // Frames are collected locally and delivered to Codex/Claude only when asked.
 // This is NOT live 30 FPS video, semantic gameplay perception, or game input.
 // Game capture, provider latency and Minecraft Windows behavior NOT_EXECUTED.
+import {MAX_MCP_IMAGE_CHARS} from './agent-contract.mjs';
 export const OBSERVATION_LIMITS=Object.freeze({
   minimumIntervalMs:400,maximumIntervalMs:5000,defaultIntervalMs:1250,
   minimumDurationMs:5000,maximumDurationMs:90000,defaultDurationMs:30000,
-  maximumSlots:5,maximumEncodedFrameChars:4*1024*1024,
+  maximumSlots:5,maximumEncodedFrameChars:MAX_MCP_IMAGE_CHARS,
 });
 const HASH=/^[a-f0-9]{64}$/;
 const MAX_ERRORS=3;

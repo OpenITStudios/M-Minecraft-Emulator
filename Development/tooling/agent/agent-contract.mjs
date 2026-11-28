@@ -1,6 +1,17 @@
 // Shared argument and public text boundary for MCP and trusted Code Mode.
 export const REQUEST_LIMIT = 64 * 1024;
 const MAX_MCP_TEXT_BYTES = 128 * 1024;
+export const MAX_MCP_IMAGE_CHARS = 4 * 1024 * 1024; // 3 MiB encoded image -> Base64.
+
+export function mcpImageMime(data,requireWebp=false) {
+  if(typeof data.imageBase64!=='string')return null;
+  if(data.imageBase64.length>MAX_MCP_IMAGE_CHARS)throw new Error('MCP_IMAGE_RESPONSE_TOO_LARGE');
+  const mime=data.metadata?.mimeType??'image/png';
+  if(!['image/png','image/webp'].includes(mime)||(requireWebp&&mime!=='image/webp')) {
+    throw new Error('VISUAL_FORMAT_MISMATCH');
+  }
+  return mime;
+}
 
 // An explicit opt-in is required to widen an old read/plan connection.
 export function assertAgentSurface(surface,experimental=false) {

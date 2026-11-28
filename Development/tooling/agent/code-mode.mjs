@@ -1,7 +1,7 @@
 // For an independently trusted local execution host only. This is NOT a
 // sandbox, generic tool dispatcher, new MCP session, or permission grant.
 // The host creates ONE operation core, and attaches this facade to it.
-import {REQUEST_LIMIT,boundedMcpText,publicToolError,assertAgentSurface} from './agent-contract.mjs';
+import {REQUEST_LIMIT,boundedMcpText,publicToolError,assertAgentSurface,MAX_MCP_IMAGE_CHARS,mcpImageMime} from './agent-contract.mjs';
 
 // Fixed composition routes: one declaration for SDK methods and compact MCP.
 // The original operation core remains the only dispatch/validation authority.
@@ -22,18 +22,23 @@ const ROUTES = [
   ['input.assess','assess_input_route',['actions']],
   ['capabilities','agent_capabilities',[]],
 ];
-const METHODS=Object.freeze(ROUTES.map(([method])=>method));
-
-// Product playtesting adds existing real operations, not another execution core.
-// Keep the prior SDK and read/plan wire profile unchanged for existing clients.
+// Both transports derive their admitted keys and named methods from these routes.
 const PLAYTEST_EXCLUDE=new Set(['get_test_context','plan_player_actions','assess_input_route','read_game_evidence']);
-const PLAYTEST_EXTRA=[
-  ['launch_profile',['slot']],
-  ['observe_client',['slot','width','height','afterFrame']],
-  ['inspect_client_ui',['slot']],
-  ['start_visual_observation',['slots','intervalMs','durationMs','width','height']],
-  ['read_visual_observation',['slot','afterSequence','includeImage']],
-  ['stop_visual_observation',['slots']],
+const PLAYTEST_KEYS={
+  'testing.probe':['restart'],
+  'evidence.summarize':['window'],
+  capabilities:['inspectProfiles'],
+};
+const PLAYTEST_ROUTES=[
+  ...ROUTES.filter(([,tool])=>!PLAYTEST_EXCLUDE.has(tool))
+    .map(([method,tool,allowed,...rest])=>
+      [method,tool,[...allowed,...(PLAYTEST_KEYS[method]??[])],...rest]),
+  ['profiles.launch','launch_profile',['slot'],{},['slot']],
+  ['observation.capture','observe_client',['slot','width','height','afterFrame'],{},['slot']],
+  ['observation.inspectUi','inspect_client_ui',['slot'],{},['slot']],
+  ['observation.start','start_visual_observation',['slots','intervalMs','durationMs','width','height'],{},['slots']],
+  ['observation.read','read_visual_observation',['slot','afterSequence','includeImage'],{},['slot']],
+  ['observation.stop','stop_visual_observation',['slots'],{},['slots']],
 ];
 
 // Playtest image responses need a small visual receipt, not the native
@@ -66,18 +71,10 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
   if(surface==='legacy')throw new Error('Unknown agent surface');
   const playtest=surface==='playtest';
   const allowedByTool=new Map();
-  for(const [,tool,allowed,forced={}] of ROUTES) {
-    if(playtest&&PLAYTEST_EXCLUDE.has(tool))continue;
+  for(const [,tool,allowed,forced={}] of (playtest?PLAYTEST_ROUTES:ROUTES)) {
     const keys=allowedByTool.get(tool)??new Set();
     for(const key of [...allowed,...Object.keys(forced)])keys.add(key);
     allowedByTool.set(tool,keys);
-  }
-  if(playtest) {
-    for(const [tool,keys] of PLAYTEST_EXTRA)allowedByTool.set(tool,new Set(keys));
-    // Explicit new Probe attempt, not native reservation or command dispatch.
-    allowedByTool.get('probe_qa').add('restart');
-    allowedByTool.get('summarize_test_evidence').add('window');
-    allowedByTool.get('agent_capabilities').add('inspectProfiles');
   }
   // A duplicate could otherwise hide a missing route behind the same count.
   const selected=descriptors.filter(tool=>allowedByTool.has(tool.name));
@@ -156,8 +153,15 @@ export function createCodeModeSurface(descriptors,callTool,surface='code-mode') 
 const MAX_CALLS=64;
 const MAX_RESULT_BYTES=1024*1024;
 
-export function createCodeModeClient(core) {
-  let calls=0,resultBytes=0,busy=false,closed=false;
+export function createCodeModeClient(core,surface='code-mode') {
+  assertAgentSurface(surface);
+  if(surface==='legacy')throw new Error('Unknown agent surface');
+  const playtest=surface==='playtest';
+  const routes=playtest?PLAYTEST_ROUTES:ROUTES;
+  const methods=routes.map(([method])=>method);
+  // The opt-in Playtest facade uses exactly the existing wire projection.
+  const dispatch=playtest?createCodeModeSurface(core.listTools(),core.callTool,surface).callTool:core.callTool;
+  let calls=0,resultBytes=0,imageChars=0,busy=false,closed=false;
   // The host MUST close the facade at the end of a script. The core is
   // separately owned by the host, and may be shared with its MCP adapter.
   async function invoke(name,args,allowed,forced={},required=[]) {
@@ -184,16 +188,23 @@ export function createCodeModeClient(core) {
         throw new Error('Invalid tool arguments');
       }
       if(closed||core.isClosed())throw new Error('MCP_CONNECTION_CLOSED');
-      // Exact owner admission and typed result projections are unchanged.
-      // A guest cannot specify a tool name, executable, source path, lease,
-      // publication, restart, native reservation or arbitrary command.
-      const result=await core.callTool(name,{...input,...forced});
+      // No arbitrary tool, executable, source path, lease or publication.
+      const result=await dispatch(name,{...input,...forced});
       if(closed||core.isClosed())throw new Error('MCP_CONNECTION_CLOSED');
-      const output=boundedMcpText(name==='agent_capabilities'?
-        {...result,available:[...METHODS]}:result);
+      const visual=playtest&&(name==='observe_client'||name==='read_visual_observation');
+      const output=boundedMcpText(visual?result.metadata:name==='agent_capabilities'?
+        {...result,available:[...methods]}:result);
       resultBytes+=Buffer.byteLength(output,'utf8');
       if(resultBytes>MAX_RESULT_BYTES) throw new Error('MCP_TEXT_RESPONSE_TOO_LARGE');
-      return JSON.parse(output);
+      const value=JSON.parse(output);
+      if(!visual)return value;
+      const mime=mcpImageMime(result,true);
+      if(mime!==null) {
+        imageChars+=result.imageBase64.length;
+        if(imageChars>MAX_MCP_IMAGE_CHARS)throw new Error('MCP_IMAGE_RESPONSE_TOO_LARGE');
+      }
+      // Do not stringify/parse the large Base64 string a second time.
+      return {metadata:value,imageBase64:mime===null?null:result.imageBase64};
     } catch(error) {
       throw new Error(publicToolError(error));
     } finally {
@@ -201,7 +212,7 @@ export function createCodeModeClient(core) {
     }
   }
   const tester={};
-  for(const [method,name,allowed,forced={},required=[]] of ROUTES) {
+  for(const [method,name,allowed,forced={},required=[]] of routes) {
     const [namespace,member]=method.split('.');
     const call=args=>invoke(name,args,allowed,forced,required);
     if(member) (tester[namespace]??={})[member]=call;

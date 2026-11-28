@@ -44,7 +44,9 @@ A process or preview is not evidence of a signed-in playable world.
 **MCP / Code Mode (optional):** manual desktop use requires no AI host,
 MCP connection or Code Mode setting. If the user chooses AI assistance,
 select `--surface playtest` explicitly; ordinary MCP and host-provided
-Code Mode use the same tool contract and retained controller. The restricted
+Code Mode use the same tool contract and retained controller. A trusted local
+host may instead attach `createCodeModeClient(core,'playtest')` directly,
+without stdio MCP framing. The restricted
 `--surface code-mode` profile is read/plan-only, not a host feature toggle.
 No automatic activation; actual autonomous gameplay input is not verified.
 Normal tools inspect profiles, explicitly request launches, plan actions,

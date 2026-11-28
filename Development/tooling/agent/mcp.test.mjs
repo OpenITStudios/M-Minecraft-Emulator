@@ -5753,3 +5753,91 @@ test('stdio abandons an asynchronous output stall and runs core shutdown once',a
     assert.equal(f.output.destroyed,true);
   }finally{f.input.destroy();f.output.destroy();}
 });
+
+test('direct Playtest Code Mode covers the entire projected MCP catalog with the same admission',async()=>{
+  const owner=createOperationCore(config());
+  const calls=[];
+  const core={isClosed:owner.isClosed,listTools:owner.listTools,shutdown:owner.shutdown,
+    async callTool(name,args){
+      calls.push({name,args});
+      if(name==='observe_client'||name==='read_visual_observation')return {
+        metadata:{schema:1,slot:2,mimeType:'image/webp',privateField:'not projected'},
+        imageBase64:args.includeImage===false?null:'UklGRgAAAABXRUJQ',
+      };
+      return {schema:1};
+    }};
+  const mcp=createMcpHandler(core,'playtest');
+  const code=createCodeModeClient(core,'playtest');
+  const t=code.tester;
+  try {
+    const operations=[
+      ['inspect_profiles',{},()=>t.profiles.inspect()],
+      ['launch_profile',{slot:2},()=>t.profiles.launch({slot:2})],
+      ['observe_client',{slot:2,width:320,height:180},()=>t.observation.capture({slot:2,width:320,height:180})],
+      ['inspect_client_ui',{slot:2},()=>t.observation.inspectUi({slot:2})],
+      ['start_visual_observation',{slots:[2]},()=>t.observation.start({slots:[2]})],
+      ['get_multi_client_visual_state',{slots:[2]},()=>t.observation.state({slots:[2]})],
+      ['read_visual_observation',{slot:2,includeImage:false},()=>t.observation.read({slot:2,includeImage:false})],
+      ['stop_visual_observation',{slots:[2]},()=>t.observation.stop({slots:[2]})],
+      ['probe_qa',{slot:2,restart:true},()=>t.testing.probe({slot:2,restart:true})],
+      ['probe_qa',{slot:2,inspectRun:true},()=>t.testing.inspectRun({slot:2})],
+      ['probe_qa',{archivedRunId:'a'.repeat(32)},()=>t.testing.readArchived({archivedRunId:'a'.repeat(32)})],
+      ['summarize_test_evidence',{slots:[2],window:'begin'},()=>t.evidence.summarize({slots:[2],window:'begin'})],
+      ['get_diagnostics_overview',{},()=>t.diagnostics.overview()],
+      ['list_issue_candidates',{run:'demo'},()=>t.diagnostics.list({run:'demo'})],
+      ['get_issue_details',{run:'demo',id:'issue'},()=>t.diagnostics.details({run:'demo',id:'issue'})],
+      ['query_diagnostic_evidence',{run:'demo',id:'issue'},()=>t.diagnostics.evidence({run:'demo',id:'issue'})],
+      ['agent_capabilities',{inspectProfiles:true},()=>t.capabilities({inspectProfiles:true})],
+    ];
+    const listing=(await mcp.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    assert.deepEqual([...new Set(operations.map(([name])=>name))].sort(),listing.map(x=>x.name).sort());
+    for(const [name,args,invoke] of operations) {
+      const direct=await invoke();
+      const directCall=calls.at(-1);
+      const wire=await mcp.callTool(name,args);
+      assert.deepEqual(directCall,calls.at(-1));
+      if(name==='agent_capabilities') {
+        assert.equal(direct.available.length,17);
+        assert.ok(direct.available.includes('observation.capture'));
+        assert.equal(direct.playtest.autonomousGameplay,wire.playtest.autonomousGameplay);
+      } else assert.deepEqual(direct,JSON.parse(JSON.stringify(wire)));
+    }
+    assert.equal(t.input,undefined);
+    assert.equal(t.profiles.close,undefined);
+    assert.equal(t.testing.context,undefined);
+    assert.equal(t.evidence.read,undefined);
+    const count=calls.length;
+    await assert.rejects(t.observation.capture({slot:2,imageFormat:'png'}),/Invalid tool arguments/);
+    await assert.rejects(t.testing.probe({coordinateNative:true}),/Invalid tool arguments/);
+    await assert.rejects(t.capabilities({publishToDesktop:true}),/Invalid tool arguments/);
+    await assert.rejects(t.testing.readArchived({}),/Invalid tool arguments/);
+    assert.equal(calls.length,count);
+  }finally{code.close();mcp.shutdown();}
+});
+
+test('direct Playtest images have independent bounded budget and no PNG fallback',async()=>{
+  const owner=createOperationCore(config());
+  let image='x'.repeat(3*1024*1024),mime='image/webp';
+  const code=createCodeModeClient({isClosed:owner.isClosed,listTools:owner.listTools,
+    callTool:async(name,args)=>name==='observe_client'?{
+      metadata:{schema:1,slot:2,mimeType:mime},
+      imageBase64:image,
+    }:{schema:1}},'playtest');
+  try {
+    const t=code.tester;
+    mime='image/png';
+    await assert.rejects(t.observation.capture({slot:2}),/VISUAL_FORMAT_MISMATCH/);
+    mime='image/webp';
+    image='x'.repeat(4*1024*1024+1);
+    await assert.rejects(t.observation.capture({slot:2}),/MCP_IMAGE_RESPONSE_TOO_LARGE/);
+    image='x'.repeat(3*1024*1024);
+    assert.equal((await t.observation.capture({slot:2})).imageBase64,image);
+    await assert.rejects(t.observation.capture({slot:2}),/MCP_IMAGE_RESPONSE_TOO_LARGE/);
+    assert.equal((await t.profiles.inspect()).schema,1);
+  }finally{code.close();owner.shutdown();}
+});
+
+test('direct Playtest refuses experimental catalog attachment',()=>{
+  const core={isClosed:()=>false,callTool:async()=>{},listTools:()=>[{name:'run_experimental_multi_client_actions'}]};
+  assert.throws(()=>createCodeModeClient(core,'playtest'),/does not admit experimental input/);
+});

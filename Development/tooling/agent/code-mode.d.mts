@@ -34,10 +34,33 @@ export interface Tester {
   };
   capabilities(args?:Record<string,never>):Result;
 }
-export function createCodeModeClient(core:{
+export interface VisualResult {
+  metadata:Json;
+  imageBase64:string|null;
+}
+type PreviewSize={width:number;height:number}|{width?:never;height?:never};
+export interface PlaytestTester {
+  profiles:Tester['profiles']&{launch(args:{slot:Slot}):Result};
+  testing:Pick<Tester['testing'],'inspectRun'|'readArchived'>&{
+    probe(args?:{slot?:Slot;scope?:Scope;restart?:boolean}):Result;
+  };
+  evidence:{summarize(args?:{slots?:Slot[];window?:never}|{slots:Slot[];window:'begin'|'read'}):Result};
+  diagnostics:Tester['diagnostics'];
+  observation:Tester['observation']&{
+    capture(args:{slot:Slot;afterFrame?:string}&PreviewSize):Promise<VisualResult>;
+    inspectUi(args:{slot:Slot}):Result;
+    start(args:{slots:Slot[];intervalMs?:number;durationMs?:number}&PreviewSize):Result;
+    read(args:{slot:Slot;afterSequence?:number;includeImage?:boolean}):Promise<VisualResult>;
+    stop(args:{slots:Slot[]}):Result;
+  };
+  capabilities(args?:{inspectProfiles?:boolean}):Result;
+}
+interface Core {
   isClosed():boolean;
   callTool(name:string,args:Record<string,unknown>):Promise<unknown>;
-}):Readonly<{tester:Tester;close():void}>;
+}
+export function createCodeModeClient(core:Core,surface?:'code-mode'):Readonly<{tester:Tester;close():void}>;
+export function createCodeModeClient(core:Core&{listTools():CodeModeToolDescriptor[]},surface:'playtest'):Readonly<{tester:PlaytestTester;close():void}>;
 
 // Trusted adapter helper, not a model-facing generic dispatcher.
 export interface CodeModeToolDescriptor {
