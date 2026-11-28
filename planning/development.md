@@ -10,7 +10,7 @@ Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Bas
 - RPT-07 integration audit: typed Rust operation/code vocabulary reused for full prior-checkpoint validation before replacement; explicit native-only Check/Copy with nullable UI checkpoint, no healthy report or false absence on failed native read; cross-language vocabulary and regression fixtures authored NOT_EXECUTED. Native failure checkpoint I/O is synchronous after transport gate release; outer manager gate can remain held. No new poll, service, dependency or session-wire change.
 - Standalone process failures, crash before checkpoint, unsubmitted UI repeats, historical UI read, exact build identity, correlation and measured overhead remain unresolved. [Checkpoint contract](../Development/apps/desktop/README.md#bounded-local-checkpoint). Native/TS fixtures authored NOT_EXECUTED. ICE-01–04 and prior PLA/source scopes closed; ICE-05/OPT-07 held.
 
-**Next — STOP at scoped RPT-01–07 source ceiling.** Native ABI v4 digest approval missing; standard dev/package/new launch blocked. All tests/builds/benchmarks/native acceptance NOT_EXECUTED. No CI or unapproved local validation.
+**Next — SOURCE_READY_FOR_LOCAL (scoped source handoff).** The operator requested preparation for the PC-local phase, not execution on this surface. Use the single staged handoff below; native ABI v4 digest approval still blocks standard dev/package/new launch. All tests/builds/benchmarks/native acceptance NOT_EXECUTED. No CI or unapproved local validation.
 
 ## Unreleased — Rust-first integration
 
@@ -35,7 +35,20 @@ CAP-01–05 source integrated: lossless client WebP screenshot, selected-slot AV
 
 ## Source-to-local handoff — SOURCE_READY_FOR_LOCAL
 
-Applies only to completed scoped source work (PLA, ZW, MCP/Code Mode, earlier scopes), not whole product readiness or permission to execute. Re-pin exact HEAD before separately authorized verified LOCAL_PC_AGENT phase.
+Source baseline reviewed: `d11a5f63b5db8db5ed63533dbf5f2b06c90724e5` (RPT-07). This handoff-only commit advances HEAD without changing executable source. Re-pin the actual Local HEAD and reconcile any later changes before validation. Applies to completed scoped source work, including RPT-01–07, PLA, ZW, MCP/Code Mode and earlier closed scopes, not whole-product readiness or execution permission.
+
+### One PC-local entry — progressive acceptance
+
+Use the existing [Windows first-run guide](../docs/validation/local-pc-first-run.md) and `DEV.cmd`. No new runner, package format or status store. Only a verified `LOCAL_PC_AGENT` with explicit operator approval for each applicable held stage may execute:
+
+1. **Admission:** confirm actual Windows x64 PC/agent, clean Local checkout and full SHA; run read-only `DEV.cmd localcheck`. Preserve all existing App/Data, accounts and worlds. Missing native DLL approval is expected and blocks native stages, not independent source checks when their own prerequisites are met. Prepare pinned tools with `DEV.cmd bootstrap` only if missing and authorized; verify prerequisites per the first-run guide.
+2. **Source:** run `DEV.cmd preflight` once after approval. It reuses/installs locked npm dependencies as needed and includes frontend Vitest, desktop/runtime Rust checks/tests and the developer report-review suite. Do not precede it with redundant setup, quick, check or agent-suite runs. Default Cargo features only; product/experimental feature acceptance remains separate. Stop on failure; correct the first owning source and re-pin affected evidence. Preserve the private preflight manifest.
+3. **Native prerequisite:** use VAL-01/02 below for independently reviewed ABI v4 x64 DLL build/controls and separate exact digest admission; `REVIEWED_EDUCATION_BOOTSTRAP = None` at the baseline. Until admitted, do not follow preflight's generic dev suggestion, launch a new game or package. No placeholders, old DLLs, hash bypass or experimental flags.
+4. **Product smoke:** after native admission and matching approval, use `DEV.cmd dev` and the existing progressive LT-01–13 plan, manager then MC01/MC02, before any five-client escalation. Preserve original slot/session ownership, normal close/reconnect and private data. Reuse already matching source receipts rather than rerunning the quick screen. Packaging, capture/recording, experimental AI/input and full regression escalation remain separate gates.
+5. **Report acceptance during the same approved smoke:** on an isolated checkout/data root, healthy explicit Check yields no current issue report and creates no checkpoint; any existing historical checkpoint remains unchanged. A safely observed UI/native issue yields bounded sanitized evidence; check native-only Check/Copy, repeat/recovery semantics, exit/Copy checkpoint and retention via existing regression fixtures and naturally observed failures. Never induce faults in licensed sessions or overwrite real evidence. Use `DEV.cmd report --json` once when needed: no report is not health proof; UI/native provenance stays separate, at most 12 review candidates, root cause/build identity unknown. Malformed/oversized/interrupted evidence preservation belongs to existing disposable fixtures; do not modify real Data to simulate it. Unobserved runtime cases stay NOT_EXECUTED/INCONCLUSIVE.
+6. **Feedback/STOP:** use existing private `workspace/runs/` receipts, exact SHA, first failing stage, sanitized observed vs expected and canonical source owner. Do not dump logs or commit private Data. No automatic fix, replay or repeat of successful unaffected checks; stop at the selected proof ceiling. OPT-07/ICE-05 and other holds below remain unchanged.
+
+All commands above are deferred; this is a source handoff, not a test or release authorization.
 
 | Gate | Existing evidence owner |
 | --- | --- |
