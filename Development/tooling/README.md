@@ -173,8 +173,17 @@ input injection, Accessibility access or cross-user transport. Three pairs of
 sequential screenshots and two bounded manual waits are not live simultaneous
 preview or shared interactive workspace proof. Normal close A preserves B,
 then close B. Only scoped statuses are emitted, always runtimeAdmission=false.
-The existing no-argument/profile modes retain their behavior. All modes are
-source-authored and NOT_EXECUTED.
+The explicit `--shared-workspace-probe` mode reuses those two windows and
+adds one native AppKit panel with a selected snapshot and two preview tiles.
+The operator clicks Select A/B in the panel, then physically clicks the
+focused original window. AppKit activation is requested once and the exact
+frontmost application must be observed. Captures remain bounded sequential
+snapshots, not live streams; only the two latest preview images are displayed
+with the selected image reused in the viewport. The panel is not an embedded
+game window and does not send input events or access another user session.
+No screenshots are persisted. Any unconfirmed selection, focus or marker
+refuses; existing single/profile/workspace modes remain available.
+All modes are source-authored and NOT_EXECUTED.
 The temporary fixture bundle is retained and
 may be removed by that operator after confirming exit. The result is scoped
 to a synthetic app, never game isolation or gameplay proof. Source not compiled

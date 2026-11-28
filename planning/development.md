@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-04f: synthetic window feasibility)
+## Current status — cross-platform-native (MAC-04g: shared snapshot selection)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,36 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-04g — shared snapshot panel and native focus (P3b partial, source only)
+
+Extend the existing self-only fixture with explicit
+`--shared-workspace-probe` and retain the previous three modes.
+Reuse exact-window capture and marker validation; one AppKit panel displays
+two latest snapshot images and the selected image (no independent encoder,
+persistent service or capture loop). The user must select A then B in the
+panel, then physically click each original native window. Selection must
+originate while the panel is key and active. Request AppKit activation
+once for the retained original application; observe the exact frontmost
+application before proceeding. [AppKit 14 activation notes](https://developer.apple.com/documentation/macos-release-notes/appkit-release-notes-for-macos-14)
+and [NSRunningApplication.activate](https://developer.apple.com/documentation/appkit/nsrunningapplication/activate(from:options:))
+establish a request, not guaranteed focus. Refusal, stale target, wrong
+selection or mismatched marker blocks further action; no forced activation,
+input injection or fallback. Capture markers and independent normal exit
+remain required. Correct the marker fill to documented NSBezierPath.fill.
+
+This tests a real shared snapshot/selection consumer at source level, not
+embedded interactive gameplay. Sequential snapshots may be stale between
+observations; the panel must not be treated as a live player viewport.
+No inactive-login capture, cross-user transport, actual Minecraft game
+or profile isolation proof. No source compile/test/native execution and
+no product changes. The P3b partial receipt explicitly keeps
+embeddedGameplay and inactiveLoginSession NOT_VERIFIED, runtimeAdmission=false.
+This is the terminal useful synthetic source step absent Mac access;
+do not expand synthetic UI, streaming or per-user agents speculatively.
+Final acceptance remains five independent interactive Minecraft sessions
+in one workspace; P1 actual artifact/isolation and P3 real workspace
+feasibility remain unresolved. Existing native/test/CI/release holds stand.
 
 ### MAC-04f — two exact native window snapshots (P3a, source only)
 
@@ -535,7 +565,8 @@ MAC-04b authors a synthetic AppKit lifecycle acceptance fixture;
 MAC-04c extends it with explicit two-instance path observations;
 MAC-04d records authentication counterevidence and alternate native topology;
 MAC-04e records operator-confirmed final workspace parity and staged design;
-MAC-04f adds same-login synthetic window capture/interaction feasibility source.
+MAC-04f adds same-login synthetic window capture/interaction feasibility source;
+MAC-04g adds a bounded synthetic shared snapshot/selection panel.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

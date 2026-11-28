@@ -57,7 +57,7 @@ private final class WorkspaceMarker: NSView {
             ? (clicked ? .green : .red)
             : (clicked ? .yellow : .blue)
         color.setFill()
-        bounds.fill()
+        NSBezierPath.fill(bounds)
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
@@ -69,6 +69,79 @@ private final class WorkspaceMarker: NSView {
         displayIfNeeded()
         // Only this synthetic marker is written. No input event leaves the view.
         try? Data([1]).write(to: clickFile, options: .withoutOverwriting)
+    }
+}
+
+// One fixture-only workspace. Snapshot views share the same two CGImages;
+// no image encoding, background sampling, or input forwarding.
+@MainActor
+private final class WorkspacePanel: NSObject {
+    let window: NSWindow
+    private let active = NSImageView()
+    private let previews = [NSImageView(), NSImageView()]
+    private let status = NSTextField(labelWithString: "")
+    private var buttons: [NSButton] = []
+    private var images: [NSImage] = []
+    private(set) var selection: Int?
+    private(set) var selectedWhileActive = false
+
+    override init() {
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 340),
+                          styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        super.init()
+        window.title = "Lazy Tester — Synthetic Workspace"
+        window.isReleasedWhenClosed = false
+        let content = NSView(frame: NSRect(x: 0, y: 0, width: 560, height: 340))
+        active.frame = NSRect(x: 152, y: 118, width: 256, height: 192)
+        active.imageScaling = .scaleProportionallyUpOrDown
+        content.addSubview(active)
+        status.frame = NSRect(x: 12, y: 312, width: 536, height: 20)
+        content.addSubview(status)
+        for index in 0..<2 {
+            let x = CGFloat(144 + 140 * index)
+            previews[index].frame = NSRect(x: x, y: 36, width: 132, height: 80)
+            previews[index].imageScaling = .scaleProportionallyUpOrDown
+            content.addSubview(previews[index])
+            let button = NSButton(title: index == 0 ? "Select A" : "Select B",
+                                  target: self, action: #selector(selectSlot(_:)))
+            button.tag = index
+            button.frame = NSRect(x: x, y: 6, width: 132, height: 26)
+            button.isEnabled = false
+            buttons.append(button)
+            content.addSubview(button)
+        }
+        window.contentView = content
+        window.center()
+    }
+
+    func publish(_ frames: [CGImage], selected: Int) {
+        precondition(frames.count == 2 && (0..<2).contains(selected))
+        images = frames.map { NSImage(cgImage: $0, size: NSSize(width: CGFloat($0.width), height: CGFloat($0.height))) }
+        for index in 0..<2 { previews[index].image = images[index] }
+        active.image = images[selected]
+    }
+
+    func prepareSelection(_ expected: Int) {
+        selection = nil
+        selectedWhileActive = false
+        status.stringValue = expected == 0 ? "Select A, then click its native window." :
+                                            "Select B, then click its native window."
+        buttons.forEach { $0.isEnabled = true }
+    }
+
+    @objc private func selectSlot(_ sender: NSButton) {
+        guard selection == nil, images.count == 2, (0..<2).contains(sender.tag) else { return }
+        selectedWhileActive = NSApp.isActive && window.isKeyWindow
+        selection = sender.tag
+        active.image = images[sender.tag]
+        buttons.forEach { $0.isEnabled = false }
+    }
+
+    func clear() {
+        active.image = nil
+        previews.forEach { $0.image = nil }
+        images.removeAll()
+        buttons.forEach { $0.isEnabled = false }
     }
 }
 
@@ -113,20 +186,22 @@ struct LifecycleFixture {
             return
         }
         guard arguments.isEmpty || arguments == ["--profile-probe"] ||
-              arguments == ["--workspace-probe"] else {
+              arguments == ["--workspace-probe"] || arguments == ["--shared-workspace-probe"] else {
             receipt("REFUSED"); exit(2)
         }
         do {
-            let workspace = arguments == ["--workspace-probe"]
+            let shared = arguments == ["--shared-workspace-probe"]
+            let workspace = arguments == ["--workspace-probe"] || shared
             if workspace {
                 guard #available(macOS 14.0, *), CGPreflightScreenCaptureAccess()
                 else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
             }
-            let result = try run(pair: !arguments.isEmpty, workspace: workspace)
+            let result = try run(pair: !arguments.isEmpty, workspace: workspace, shared: shared)
             receipt(result.status, profiles: result.profiles)
             if result.status != "SYNTHETIC_EXIT_OBSERVED" &&
                result.status != "SYNTHETIC_PRIVATE_PATHS_OBSERVED" &&
-               result.status != "SYNTHETIC_WINDOW_MARKERS_OBSERVED" { exit(1) }
+               result.status != "SYNTHETIC_WINDOW_MARKERS_OBSERVED" &&
+               result.status != "SYNTHETIC_WORKSPACE_SELECTION_OBSERVED" { exit(1) }
         } catch let failure as FixtureFailure {
             receipt(failure.status)
             exit(1)
@@ -141,6 +216,14 @@ struct LifecycleFixture {
             "schema": 1, "scope": "SYNTHETIC_APPKIT_LIFECYCLE",
             "status": status, "runtimeAdmission": false
         ]
+        if status == "SYNTHETIC_WORKSPACE_SELECTION_OBSERVED" {
+            report["capture"] = "SEQUENTIAL_WINDOW_SNAPSHOTS"
+            report["selection"] = "SHARED_PANEL_TO_NATIVE_FOCUS"
+            report["interaction"] = "MANUAL_NATIVE_WINDOW_CLICKS"
+            report["embeddedGameplay"] = "NOT_VERIFIED"
+            report["inactiveLoginSession"] = "NOT_VERIFIED"
+            report["minecraft"] = "NOT_VERIFIED"
+        }
         if status == "SYNTHETIC_WINDOW_MARKERS_OBSERVED" {
             report["capture"] = "SEQUENTIAL_WINDOW_SNAPSHOTS"
             report["interaction"] = "MANUAL_NATIVE_WINDOW_CLICKS"
@@ -272,7 +355,7 @@ struct LifecycleFixture {
     }
 
     @available(macOS 14.0, *)
-    private static func captureMarker(_ window: SCWindow) throws -> String {
+    private static func captureMarker(_ window: SCWindow) throws -> (marker: String, image: CGImage) {
         let result = CaptureResult<CGImage>()
         let config = SCStreamConfiguration()
         config.width = 320
@@ -305,13 +388,13 @@ struct LifecycleFixture {
             marker = observed
         }
         guard let marker = marker else { throw FixtureFailure(status: "WINDOW_MARKER_UNCONFIRMED") }
-        return marker
+        return (marker, image)
     }
 
     @available(macOS 14.0, *)
     private static func capturePair(_ applications: [NSRunningApplication], id: String,
                                     bundle: URL, exe: URL, expectedIDs: [CGWindowID]?)
-        throws -> (ids: [CGWindowID], markers: [String]) {
+        throws -> (ids: [CGWindowID], markers: [String], frames: [CGImage]) {
         guard applications.count == slots.count,
               applications.allSatisfy({ exactLiveApplication($0, id: id, bundle: bundle, exe: exe) })
         else { throw FixtureFailure(status: "OWNERSHIP_UNCONFIRMED") }
@@ -320,6 +403,7 @@ struct LifecycleFixture {
         let windows = try shareableWindows()
         var ids: [CGWindowID] = []
         var markers: [String] = []
+        var frames: [CGImage] = []
         for (index, application) in applications.enumerated() {
             // Retained app identity plus exactly one owned window; title is
             // a fixture discriminator, not authority. Recheck before capture.
@@ -333,7 +417,9 @@ struct LifecycleFixture {
                   exactLiveApplication(application, id: id, bundle: bundle, exe: exe)
             else { throw FixtureFailure(status: "WINDOW_IDENTITY_UNCONFIRMED") }
             ids.append(window.windowID)
-            markers.append(try captureMarker(window))
+            let frame = try captureMarker(window)
+            markers.append(frame.marker)
+            frames.append(frame.image)
             guard exactLiveApplication(application, id: id, bundle: bundle, exe: exe)
             else { throw FixtureFailure(status: "OWNERSHIP_UNCONFIRMED") }
         }
@@ -341,20 +427,53 @@ struct LifecycleFixture {
             throw FixtureFailure(status: "WINDOW_IDENTITY_UNCONFIRMED")
         }
         // These are sequential bounded snapshots, not simultaneous live streams.
-        return (ids, markers)
+        return (ids, markers, frames)
     }
 
     @available(macOS 14.0, *)
     private static func workspaceProbe(_ applications: [NSRunningApplication], id: String,
-                                       root: URL, bundle: URL, exe: URL) throws {
+                                       root: URL, bundle: URL, exe: URL,
+                                       shared: Bool) throws {
         let fm = FileManager.default
         let initial = try capturePair(applications, id: id, bundle: bundle, exe: exe, expectedIDs: nil)
         guard initial.markers == ["red", "blue"],
               slots.allSatisfy({ !fm.fileExists(atPath: clickFile(root, $0).path) })
         else { throw FixtureFailure(status: "WORKSPACE_BASELINE_UNCONFIRMED") }
 
+        // Shared mode adds a snapshot consumer, not a new runtime or game adapter.
+        let panel = shared ? WorkspacePanel() : nil
+        defer {
+            panel?.clear()
+            panel?.window.close()
+        }
+        if let panel = panel {
+            NSApplication.shared.setActivationPolicy(.regular)
+            panel.publish(initial.frames, selected: 0)
+            panel.window.makeKeyAndOrderFront(nil)
+            // The operator chooses the panel; no forced foreground activation.
+        }
         for (index, slot) in slots.enumerated() {
-            // Physical user interaction only; no focus stealing or event injection.
+            if let panel = panel {
+                panel.prepareSelection(index)
+                guard wait(30, until: {
+                    panel.selection != nil || !panel.window.isVisible ||
+                    applications.contains(where: { $0.isTerminated })
+                }), panel.selection == index, panel.selectedWhileActive,
+                    panel.window.isVisible, NSApp.isActive,
+                    !fm.fileExists(atPath: clickFile(root, slot).path),
+                    exactLiveApplication(applications[index], id: id, bundle: bundle, exe: exe)
+                else { throw FixtureFailure(status: "WORKSPACE_SELECTION_UNCONFIRMED") }
+                // Request focus only in response to a user click in our panel.
+                // AppKit may refuse; never retry or synthesize a game input event.
+                let target = applications[index]
+                guard target.activate(from: NSRunningApplication.current, options: []),
+                      wait(5, until: {
+                          target.isTerminated || NSWorkspace.shared.frontmostApplication?.isEqual(target) == true
+                      }), exactLiveApplication(target, id: id, bundle: bundle, exe: exe),
+                      NSWorkspace.shared.frontmostApplication?.isEqual(target) == true
+                else { throw FixtureFailure(status: "WORKSPACE_FOCUS_UNCONFIRMED") }
+            }
+            // Physical user interaction only; no event injection.
             let message = "Click inside fixture window " + slot + " only (30 seconds).\n"
             FileHandle.standardError.write(Data(message.utf8))
             guard wait(30, until: {
@@ -366,8 +485,10 @@ struct LifecycleFixture {
             let expected = index == 0 ? ["green", "blue"] : ["green", "yellow"]
             guard snapshot.markers == expected,
                   fm.fileExists(atPath: clickFile(root, slot).path),
-                  index != 0 || !fm.fileExists(atPath: clickFile(root, "B").path)
+                  index != 0 || !fm.fileExists(atPath: clickFile(root, "B").path),
+                  !shared || NSWorkspace.shared.frontmostApplication?.isEqual(applications[index]) == true
             else { throw FixtureFailure(status: "WORKSPACE_MARKER_MISMATCH") }
+            panel?.publish(snapshot.frames, selected: index)
         }
     }
 
@@ -425,7 +546,7 @@ struct LifecycleFixture {
         else { throw FixtureFailure(status: "EXIT_UNCONFIRMED") }
     }
 
-    private static func run(pair: Bool, workspace: Bool) throws -> (status: String, profiles: [[String: Bool]]) {
+    private static func run(pair: Bool, workspace: Bool, shared: Bool) throws -> (status: String, profiles: [[String: Bool]]) {
         let fm = FileManager.default
         let id = prefix + UUID().uuidString.lowercased()
         let root = fm.temporaryDirectory.resolvingSymlinksInPath()
@@ -471,12 +592,12 @@ struct LifecycleFixture {
         if workspace {
             guard #available(macOS 14.0, *)
             else { throw FixtureFailure(status: "WORKSPACE_OS_UNSUPPORTED") }
-            try workspaceProbe([a, b], id: id, root: root, bundle: bundle, exe: exe)
+            try workspaceProbe([a, b], id: id, root: root, bundle: bundle, exe: exe, shared: shared)
             try close(a, id: id, bundle: bundle, exe: exe)
             guard exactLiveApplication(b, id: id, bundle: bundle, exe: exe)
             else { throw FixtureFailure(status: "PEER_EXIT_OR_IDENTITY_CHANGED") }
             try close(b, id: id, bundle: bundle, exe: exe)
-            return ("SYNTHETIC_WINDOW_MARKERS_OBSERVED", [])
+            return (shared ? "SYNTHETIC_WORKSPACE_SELECTION_OBSERVED" : "SYNTHETIC_WINDOW_MARKERS_OBSERVED", [])
         }
         guard wait(5, until: {
             slots.allSatisfy { fm.fileExists(atPath: observationFile(root, $0).path) }
