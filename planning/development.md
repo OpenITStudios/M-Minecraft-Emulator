@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-04a: Mac development shell)
+## Current status — cross-platform-native (MAC-04b: synthetic native lifecycle)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,40 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-04b — native AppKit lifecycle feasibility fixture (source only)
+
+Author one isolated `Development/tooling/acceptance/macos/lifecycle-fixture.swift`
+program for a future separately authorized Mac acceptance phase. It uses
+Apple AppKit/Swift already available through the developer toolchain, not a
+product dependency, second runtime, user profile or service. The fixture
+creates a fresh private temporary bundle containing its own executable and a
+unique bundle ID; no arbitrary app path, elevated execution, game launch,
+credentials or world access. No automatic execution or deletion.
+
+Use [NSWorkspace.openApplication](https://developer.apple.com/documentation/appkit/nsworkspace/openapplication(at:configuration:completionhandler:))
+with substitution disabled, new instance requested and no activation/recent
+items; retain the original [NSRunningApplication](https://developer.apple.com/documentation/appkit/nsrunningapplication).
+Match bundle/executable URL and unique identifier; compare a fresh process
+object with the original using isEqual rather than PID alone
+([Apple processIdentifier](https://developer.apple.com/documentation/appkit/nsrunningapplication/processidentifier)).
+A bounded main-run-loop wait precedes normal terminate; wait separately for
+isTerminated, since a quit request is not proof of exit. Unknown launch,
+identity or close does not retry, adopt, kill or delete. Receipt always
+runtimeAdmission=false, even when the synthetic exit is observed.
+
+This is executable candidate source, not a compiled/observed result.
+AppKit launch completion/run-loop delivery, self-copy signing, normal
+termination and actual timing remain NOT_EXECUTED. The fixture is not
+a game publisher/image proof or an independent profile. No product
+module, native command, background worker or change to Windows behavior.
+
+Next source design: build the actual Mac profile mechanism only when
+a defensible storage and login route is identified. Same-user isolated
+profile is primary; separate existing macOS users is an explicitly
+different native topology candidate, not an auto-fallback. The synthetic
+fixture makes native lifecycle work concrete without claiming the Mac
+game backend is available or requesting Mac tests now.
 
 ### MAC-04a — separate source development from native activation
 
@@ -268,7 +302,8 @@ MAC-01 and MAC-02 change planning only; MAC-03a changes common frontend
 source and matching fixtures; MAC-03b adds explicit offline artifact tooling;
 MAC-03c shares existing pure session policy with its active native caller;
 MAC-03d centralizes active frontend window identity comparisons;
-MAC-04a adds the explicit non-product Mac development shell route.
+MAC-04a adds the explicit non-product Mac development shell route;
+MAC-04b authors a synthetic AppKit lifecycle acceptance fixture.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

@@ -17,6 +17,7 @@ a second live game process/session owner.
 | `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
 | [`lazytester-particles/`](lazytester-particles/README.md) | Optional Particle Tuning v0.3 offline .mcpack builder; no automatic installation |
 | [`lazytester-textures/`](lazytester-textures/README.md) | Optional block-only Texture Lite v0.1 offline .mcpack builder; entity/PBR extension retired |
+| `acceptance/macos/lifecycle-fixture.swift` | Explicit synthetic AppKit launch/identity/normal-exit fixture; never launches Minecraft |
 | `acceptance/macos/education-target.mjs` | Explicit offline Mac bundle metadata collector; no native launch or runtime admission |
 | `acceptance/windows/education-target.ps1` | **Active** registered Minecraft Education executable resolver, moved from the retired isolation-source tree |
 | `local-test/` | Optional source acceptance bookkeeping, not runtime evidence until executed |
@@ -137,3 +138,22 @@ atomic against concurrent replacement. Refusal emits a generic JSON status.
 The tool is not mounted in product, DEV.cmd, MCP or startup. See
 [development handoff](../../planning/development.md). Source fixtures are
 included in the existing native-feasibility test route, NOT_EXECUTED.
+
+## macOS synthetic lifecycle fixture (source prepared)
+
+`acceptance/macos/lifecycle-fixture.swift` is a separately compiled, opt-in
+acceptance program for a future approved Mac phase. It builds no game
+adapter and is not part of the desktop, DEV.cmd, startup, MCP or package.
+The fixture accepts no target path or arguments and refuses root. It copies
+its own compiled executable into a fresh private temporary application bundle,
+uses AppKit to request a new application, retains the original running-app
+object, verifies bundle/executable identity and requests normal termination.
+It waits for observed exit; timeout/refusal preserves the application and
+fixture directory, with no force close, retries, adoption or recursive deletion.
+Use the existing macOS developer tools, not a new runtime dependency.
+A future authorized local agent may compile with `swiftc -swift-version 5
+-parse-as-library` and an explicit private output path, then run the resulting
+executable without arguments. The temporary fixture bundle is retained and
+may be removed by that operator after confirming exit. The result is scoped
+to a synthetic app, never game isolation or gameplay proof. Source not compiled
+or executed; main-run-loop behavior, bundle launch and exit remain unverified.
