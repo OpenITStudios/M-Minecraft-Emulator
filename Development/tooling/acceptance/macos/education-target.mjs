@@ -258,6 +258,38 @@ export function machOSummary(read, size) {
   return results.sort((a,b)=>a.arch.localeCompare(b.arch));
 }
 
+// Allowlisted, exact NUL-delimited byte strings only. A hit is not a
+// call site, supported option, or proof of the selected storage/account route.
+const routingTokens = [
+  'Minecraftpe','minecraftpe','com.mojang','CFFIXED_USER_HOME','HOME','TMPDIR',
+  '_getenv','_getpwuid','_NSHomeDirectory','_NSSearchPathForDirectoriesInDomains',
+  'URLsForDirectory:inDomains:','_CFPreferencesCopyAppValue','_CFPreferencesSetAppValue',
+  '_OBJC_CLASS_$_NSUserDefaults','_SecItemCopyMatching','_SecItemAdd','_SecItemUpdate',
+  '_SecItemDelete','_kSecUseDataProtectionKeychain',
+  '--gameDir','--data-dir','--user-data-dir'
+];
+
+export function summarizeExecutableChunks(chunks) {
+  const hash=createHash('sha256');
+  const pending=new Map(routingTokens.map(token=>[token,Buffer.from('\0'+token+'\0')]));
+  const indicators=Object.fromEntries(routingTokens.map(token=>[token,false]));
+  const overlap=Math.max(...[...pending.values()].map(bytes=>bytes.length))-1;
+  let tail=Buffer.alloc(0);
+  for(const chunk of chunks){
+    hash.update(chunk);
+    if(!pending.size)continue;
+    const bytes=tail.length?Buffer.concat([tail,chunk]):chunk;
+    for(const [token,needle] of pending){
+      if(bytes.indexOf(needle)!==-1){
+        indicators[token]=true;
+        pending.delete(token);
+      }
+    }
+    tail=bytes.subarray(Math.max(0,bytes.length-overlap));
+  }
+  return {executableSha256:hash.digest('hex'),lexicalRoutingIndicators:indicators};
+}
+
 export function inspectMachO(path) {
   if(typeof path!=='string'||!isAbsolute(path)||basename(path)!==expectedExecutable)
     throw Error('EXPLICIT_EXECUTABLE_REQUIRED');
@@ -281,12 +313,13 @@ export function inspectMachO(path) {
       return b;
     };
     const slices=machOSummary(read,size);
-    const hash=createHash('sha256');
-    for(let pos=0;pos<size;pos+=1024*1024)
-      hash.update(read(pos,Math.min(1024*1024,size-pos)));
+    const summary=summarizeExecutableChunks((function*(){
+      for(let pos=0;pos<size;pos+=1024*1024)
+        yield read(pos,Math.min(1024*1024,size-pos));
+    })());
     if(identity(fstatSync(fd,{bigint:true}))!==before||fingerprint(root,'file')!==before)
       throw Error('ARTIFACT_CHANGED');
-    return {schema:1,status:'OFFLINE_MACH_O_METADATA_ONLY',sizeBytes:size,executableSha256:hash.digest('hex'),
+    return {schema:1,status:'OFFLINE_MACH_O_METADATA_ONLY',sizeBytes:size,...summary,
       slices,signatureIntegrity:'NOT_VERIFIED',officialPublisher:'NOT_PINNED',
       distributionPackage:'NOT_VERIFIED',profileIsolation:'NOT_VERIFIED',runtimeAdmission:false};
   } finally {closeSync(fd);}

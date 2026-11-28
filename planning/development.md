@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-08c: native profile boundary)
+## Current status — cross-platform-native (MAC-09: artifact routing evidence)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,47 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-09 — make the existing compact artifact intake decision-oriented
+
+The Drive sample's main executable (512129360 bytes) was materialized
+according to the connector receipt, but both subsequent container and
+Python access returned ClientError; no binary bytes or digest observed.
+Do not retry full transfer in this surface. The existing offline collector
+now checks a fixed allowlist of exact NUL-delimited routing-related byte
+strings during its existing streaming SHA-256 pass. It emits only
+aggregate booleans, no arbitrary strings, paths, credentials, or new
+runtime dependencies. Includes documented Foundation/Security APIs,
+observed world-path terms, environment names and known *other launcher*
+flags for discrimination only. A hit is neither import/call-site proof
+nor a supported Education option; absence is not exclusion. Existing
+Mac codesign verification and native admission refusal unchanged.
+Source regression covers chunk boundaries, exact token matching,
+allowlist and unchanged hash; NOT_EXECUTED. Reuse the same documented
+--mach-o command from Windows with the original extracted file and
+compact JSON, not another large upload or native test request.
+
+New game-specific counterevidence: the Education
+[1.21.03 support discussion](https://edusupport.minecraft.net/hc/en-us/community/posts/28795140075540-Technical-issues-1-21-03-Multiplayer?sort_by=votes)
+reports a historical Mac Keychain fix, and a
+[2021 community report](https://edusupport.minecraft.net/hc/en-us/community/posts/360076715031-iPad-Unable-to-access-library-COMMUNITY-HELP-NEEDED)
+describes a separate OS user resolving account-context problems despite
+reinstall/world-directory cleanup not signing out the original user.
+Neither establishes current concurrent isolation. Apple
+[TN3137](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+distinguishes file-based and data-protection keychains; environment
+redirection alone cannot establish their independent use. Apple
+[Remote Desktop](https://support.apple.com/en-gw/guide/remote-desktop/apd4f46319e/mac)
+documents a distinct-user virtual desktop, but
+[High Performance Screen Sharing](https://support.apple.com/en-ie/guide/mac-help/mchl1883115d/27/mac/27)
+is limited to one active high-performance session per Mac. Distinct-user
+fallback remains an option for operator selection, not an automatic
+topology switch or a proven five-slot workspace.
+
+Next: review the compact game-specific artifact report; if no decisive
+supported same-user route is found, resolve topology with the operator
+rather than add another speculative mechanism. All native/test/CI/release
+holds remain. Native integration BLOCKED, not SOURCE_READY_FOR_LOCAL.
 
 ### MAC-08c — keep the native profile boundary small
 

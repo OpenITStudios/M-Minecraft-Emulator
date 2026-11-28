@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {bundleMetadata,architectureList,entitlementSummary,inspectBundle,machOSummary} from './education-target.mjs';
+import {createHash} from 'node:crypto';
+import {bundleMetadata,architectureList,entitlementSummary,inspectBundle,machOSummary,summarizeExecutableChunks} from './education-target.mjs';
 
 const plist={CFBundlePackageType:'APPL',CFBundleIdentifier:'com.microsoft.minecraft-edu',
   CFBundleExecutable:'minecraft-edu',CFBundleVersion:'1.26.33.0',CFBundleShortVersionString:'1.26.33'};
@@ -74,4 +75,17 @@ test('offline code-signature structure is an indication, not trust',()=>{
   assert.equal(result[0].embeddedSignature.xmlEntitlementKeyIndicators,null);
   b.writeUInt32BE(0xffffffff,64); // superblob slot offset
   assert.throws(()=>machOSummary((o,n)=>b.subarray(o,o+n),b.length));
+});
+
+test('offline routing hints are exact, chunk-boundary safe and allowlisted',()=>{
+  const bytes=Buffer.from('prefix\0_NSHomeDirectory\0HOMELESS\0--data-dir-extra\0_SecItemCopyMatching\0private.example\0');
+  const chunks=Array.from(bytes,(_,i)=>bytes.subarray(i,i+1));
+  const {executableSha256,lexicalRoutingIndicators:hints}=summarizeExecutableChunks(chunks);
+  assert.equal(executableSha256,createHash('sha256').update(bytes).digest('hex'));
+  assert.equal(hints._NSHomeDirectory,true);
+  assert.equal(hints._SecItemCopyMatching,true);
+  assert.equal(hints.HOME,false);
+  assert.equal(hints['--data-dir'],false);
+  assert.equal(Object.hasOwn(hints,'private.example'),false);
+  assert.deepEqual(summarizeExecutableChunks([bytes]).lexicalRoutingIndicators,hints);
 });

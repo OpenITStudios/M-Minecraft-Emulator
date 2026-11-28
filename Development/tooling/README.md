@@ -190,7 +190,14 @@ not localtest. The collector reads one fixed executable basename with
 bounded random reads, hashes through small buffers, and reports declared
 64-bit Intel/ARM slices, embedded CodeDirectory identity/team comparisons,
 flags, CMS/DER blob presence, selected XML entitlement-key indications
-and linked-library name indications. It does not disclose paths, raw
+and linked-library name indications. The existing hash pass additionally
+checks a fixed allowlist of exact NUL-delimited storage, home,
+preferences, Keychain and known launcher-option strings. The compact
+JSON reports booleans only, aggregated across the whole executable:
+a match is not an import/call-site observation or a supported option;
+absence does not exclude encoded, dynamically resolved, suffix-shared
+or framework-owned behavior. Never pass a detected flag to the game
+without independent evidence. It does not disclose paths, raw
 entitlements or certificates, run game code, install anything or validate
 signatures. Unsupported layouts refuse. XML key indications are lexical,
 not semantic/effective values; missing linked-library hints do not rule
