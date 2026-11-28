@@ -16,7 +16,14 @@ use std::{
     path::Path,
 };
 
-const CANDIDATES: [&str; 2] = ["Minecraft Education.app", "minecraft-edu.app"];
+// Current Homebrew/original bundle names plus Microsoft's historical Intune
+// sample install name. These are discovery hints, not product identity.
+const CANDIDATES: [&str; 3] = ["Minecraft Education.app", "minecraft-edu.app", "Minecraft EE.app"];
+// Installomator's reviewed minecraftedu label expects UBF8T346G9, also
+// documented by Microsoft for other products. Not yet checked against
+// the actual official Education DMG. Restrict to Developer ID Application
+// using Apple's certificate OIDs (TN3127), not arbitrary Apple-issued code.
+const EXPECTED_TEAM_REQUIREMENT: &str = r#"anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13] and certificate leaf[subject.OU] = "UBF8T346G9""#;
 const MAX_PLIST: u64 = 256 * 1024;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -30,7 +37,7 @@ enum CandidateStatus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 enum SignatureObservation {
     NotChecked,
-    AppleAnchored,
+    ExpectedTeamMatched,
     Unconfirmed,
 }
 
@@ -125,15 +132,16 @@ fn parse_metadata(bytes: &[u8]) -> io::Result<BundleMetadata> {
     Ok(metadata)
 }
 
-// A generic Apple-issued signer requirement excludes ad-hoc signatures,
-// but it does not identify Microsoft, prove notarization, or admit launch.
+// An expected Developer ID team match is stronger than a generic Apple
+// anchor, but does not pin the specific Education product, prove
+// notarization, or admit launch. No generic fallback or second expensive check.
 // No private signing data is serialized. The caller owns a blocking,
 // explicitly requested operation and repeats metadata checks afterwards.
 fn observe_static_signature(path: &Path) -> SignatureObservation {
     let Some(url) = CFURL::from_path(path, true) else {
         return SignatureObservation::Unconfirmed;
     };
-    let text = CFString::new("anchor apple generic");
+    let text = CFString::new(EXPECTED_TEAM_REQUIREMENT);
     let mut requirement: SecRequirementRef = std::ptr::null_mut();
     let mut code: SecStaticCodeRef = std::ptr::null_mut();
     // Each successful Create returns one owned CF reference. The local
@@ -154,7 +162,7 @@ fn observe_static_signature(path: &Path) -> SignatureObservation {
         let flags = kSecCSCheckAllArchitectures | kSecCSCheckNestedCode
             | kSecCSStrictValidate | kSecCSNoNetworkAccess | kSecCSSingleThreaded;
         if SecStaticCodeCheckValidity(code, flags, requirement) == 0 {
-            SignatureObservation::AppleAnchored
+            SignatureObservation::ExpectedTeamMatched
         } else {
             SignatureObservation::Unconfirmed
         }
@@ -276,17 +284,32 @@ mod tests {
         assert_eq!(wire, serde_json::json!({"schema":1,"platform":"macos","status":"Candidate",
             "version":"26.33","signature":"Unconfirmed","publisher":"NotPinned",
             "multipleInstancesProhibited":null,"runtimeAdmission":false}));
-        // A generic successful signature observation still cannot pin the
+        // An expected-team observation still cannot pin the exact game
         // publisher or authorize launch, even with the singleton key absent.
-        let anchored = inspect_at(&root, |_| SignatureObservation::AppleAnchored);
-        assert_eq!(anchored.signature, SignatureObservation::AppleAnchored);
-        assert_eq!(anchored.publisher, "NotPinned");
-        assert!(!anchored.runtime_admission);
-        assert_eq!(anchored.multiple_instances_prohibited, None);
+        let matched = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);
+        assert_eq!(matched.signature, SignatureObservation::ExpectedTeamMatched);
+        assert_eq!(matched.publisher, "NotPinned");
+        assert!(!matched.runtime_admission);
+        assert_eq!(matched.multiple_instances_prohibited, None);
         fixture(&root, CANDIDATES[1], "fixture");
         let ambiguous = inspect_at(&root, |_| panic!("must not inspect ambiguous bundles"));
         assert_eq!(ambiguous.status, CandidateStatus::Ambiguous);
         assert_eq!(ambiguous.signature, SignatureObservation::NotChecked);
+    }
+
+    #[test]
+    fn intune_install_name_is_a_candidate_and_conflicting_names_refuse() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        fixture(&root, CANDIDATES[2], "fixture");
+        let observed = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);
+        assert_eq!(observed.status, CandidateStatus::Candidate);
+        assert_eq!(observed.publisher, "NotPinned");
+        assert!(!observed.runtime_admission);
+        fixture(&root, CANDIDATES[0], "fixture");
+        let conflict = inspect_at(&root, |_| panic!("multiple names must not verify a signature"));
+        assert_eq!(conflict.status, CandidateStatus::Ambiguous);
+        assert_eq!(conflict.signature, SignatureObservation::NotChecked);
     }
 
     #[test]
@@ -298,12 +321,12 @@ mod tests {
         let original = fs::read_to_string(&info).unwrap();
         let with_flag = original.replace("</dict>", "<key>LSMultipleInstancesProhibited</key><true/></dict>");
         fs::write(&info, &with_flag).unwrap();
-        let observed = inspect_at(&root, |_| SignatureObservation::AppleAnchored);
+        let observed = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);
         assert_eq!(observed.multiple_instances_prohibited, Some(true));
         assert!(!observed.runtime_admission);
         let changed = inspect_at(&root, |_| {
             fs::write(&info, &original).unwrap();
-            SignatureObservation::AppleAnchored
+            SignatureObservation::ExpectedTeamMatched
         });
         assert_eq!(changed.status, CandidateStatus::Unconfirmed);
         assert_eq!(changed.signature, SignatureObservation::NotChecked);

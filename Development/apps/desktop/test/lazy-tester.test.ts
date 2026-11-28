@@ -38,11 +38,11 @@ describe('Education installation observation',()=>{
     expect(parseMacEducationInstallation(mac)).toEqual(mac);
     for(const status of ['Missing','Ambiguous','Unconfirmed'])
       expect(parseMacEducationInstallation({...mac,status,version:null,signature:'NotChecked'}).status).toBe(status);
-    expect(parseMacEducationInstallation({...mac,signature:'AppleAnchored',multipleInstancesProhibited:true}).runtimeAdmission).toBe(false);
+    expect(parseMacEducationInstallation({...mac,signature:'ExpectedTeamMatched',multipleInstancesProhibited:true}).runtimeAdmission).toBe(false);
     for(const invalid of [report,{...mac,runtimeAdmission:true},{...mac,path:'/private'},
       {...mac,version:null},{...mac,version:'1..2'},{...mac,status:'Missing'},
-      {...mac,status:'Ready'},{...mac,signature:'NotChecked'},{...mac,publisher:'Microsoft'},
-      {...mac,multipleInstancesProhibited:'false'},{...mac,status:'Missing',version:null,signature:'AppleAnchored'},
+      {...mac,status:'Ready'},{...mac,signature:'AppleAnchored'},{...mac,signature:'NotChecked'},{...mac,publisher:'Microsoft'},
+      {...mac,multipleInstancesProhibited:'false'},{...mac,status:'Missing',version:null,signature:'ExpectedTeamMatched'},
       {...mac,status:'Missing',version:null,signature:'NotChecked',multipleInstancesProhibited:false}])expect(()=>parseMacEducationInstallation(invalid)).toThrow();
     expect(()=>parseEducationInstallation(mac)).toThrow();
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');

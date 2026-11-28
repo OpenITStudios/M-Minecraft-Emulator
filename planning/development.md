@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-05b: static game identity observation)
+## Current status — cross-platform-native (MAC-05c: expected signing team evidence)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,46 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-05c — expected signing team and deployment name (P1 partial)
+
+New product-specific evidence: pinned third-party
+[Installomator minecraftedu label](https://github.com/Installomator/Installomator/blob/6013fa5e6ef57fc599ba1cb7f727dd8fea963c90/fragments/labels/minecraftedu.sh)
+(blob 6a5623594be4430507bc9cb18792236df308a1ee) expects Team ID
+UBF8T346G9 for the official aka.ms/meeclientmacos download alias.
+[Microsoft Intune](https://learn.microsoft.com/en-us/intune/device-configuration/templates/ref-kernel-extensions-settings-macos)
+and [Microsoft Platform SSO](https://learn.microsoft.com/en-us/intune/intune-service/configuration/platform-sso-macos)
+corroborate that Team ID for OTHER Microsoft products, not this exact game.
+The pinned original [Microsoft Intune Minecraft sample](https://github.com/microsoft/shell-intune-samples/blob/a4f5eeaefe395fb36c70ea41823dabac94fa4db2/macOS/Apps/Minecraft%20Education%20Edition/installMinecraftEE.sh)
+(blob eea0693f3d04a26788605145492d81f06e769664) uses the same official
+download alias and historically installs as Minecraft EE.app. Add that
+third fixed name, with the same ambiguity and symlink refusal; no script
+execution, installation or update behavior imported.
+
+Replace generic Apple-anchor observation (MAC-05b) with a stricter single
+Security.framework static validity request: Apple anchor, Developer ID
+issuer/application certificate OIDs and the expected Team ID in leaf OU
+(Apple [TN3127](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements/)).
+This is an informational requirement candidate, NOT the reviewed Education
+designated requirement. No exact code identifier assumed, no publisher pin
+and no generic fallback or second signature validation. Result becomes
+ExpectedTeamMatched or Unconfirmed; old generic AppleAnchored receipt is
+rejected by the updated Mac parser. Mac schema remains unreleased; Windows
+receipt is unchanged. publisher=NotPinned and runtimeAdmission=false are
+mandatory, even for expected-team matches. The exact official DMG,
+identifier, architecture-specific signatures and actual isolation remain
+unobserved. Historical community [signature failure](https://edusupport.minecraft.net/hc/en-us/community/posts/31685896910228-Error-launching-Minecraft-Education-1-21-06-on-MacOS-Big-Sur)
+is not a reason to re-sign or alter an installed game.
+
+Source-only Rust/TS fixture updates cover the additional name, ambiguous
+names, synthetic matched team, old generic and forged positive admission.
+No new dependency or command, no build, test or native execution.
+Unresolved: the third-party expectation could be stale; a legitimate
+signer change must remain unconfirmed until reviewed. Static validation
+still has no hard deadline and is not atomic. No official signer or Mac
+profile acceptance claim. Next: actual artifact evidence and supported
+per-instance storage/authentication route, not another speculative gate.
+All prior holds stand.
 
 ### MAC-05b — static Mac signature and singleton evidence (P1 partial)
 
@@ -641,7 +681,9 @@ MAC-04e records operator-confirmed final workspace parity and staged design;
 MAC-04f adds same-login synthetic window capture/interaction feasibility source;
 MAC-04g adds a bounded synthetic shared snapshot/selection panel;
 MAC-05a adds an explicit product-side Mac installation candidate observation;
-MAC-05b adds generic static signature and explicit singleton metadata observation.
+MAC-05b adds generic static signature and explicit singleton metadata observation;
+MAC-05c tightens candidate signature observation with reviewed expected team
+and adds the historical Microsoft Intune installation name.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
