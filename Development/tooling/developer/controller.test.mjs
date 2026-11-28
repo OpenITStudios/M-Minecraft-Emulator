@@ -548,6 +548,8 @@ test('extracted session owners retain their precise cross-module review routes',
   const cases=[
     ['session_protocol.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
     ['tests.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
+    ['pipe/peer_endpoint.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror']],
+    ['pipe/tests.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror']],
     ['controller_ai_input_leases.rs',['agent-input-lease','native-input-v4']],
     ['controller_testing_runs.rs',['agent-input-lease']],
     ['agent_activity.rs',['agent-activity-mirror']]

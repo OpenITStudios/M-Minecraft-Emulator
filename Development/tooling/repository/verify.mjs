@@ -206,6 +206,7 @@ const NAMED_OWNERS=Object.freeze([
   ['struct AiLeaseBook',OWNERSHIP_ENGINE+'native_clients_session/controller_ai_input_leases.rs'],
   ['enum SessionRequest',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
   ['fn validate_request',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
+  ['struct McpOwnerLifetime',OWNERSHIP_ENGINE+'native_clients_session/pipe/peer_endpoint.rs'],
   ['struct SessionSnapshot',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
   ['struct PendingEducationBootstrap',OWNERSHIP_ENGINE+'independent_bootstrap.rs'],
   ['struct BootstrapLibrary',OWNERSHIP_ENGINE+'independent_bootstrap/reviewed_bootstrap_payload.rs'],
@@ -552,7 +553,7 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
   const imageReader=read('Development/apps/desktop/src-tauri/src/engine/windows_process_image.rs');
   const imageOwners=[
     gameSource,
-    read('Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe.rs'),
+    read('Development/apps/desktop/src-tauri/src/engine/native_clients_session/pipe/peer_endpoint.rs'),
     read('Development/apps/desktop/src-tauri/src/engine/instance_identity/windows/image_signature.rs'),
     windowsAdapter,
     read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs')
