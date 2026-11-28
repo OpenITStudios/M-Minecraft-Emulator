@@ -200,7 +200,7 @@ fn create_file_slot(logical: &File, path: &Path, slot: u32) -> io::Result<SlotSt
     Ok(SlotStorage {
         slot,
         logical: logical.try_clone()?,
-        temporary: private_temporary(&private)?,
+        temporary: open_private_temporary(&private, PrivateTemporaryMode::CreateIfMissing)?,
         private,
         registry,
         user_key_path: user_registry_path()?,
@@ -416,7 +416,7 @@ fn open_at(logical: File, root: &Path) -> io::Result<[SlotStorage; 5]> {
         stores.push(SlotStorage {
             slot,
             logical: logical.try_clone()?,
-            temporary: existing_private_temporary(&private)?,
+            temporary: open_private_temporary(&private, PrivateTemporaryMode::ExistingOnly)?,
             private,
             registry,
             user_key_path,

@@ -388,9 +388,9 @@ mod tests {
         let fixture = Fixture::new();
         std::fs::create_dir(fixture.0.join("Local")).unwrap();
         let pin = fixture.pin();
-        assert!(existing_private_temporary(&pin).is_err());
+        assert!(open_private_temporary(&pin, PrivateTemporaryMode::ExistingOnly).is_err());
         assert!(!fixture.0.join("Local/Temp").exists());
-        drop(private_temporary(&pin).unwrap()); // Explicit preparation is separate.
-        assert!(existing_private_temporary(&pin).is_ok());
+        drop(open_private_temporary(&pin, PrivateTemporaryMode::CreateIfMissing).unwrap()); // Explicit preparation is separate.
+        assert!(open_private_temporary(&pin, PrivateTemporaryMode::ExistingOnly).is_ok());
     }
 }

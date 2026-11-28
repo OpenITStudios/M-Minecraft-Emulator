@@ -3,7 +3,7 @@
 ## Current status
 
 Branch `Local`; Unreleased. Work: `prelocal-modularity-efficiency`.
-MOD-01–09 scoped source integration; SOURCE_READY_FOR_LOCAL (scoped handoff, not execution or native readiness).
+MOD-01–09 scoped source integration closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). Operator reopened focused simplification: SIM-MOD-01 extracts storage handle ownership, consolidates existing/create Temp paths and corrects the production fresh-root cfg gate. Source only; fixtures NOT_EXECUTED.
 Final review baseline: `bf2588dc527d137fe75e4cdf6559130259b1dcf3`. Original work baseline: `ed320acd98065300e48dce9f574af0bfd7e7f18b`.
 No source test, compiler, formatter, build, CI, PC or runtime execution.
 
@@ -20,7 +20,7 @@ No source test, compiler, formatter, build, CI, PC or runtime execution.
 
 | MOD-09 | Correct staging, packaging and readiness digest-owner paths; repair stale startup fixture boundaries and classify extracted Rust test files correctly. Source fixtures authored NOT_EXECUTED. |
 
-STOP at scoped source proof. Re-pin actual HEAD for any separately
+Next: review remaining bootstrap replay/observation and controller storage responsibilities; avoid mechanical splitting. Re-pin actual HEAD for any separately
 approved PC-local stage. The existing native DLL and release holds remain.
 No compilation, runtime improvement or whole-product readiness claimed.
 
