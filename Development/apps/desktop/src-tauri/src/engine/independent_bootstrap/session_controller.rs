@@ -587,16 +587,13 @@ impl Sessions {
                         if let Some(hwnd) = verified_retained_hwnd(previous) {
                             // The game can reset its caption after a desktop/workspace transition.
                             // Do not mutate game or dialog titles once full exit begins.
-                            let responding = unsafe {
-                                windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(hwnd)
-                            } == 0;
-                            // A hung game cannot usefully process a title write.
-                            // Retry on a later responsive observation, not now.
-                            if relabel && !self.exiting && responding {
+                            if relabel && !self.exiting {
                                 let _ = window_caption::label_slot_window(hwnd as _, child.pid, index as u32 + 1);
                             }
                             let mut process = previous.clone();
-                            process.responding = responding;
+                            process.responding = unsafe {
+                                windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(hwnd)
+                            } == 0;
                             return Some(process);
                         }
                     }
@@ -1502,10 +1499,7 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
     }
     child.identity().ok()?;
     let slot = child.storage.as_ref()?.slot;
-    let responding = unsafe {
-        windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(selected.hwnd)==0
-    };
-    if label && responding {
+    if label {
         let _ = window_caption::label_slot_window(selected.hwnd, child.pid, slot);
     }
     let process=OwnedProcess {
@@ -1515,7 +1509,9 @@ fn window(child: &PendingEducationBootstrap, label: bool) -> Option<OwnedProcess
         window_handle: format!("0x{:x}", selected.hwnd as usize),
         // Enumeration only verifies a visible root. It does not establish
         // message-loop responsiveness; match the retained-HWND snapshot path.
-        responding,
+        responding: unsafe {
+            windows_sys::Win32::UI::WindowsAndMessaging::IsHungAppWindow(selected.hwnd)==0
+        },
     };
     // Recheck immediately after observing/optionally labeling. A recycled
     // HWND or destroyed game surface is never published as a playable game.

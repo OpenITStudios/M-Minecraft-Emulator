@@ -352,43 +352,46 @@ impl Lease {
         // Terminal reader End precedes the helper's process-exit signal
         // on some Windows schedules. Never restore while the helper can
         // still make a later native window write.
-        let deadline = Instant::now() + Duration::from_secs(3);
-        loop {
-            let helper_exited = self.child.try_wait()?.is_some();
-            if let Some(retired) = retire_failed_pre_ready(
-                self.ended.as_ref(),
-                helper_exited,
-                self.saved.is_some(),
-                || native::original_game_process_exited(&self.requested),
-            ) {
-                // No Saved means no safe HWND/frame to restore. Only
-                // verified original process exit makes restore unnecessary.
-                return retired;
-            }
-            if let Some(retry) = retry_failed_terminal_restore(
-                self.ended.as_ref(),
-                helper_exited,
-                self.saved.as_ref(),
-                native::restore,
-            ) {
-                // The source terminal End remains Err; the verified
-                // parent-side recovery is stronger *new* evidence.
-                // On failure the caller keeps this exact lease/gate
-                // for an explicit later attempt. No blind retry loop.
-                return retry.map_err(|error| io::Error::new(error.kind(),
-                    format!("Native restoration retry failed; original recovery checkpoint retained: {error}")));
-            }
-            match completed_helper_status(self.ended.as_ref(), helper_exited) {
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        return Err(io::Error::new(io::ErrorKind::TimedOut,
-                            "Final window recovery was observed but its helper process is still running; checkpoint retained"));
-                    }
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                result => return result,
+        use std::os::windows::io::AsRawHandle;
+        use windows_sys::Win32::{Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT, WAIT_FAILED},
+            System::Threading::WaitForSingleObject};
+        let mut helper_exited = self.child.try_wait()?.is_some();
+        // Only a successful terminal receipt used the former retry loop.
+        // Wait on the owned child handle once; do not wait on a PID or
+        // turn a failed End into a successful recovery.
+        if !helper_exited && matches!(self.ended.as_ref(), Some(Ok(()))) {
+            match unsafe { WaitForSingleObject(self.child.as_raw_handle() as _, 3000) } {
+                WAIT_OBJECT_0 => helper_exited = self.child.try_wait()?.is_some(),
+                WAIT_TIMEOUT => return Err(io::Error::new(io::ErrorKind::TimedOut,
+                    "Final window recovery was observed but its helper process is still running; checkpoint retained")),
+                WAIT_FAILED => return Err(io::Error::last_os_error()),
+                _ => return Err(io::Error::other("Unexpected recovery helper wait result; checkpoint retained")),
             }
         }
+        if let Some(retired) = retire_failed_pre_ready(
+            self.ended.as_ref(),
+            helper_exited,
+            self.saved.is_some(),
+            || native::original_game_process_exited(&self.requested),
+        ) {
+            // No Saved means no safe HWND/frame to restore. Only
+            // verified original process exit makes restore unnecessary.
+            return retired;
+        }
+        if let Some(retry) = retry_failed_terminal_restore(
+            self.ended.as_ref(),
+            helper_exited,
+            self.saved.as_ref(),
+            native::restore,
+        ) {
+            // The source terminal End remains Err; the verified
+            // parent-side recovery is stronger *new* evidence.
+            // On failure the caller keeps this exact lease/gate
+            // for an explicit later attempt. No blind retry loop.
+            return retry.map_err(|error| io::Error::new(error.kind(),
+                format!("Native restoration retry failed; original recovery checkpoint retained: {error}")));
+        }
+        completed_helper_status(self.ended.as_ref(), helper_exited)
     }
     fn stop(&mut self) -> io::Result<()> {
         // A prior Place/Hide receipt is never native recovery evidence.

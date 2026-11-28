@@ -1469,9 +1469,11 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
             "Session observation budget expired before the next request"));
     }
     let (sender, replies) = std::sync::mpsc::sync_channel(1);
-    let worker = std::thread::spawn(move || {
+    // A failed OS thread allocation must not panic while the transport
+    // mutex is held. No worker or mutation was admitted on spawn failure.
+    let worker = std::thread::Builder::new().spawn(move || {
         let _ = sender.send(transact(request));
-    });
+    })?;
     owner.pending = Some(PendingRequest { replies, worker });
     let outcome = classify_pending_worker_wait(
         owner.pending.as_ref().unwrap().replies

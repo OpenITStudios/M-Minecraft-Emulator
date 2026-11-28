@@ -267,7 +267,6 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
     mountedUI.includes('disposed = true; clearBackgroundObservation();') &&
     /refreshing = true;\s*lastInspectionStartedAt = performance\.now\(\);/.test(mountedUI) &&
     mountedUI.includes("profiles.every(profile => profile.state === 'STOPPED' && profile.process === null && profile.issue === null)") &&
-    mountedUI.includes('workspaceSettledIdle = workspaceObservationHealthy && active === null') &&
     mountedUI.includes('requested === null && queued === null && queuedLaunch === null') &&
     mountedUI.includes("previewIssue === '' && !closeFailure;") &&
     mountedUI.includes('workspaceSettledIdle = workspaceObservationHealthy && active === null && agentActivity === null') &&

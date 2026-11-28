@@ -20,7 +20,7 @@ pub(super) fn label_slot_window(
     slot: u32,
 ) -> io::Result<()> {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        GetWindowTextW, SendMessageTimeoutW, SMTO_ABORTIFHUNG, SMTO_BLOCK, SMTO_ERRORONEXIT,
+        GetWindowTextW, IsHungAppWindow, SendMessageTimeoutW, SMTO_ABORTIFHUNG, SMTO_BLOCK, SMTO_ERRORONEXIT,
         WM_SETTEXT,
     };
     let caption = slot_caption(slot)?;
@@ -32,6 +32,12 @@ pub(super) fn label_slot_window(
     }
     // System-message marshalling, bounded wait; never inject another game hook for presentation.
     super::super::verify_live_client_02_window(hwnd, pid)?;
+    // Keep the unchanged-caption fast path and skip only the costly write
+    // when an actual repair is needed but the verified window is hung.
+    // The caller still observes responsiveness AFTER this operation.
+    if unsafe { IsHungAppWindow(hwnd) } != 0 {
+        return Err(io::Error::new(io::ErrorKind::WouldBlock, "Minecraft window is not responding"));
+    }
     let mut result = 0;
     if unsafe {
         SendMessageTimeoutW(
