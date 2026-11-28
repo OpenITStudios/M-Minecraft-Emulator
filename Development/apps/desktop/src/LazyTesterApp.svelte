@@ -198,7 +198,8 @@
       while (issueCheckpointQueued && !disposed) {
         issueCheckpointQueued = false;
         const ui = issueReport.read();
-        if (ui===null) continue;
+        // Null is allowed only for explicit native-only export; healthy
+        // native checkpoint returns without creating a file.
         try { await lazyTester.checkpointIssues(ui); issueStorageUnavailable=false; }
         catch { issueStorageUnavailable=true; }
       }
@@ -224,7 +225,11 @@
     queueIssueCheckpoint();
     await issueCheckpoint;
     try { return issueReport.readCombined(await lazyTester.issueReport(),issueStorageUnavailable); }
-    catch { return issueReport.readCombined(undefined,issueStorageUnavailable); }
+    catch {
+      const partial = issueReport.readCombined(undefined,issueStorageUnavailable);
+      if (partial===null) throw new Error('Issue report unavailable');
+      return partial;
+    }
   }
   let previewIssue = '', selectedIdentity = '';
   // Optional native controller mirror; no new timer or MCP process.

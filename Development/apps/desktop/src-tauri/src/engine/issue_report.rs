@@ -1,11 +1,11 @@
 //! Bounded native request-client issue evidence. Recording itself performs no I/O.
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 const LIMIT: usize = 16;
 fn is_false(value: &bool) -> bool { !*value }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub(crate) enum Code {
     IpcWorkerStartFailed,
@@ -17,16 +17,60 @@ pub(crate) enum Code {
     IpcReplyLost,
 }
 
+// One typed operation vocabulary serves both emission and stored-file admission.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum Operation {
+    Inspect,
+    Target,
+    AgentActivity,
+    TestingReserve,
+    TestingFinalize,
+    TestingInspect,
+    InspectSettings,
+    ApplyPreset,
+    ApplyGraphicsPreset,
+    SavePerformance,
+    SaveAudio,
+    SaveStoragePreferences,
+    InspectStorage,
+    InspectProfileStorage,
+    InspectSelectiveInventory,
+    ReviewSelectiveInventory,
+    ConfirmSelectedWorlds,
+    ConfirmSelectedPacks,
+    OpenProfileFolder,
+    ClearProfileCache,
+    ClearProfileDownloadCache,
+    ResetGameSettings,
+    RestoreGameSettings,
+    DisableImprovedInputResponse,
+    EnableTextureStreaming,
+    DisableTextureStreaming,
+    ClearProfileData,
+    Launch,
+    LaunchMc02Experiment,
+    LaunchAiExperiment,
+    Mc02Input,
+    AiLeasedInput,
+    AiLeaseAcquire,
+    AiLeaseRelease,
+    AiInputGroup,
+    CloseOne,
+    CloseAll,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Context {
-    pub operation: &'static str,
+    pub operation: Operation,
     pub slot: Option<u32>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Entry {
     c: Code,
-    op: &'static str,
+    op: Operation,
     #[serde(skip_serializing_if = "Option::is_none")]
     s: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -43,15 +87,34 @@ struct Entry {
     e: Option<u32>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct NativeIssueReport {
     v: u8,
     issues: Vec<Entry>,
-    #[serde(skip_serializing_if = "is_false")]
+    #[serde(default, skip_serializing_if = "is_false")]
     truncated: bool,
 }
 
 impl NativeIssueReport {
+    // Stored evidence is untrusted. Use the same typed vocabulary and bounds
+    // as the producer without importing old observations into live state.
+    pub(super) fn valid(&self) -> bool {
+        const MAX_JS_INTEGER: u64 = 9_007_199_254_740_991;
+        self.v == 1 && !self.issues.is_empty() && self.issues.len() <= LIMIT &&
+            self.issues.iter().enumerate().all(|(index, row)| {
+                row.s.is_none_or(|slot| (1..=5).contains(&slot)) &&
+                row.t <= MAX_JS_INTEGER &&
+                row.l.is_none_or(|t| t <= MAX_JS_INTEGER) &&
+                row.r.is_none_or(|t| t <= MAX_JS_INTEGER) &&
+                row.n > 0 && (row.n > 1) == row.l.is_some() &&
+                row.e.is_none_or(|e| e > 0 && (e < row.n || row.n == u32::MAX)) &&
+                (row.c != Code::IpcWorkerStartFailed || (row.r.is_none() && row.e.is_none())) &&
+                !self.issues[..index].iter().any(|old|
+                    old.c == row.c && old.op == row.op && old.s == row.s && old.os == row.os)
+            })
+    }
+
     const fn new() -> Self {
         Self { v: 1, issues: Vec::new(), truncated: false }
     }
@@ -124,7 +187,7 @@ mod tests {
     #[test]
     fn report_aggregates_actual_failures_without_raw_context() {
         let mut report = NativeIssueReport::new();
-        let context = Context { operation: "close_one", slot: Some(2) };
+        let context = Context { operation: Operation::CloseOne, slot: Some(2) };
         report.record(Code::IpcReplyTimeout, context, None, 100);
         report.record(Code::IpcReplyTimeout, context, None, 120);
         report.record(Code::IpcReplyLost, context, None, 130);
@@ -139,7 +202,7 @@ mod tests {
     #[test]
     fn reconciliation_marks_only_uncertain_rows_and_recurrence_reopens() {
         let mut report = NativeIssueReport::new();
-        let context = Context { operation: "close_one", slot: Some(2) };
+        let context = Context { operation: Operation::CloseOne, slot: Some(2) };
         report.reconcile_transport(90);
         assert!(report.issues.is_empty());
         report.record(Code::IpcWorkerStartFailed, context, None, 100);
@@ -164,7 +227,7 @@ mod tests {
     #[test]
     fn checkpoint_due_only_for_new_recurrent_or_power_of_two_counts() {
         let mut report = NativeIssueReport::new();
-        let context = Context { operation: "inspect", slot: None };
+        let context = Context { operation: Operation::Inspect, slot: None };
         for due in [true, true, false, true, false] {
             assert_eq!(report.record(Code::IpcReplyTimeout, context, None, 100), due);
         }
@@ -176,7 +239,7 @@ mod tests {
     #[test]
     fn report_preserves_bound_and_distinct_os_codes() {
         let mut report = NativeIssueReport::new();
-        let context = Context { operation: "inspect", slot: None };
+        let context = Context { operation: Operation::Inspect, slot: None };
         for os in 0..17 {
             report.record(Code::IpcTransportFailed, context, Some(os), 100);
         }

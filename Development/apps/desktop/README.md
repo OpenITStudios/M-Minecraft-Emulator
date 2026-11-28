@@ -59,8 +59,10 @@ unverified games.
 
 ## Selective issue report
 
-General Settings shows **Issue report / Copy report** only after a problem
-has been observed in the current desktop lifetime. This is a local,
+General Settings provides **Check issue report** on demand, changing to
+**Copy report** after a UI-observed problem. This also exposes native-only
+evidence without background availability checks. A healthy check returns
+no report; unavailable native evidence is not reported as healthy. This is a local,
 sanitized support summary, not a security audit log, crash dump or gameplay
 acceptance. No new polling, background IPC, service, upload, raw error
 text, screenshots, process identifiers, account or world data. Existing
@@ -100,9 +102,12 @@ Only the ordinary Windows product desktop enables writes after its existing
 exclusive instance lease. Native issue changes checkpoint after releasing
 the native request gate; UI submits one coalesced snapshot on new issues,
 recovery, recurrence, first overflow or power-of-two repeat counts.
-Copy retries current UI/native evidence; clean exit flushes native and
-last submitted UI counts. No new timer, service or automatic retry loop.
-Copy indicates `storageUnavailable:true` if saving fails.
+Copy retries current UI/native evidence (including a native-only checkpoint);
+clean exit flushes native and last submitted UI counts. No new timer, service
+or automatic retry loop. Copy indicates `storageUnavailable:true` if its
+checkpoint attempt fails. Native publication is synchronous on the exceptional
+request path after the session transport gate is released; an outer manager
+admission gate may still be held. Disk delay and actual overhead are unmeasured.
 
 `Data/Reports/issues.json` holds the latest issue-bearing desktop lifetime:
 64 rows maximum, 16 KiB hard cap. Healthy runs preserve it; the next
@@ -110,7 +115,9 @@ issue-bearing lifetime replaces it, without merging old recovery episodes.
 Identical snapshots skip publication only after comparing the actual bounded file; a missing final is recreated. A fixed exclusive `issues.pending`
 stage is flushed and moved within the pinned directory; interrupted or
 unrecognized files block publication and require manual review, never
-automatic deletion. At most two reporter-created files (16 KiB each).
+automatic deletion. Replacement requires the complete known schema,
+including bounded UI/native rows, typed native operation and code vocabulary,
+and no extra fields. This does not provide hostile same-user race attestation. At most two reporter-created files (16 KiB each).
 Historical evidence is available on disk, not imported into live UI.
 A crash before checkpoint or between repeat checkpoints may lose evidence.
 CLI/controller/helper and startup diagnostic processes never write.

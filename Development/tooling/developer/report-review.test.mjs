@@ -64,6 +64,12 @@ test('review catalog covers current storage/UI/native code vocabulary and source
   const bridge=readFileSync(new URL('../../apps/desktop/src/app/bridge/lazyTester.ts',import.meta.url),'utf8');
   const uiCodes=[...store.matchAll(/"(LT-[A-Z]+-[0-9]+)"/g)].map(m=>m[1]);
   const nativeCodes=JSON.parse(bridge.split('\n').find(line=>line.startsWith('const nativeIssueCodes = ')).split(' = ')[1].split(' as const')[0]);
+  const nativeOps=JSON.parse(bridge.split('\n').find(line=>line.startsWith('const nativeIssueOperations = ')).split(' = ')[1].split(' as const')[0]);
+  const native=readFileSync(new URL('../../apps/desktop/src-tauri/src/engine/issue_report.rs',import.meta.url),'utf8');
+  const rustNames=name=>native.split('enum '+name+' {')[1].split('}')[0].trim().split(',').map(v=>v.trim()).filter(Boolean);
+  const snake=s=>s.replace(/[A-Z]/g,(c,i)=>(i?'_':'')+c.toLowerCase());
+  assert.deepEqual(rustNames('Operation').map(snake).sort(),nativeOps.sort());
+  assert.deepEqual(rustNames('Code').map(s=>snake(s).toUpperCase()).sort(),[...nativeCodes].sort());
   assert.deepEqual([...issueCatalogCodes()].sort(),[...new Set([...uiCodes,...nativeCodes])].sort());
   for(const code of issueCatalogCodes()){
     const value=code.startsWith('IPC_')?{v:2,scope:'desktop-process',issues:[],native:{v:1,issues:[{c:code,op:'inspect',t:1,n:1}]}}:

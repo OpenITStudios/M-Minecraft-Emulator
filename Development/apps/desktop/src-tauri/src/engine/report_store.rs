@@ -43,18 +43,24 @@ fn invalid() -> io::Error { io::Error::new(io::ErrorKind::InvalidData, "Issue re
 fn parse_ui(text: &str) -> io::Result<UiSnapshot> {
     if text.len() > MAX_BYTES { return Err(invalid()); }
     let ui: UiSnapshot = serde_json::from_str(text).map_err(|_| invalid())?;
-    if ui.v != 1 || ui.scope != "desktop-observed" || ui.issues.is_empty() ||
-        ui.issues.len() > MAX_UI_ROWS { return Err(invalid()); }
-    for (i, row) in ui.issues.iter().enumerate() {
+    if ui.v != 1 || ui.scope != "desktop-observed" || ui.issues.is_empty() {
+        return Err(invalid());
+    }
+    validate_ui_rows(&ui.issues)?;
+    Ok(ui)
+}
+fn validate_ui_rows(rows: &[UiEntry]) -> io::Result<()> {
+    if rows.len() > MAX_UI_ROWS { return Err(invalid()); }
+    for (i, row) in rows.iter().enumerate() {
         if !UI_CODES.contains(&row.c.as_str()) ||
             row.s.is_some_and(|s| !(1..=5).contains(&s)) ||
             row.t > MAX_JS_INTEGER || row.l.is_some_and(|t| t > MAX_JS_INTEGER) ||
             row.r.is_some_and(|t| t > MAX_JS_INTEGER) || row.n == Some(0) ||
-            row.e == Some(0) || ui.issues[..i].iter().any(|old| old.c == row.c && old.s == row.s) {
+            row.e == Some(0) || rows[..i].iter().any(|old| old.c == row.c && old.s == row.s) {
             return Err(invalid());
         }
     }
-    Ok(ui)
+    Ok(())
 }
 #[derive(Serialize)]
 struct Checkpoint<'a> {
@@ -64,6 +70,33 @@ struct Checkpoint<'a> {
     #[serde(skip_serializing_if = "is_false")]
     truncated: bool,
     native: Option<super::issue_report::NativeIssueReport>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredCheckpoint {
+    v: u8,
+    scope: String,
+    issues: Vec<UiEntry>,
+    #[serde(default)]
+    truncated: bool,
+    native: Option<super::issue_report::NativeIssueReport>,
+}
+fn validate_saved(bytes: &[u8]) -> io::Result<()> {
+    let saved: StoredCheckpoint = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+    if saved.v != 2 || saved.scope != "desktop-process" ||
+        (saved.issues.is_empty() && saved.native.is_none()) ||
+        saved.native.as_ref().is_some_and(|native| !native.valid()) {
+        return Err(invalid());
+    }
+    validate_ui_rows(&saved.issues)?;
+    // Require the complete producer schema, including a present native
+    // field, and reject explicit null/false optional fields it never emits.
+    let actual: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+    let canonical = serde_json::to_value(Checkpoint { v: 2, scope: "desktop-process",
+        issues: &saved.issues, truncated: saved.truncated, native: saved.native })
+        .map_err(|_| invalid())?;
+    if actual != canonical { return Err(invalid()); }
+    Ok(())
 }
 fn is_false(value: &bool) -> bool { !*value }
 struct Store { ui: Option<UiSnapshot> }
@@ -77,11 +110,12 @@ pub(crate) fn request_checkpoint() {
 pub(crate) fn checkpoint_if_due() {
     if DUE.swap(false, Ordering::AcqRel) { let _ = flush(); }
 }
-pub(crate) fn checkpoint_ui(text: &str) -> Result<(), &'static str> {
+pub(crate) fn checkpoint_ui(text: Option<&str>) -> Result<(), &'static str> {
     if !ENABLED.load(Ordering::Acquire) { return Err("Issue report checkpoint unavailable"); }
-    let ui = parse_ui(text).map_err(|_| "Invalid issue report checkpoint")?;
+    let ui = text.map(parse_ui).transpose().map_err(|_| "Invalid issue report checkpoint")?;
     let mut store = STORE.lock().map_err(|_| "Issue report checkpoint unavailable")?;
-    store.ui = Some(ui);
+    // Explicit native-only copy must also checkpoint without clearing UI evidence.
+    if let Some(ui) = ui { store.ui = Some(ui); }
     store.save().map_err(|_| "Issue report checkpoint unavailable")
 }
 pub(crate) fn flush() -> io::Result<()> {
@@ -126,12 +160,7 @@ fn existing_checkpoint(path: &Path) -> io::Result<Option<Vec<u8>>> {
     let mut bytes = Vec::new();
     Read::by_ref(&mut file).take((MAX_BYTES + 1) as u64).read_to_end(&mut bytes)?;
     if bytes.len() > MAX_BYTES { return Err(invalid()); }
-    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-    if value.get("v").and_then(|v| v.as_u64()) != Some(2) ||
-        value.get("scope").and_then(|v| v.as_str()) != Some("desktop-process") ||
-        !value.get("issues").is_some_and(|v| v.is_array()) || value.get("native").is_none() {
-        return Err(invalid());
-    }
+    validate_saved(&bytes)?;
     Ok(Some(bytes))
 }
 fn publish(data: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -184,10 +213,25 @@ mod tests {
         }
     }
     #[test]
+    fn prior_checkpoint_requires_complete_known_schema() {
+        let valid = r#"{"v":2,"scope":"desktop-process","issues":[],"native":{"v":1,"issues":[{"c":"IPC_REPLY_TIMEOUT","op":"close_one","s":2,"t":100,"n":1}]}}"#;
+        assert!(validate_saved(valid.as_bytes()).is_ok());
+        for bad in [
+            valid.replace("close_one", "unknown_op"),
+            valid.replace("IPC_REPLY_TIMEOUT", "UNKNOWN_CODE"),
+            valid.replace("\"n\":1", "\"n\":0"),
+            valid.replace("\"t\":100", "\"t\":100,\"raw\":\"private\""),
+            valid.replace("\"s\":2", "\"s\":null"),
+            valid.replace("\"n\":1", "\"n\":2"),
+            r#"{"v":2,"scope":"desktop-process","issues":[{"c":"LT-CON-01","t":1}]}"#.to_owned(),
+            r#"{"v":2,"scope":"desktop-process","issues":[],"native":null}"#.to_owned(),
+        ] { assert!(validate_saved(bad.as_bytes()).is_err()); }
+    }
+    #[test]
     fn bounded_publication_preserves_previous_and_refuses_interrupted_stage() {
         let root = tempfile::tempdir().unwrap();
-        let first = br#"{"v":2,"scope":"desktop-process","issues":[],"native":null}"#;
-        let next = br#"{"v":2,"scope":"desktop-process","issues":[],"native":null,"truncated":true}"#;
+        let first = br#"{"v":2,"scope":"desktop-process","issues":[{"c":"LT-CON-01","t":1}],"native":null}"#;
+        let next = br#"{"v":2,"scope":"desktop-process","issues":[{"c":"LT-CON-01","t":1,"r":2}],"native":null}"#;
         publish(root.path(), first).unwrap();
         let path = root.path().join("Reports/issues.json");
         publish(root.path(), next).unwrap();
@@ -205,5 +249,9 @@ mod tests {
         fs::write(&path, b"unrelated").unwrap();
         assert!(publish(root.path(), first).is_err());
         assert_eq!(fs::read(&path).unwrap(), b"unrelated");
+        let malformed = br#"{"v":2,"scope":"desktop-process","issues":[{"c":"PRIVATE","t":1}],"native":null}"#;
+        fs::write(&path, malformed).unwrap();
+        assert!(publish(root.path(), next).is_err());
+        assert_eq!(fs::read(&path).unwrap(), malformed);
     }
 }

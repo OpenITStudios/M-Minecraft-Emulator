@@ -77,8 +77,9 @@ describe('Selective desktop issue report',()=>{
   it('combines bounded native evidence with UI observations without claiming correlation',()=>{
     const report=new IssueReport(()=>100);
     expect(report.readCombined(null)).toBeNull();
-    report.note('LT-CON-01');
     const native=parseNativeIssueReport({v:1,issues:[{c:'IPC_REPLY_TIMEOUT',op:'close_one',s:2,t:100,n:2,l:120}]});
+    expect(JSON.parse(report.readCombined(native)!)).toEqual({v:2,scope:'desktop-process',issues:[],native});
+    report.note('LT-CON-01');
     expect(JSON.parse(report.readCombined(native)!)).toEqual({v:2,scope:'desktop-process',
       issues:[{c:'LT-CON-01',t:100}],native});
     expect(JSON.parse(report.readCombined(undefined)!)).toMatchObject({nativeUnavailable:true});
@@ -91,13 +92,16 @@ describe('Selective desktop issue report',()=>{
     for(const change of [{r:'130'},{e:0},{e:2},{c:'IPC_WORKER_START_FAILED'}])
       expect(()=>parseNativeIssueReport({v:1,issues:[{...recovered,...change}]})).toThrow();
   });
-  it('mounts explicit copy only after a problem and uses existing feedback without exporting raw data',()=>{
+  it('allows explicit native-only review and uses existing feedback without exporting raw data',()=>{
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
     const settings=readFileSync(new URL('../src/GeneralSettings.svelte',import.meta.url),'utf8');
     expect(app).toContain('if (issueKey!==null && reportableFeedback(issueKey))');
     expect(app).toContain('if (closeFailure) noteIssue(userFeedback(\'closeAll\').code)');
     expect(app).toContain('{issueReportAvailable} onReadIssueReport={readIssueReport}');
-    expect(settings).toContain('{#if issueReportAvailable}');
+    expect(settings).toContain("issueReportAvailable?'Copy report':'Check issue report'");
+    expect(settings).toContain("issueReportNotice='Issue report unavailable. Try again.'");
+    expect(app).toContain("if (partial===null) throw new Error('Issue report unavailable')");
+    expect(app).not.toContain('if (ui===null) continue;');
     expect(settings).toContain('await navigator.clipboard.writeText(issueReportText)');
     expect(app).toContain('await lazyTester.issueReport()');
     expect(app).toContain('await lazyTester.checkpointIssues(ui)');

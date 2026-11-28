@@ -518,7 +518,7 @@ export function parseNativeIssueReport(value:unknown):NativeIssueReport|null {
 
 export const lazyTester = {
   issueReport:async()=>parseNativeIssueReport(await invokeRuntime<unknown>('lazy_tester_issue_report')),
-  checkpointIssues:async(ui:string)=>invokeRuntime<void>('lazy_tester_checkpoint_issues',{ui}),
+  checkpointIssues:async(ui:string|null)=>invokeRuntime<void>('lazy_tester_checkpoint_issues',{ui}),
   recordingStatus:async()=>parseRecordingStatus(await invokeRuntime<unknown>('lazy_tester_recording_status')),
   startRecording:async(slot:ProfileSlot,expected:OwnedProcess)=>{
     const result=await invokeRuntime<unknown>('lazy_tester_start_recording',{slot,expected});

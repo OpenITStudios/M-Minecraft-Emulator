@@ -101,10 +101,10 @@ pub(crate) fn lazy_tester_issue_report() -> Result<Option<crate::engine::issue_r
 
 // Fixed report destination, not caller-selected file access.
 #[tauri::command]
-pub(crate) async fn lazy_tester_checkpoint_issues(ui: String) -> Result<(), &'static str> {
+pub(crate) async fn lazy_tester_checkpoint_issues(ui: Option<String>) -> Result<(), &'static str> {
     #[cfg(windows)]
     {
-        tauri::async_runtime::spawn_blocking(move || crate::engine::report_store::checkpoint_ui(&ui))
+        tauri::async_runtime::spawn_blocking(move || crate::engine::report_store::checkpoint_ui(ui.as_deref()))
             .await.map_err(|_| "Issue report checkpoint task unavailable")?
     }
     #[cfg(not(windows))]
