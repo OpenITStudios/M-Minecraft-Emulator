@@ -1567,7 +1567,14 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
                             return Err(io::Error::new(io::ErrorKind::BrokenPipe,
                                 "Invalid full Inspect receipt; outcome uncertain"));
                         }
-                        if reply.is_ok() { owner.uncertain = false; }
+                        if reply.is_ok() {
+                            if owner.uncertain {
+                                // Only the original valid full Inspect clears uncertainty.
+                                // Report its reconciliation, not the prior mutation outcome.
+                                issue_report::reconcile_transport();
+                            }
+                            owner.uncertain = false;
+                        }
                     }
                     reply.map_err(io::Error::other)
                 }

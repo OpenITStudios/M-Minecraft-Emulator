@@ -485,7 +485,7 @@ const nativeIssueCodes = ["IPC_WORKER_START_FAILED","IPC_TRANSPORT_FAILED","IPC_
 const nativeIssueOperations = ["inspect","target","agent_activity","testing_reserve","testing_finalize","testing_inspect","inspect_settings","apply_preset","apply_graphics_preset","save_performance","save_audio","save_storage_preferences","inspect_storage","inspect_profile_storage","inspect_selective_inventory","review_selective_inventory","confirm_selected_worlds","confirm_selected_packs","open_profile_folder","clear_profile_cache","clear_profile_download_cache","reset_game_settings","restore_game_settings","disable_improved_input_response","enable_texture_streaming","disable_texture_streaming","clear_profile_data","launch","launch_mc02_experiment","launch_ai_experiment","mc02_input","ai_leased_input","ai_lease_acquire","ai_lease_release","ai_input_group","close_one","close_all"] as const;
 export interface NativeIssueReport {
   v:1;
-  issues:{c:typeof nativeIssueCodes[number];op:typeof nativeIssueOperations[number];s?:ProfileSlot;os?:number;t:number;n:number;l?:number}[];
+  issues:{c:typeof nativeIssueCodes[number];op:typeof nativeIssueOperations[number];s?:ProfileSlot;os?:number;t:number;n:number;l?:number;r?:number;e?:number}[];
   truncated?:true;
 }
 export function parseNativeIssueReport(value:unknown):NativeIssueReport|null {
@@ -497,13 +497,16 @@ export function parseNativeIssueReport(value:unknown):NativeIssueReport|null {
     throw new TypeError('Invalid native issue report');
   const seen=new Set<string>();
   for(const row of value.issues) {
-    if(!record(row)||!exact(row,['c','op','t','n',...['s','os','l'].filter(k=>Object.hasOwn(row,k))])||
+    if(!record(row)||!exact(row,['c','op','t','n',...['s','os','l','r','e'].filter(k=>Object.hasOwn(row,k))])||
        !nativeIssueCodes.includes(row.c as typeof nativeIssueCodes[number])||
        !nativeIssueOperations.includes(row.op as typeof nativeIssueOperations[number])||
        !uint(row.t)||!uint(row.n,0xffffffff)||row.n===0||
        Object.hasOwn(row,'s')&&!profileSlots.includes(row.s as ProfileSlot)||
        Object.hasOwn(row,'os')&&(typeof row.os!=='number'||!Number.isInteger(row.os)||row.os< -2147483648||row.os>2147483647)||
        Object.hasOwn(row,'l')&&!uint(row.l)||
+       Object.hasOwn(row,'r')&&!uint(row.r)||
+       Object.hasOwn(row,'e')&&(!uint(row.e,0xffffffff)||Number(row.e)<1||Number(row.e)>=Number(row.n)&&Number(row.n)!==0xffffffff)||
+       row.c==='IPC_WORKER_START_FAILED'&&(Object.hasOwn(row,'r')||Object.hasOwn(row,'e'))||
        (Number(row.n)>1)!==Object.hasOwn(row,'l'))
       throw new TypeError('Invalid native issue entry');
     const key=JSON.stringify([row.c,row.op,row.s??null,row.os??null]);

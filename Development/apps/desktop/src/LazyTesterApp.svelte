@@ -116,6 +116,7 @@
       const result=await lazyTester.recordingStatus();
       if(disposed)return;
       recordings=result;recordingStatusKnown=true;recordingWatch=result.some(recordingActive);
+      issueReport.resolve('LT-CAP-03');
     }catch{
       if(!disposed){recordingStatusKnown=false;recordingWatch=true;noteIssue('LT-CAP-03');}
     }finally{recordingStatusPending=false;}
@@ -159,7 +160,10 @@
     activeOperation = 'screenshot';screenshotNotice=null;
     try{
       const receipt=await lazyTester.screenshot(slot,target);
-      if(receipt&&!disposed)screenshotNotice={slot,message:`Screenshot saved · ${receipt.width} × ${receipt.height}`};
+      if(receipt&&!disposed){
+        screenshotNotice={slot,message:`Screenshot saved · ${receipt.width} × ${receipt.height}`};
+        issueReport.resolve('LT-CAP-01',slot);
+      }
     }catch{
       if(!disposed){
         screenshotNotice={slot,message:'Screenshot unavailable. No successful save was confirmed.'};
@@ -263,7 +267,10 @@
   });
   // Project only already-observed problem signals; no new native read or timer.
   $: if (mounted && !disposed) {
-    if (issueKey!==null && reportableFeedback(issueKey)) noteIssue(userFeedback(issueKey).code);
+    if (issueKey!==null && reportableFeedback(issueKey)) {
+      // Selected-window restoration already has an exact slot observation.
+      if (issueKey!=='recovery') noteIssue(userFeedback(issueKey).code);
+    }
     if (connectionIssueKey!==null) noteIssue(userFeedback(connectionIssueKey).code);
     if (bindingIssue && !locationIssue && nativeBackend!=='Unsupported')
       noteIssue(userFeedback(nativeBackend===null?'backend':'binding').code);
@@ -502,11 +509,13 @@
       if(layoutChanged) {
         previewStatuses=[];pendingPreviewInvalidations.clear();dirty=true;
       }
+      if (isCurrentObservation(issued)) issueReport.resolve(userFeedback('connection').code);
     } catch (error) {
       if (isCurrentObservation(issued)) {
         if (available) dirty = true;
         available = false;agentActivity=null;previewStatuses=[];pendingPreviewInvalidations.clear();
         connectionIssueKey='connection';
+        noteIssue(userFeedback('connection').code);
       }
     } finally { refreshing = false; }
   }
@@ -670,6 +679,7 @@
       const snapshot=await lazyTester.saveStoragePreferences({...settings.storagePreferences,autoClearWebCache:enabled});
       publishSettings(snapshot.settings);publishProfiles(snapshot.profiles);
       storageNotice='Web cache preference saved.';
+      if (!disposed) issueReport.resolve('LT-SET-07');
     } catch {
       // An uncertain save must not be represented as the old or new value.
       if(settings)settings={...settings,storagePreferences:undefined};
@@ -752,6 +762,7 @@
   }
   function markClosePresentationUncertain(slot: ProfileSlot) {
     uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, false);
+    if (!disposed) noteIssue(userFeedback('recovery').code,slot);
     issueKey = 'recovery';
     if (active === slot) {
       active = null; selectedIdentity = ''; requested = null; queued = null;
@@ -780,6 +791,7 @@
         return;
       }
       uncertainWindowSlots = updateRecoverySlots(uncertainWindowSlots, slot, true);
+      if (!disposed) issueReport.resolve(userFeedback('recovery').code,slot);
       // Only a confirmed native restoration receipt permits a normal
       // selected close transition and automatic selection of another peer.
       const wasActive=active===slot;

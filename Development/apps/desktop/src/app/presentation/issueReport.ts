@@ -7,7 +7,7 @@ export type IssueCode = ReturnType<typeof userFeedback>['code'] |
   'LT-AGT-01' | 'LT-AGT-02' | 'LT-AGT-03' | 'LT-AGT-04' | 'LT-AGT-05' | 'LT-SET-07';
 
 export const MAX_ISSUES = 48;
-interface IssueEntry { c: IssueCode; s?: ProfileSlot; t: number; n?: number; l?: number }
+interface IssueEntry { c: IssueCode; s?: ProfileSlot; t: number; n?: number; l?: number; r?: number; e?: number }
 
 // Known preflight/contended close refusals are not unexpected failures.
 export function reportableFeedback(key: UserMessageKey): boolean {
@@ -27,8 +27,13 @@ export class IssueReport {
     const key = code + ':' + (slot ?? 0);
     const prior = this.entries.get(key);
     if (prior) {
-      if (!countAttempt) return false;
-      prior.n = Math.min((prior.n ?? 0) + 1, 0xffffffff);
+      const recurring = prior.r !== undefined;
+      if (!countAttempt && !recurring) return false;
+      if (recurring) {
+        delete prior.r;
+        prior.e = Math.min((prior.e ?? 0) + 1, 0xffffffff);
+      }
+      if (countAttempt) prior.n = Math.min((prior.n ?? 0) + 1, 0xffffffff);
       prior.l = this.seconds();
       return true;
     }
@@ -40,6 +45,13 @@ export class IssueReport {
     this.entries.set(key,{c:code,...(slot === undefined ? {} : {s:slot}),
       t:this.seconds(),...(countAttempt ? {n:1} : {})});
     return true;
+  }
+
+  // Called only by an explicit positive receipt for the same scope.
+  // No healthy record is created and repeated success cannot rewrite history.
+  resolve(code: IssueCode, slot?: ProfileSlot): void {
+    const prior = this.entries.get(code + ':' + (slot ?? 0));
+    if (prior && prior.r === undefined) prior.r = this.seconds();
   }
 
   // One export; keep observations of different producers separate unless correlated.

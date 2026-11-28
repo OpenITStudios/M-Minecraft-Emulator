@@ -72,7 +72,7 @@ JSON text. The report is not available before General Settings can open.
 Compact combined export schema 2: `v` schema; `scope` desktop-process; `issues`
 contains at most 48 distinct code/slot entries, first observed wall-clock
 Unix seconds `t`, optional launcher slot `s`. State observations are
-deduplicated across the current desktop lifetime and do not have a count.
+deduplicated until an explicit, scope-matched positive receipt; they do not have an attempt count.
 Discrete recorded capture/preference failures include attempt count `n`
 (saturating) and most recent observed time `l` when repeated. An overflow
 sets `truncated:true`; no stored row is evicted or overwritten. Codes
@@ -93,6 +93,8 @@ codes:
 | LT-SET-07 | Web cache preference save unconfirmed |
 
 The optional `native` section is one explicit read of a 16-row, current-process Rust request-client summary. `native:null` means no retained native rows; `nativeUnavailable:true` means the read failed. Together with 48 UI rows, the report retains at most 64 distinct rows. Native `c` is the source-classified code, `op` is the actual admitted request name, optional `s` is the slot, optional `os` is the raw numeric OS error (not a message), `t`/`l` are observed Unix seconds (zero if unavailable), and `n` counts discrete failed attempts. Source owner: `native_clients_session.rs`, with `issue_report.rs` retaining bounded evidence. `IPC_WORKER_START_FAILED` means no worker started; `IPC_REPLY_TIMEOUT`, `IPC_REPLY_LOST`, `IPC_TRANSPORT_FAILED`, `IPC_INPUT_RECEIPT_INVALID`, `IPC_TARGET_RECEIPT_INVALID` and `IPC_INSPECT_RECEIPT_INVALID` preserve unconfirmed outcome; no automatic retry or inferred cause. UI and native rows are separate observations, not additive incident counts. This read cannot collect another CLI/controller process's memory. No report persistence or exact build identity yet; no new wire fields, no new periodic reads.
+
+Optional `r` is the observed recovery/reconciliation time for the current issue episode; absence means no matching positive evidence, not a proved continuing failure. Optional `e` counts recurrences after confirmed recovery (saturating); recurrence clears `r`, updates `l` and never erases the first timestamp. Native `r` is recorded only after the existing uncertainty gate accepts a full Inspect; this reconciles transport, not the prior mutation or gameplay. Worker-start failure is excluded from that reconciliation. Desktop recovery is limited to current successful Refresh, validated recording status, a non-cancelled screenshot receipt, confirmed selected-window restoration, and matched web-cache preference save. Recovery describes a later successful observation/operation at the same report scope, not success of the original failed action. Other codes remain without recovery evidence; UI warnings disappearing, partial replies and timeouts do not establish recovery. No extra polling or report rows for normal success.
 
 The summary does not include success denominators, unobserved native
 failures, exact root causes or historical process exits. It cannot

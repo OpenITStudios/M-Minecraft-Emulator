@@ -35,6 +35,12 @@ struct Entry {
     n: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     l: Option<u64>,
+    // Last confirmed reconciliation of the current uncertainty episode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    r: Option<u64>,
+    // Recurrences after a confirmed reconciliation, not poll counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    e: Option<u32>,
 }
 
 #[derive(Clone, Serialize)]
@@ -57,10 +63,23 @@ impl NativeIssueReport {
             row.c == code && row.op == context.operation && row.s == slot && row.os == os) {
             row.n = row.n.saturating_add(1);
             row.l = Some(now);
+            if row.r.take().is_some() {
+                row.e = Some(row.e.unwrap_or(0).saturating_add(1));
+            }
         } else if self.issues.len() < LIMIT {
-            self.issues.push(Entry { c: code, op: context.operation, s: slot, os, t: now, n: 1, l: None });
+            self.issues.push(Entry { c: code, op: context.operation, s: slot, os, t: now, n: 1, l: None, r: None, e: None });
         } else {
             self.truncated = true;
+        }
+    }
+
+    // The existing controller gate is authoritative: this only records the
+    // transport reconciliation, never the success of the earlier operation.
+    fn reconcile_transport(&mut self, now: u64) {
+        for row in &mut self.issues {
+            if row.c != Code::IpcWorkerStartFailed && row.r.is_none() {
+                row.r = Some(now);
+            }
         }
     }
 }
@@ -75,6 +94,15 @@ pub(crate) fn note(code: Code, context: Context, os: Option<i32>) {
         .map_or(0, |duration| duration.as_secs());
     if let Ok(mut report) = REPORT.lock() {
         report.record(code, context, os, now);
+    }
+}
+
+#[cfg(windows)]
+pub(crate) fn reconcile_transport() {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs());
+    if let Ok(mut report) = REPORT.lock() {
+        report.reconcile_transport(now);
     }
 }
 
@@ -100,6 +128,31 @@ mod tests {
                 {"c":"IPC_REPLY_LOST","op":"close_one","s":2,"t":130,"n":1}
             ]
         }));
+    }
+
+    #[test]
+    fn reconciliation_marks_only_uncertain_rows_and_recurrence_reopens() {
+        let mut report = NativeIssueReport::new();
+        let context = Context { operation: "close_one", slot: Some(2) };
+        report.reconcile_transport(90);
+        assert!(report.issues.is_empty());
+        report.record(Code::IpcWorkerStartFailed, context, None, 100);
+        report.record(Code::IpcReplyTimeout, context, None, 101);
+        report.record(Code::IpcReplyTimeout, context, None, 102);
+        report.reconcile_transport(110);
+        report.reconcile_transport(111);
+        assert_eq!(report.issues[0].r, None);
+        assert_eq!(report.issues[1].r, Some(110));
+        assert_eq!(report.issues[1].e, None);
+        report.record(Code::IpcReplyTimeout, context, None, 120);
+        assert_eq!(report.issues[1].r, None);
+        assert_eq!(report.issues[1].e, Some(1));
+        assert_eq!(report.issues[1].n, 3);
+        report.record(Code::IpcReplyTimeout, context, None, 121);
+        assert_eq!(report.issues[1].e, Some(1));
+        report.reconcile_transport(130);
+        assert_eq!(report.issues[1].r, Some(130));
+        assert_eq!(report.issues[1].n, 4);
     }
 
     #[test]

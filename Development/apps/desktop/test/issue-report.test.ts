@@ -25,6 +25,28 @@ describe('Selective desktop issue report',()=>{
     report.note('LT-CAP-01',1,true);
     expect(JSON.parse(report.read()!).issues).toEqual([{c:'LT-CAP-01',s:1,t:100,n:2,l:120}]);
   });
+  it('records recovery only for a retained issue and reopens on a genuine recurrence',()=>{
+    let time=100;
+    const report=new IssueReport(()=>time);
+    report.resolve('LT-CAP-03');
+    expect(report.read()).toBeNull();
+    report.note('LT-CAP-03');
+    time=110;
+    report.resolve('LT-CAP-03');
+    time=111;
+    report.resolve('LT-CAP-03');
+    expect(JSON.parse(report.read()!).issues).toEqual([{c:'LT-CAP-03',t:100,r:110}]);
+    time=120;
+    expect(report.note('LT-CAP-03')).toBe(true);
+    expect(report.note('LT-CAP-03')).toBe(false);
+    expect(JSON.parse(report.read()!).issues).toEqual([{c:'LT-CAP-03',t:100,e:1,l:120}]);
+    report.note('LT-CAP-01',2,true);
+    report.resolve('LT-CAP-01',1);
+    report.resolve('LT-CAP-01',2);
+    time=130;
+    report.note('LT-CAP-01',2,true);
+    expect(JSON.parse(report.read()!).issues[1]).toEqual({c:'LT-CAP-01',s:2,t:120,n:2,e:1,l:130});
+  });
   it('bounds the summary, preserves the first records and excludes expected refusals',()=>{
     const keys:UserMessageKey[]=['general','backend','binding','connection','launch','selection','workspace','location','storage','settings','performance'];
     const slots:ProfileSlot[]=[1,2,3,4,5];
@@ -50,6 +72,10 @@ describe('Selective desktop issue report',()=>{
     for(const change of [{op:'unknown'},{c:'unknown'},{s:9},{raw:'secret'},{n:0},{l:null}])
       expect(()=>parseNativeIssueReport({v:1,issues:[{...native!.issues[0],...change}]})).toThrow();
     expect(()=>parseNativeIssueReport({v:1,issues:Array(17).fill(native!.issues[0])})).toThrow();
+    const recovered={...native!.issues[0],r:130,e:1};
+    expect(parseNativeIssueReport({v:1,issues:[recovered]})?.issues[0]).toEqual(recovered);
+    for(const change of [{r:'130'},{e:0},{e:2},{c:'IPC_WORKER_START_FAILED'}])
+      expect(()=>parseNativeIssueReport({v:1,issues:[{...recovered,...change}]})).toThrow();
   });
   it('mounts explicit copy only after a problem and uses existing feedback without exporting raw data',()=>{
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
@@ -60,6 +86,14 @@ describe('Selective desktop issue report',()=>{
     expect(settings).toContain('{#if issueReportAvailable}');
     expect(settings).toContain('await navigator.clipboard.writeText(issueReportText)');
     expect(app).toContain('await lazyTester.issueReport()');
+    expect(app).toContain("issueReport.resolve('LT-CAP-03')");
+    const shot=app.slice(app.indexOf('async function saveScreenshot()'),app.indexOf('let manualRefreshRequested'));
+    expect(shot.indexOf('if(receipt&&!disposed)')).toBeLessThan(shot.indexOf("issueReport.resolve('LT-CAP-01',slot)"));
+    const session=readFileSync(new URL('../src-tauri/src/engine/native_clients_session.rs',import.meta.url),'utf8');
+    const locked=session.slice(session.indexOf('fn request_locked('),session.indexOf('// Only the desktop\'s passive idle lane'));
+    expect(locked).toContain('if reply.is_ok() {\n                            if owner.uncertain {');
+    expect(locked.indexOf('!snapshot.is_full_inspect_receipt()')).toBeLessThan(locked.indexOf('issue_report::reconcile_transport();'));
+    expect(locked.match(/issue_report::reconcile_transport\(\)/g)).toHaveLength(1);
     expect(settings).toContain('await onReadIssueReport()');
     expect(settings).toContain('readonly rows="4" value={issueReportText}');
   });
