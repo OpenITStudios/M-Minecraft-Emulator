@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type EducationInstallationReport, type NativeBackendSupport, profileSlots, recordingActive, type RecordingReceipt} from './app/bridge/lazyTester.js';
+  import {lazyTester, supportsManagedSessions, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type EducationInstallationReport, type NativeBackendSupport, profileSlots, recordingActive, type RecordingReceipt} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazytester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -40,7 +40,7 @@
     selectedSlot=slot;
     // Never display another slot's receipt while the selected read is pending.
     settingsNotice='';storageNotice='';storage=null;
-    if(page!=='storage'||nativeBackend!=='WindowsNative'||!binding?.configured)return;
+    if(page!=='storage'||!supportsManagedSessions(nativeBackend)||!binding?.configured)return;
     const issued=observationEpoch;
     activeOperation='refreshStorage';issueKey=null;
     try {
@@ -307,7 +307,7 @@
   $: healthIssues = projectSessionHealth({
     profiles, previewStatuses, launchFailures, unresolvedRecovery: uncertainWindowSlots,
     primarySlot: primary,
-    observed: nativeBackend === 'WindowsNative' && !initializing && available && !!binding?.configured,
+    observed: supportsManagedSessions(nativeBackend) && !initializing && available && !!binding?.configured,
     previewsVisible: page === 'workspace' && !detached,
   });
   // Project only already-observed problem signals; no new native read or timer.
@@ -358,7 +358,7 @@
   // All reactive dependencies are explicit. A blocked lane has no deadline;
   // resuming uses its last start, not a fresh full delay after each UI event.
   $: sessionObservationEnabled = mounted && !disposed && managerVisible &&
-    nativeBackend === 'WindowsNative' && !closeReviewPending && !!binding?.configured &&
+    supportsManagedSessions(nativeBackend) && !closeReviewPending && !!binding?.configured &&
     !selectiveOpen && storageReview===null &&
     activeOperation === null && !manualRefreshing && !refreshing && !resizing && !initializing;
   $: recordingObservationEnabled = mounted && !disposed && managerVisible &&
@@ -373,7 +373,7 @@
   $: scheduleBackgroundObservation(sessionDeadline, recordingDeadline);
   // Normal Play is already inspected automatically. Keep explicit Refresh
   // for exceptional states, settings/storage and an in-flight manual action.
-  $: showHeaderRefresh = nativeBackend==='WindowsNative' &&
+  $: showHeaderRefresh = supportsManagedSessions(nativeBackend) &&
     (page!=='workspace' || closeOneSlot!==null || closingOneSlot!==null || manualRefreshing || manualRefreshRequested ||
       (!initializing && (!available || !binding?.configured || issueKey!==null ||
         connectionIssueKey!==null || previewIssue!=='' || attentionCount>0 || !!closeFailure)));
@@ -392,7 +392,7 @@
     : 'Session status unavailable';
   // UI-only admission: pending selections and launches must finish before
   // another manual recovery action can replace their queued destination.
-  $: guidedRecoveryBlocked = nativeBackend !== 'WindowsNative' || page !== 'workspace' ||
+  $: guidedRecoveryBlocked = !supportsManagedSessions(nativeBackend) || page !== 'workspace' ||
     disposed || !mounted || initializing || !available || !binding?.configured ||
     busy || refreshing || resizing || manualRefreshing || manualRefreshRequested ||
     closeReviewPending || queuedPage !== null || queuedLaunch !== null ||
@@ -457,7 +457,7 @@
     const recommended = projectSessionHealth({
       profiles, previewStatuses, launchFailures, unresolvedRecovery: uncertainWindowSlots,
       primarySlot: primary,
-      observed: nativeBackend === 'WindowsNative' && !initializing &&
+      observed: supportsManagedSessions(nativeBackend) && !initializing &&
         available && !!binding?.configured,
       previewsVisible: page === 'workspace' && !detached,
     }).find(item => item.slot === slot);
@@ -508,7 +508,7 @@
     } finally {installationPending=false;}
   }
   async function refresh(passiveIdle = false) {
-    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || activeOperation !== null || refreshing || resizing || disposed) return;
+    if (!supportsManagedSessions(nativeBackend) || closeReviewActive(reviewState()) || activeOperation !== null || refreshing || resizing || disposed) return;
     const issued = observationEpoch;
     refreshing = true;
     lastInspectionStartedAt = performance.now();
@@ -595,8 +595,8 @@
     finally { activeOperation = null; }
   }
   function navigate(next: typeof page) {
-    // Settings and storage require the Windows native session owner.
-    if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) ||
+    // Settings and storage require an implemented native session owner.
+    if (!supportsManagedSessions(nativeBackend) || closeReviewActive(reviewState()) ||
         selectiveOpen || activeOperation === 'clearData' || storageReview !== null) return;
     closeOneTrigger=null;
     // A queued Refresh belongs to its original page; moving to another
@@ -673,7 +673,7 @@
   async function refreshPage() {
     const keyboardOrigin = headerRefreshFocusPage;
     headerRefreshFocusPage = null;
-    if (nativeBackend !== 'WindowsNative' || navigationReviewOpen ||
+    if (!supportsManagedSessions(nativeBackend) || navigationReviewOpen ||
         activeOperation !== null || refreshing || resizing) return;
     const issued = observationEpoch;
     const current = () => isCurrentObservation(issued);
@@ -1042,7 +1042,7 @@
     return true;
   }
   async function loadBinding(importProfiles = false) {
-    if (nativeBackend !== 'WindowsNative' || activeOperation !== null || refreshing || resizing || disposed) return;
+    if (!supportsManagedSessions(nativeBackend) || activeOperation !== null || refreshing || resizing || disposed) return;
     activeOperation = 'binding'; issueKey=null;
     try { await checkBinding(importProfiles); }
     finally { activeOperation = null; }
@@ -1401,7 +1401,7 @@
         </div>
       {/if}
       {#if page==='workspace'}
-        <button class="lazytester-secondary lazytester-settings-button" disabled={navigationReviewOpen||nativeBackend!=='WindowsNative'} on:click={()=>navigate('settings')}>Settings</button>
+        <button class="lazytester-secondary lazytester-settings-button" disabled={navigationReviewOpen||!supportsManagedSessions(nativeBackend)} on:click={()=>navigate('settings')}>Settings</button>
       {:else}
         <button class="lazytester-secondary" disabled={navigationReviewOpen} on:click={()=>navigate('workspace')}>Back</button><span class="lazytester-settings-title">Settings</span>
       {/if}
@@ -1409,7 +1409,7 @@
     {#if page==='workspace'&&available&&activityView}
       <AgentActivityNotice view={activityView}/>
     {/if}
-    {#if initializing || nativeBackend !== 'WindowsNative' || !binding?.configured || !available}
+    {#if initializing || !supportsManagedSessions(nativeBackend) || !binding?.configured || !available}
     <span class="lazytester-connection" role="status" title={sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}><span class="lazytester-dot" class:waiting={!available||!binding?.configured}></span>{sessionConnectionLabel(initializing,nativeBackend,!!binding?.configured,available)}</span>
     {/if}
   </header>
@@ -1419,14 +1419,14 @@
       <header class="lazytester-page-header" class:lazytester-play-header={page==='workspace'}>
         <div><h1 bind:this={pageHeading} tabindex="-1">{page==='workspace'?(detached?(uncertainWindowSlots.size > 0?'Window recovery unconfirmed':'Workspace'):active?'Minecraft '+active:initializing?'Preparing your launchers':nativeBackend==='Unsupported'?'Minecraft backend unavailable':!binding?.configured?'Launcher connection unavailable':!available?'Session status unavailable':requested?'Starting Minecraft - '+requested:'Workspace'):page==='storage'?'Data Storage':'General'}</h1>{#if page==='workspace'}<p hidden={active!==null&&!detached}>{detached?(uncertainWindowSlots.size > 0?'Session state and native window restoration must be verified separately.':'Select a Minecraft launcher.'):active?'Select another Minecraft launcher to switch.':binding?.configured?'Each launcher keeps its own data.':'Existing data will be preserved.'}</p>{/if}</div>
         <div class="lazytester-header-actions">
-          {#if page==='workspace' && nativeBackend==='WindowsNative'}<span class="lazytester-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>{/if}
+          {#if page==='workspace' && supportsManagedSessions(nativeBackend)}<span class="lazytester-games-count" title={gamesStatusSummary}>{gamesStatusSummary}</span>{/if}
           {#if page==='workspace'&&screenshotAvailable&&active!==null&&!detached}
           <button class="lazytester-secondary" disabled={busy||refreshing||resizing||closeReviewPending||navigationReviewOpen}
             on:click={()=>void saveScreenshot()}>{screenshotBusy?'Saving…':'Screenshot'}</button>
           {/if}
           {#if showHeaderRefresh}
           <button class="lazytester-secondary" bind:this={headerRefreshButton}
-            disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
+            disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||!supportsManagedSessions(nativeBackend)}
             on:click={requestHeaderRefresh}>{manualRefreshing||manualRefreshRequested?'Refreshing…':'Refresh'}</button>
           {/if}
         </div>
@@ -1449,9 +1449,9 @@
             </div>
           {/if}
           <div class="lazytester-alert-footer">
-            {#if nativeBackend==='WindowsNative'}
+            {#if supportsManagedSessions(nativeBackend)}
               <button class="lazytester-secondary lazytester-alert-refresh" type="button"
-                disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||nativeBackend!=='WindowsNative'}
+                disabled={busy||manualRefreshing||manualRefreshRequested||navigationReviewOpen||!supportsManagedSessions(nativeBackend)}
                 title="Checks current status only; does not repeat the failed action."
                 on:click={requestHeaderRefresh}>Refresh status</button>
             {/if}

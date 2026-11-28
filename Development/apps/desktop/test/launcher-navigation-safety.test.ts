@@ -36,7 +36,7 @@ describe('Lazy Tester startup inventory and review-safe navigation source contra
     expect(app).toContain('closeReviewActive(reviewState()) || storageReview!==null) return;');
     expect(app).toContain('onCancelReview={cancelStorageReview}');
     expect(app).toContain('disabled={navigationReviewOpen} on:click={()=>navigate(\'workspace\')}>Back</button>');
-    expect(app).toContain('disabled={navigationReviewOpen||nativeBackend!==\'WindowsNative\'}');
+    expect(app).toContain('disabled={navigationReviewOpen||!supportsManagedSessions(nativeBackend)}');
     expect(app).toContain('disabled={navigationReviewOpen} class:chosen={page===\'storage\'}');
     expect(app).toContain('Save your work first. Only this game closes; other games keep running.');
     expect(storage).toContain('Finish or cancel this review before switching profiles.');

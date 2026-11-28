@@ -27,7 +27,7 @@ describe('Lazy Tester optional activity status stays inside fixed-height topbar'
     expect(app).toContain('aria-label="LazyTester"');
     expect(app).toContain('<span class="lazytester-brand-name">LazyTester</span>');
     expect(app).toContain('role="status" title={sessionConnectionLabel(');
-    expect(app).toContain("{#if initializing || nativeBackend !== 'WindowsNative' || !binding?.configured || !available}");
+    expect(app).toContain("{#if initializing || !supportsManagedSessions(nativeBackend) || !binding?.configured || !available}");
     expect(notice).toContain('Summary takes a bounded slot in the fixed-height topbar');
     expect(notice).toContain('name="lazytester-play-disclosures"');
   });

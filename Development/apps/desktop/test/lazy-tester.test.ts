@@ -1,7 +1,7 @@
 import {sameWorkspaceGeometry, type WorkspaceGeometry} from '../src/app/workspaceGeometry.js';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, parseStartupCapabilities, parseEducationInstallation, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, supportsManagedSessions, parseNativeBackendSupport, parseStartupCapabilities, parseEducationInstallation, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -384,9 +384,12 @@ describe('Lazy Tester profile contract', () => {
   });
   it('accepts only compiled-backend support, never user agent or gameplay guesses',()=>{
     expect(parseNativeBackendSupport('WindowsNative')).toBe('WindowsNative');
+    expect(supportsManagedSessions('WindowsNative')).toBe(true);
+    expect(supportsManagedSessions('Unsupported')).toBe(false);
     expect(parseNativeBackendSupport('Unsupported')).toBe('Unsupported');
     for (const forged of [true,false,null,undefined,0,'macos','MacNative','Ready',{},['WindowsNative']]) {
       expect(()=>parseNativeBackendSupport(forged)).toThrow('Invalid native backend capability');
+      expect(supportsManagedSessions(forged)).toBe(false);
     }
   });
   it('accepts one exact startup capability report and rejects capture in unsupported or diagnostic mode',()=>{

@@ -326,7 +326,7 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
     'Healthy idle/settled Play may throttle; unavailable and unsettled live sessions retain recovery cadence');
   const mountedUI=read('Development/apps/desktop/src/LazyTesterApp.svelte');
   const titlebar=read('Development/apps/desktop/src/WindowTitlebar.svelte');
-  assert.ok(mountedUI.includes("nativeBackend === 'WindowsNative' && !closeReviewPending && !!binding?.configured") &&
+  assert.ok(mountedUI.includes("supportsManagedSessions(nativeBackend) && !closeReviewPending && !!binding?.configured") &&
     mountedUI.includes('sessionObservationEnabled = mounted && !disposed && managerVisible') &&
     mountedUI.includes('sessionInspectionDeadline(lastInspectionStartedAt,') &&
     mountedUI.includes('periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle, workspaceSettledLive)') &&
@@ -343,11 +343,12 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
     mountedUI.includes('workspaceSettledLive = workspaceObservationHealthy && active !== null && !agentNeedsFastInspection(agentActivity)') &&
     mountedUI.includes('activeOperation === null && !refreshing && !resizing && !initializing') &&
     mountedUI.includes('<WindowTitlebar backendSupport={nativeBackend} />') &&
-    mountedUI.includes("if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState())") &&
-    mountedUI.includes("if (nativeBackend !== 'WindowsNative') return;") &&
+    mountedUI.includes("if (!supportsManagedSessions(nativeBackend) || closeReviewActive(reviewState())") &&
+    mountedUI.includes("if (nativeBackend === 'Unsupported') {") &&
+    mountedUI.includes("if (!supportsManagedSessions(nativeBackend) || activeOperation !== null || refreshing || resizing || disposed) return;") &&
     mountedUI.includes("if (nativeBackend === 'WindowsNative') void workspaceSurface.release()") &&
     mountedUI.includes("{#if nativeBackend === 'WindowsNative'}") &&
-    titlebar.includes("title={backendSupport === 'WindowsNative' ?"),
+    titlebar.includes("title={supportsManagedSessions(backendSupport) ?"),
     'Unsupported diagnostic UI must not schedule game IPC or advertise CloseAll');
   const nativeSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
   assert.ok(nativeSource.includes('pub enum NativeBackendSupport') &&

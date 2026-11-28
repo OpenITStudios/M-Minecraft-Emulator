@@ -79,7 +79,7 @@ describe("Emulator source verification routing", () => {
   it("keeps manual header Refresh unavailable during an active close review", () => {
     const ui=readFileSync(new URL("../src/LazyTesterApp.svelte",import.meta.url),"utf8");
     const scheduling=readFileSync(new URL("../src/app/inspectionScheduling.ts",import.meta.url),"utf8");
-    expect(ui).toContain("manualRefreshRequested||navigationReviewOpen||nativeBackend");
+    expect(ui).toContain("manualRefreshRequested||navigationReviewOpen||!supportsManagedSessions(nativeBackend)");
     expect(ui).toContain("if (navigationReviewOpen) return;");
     expect(ui).toContain('on:click={requestHeaderRefresh}');
     expect(ui).toContain('manualRefreshRequested=true;');

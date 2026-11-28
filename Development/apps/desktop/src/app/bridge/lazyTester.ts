@@ -27,6 +27,10 @@ export interface ProfileStorage {
 }
 // Backend implementation availability, never game sign-in or profile readiness.
 export type NativeBackendSupport = 'WindowsNative' | 'Unsupported';
+// UI admission only. Unknown and unimplemented backends never enable managed sessions.
+export function supportsManagedSessions(value: unknown): boolean {
+  return value === 'WindowsNative';
+}
 export function parseNativeBackendSupport(value: unknown): NativeBackendSupport {
   if (value !== 'WindowsNative' && value !== 'Unsupported') {
     throw new TypeError('Invalid native backend capability');

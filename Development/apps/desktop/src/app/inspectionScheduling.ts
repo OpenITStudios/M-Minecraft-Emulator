@@ -1,6 +1,6 @@
 // UI-only scheduling policy. It never owns a native process or authorizes
 // Launch/Close; those remain under the Rust controller and Tauri admission.
-import type {ProfileSession, SettingsReport, AgentActivityReport} from './bridge/lazyTester.js';
+import {supportsManagedSessions, type NativeBackendSupport, type ProfileSession, type SettingsReport, type AgentActivityReport} from './bridge/lazyTester.js';
 
 // Compare the layout-relevant fields of the validated profile contract.
 // Issue text changes feedback, not the native geometry or source identity.
@@ -192,7 +192,7 @@ export function nextBackgroundDeadline(session: number | null, recording: number
 // STARTING does not block legacy selection/layout scheduling.
 export interface PendingUiQueueState {
   readonly mounted: boolean;
-  readonly nativeBackend: 'WindowsNative' | 'Unsupported' | null;
+  readonly nativeBackend: NativeBackendSupport | null;
   readonly closeInProgress: boolean;
   readonly closeReviewPending: boolean;
   readonly selectedReviewGeometryOnly?: boolean;
@@ -216,7 +216,7 @@ export type PendingUiAction =
 export function nextPendingUiAction(state: PendingUiQueueState): PendingUiAction | null {
   // Native layout can otherwise occupy the resize/admission lane before
   // initializeLaunchers performs its first session inspection.
-  if (!state.mounted || state.nativeBackend !== 'WindowsNative' ||
+  if (!state.mounted || !supportsManagedSessions(state.nativeBackend) ||
       state.initializing ||
       state.closeInProgress ||
       state.busy || state.refreshing || state.resizing) return null;

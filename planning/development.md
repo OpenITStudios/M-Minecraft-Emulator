@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-02)
+## Current status — cross-platform-native (MAC-03a)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,20 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-03a — shared UI session capability (source only)
+
+Extract the existing positive Windows session check into the typed bridge's
+`supportsManagedSessions` predicate. Only WindowsNative is accepted today;
+Unsupported, null and forged/new backend labels do not enable sessions.
+The existing wire enum, Rust authority, feature gates, slot catalog,
+DWM/geometry/release guards, timing and one UI dispatcher are retained.
+Use the predicate for common session observation, settings/navigation,
+feedback, action dispatch and titlebar close wording. Adapt the existing
+frontend negative fixtures and repository source witnesses; no new state,
+workers, dependencies or native calls. Tests/typecheck NOT_EXECUTED.
+This is a bounded shared-source preparation, not native Mac admission.
+MAC-02 artifact and isolation blocker remains; no automatic fallback.
 
 ### MAC-02 — artifact candidate and isolation findings (2026-11-28)
 
@@ -142,8 +156,9 @@ managed launch until a safe mechanism is established; two PIDs are not proof.
    CPU/RAM/GPU/frame time/startup and Windows regression. No estimated
    performance claim or source-only PASS.
 
-MAC-01 and MAC-02 change planning only; no runtime code, dependencies, fake adapters,
-test execution or weakened gates. Builds, native/gameplay/performance,
+MAC-01 and MAC-02 change planning only; MAC-03a changes common frontend
+source and matching fixtures only. No native runtime code, dependencies,
+fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
 and defensible isolation mechanism. Preserve all existing holds.
 

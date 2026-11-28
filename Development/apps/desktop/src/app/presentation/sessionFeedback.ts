@@ -1,6 +1,6 @@
 // UI-only messages. Never display native error strings or use this projection
 // to authorize Launch, Close, Restore or storage writes.
-import type {NativeBackendSupport, ProfileSlot, EducationInstallationReport} from '../bridge/lazyTester.js';
+import {supportsManagedSessions, type NativeBackendSupport, type ProfileSlot, type EducationInstallationReport} from '../bridge/lazyTester.js';
 
 // One actionable notice for the last observed installation, not a launch gate.
 // Do not expose scheduler states, hashes or successful internal review in UI.
@@ -109,7 +109,7 @@ export function sessionConnectionLabel(
 ): string {
   if (initializing) return 'Checking profiles…';
   if (backend === 'Unsupported') return 'Not supported';
-  if (backend !== 'WindowsNative') return 'Status unavailable';
+  if (!supportsManagedSessions(backend)) return 'Status unavailable';
   if (!bindingConfigured) return 'Profiles unavailable';
   return sessionObserved ? 'Profile data verified' : 'Session status unavailable';
 }
