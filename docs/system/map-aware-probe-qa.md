@@ -222,12 +222,10 @@ tools remain separately read-only and are **not** silently treated as
 map-specific pass evidence. This is one report projection within the
 existing owners, not a second result database or test/score engine.
 
-Without a configured map contract, old `probe_qa`, its legacy
-`prepare_probe_qa`/`read_probe_qa_result` tools and normal output
-shape remain compatible; no `mapPlan` or `qaReport` is added. The legacy
-names are ingress adapters to the same private prepare/read operations in
-`operation-core.mjs`; the preferred `probe_qa` route calls those operations
-directly, without redispatching a compatibility tool name.
+Without a configured map contract, `probe_qa` retains its normal output
+shape; no `mapPlan` or `qaReport` is added. The former public prepare/read
+aliases are retired. One canonical entry invokes the existing private
+prepare/read operations in `probe-qa-operations.mjs`.
 
 ## Boundaries and next runtime proof
 

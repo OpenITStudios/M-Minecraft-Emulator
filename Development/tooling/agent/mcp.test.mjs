@@ -5,7 +5,8 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createOperationCore,createMcpHandler,attachMcpStdio} from './mcp.mjs';
 import {PassThrough,Writable} from 'node:stream';
-import {createCodeModeClient,createCodeModeSurface} from './code-mode.mjs';
+import {createAgentClient} from './code-mode.mjs';
+import {TOOL_LIST} from './tool-catalog.mjs';
 import {expandActionGroups} from './control-plan.mjs';
 import {prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
@@ -239,11 +240,8 @@ test('MCP handshake and tool discovery are standard JSON-RPC',async()=>{
   const listing=await h.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
   assert.equal(listing.result.tools.find(x=>x.name==='probe_qa')
     .inputSchema.properties.publishToDesktop.type,'boolean');
-  assert.match(listing.result.tools.find(x=>x.name==='prepare_probe_qa')
-    .description,/LEGACY COMPATIBILITY ONLY/);
-  assert.match(listing.result.tools.find(x=>x.name==='read_probe_qa_result')
-    .description,/LEGACY COMPATIBILITY ONLY/);
-  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','inspect_client_ui','assess_client_background_action','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','prepare_probe_qa','read_probe_qa_result','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
+  assert.equal(listing.result.tools.some(x=>['prepare_probe_qa','read_probe_qa_result'].includes(x.name)),false);
+  assert.deepEqual(listing.result.tools.map(x=>x.name),['start_visual_observation','get_multi_client_visual_state','read_visual_observation','stop_visual_observation','inspect_client_ui','assess_client_background_action','observe_client','get_computer_use_target','revalidate_computer_use_target','get_test_context','agent_capabilities','inspect_profiles','launch_profile','plan_peer_session','plan_player_actions','assess_input_route','summarize_test_evidence','read_game_evidence','probe_qa','get_diagnostics_overview','list_issue_candidates','get_issue_details','query_diagnostic_evidence']);
   assert.equal(await h.handle({jsonrpc:'2.0',method:'notifications/initialized'}),null);
 });
 
@@ -269,18 +267,18 @@ test('QA MCP requires one pinned ZIP and cannot target human MC01',async()=>{
   const h=createHandler(config(),{native:async()=>{
     nativeCalls++;throw Error('must not call native for QA source prep');
   }});
-  const initial=await h.callTool('prepare_probe_qa',{});
-  assert.equal(initial.status,'PROBE_ZIP_NOT_CONFIGURED');
-  assert.equal(initial.commandSent,false);
-  await assert.rejects(()=>h.callTool('prepare_probe_qa',{slot:1}),
+  const initial=await h.callTool('probe_qa',{});
+  assert.equal(initial.status,'BLOCKED');
+  assert.equal(initial.reason,'PROBE_ZIP_NOT_CONFIGURED');
+  assert.equal(initial.commandSentByLazyTester,false);
+  await assert.rejects(()=>h.callTool('probe_qa',{slot:1}),
     /MC01 human host is protected/);
-  const results=await h.callTool('read_probe_qa_result',{
-    slot:2,sessionId:'a'.repeat(24)});
-  assert.equal(results.status,'NOT_PREPARED_OR_EXPIRED');
+  await assert.rejects(()=>h.callTool('prepare_probe_qa',{slot:2}),/Unknown tool/);
+  await assert.rejects(()=>h.callTool('read_probe_qa_result',{slot:2,sessionId:'a'.repeat(24)}),/Unknown tool/);
   assert.equal(nativeCalls,0);
 });
 
-test('legacy Probe tokens and canonical restart share one checkpoint owner',async()=>{
+test('canonical Probe restart is explicit and retired aliases cannot replace its checkpoint',async()=>{
   let prepares=0,nativeCalls=0;
   const h=createHandler({...config(),executable:'',
     probeZip:path.resolve('skills-probe.zip'),
@@ -296,18 +294,15 @@ test('legacy Probe tokens and canonical restart share one checkpoint owner',asyn
     },
   });
   try {
-    const old=await h.callTool('prepare_probe_qa',{slot:2});
-    assert.equal(old.status,'PREPARED_SOURCE_ONLY');
+    const first=await h.callTool('probe_qa',{slot:2});
+    assert.equal(first.phase,'AWAITING_AUTHORIZED_COMMAND');
+    await assert.rejects(()=>h.callTool('prepare_probe_qa',{slot:2}),/Unknown tool/);
+    await assert.rejects(()=>h.callTool('read_probe_qa_result',{slot:2,sessionId:'a'.repeat(24)}),/Unknown tool/);
+    assert.equal(prepares,1);
     const ready=await h.callTool('probe_qa',{slot:2,restart:true});
     assert.equal(ready.phase,'AWAITING_AUTHORIZED_COMMAND');
     assert.equal(ready.commandSentByLazyTester,false);
-    assert.equal((await h.callTool('read_probe_qa_result',{
-      slot:2,sessionId:old.sessionId})).status,'NOT_PREPARED_OR_EXPIRED');
-    const latest=await h.callTool('prepare_probe_qa',{slot:2});
-    assert.equal(latest.status,'PREPARED_SOURCE_ONLY');
-    const read=await h.callTool('read_probe_qa_result',{slot:2,sessionId:latest.sessionId});
-    assert.equal(read.sessionId,latest.sessionId);
-    assert.equal(prepares,3);
+    assert.equal(prepares,2);
     assert.equal(nativeCalls,0);
   } finally {h.shutdown();}
 });
@@ -1818,14 +1813,10 @@ test('native-coordinated Testing admits one MCP process and rejects a rival',asy
   assert.equal(restart.nativeRunStatus,'RESERVED');
   assert.notEqual(restart.testingRunId,prepared.testingRunId);
   assert.equal(catalogs,2,'An explicit owner restart creates one new checkpoint');
-  // Legacy direct preparation invalidates only this MCP's local checkpoint
-  // identity. It cannot silently inherit the old native reservation.
-  const legacy=await one.callTool('prepare_probe_qa',{slot:2});
-  assert.equal(legacy.status,'PREPARED_SOURCE_ONLY');
-  const mismatched=await one.callTool('probe_qa',
-    {slot:2,coordinateNative:true});
-  assert.equal(mismatched.reason,
-    'EXISTING_LEGACY_TESTING_CHECKPOINT_NOT_COORDINATED');
+  // Removed ingress must not replace the coordinated checkpoint.
+  await assert.rejects(()=>one.callTool('prepare_probe_qa',{slot:2}),/Unknown tool/);
+  await assert.rejects(()=>one.callTool('read_probe_qa_result',{slot:2,sessionId:'a'.repeat(24)}),/Unknown tool/);
+  assert.equal(catalogs,2);
   one.shutdown();two.shutdown();
 });
 
@@ -5027,11 +5018,11 @@ test('two MC slots cannot count one identical local capture inode twice',async()
     evidence:async()=>({status:'CAPTURE_FILE_PRESENT',captureCursor:{
       kind:'STABLE_CAPTURE_CURSOR_V1',fileIdentity:'d'.repeat(64)}})
   });
-  const first=await h.callTool('prepare_probe_qa',{slot:2});
-  assert.equal(first.status,'PREPARED_SOURCE_ONLY');
-  const second=await h.callTool('prepare_probe_qa',{slot:3});
-  assert.equal(second.status,'CAPTURE_SLOT_COLLISION');
-  assert.equal(second.commandSent,false);
+  const first=await h.callTool('probe_qa',{slot:2});
+  assert.equal(first.phase,'AWAITING_AUTHORIZED_COMMAND');
+  const second=await h.callTool('probe_qa',{slot:3});
+  assert.equal(second.reason,'CAPTURE_SLOT_COLLISION');
+  assert.equal(second.commandSentByLazyTester,false);
   assert.equal(nativeCalls,0);
   h.shutdown();
 });
@@ -5049,8 +5040,8 @@ test('different native log identities remain independent across MC slots',async(
         fileIdentity:(slot===2?'d':'e').repeat(64)}
     })
   });
-  assert.equal((await h.callTool('prepare_probe_qa',{slot:2})).status,'PREPARED_SOURCE_ONLY');
-  assert.equal((await h.callTool('prepare_probe_qa',{slot:3})).status,'PREPARED_SOURCE_ONLY');
+  assert.equal((await h.callTool('probe_qa',{slot:2})).phase,'AWAITING_AUTHORIZED_COMMAND');
+  assert.equal((await h.callTool('probe_qa',{slot:3})).phase,'AWAITING_AUTHORIZED_COMMAND');
   h.shutdown();
 });
 
@@ -5060,9 +5051,9 @@ test('Code Mode and MCP share the original operation core, one combined context 
     native:async(_exe,operation)=>{nativeCalls++;assert.equal(operation,'inspect');return snapshot(operation);},
   });
   const mcp=createMcpHandler(core);
-  const code=createCodeModeClient(core);
+  const code=createAgentClient(core);
   try {
-    const context=await code.tester.testing.context({slots:[2]});
+    const context=await code.tester.get_test_context({slots:[2]});
     assert.equal(nativeCalls,1);
     assert.equal(context.nativeProfiles.length,5);
     assert.equal(context.gameControl,'INDEPENDENT_BACKGROUND_INPUT_NOT_VERIFIED');
@@ -5071,51 +5062,51 @@ test('Code Mode and MCP share the original operation core, one combined context 
     assert.equal(legacy.result.isError,false);
     assert.equal(nativeCalls,2);
     const list=await mcp.handle({jsonrpc:'2.0',id:2,method:'tools/list'});
-    const capability=await code.tester.capabilities();
-    assert.equal(list.result.tools.length,25);
-    assert.equal(capability.available.length,15);
-    assert.ok(capability.available.includes('testing.context'));
-    assert.ok(!capability.available.includes('launch_profile'));
+    const capability=await code.tester.agent_capabilities();
+    assert.equal(list.result.tools.length,23);
+    assert.equal(capability.available.length,22);
+    assert.ok(capability.available.includes('get_test_context'));
+    assert.ok(capability.available.includes('launch_profile'));
     const legacyCapability=await mcp.callTool('agent_capabilities',{});
     assert.deepEqual(legacyCapability.available,list.result.tools.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
     code.close();
-    await assert.rejects(code.tester.profiles.inspect(),/CODE_MODE_CLOSED/);
+    await assert.rejects(code.tester.inspect_profiles(),/CODE_MODE_CLOSED/);
     assert.equal(core.isClosed(),false);
     mcp.shutdown();
     assert.equal(core.isClosed(),true);
   } finally {code.close();core.shutdown();}
 });
 
-test('Code Mode rejects hidden mutation flags, private errors, oversize and closed calls',async()=>{
+test('SDK rejects invalid selectors and unsupported operations, private errors, oversize and closed calls',async()=>{
   let calls=0;
   const core=createOperationCore(config(),{
     native:async()=>{calls++;throw new Error('private C:\\Accounts\\secret');},
   });
-  const code=createCodeModeClient(core);
+  const code=createAgentClient(core);
   try {
-    assert.equal(code.tester.profiles.launch,undefined);
-    assert.equal(code.tester.input.execute,undefined);
-    await assert.rejects(code.tester.testing.probe({coordinateNative:true}),/Invalid tool arguments/);
-    await assert.rejects(code.tester.testing.probe({restart:true}),/Invalid tool arguments/);
-    await assert.rejects(code.tester.capabilities({publishToDesktop:true}),/Invalid tool arguments/);
-    await assert.rejects(code.tester.testing.readArchived({}),/Invalid tool arguments/);
-    await assert.rejects(code.tester.observation.state({slots:[1]}),/protected|details withheld|Invalid tool arguments/);
-    await assert.rejects(code.tester.diagnostics.overview({run:'x'.repeat(65536)}),/Invalid tool arguments/);
+    assert.equal(code.tester.close_profile,undefined);
+    assert.equal(code.tester.execute_actions,undefined);
+    await assert.rejects(code.tester.probe_qa({coordinateNative:'yes'}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.probe_qa({restart:'yes'}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.agent_capabilities({publishToDesktop:'yes'}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.probe_qa({archivedRunId:undefined}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.get_multi_client_visual_state({slots:[1]}),/protected|details withheld|Invalid tool arguments/);
+    await assert.rejects(code.tester.get_diagnostics_overview({run:'x'.repeat(65536)}),/Invalid tool arguments/);
     assert.equal(calls,0);
-    await assert.rejects(code.tester.profiles.inspect(),/Tool unavailable; details withheld/);
+    await assert.rejects(code.tester.inspect_profiles(),/Tool unavailable; details withheld/);
     assert.equal(calls,1);
     core.shutdown();
-    await assert.rejects(code.tester.capabilities(),/CODE_MODE_CLOSED/);
+    await assert.rejects(code.tester.agent_capabilities(),/CODE_MODE_CLOSED/);
   } finally {code.close();core.shutdown();}
 });
 
 test('Code Mode admits bounded serial composition, never an unbounded parallel queue',async()=>{
   let release;
   let calls=0;
-  const core={isClosed:()=>false,callTool:async()=>{calls++;await new Promise(resolve=>{release=resolve;});return {ok:true};}};
-  const code=createCodeModeClient(core);
-  const pending=code.tester.profiles.inspect();
-  await assert.rejects(code.tester.profiles.inspect(),/CODE_MODE_CALL_IN_PROGRESS/);
+  const core={isClosed:()=>false,listTools:()=>TOOL_LIST,callTool:async()=>{calls++;await new Promise(resolve=>{release=resolve;});return {ok:true};}};
+  const code=createAgentClient(core);
+  const pending=code.tester.inspect_profiles();
+  await assert.rejects(code.tester.inspect_profiles(),/CODE_MODE_CALL_IN_PROGRESS/);
   assert.equal(calls,1);
   release();
   assert.deepEqual(await pending,{ok:true});
@@ -5134,53 +5125,40 @@ test('legacy MCP does not advertise unsupported stateless protocol through initi
 
 test('Code Mode call budget includes invalid archive selectors and never falls into preparation',async()=>{
   let calls=0;
-  const core={isClosed:()=>false,callTool:async()=>{calls++;return {ok:true};}};
-  const code=createCodeModeClient(core);
+  const core={isClosed:()=>false,listTools:()=>TOOL_LIST,callTool:async()=>{calls++;return {ok:true};}};
+  const code=createAgentClient(core);
   try {
-    for(let i=0;i<64;i++) await assert.rejects(code.tester.testing.readArchived({}),/Invalid tool arguments/);
+    for(let i=0;i<64;i++) await assert.rejects(code.tester.probe_qa({archivedRunId:undefined}),/Invalid tool arguments/);
     assert.equal(calls,0);
-    await assert.rejects(code.tester.capabilities(),/CODE_MODE_BUDGET_EXHAUSTED/);
+    await assert.rejects(code.tester.agent_capabilities(),/CODE_MODE_BUDGET_EXHAUSTED/);
     assert.equal(calls,0);
   } finally {code.close();}
 });
 
 test('Code Mode closure fences pending results without claiming native cancellation',async()=>{
   let release;
-  const core={isClosed:()=>false,callTool:async()=>{await new Promise(resolve=>{release=resolve;});return {ok:true};}};
-  const code=createCodeModeClient(core);
-  const pending=code.tester.profiles.inspect();
+  const core={isClosed:()=>false,listTools:()=>TOOL_LIST,callTool:async()=>{await new Promise(resolve=>{release=resolve;});return {ok:true};}};
+  const code=createAgentClient(core);
+  const pending=code.tester.inspect_profiles();
   code.close();
   release();
   await assert.rejects(pending,/MCP_CONNECTION_CLOSED/);
-  await assert.rejects(code.tester.capabilities(),/CODE_MODE_CLOSED/);
+  await assert.rejects(code.tester.agent_capabilities(),/CODE_MODE_CLOSED/);
 });
 
-test('opt-in Code Mode MCP surface has one compact catalog and refuses hidden operations',async()=>{
-  const cfg={...config(),surface:'code-mode'};
+test('unified MCP catalog refuses retired and ambiguous operations without native work',async()=>{
   let nativeCalls=0;
-  const h=createHandler(cfg,{
+  const h=createHandler(config(),{
     native:async(_exe,operation)=>{nativeCalls++;assert.equal(operation,'inspect');return snapshot(operation);},
   });
   try {
-    const listing=await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'});
-    const tools=listing.result.tools;
-    assert.equal(tools.length,13);
-    assert.deepEqual(tools.map(t=>t.name),[
-      'get_multi_client_visual_state','get_test_context','agent_capabilities',
-      'inspect_profiles','plan_player_actions','assess_input_route','summarize_test_evidence',
-      'read_game_evidence','probe_qa','get_diagnostics_overview','list_issue_candidates',
-      'get_issue_details','query_diagnostic_evidence']);
-    assert.deepEqual(Object.keys(tools.find(t=>t.name==='probe_qa').inputSchema.properties),
-      ['slot','inspectRun','scope','archivedRunId']);
-    assert.deepEqual(tools.find(t=>t.name==='agent_capabilities').inputSchema.properties,{});
+    const tools=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    assert.deepEqual(tools,TOOL_LIST);
     for(const [name,args] of [
-      ['launch_profile',{slot:2}],['prepare_probe_qa',{slot:2}],
-      ['observe_client',{slot:2}],['start_visual_observation',{slots:[2]}],
-      ['run_experimental_multi_client_actions',{actions:[]}],
-      ['probe_qa',{slot:2,coordinateNative:true}],['probe_qa',{slot:2,restart:true}],
-      ['probe_qa',{slot:2,inspectRun:false}],['probe_qa',{inspectRun:true,scope:'full'}],
-      ['probe_qa',{slot:2,archivedRunId:'a'.repeat(32)}],
-      ['agent_capabilities',{publishToDesktop:true}],
+      ['prepare_probe_qa',{slot:2}],['read_probe_qa_result',{slot:2,sessionId:'a'.repeat(24)}],
+      ['close_profile',{slot:2}],['probe_qa',{slot:2,inspectRun:false}],
+      ['probe_qa',{inspectRun:true,scope:'full'}],['probe_qa',{slot:2,archivedRunId:'a'.repeat(32)}],
+      ['agent_capabilities',{publishToDesktop:true,inspectProfiles:true}],
     ]) {
       const wire=await h.handle({jsonrpc:'2.0',id:name,method:'tools/call',params:{name,arguments:args}});
       assert.equal(wire.result.isError,true);
@@ -5189,24 +5167,23 @@ test('opt-in Code Mode MCP surface has one compact catalog and refuses hidden op
     assert.equal(nativeCalls,0);
     const caps=await h.callTool('agent_capabilities',{});
     assert.deepEqual(caps.available,tools.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
-    const context=await h.callTool('get_test_context',{slots:[2]});
-    assert.equal(context.nativeProfiles.length,5);
+    assert.equal((await h.callTool('get_test_context',{slots:[2]})).nativeProfiles.length,5);
     assert.equal(nativeCalls,1);
   }finally{h.shutdown();}
 });
 
-test('Code Mode surface selection is explicit and incompatible with input experiments',()=>{
-  assert.equal(parseConfiguration([],{}).surface,'legacy');
-  assert.equal(parseConfiguration(['--surface','code-mode'],{}).surface,'code-mode');
-  assert.throws(()=>parseConfiguration(['--surface','other'],{}),/Unknown agent surface/);
-  assert.throws(()=>parseConfiguration(['--surface','code-mode','--surface','playtest'],{}),
-    /Select exactly one agent surface/);
-  assert.throws(()=>parseConfiguration(['--surface','playtest','--surface','playtest'],{}),
-    /Select exactly one agent surface/);
-  assert.throws(()=>parseConfiguration(['--surface','code-mode','--multi-client-input-experimental','on'],{}),
-    /does not admit experimental input/);
-  assert.throws(()=>createHandler({...config(),surface:'code-mode',experimentalMc02InputEnabled:true}),
-    /does not admit experimental input/);
+test('old surface selectors refuse before connection or provider initialization',()=>{
+  assert.equal(Object.hasOwn(parseConfiguration([],{}),'surface'),false);
+  for(const surface of ['legacy','code-mode','playtest','other']) {
+    assert.throws(()=>parseConfiguration(['--surface',surface],{}),/Agent surface retired/);
+    assert.throws(()=>createHandler({...config(),surface}),/Agent surface retired/);
+    assert.throws(()=>createOperationCore({...config(),surface}),/Agent surface retired/);
+    const core=createOperationCore(config());
+    try {
+      assert.throws(()=>createMcpHandler(core,surface),/Agent surface retired/);
+      assert.throws(()=>createAgentClient(core,surface),/Agent surface retired/);
+    }finally{core.shutdown();}
+  }
 });
 
 test('native receipt seam still rejects invalid injected targets and strips private profile fields',async()=>{
@@ -5216,9 +5193,9 @@ test('native receipt seam still rejects invalid injected targets and strips priv
       profiles:snapshot(operation).profiles.map(p=>({...p,privatePath:'never-return'})),
     },
   });
-  const code=createCodeModeClient(core);
+  const code=createAgentClient(core);
   try {
-    const receipt=await code.tester.profiles.inspect();
+    const receipt=await code.tester.inspect_profiles();
     assert.equal(JSON.stringify(receipt).includes('never-return'),false);
     await assert.rejects(core.callTool('get_computer_use_target',{slot:2}),/target is not verified/);
   }finally{code.close();core.shutdown();}
@@ -5226,7 +5203,7 @@ test('native receipt seam still rejects invalid injected targets and strips priv
 
 test('playtest uses the same native launch, bounded image and evidence operations',async()=>{
   const calls=[];
-  const cfg={...config(),surface:'playtest',gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')};
+  const cfg={...config(),gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')};
   const requested=[];
   const h=createHandler(cfg,{
     native:async(_exe,op,slot)=>{
@@ -5246,28 +5223,17 @@ test('playtest uses the same native launch, bounded image and evidence operation
   });
   try {
     const listed=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
-    assert.equal(listed.length,15);
-    assert.deepEqual(listed.map(t=>t.name),[
-      'start_visual_observation','get_multi_client_visual_state','read_visual_observation',
-      'stop_visual_observation','inspect_client_ui','observe_client','agent_capabilities',
-      'inspect_profiles','launch_profile','summarize_test_evidence',
-      'probe_qa','get_diagnostics_overview','list_issue_candidates','get_issue_details',
-      'query_diagnostic_evidence']);
-    assert.ok(!Object.hasOwn(listed.find(t=>t.name==='read_visual_observation').inputSchema.properties,'screenReview'));
+    assert.deepEqual(listed,TOOL_LIST);
     assert.equal(listed.find(t=>t.name==='probe_qa').inputSchema.properties.restart.type,'boolean');
     const caps=await h.callTool('agent_capabilities',{});
-    assert.equal(caps.playtest.autonomousGameplay,'BLOCKED_NO_VERIFIED_INPUT_BACKEND');
+    assert.equal(caps.independentInput.state,'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND');
     assert.equal(caps.configuredSources.visual,'WGC');
-    assert.equal(caps.playtest.observation.format,'image/webp');
     assert.deepEqual(caps.available,listed.map(t=>t.name).filter(n=>n!=='agent_capabilities'));
     for(const [name,args] of [
       ['launch_profile',{slot:1}],['observe_client',{slot:1}],
       ['close_profile',{slot:2}],['plan_player_actions',{actions:[]}],
-      ['assess_input_route',{actions:[]}],['get_test_context',{}],
-      ['read_game_evidence',{slot:2}],
-      ['prepare_probe_qa',{slot:2}],['get_computer_use_target',{slot:2}],
+      ['assess_input_route',{actions:[]}],['prepare_probe_qa',{slot:2}],
       ['run_experimental_multi_client_actions',{actions:[]}],
-      ['probe_qa',{slot:2,coordinateNative:true}],
       ['probe_qa',{inspectRun:true,restart:true}],
       ['read_visual_observation',{slot:2,screenReview:{}}],
     ]) {
@@ -5278,7 +5244,7 @@ test('playtest uses the same native launch, bounded image and evidence operation
     const launch=await h.callTool('launch_profile',{slot:2});
     assert.equal(launch.operation,'launch');
     const image=await h.handle({jsonrpc:'2.0',id:2,method:'tools/call',params:{
-      name:'observe_client',arguments:{slot:2}}});
+      name:'observe_client',arguments:{slot:2,imageFormat:'webp'}}});
     assert.equal(image.result.isError,false);
     assert.equal(image.result.content[1].type,'image');
     assert.equal(image.result.content[1].mimeType,'image/webp');
@@ -5287,11 +5253,11 @@ test('playtest uses the same native launch, bounded image and evidence operation
     assert.equal(Object.hasOwn(meta,'f3VisualReview'),false);
     assert.deepEqual(requested,[{slot:2,width:640,height:360}]);
     const custom=await h.handle({jsonrpc:'2.0',id:3,method:'tools/call',params:{
-      name:'observe_client',arguments:{slot:2,width:320,height:180}}});
+      name:'observe_client',arguments:{slot:2,imageFormat:'webp',width:320,height:180}}});
     assert.equal(custom.result.isError,false);
     assert.deepEqual(requested.at(-1),{slot:2,width:320,height:180});
     await assert.rejects(h.callTool('observe_client',{slot:2,width:640}),/Invalid tool arguments/);
-    await assert.rejects(h.callTool('observe_client',{slot:2,imageFormat:'png'}),/Invalid tool arguments/);
+    await assert.rejects(h.callTool('observe_client',{slot:2,imageFormat:'other'}),/Invalid tool arguments/);
     assert.deepEqual(calls,[['launch',2],['target',2],['target',2],['target',2],['target',2]]);
     const evidence=await h.callTool('summarize_test_evidence',{slots:[2]});
     assert.equal(evidence.verdict,'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE');
@@ -5301,16 +5267,13 @@ test('playtest uses the same native launch, bounded image and evidence operation
   }finally{h.shutdown();}
 });
 
-test('playtest is explicit and cannot attach to an experimental core',()=>{
-  assert.equal(parseConfiguration(['--surface','playtest'],{}).surface,'playtest');
-  assert.equal(parseConfiguration([],{}).surface,'legacy');
-  assert.throws(()=>parseConfiguration(['--surface','playtest','--multi-client-input-experimental','on'],{}),
-    /does not admit experimental input/);
-  assert.throws(()=>createHandler({...config(),surface:'playtest',experimentalMc02InputEnabled:true}),
-    /does not admit experimental input/);
+test('normal SDK refuses experimental attachment while MCP keeps the existing explicit gate',()=>{
   const core=createOperationCore({...config(),experimentalMc02InputEnabled:true});
   try {
-    assert.throws(()=>createMcpHandler(core,'playtest'),/does not admit experimental input/);
+    assert.throws(()=>createAgentClient(core),/does not admit experimental input/);
+    assert.throws(()=>createMcpHandler(core,'playtest'),/Agent surface retired/);
+    assert.equal(core.listTools().some(t=>t.name==='run_experimental_mc02_actions'),true);
+    assert.equal(typeof createMcpHandler(core).callTool,'function');
   }finally{core.shutdown();}
 });
 
@@ -5318,7 +5281,7 @@ test('playtest evidence window excludes historical and baseline partial lines, w
   const root=await mkdtemp(path.join(tmpdir(),'lazy-playtest-evidence-'));
   const filename=path.join(root,'MC02.log');
   const row=(stage)=>'2026-11-28T00:00:00Z log [ANALYTICS]'+JSON.stringify({schema:1,type:'stage_attempt',stage})+'\n';
-  const h=createHandler({...config(),surface:'playtest',evidenceDirectory:root},{
+  const h=createHandler({...config(),evidenceDirectory:root},{
     native:async()=>{throw Error('Evidence must not call native');},
   });
   try {
@@ -5354,7 +5317,7 @@ test('appended evidence limit is explicit and baseline failures cannot reuse old
   const root=await mkdtemp(path.join(tmpdir(),'lazy-playtest-window-limit-'));
   const file=path.join(root,'MC02.log');
   const row=(stage)=>'2026-11-28T00:00:00Z log [ANALYTICS]'+JSON.stringify({type:'stage_attempt',stage})+'\n';
-  const h=createHandler({...config(),surface:'playtest',evidenceDirectory:root});
+  const h=createHandler({...config(),evidenceDirectory:root});
   try {
     await writeFile(file,row('old'));
     await h.callTool('summarize_test_evidence',{slots:[2],window:'begin'});
@@ -5374,20 +5337,19 @@ test('appended evidence limit is explicit and baseline failures cannot reuse old
   }finally{h.shutdown();await rm(root,{recursive:true,force:true});}
 });
 
-test('restricted Code Mode cannot start the playtest evidence window',async()=>{
-  const h=createHandler({...config(),surface:'code-mode'});
+test('unified SDK uses the canonical evidence window schema and cannot omit its slots',async()=>{
+  const h=createOperationCore(config());
+  const client=createAgentClient(h);
   try {
-    const listing=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
-    const schema=listing.find(t=>t.name==='summarize_test_evidence').inputSchema;
-    assert.equal(Object.hasOwn(schema.properties,'window'),false);
-    assert.equal(Object.hasOwn(schema,'dependentRequired'),false);
-    await assert.rejects(h.callTool('summarize_test_evidence',{slots:[2],window:'begin'}),/Invalid tool arguments/);
-  }finally{h.shutdown();}
+    const schema=h.listTools().find(t=>t.name==='summarize_test_evidence').inputSchema;
+    assert.deepEqual(schema.dependentRequired,{window:['slots']});
+    await assert.rejects(client.tester.summarize_test_evidence({window:'begin'}),/Invalid tool arguments/);
+  }finally{client.close();h.shutdown();}
 });
 
 test('evidence baseline admission is serial and shutdown refuses late publication',async()=>{
   let release;
-  const h=createHandler({...config(),surface:'playtest'},{
+  const h=createHandler({...config()},{
     evidence:async()=>{await new Promise(resolve=>{release=resolve;});return {
       slot:2,status:'CAPTURE_FILE_PRESENT',events:[],
       captureCursor:{kind:'STABLE_CAPTURE_CURSOR_V1',fileIdentity:'a'.repeat(64),
@@ -5426,7 +5388,7 @@ test('appended evidence uses the original anchor and bounded byte window',async(
 
 test('playtest capability preflight reuses one fresh native inspect, no launch or log read',async()=>{
   const calls=[];
-  const h=createHandler({...config(),surface:'playtest'},{
+  const h=createHandler({...config()},{
     native:async(_exe,operation,slot)=>{
       calls.push([operation,slot]);
       return {...snapshot(operation),privatePath:'never-return'};
@@ -5436,7 +5398,7 @@ test('playtest capability preflight reuses one fresh native inspect, no launch o
   try {
     const listing=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
     assert.deepEqual(Object.keys(listing.find(t=>t.name==='agent_capabilities').inputSchema.properties),
-      ['inspectProfiles']);
+      ['publishToDesktop','inspectProfiles']);
     const before=await h.callTool('agent_capabilities',{});
     assert.equal(Object.hasOwn(before,'profileInspection'),false);
     assert.equal(calls.length,0);
@@ -5446,7 +5408,7 @@ test('playtest capability preflight reuses one fresh native inspect, no launch o
     const data=JSON.parse(result.result.content[0].text);
     assert.equal(data.profileInspection.operation,'inspect');
     assert.equal(data.profileInspection.profiles.length,5);
-    assert.equal(data.playtest.autonomousGameplay,'BLOCKED_NO_VERIFIED_INPUT_BACKEND');
+    assert.equal(data.independentInput.state,'BLOCKED_NO_VERIFIED_PER_CLIENT_INPUT_BACKEND');
     assert.equal(JSON.stringify(data).includes('never-return'),false);
     assert.deepEqual(calls,[['inspect',undefined]]);
     await assert.rejects(h.callTool('agent_capabilities',{inspectProfiles:'yes'}),/Invalid tool arguments/);
@@ -5455,34 +5417,29 @@ test('playtest capability preflight reuses one fresh native inspect, no launch o
   }finally{h.shutdown();}
 });
 
-test('combined preflight preserves refusal and restricted compatibility',async()=>{
-  const h=createHandler({...config(),surface:'playtest'},{
+test('combined preflight preserves refusal in both adapters',async()=>{
+  const core=createOperationCore(config(),{
     native:async()=>{throw Error('Native controller unavailable or operation refused');},
   });
-  const restricted=createHandler({...config(),surface:'code-mode'},{
-    native:async()=>{throw Error('Restricted capability must not invoke native');},
-  });
+  const h=createMcpHandler(core),client=createAgentClient(core);
   try {
     const response=await h.handle({jsonrpc:'2.0',id:1,method:'tools/call',
       params:{name:'agent_capabilities',arguments:{inspectProfiles:true}}});
     assert.equal(response.result.isError,true);
     assert.equal(response.result.content[0].text,'Native controller unavailable or operation refused');
+    await assert.rejects(client.tester.agent_capabilities({inspectProfiles:true}),/Native controller unavailable or operation refused/);
     assert.equal(Object.hasOwn(await h.callTool('agent_capabilities',{}),'profileInspection'),false);
-    const listing=(await restricted.handle({jsonrpc:'2.0',id:2,method:'tools/list'})).result.tools;
-    assert.deepEqual(listing.find(t=>t.name==='agent_capabilities').inputSchema.properties,{});
-    await assert.rejects(restricted.callTool('agent_capabilities',{inspectProfiles:true}),/Invalid tool arguments/);
-  }finally{h.shutdown();restricted.shutdown();}
+  }finally{client.close();h.shutdown();}
 });
 
 test('compact group preview uses existing planner, bounded receipt and no native dispatch',async()=>{
   const core=createOperationCore(config(),{native:async()=>{throw Error('Must not invoke native');}});
-  const code=createCodeModeClient(core);
-  const h=createMcpHandler(core,'code-mode');
-  const playtest=createMcpHandler(core,'playtest');
+  const code=createAgentClient(core);
+  const h=createMcpHandler(core);
   const groups=[{slot:2,atMs:0,durationMs:400,hold:['move_forward','strafe_right'],
     look:{deltaX:80,deltaY:-12,steps:4}}];
   try {
-    const summary=await code.tester.input.plan({groups});
+    const summary=await code.tester.plan_player_actions({groups});
     assert.deepEqual(summary.slots,[2]);
     assert.equal(summary.actionCount,6);
     assert.equal(summary.horizonMs,400);
@@ -5493,22 +5450,22 @@ test('compact group preview uses existing planner, bounded receipt and no native
     assert.equal(detailed.batches.reduce((n,b)=>n+b.frames.reduce((m,f)=>m+f.lookDX,0),0),80);
     await assert.rejects(h.callTool('plan_player_actions',{groups,actions:[]}),/Invalid tool arguments/);
     await assert.rejects(h.callTool('plan_player_actions',{}),/Invalid tool arguments/);
-    const listing=(await playtest.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
-    assert.equal(listing.length,15);
-    assert.equal(listing.some(t=>t.name==='plan_player_actions'||t.name==='execute_actions'),false);
-    await assert.rejects(playtest.callTool('plan_player_actions',{groups}),/Unknown tool/);
+    const listing=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    assert.equal(listing.length,23);
+    assert.equal(listing.some(t=>t.name==='plan_player_actions'),true);
+    assert.equal(listing.some(t=>t.name==='execute_actions'),false);
   }finally{code.close();core.shutdown();}
 });
 
 test('playtest refuses CUA-only PNG rather than silently changing image format',async()=>{
   let calls=0;
-  const h=createHandler({...config(),surface:'playtest',cuaExecutable:path.resolve('cua-driver.exe')},{
+  const h=createHandler({...config(),cuaExecutable:path.resolve('cua-driver.exe')},{
     native:async()=>{calls++;throw Error('No capture should be requested');},
   });
   try {
     const caps=await h.callTool('agent_capabilities',{});
-    assert.equal(caps.playtest.observation.provider,'WEBP_CAPTURE_REQUIRES_WGC');
-    for(const [name,args] of [['observe_client',{slot:2}],['start_visual_observation',{slots:[2]}]]) {
+    assert.equal(caps.configuredSources.visual,'CUA');
+    for(const [name,args] of [['observe_client',{slot:2,imageFormat:'webp'}],['start_visual_observation',{slots:[2],imageFormat:'webp'}]]) {
       const wire=await h.handle({jsonrpc:'2.0',id:1,method:'tools/call',params:{name,arguments:args}});
       assert.equal(wire.result.isError,true);
       assert.equal(wire.result.content[0].text,'WEBP_CAPTURE_REQUIRES_WGC');
@@ -5516,6 +5473,7 @@ test('playtest refuses CUA-only PNG rather than silently changing image format',
     assert.equal(calls,0);
   }finally{h.shutdown();}
 });
+
 test('playtest cached image read refuses a PNG cache before delivery or target lookup',async()=>{
   let calls=0;
   const core=createOperationCore(config(),{
@@ -5523,16 +5481,16 @@ test('playtest cached image read refuses a PNG cache before delivery or target l
     visualObserverFactory:()=>({read:()=>({metadata:{schema:1,slot:2,
       freshFrameAvailable:true,sequence:1},imageBase64:null}),shutdown:()=>{}}),
   });
-  const h=createMcpHandler(core,'playtest');
+  const h=createMcpHandler(core);
   try {
-    await assert.rejects(h.callTool('read_visual_observation',{slot:2}),/VISUAL_FORMAT_MISMATCH/);
+    await assert.rejects(h.callTool('read_visual_observation',{slot:2,imageFormat:'webp'}),/VISUAL_FORMAT_MISMATCH/);
     assert.equal(calls,0);
   }finally{h.shutdown();}
 });
 
 test('playtest one-shot frame reference suppresses only identical fresh target and dimensions',async()=>{
   let captures=0,checks=0,encodes=0,pidBase=400,hash='a'.repeat(64);
-  const h=createHandler({...config(),surface:'playtest',
+  const h=createHandler({...config(),
     gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')},{
     native:async(_exe,operation,slot)=>{
       checks++;
@@ -5554,13 +5512,13 @@ test('playtest one-shot frame reference suppresses only identical fresh target a
   });
   const read=async(args)=>{
     const result=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/call',
-      params:{name:'observe_client',arguments:args}})).result;
+      params:{name:'observe_client',arguments:{...args,imageFormat:'webp'}}})).result;
     assert.equal(result.isError,false);
     return {meta:JSON.parse(result.content[0].text),images:result.content.filter(c=>c.type==='image')};
   };
   try {
     const listing=(await h.handle({jsonrpc:'2.0',id:0,method:'tools/list'})).result.tools;
-    assert.equal(listing.length,15);
+    assert.equal(listing.length,23);
     const schema=listing.find(t=>t.name==='observe_client').inputSchema;
     assert.equal(schema.properties.afterFrame.pattern,'^[a-f0-9]{64}$');
     assert.deepEqual(schema.dependentRequired,{width:['height'],height:['width']});
@@ -5596,14 +5554,14 @@ test('playtest one-shot frame reference suppresses only identical fresh target a
     // image context or a reference across scripts.
     const unconditional=await read({slot:2});
     assert.equal(unconditional.images.length,1);
-    await assert.rejects(h.callTool('observe_client',{slot:2,afterFrame:'bad'}),/Invalid tool arguments/);
+    await assert.rejects(h.callTool('observe_client',{slot:2,imageFormat:'webp',afterFrame:'bad'}),/Invalid tool arguments/);
     assert.equal(captures,7);
     assert.equal(encodes,6);
     assert.equal(checks,14);
   }finally{h.shutdown();}
 });
 
-test('playtest cached image receipts are compact while core and legacy metadata stay intact',async()=>{
+test('explicit WebP receipt is compact in the shared core while full metadata stays intact',async()=>{
   const frame={metadata:{schema:1,slot:2,status:'FRAME_BYTES_CHANGED_NOT_SEMANTIC_PROOF',
     active:true,freshFrameAvailable:true,sequence:7,hasNewImage:false,
     frameAgeMs:100,mimeType:'image/webp',width:320,height:180,
@@ -5616,10 +5574,10 @@ test('playtest cached image receipts are compact while core and legacy metadata 
     native:async()=>{throw Error('No target lookup for metadata only');},
     visualObserverFactory:()=>({read:()=>frame,shutdown:()=>{}}),
   });
-  const legacy=createMcpHandler(core),playtest=createMcpHandler(core,'playtest');
+  const h=createMcpHandler(core),client=createAgentClient(core);
   try {
-    const full=await legacy.callTool('read_visual_observation',{slot:2,includeImage:false});
-    const small=await playtest.callTool('read_visual_observation',{slot:2,includeImage:false});
+    const full=await h.callTool('read_visual_observation',{slot:2,includeImage:false});
+    const small=await h.callTool('read_visual_observation',{slot:2,includeImage:false,imageFormat:'webp'});
     assert.equal(full.metadata.captureIdentity.pid,42);
     assert.equal(small.metadata.sequence,7);
     assert.equal(small.metadata.freshFrameAvailable,true);
@@ -5629,29 +5587,28 @@ test('playtest cached image receipts are compact while core and legacy metadata 
     assert.equal(Object.hasOwn(small.metadata,'captureIdentity'),false);
     assert.ok(JSON.stringify(small.metadata).length<JSON.stringify(full.metadata).length);
     assert.equal(frame.metadata.captureIdentity.pid,42);
-  }finally{core.shutdown();}
+    assert.deepEqual(await client.tester.read_visual_observation({slot:2,includeImage:false,imageFormat:'webp'}),JSON.parse(JSON.stringify(small)));
+  }finally{client.close();core.shutdown();}
 });
 
-test('optional MCP projections reject duplicate or missing canonical tool descriptors',()=>{
+test('SDK rejects duplicate or missing descriptors, no secondary catalog',()=>{
   const core=createOperationCore(config());
   try {
     const catalog=core.listTools();
     const missing=catalog.filter(t=>t.name!=='inspect_profiles');
     const duplicate=[...missing,catalog.find(t=>t.name==='agent_capabilities')];
-    for(const profile of ['code-mode','playtest']) {
-      assert.throws(()=>createCodeModeSurface(missing,core.callTool,profile),/catalog incomplete/);
-      assert.throws(()=>createCodeModeSurface(duplicate,core.callTool,profile),/catalog incomplete/);
-      const projected=createCodeModeSurface(catalog,core.callTool,profile).listTools();
-      assert.equal(projected.length,profile==='playtest'?15:13);
-      const probe=projected.find(t=>t.name==='probe_qa').inputSchema;
-      assert.equal(JSON.stringify(probe.oneOf).includes('"restart"'),profile==='playtest');
+    for(const list of [missing,duplicate]) {
+      assert.throws(()=>createAgentClient({...core,listTools:()=>list}),/catalog incomplete/);
     }
+    const client=createAgentClient(core);
+    assert.deepEqual(Object.keys(client.tester),catalog.map(t=>t.name));
+    client.close();
   }finally{core.shutdown();}
 });
 
 test('one MCP connection does not dispatch a duplicate in-flight request ID',async()=>{
   let finish,calls=0;
-  const h=createHandler({...config(),surface:'playtest'},{
+  const h=createHandler({...config()},{
     native:async(_exe,operation)=>{
       assert.equal(operation,'inspect');calls++;
       await new Promise(resolve=>{finish=resolve;});
@@ -5682,7 +5639,7 @@ test('one MCP connection does not dispatch a duplicate in-flight request ID',asy
 
 test('closed MCP connection does not publish a late native reply',async()=>{
   let finish;
-  const h=createHandler({...config(),surface:'playtest'},{
+  const h=createHandler({...config()},{
     native:async(_exe,operation)=>{
       await new Promise(resolve=>{finish=resolve;});
       return snapshot(operation);
@@ -5805,92 +5762,88 @@ test('stdio abandons an asynchronous output stall and runs core shutdown once',a
   }finally{f.input.destroy();f.output.destroy();}
 });
 
-test('direct Playtest Code Mode covers the entire projected MCP catalog with the same admission',async()=>{
+test('trusted SDK and MCP use every canonical descriptor and identical operation arguments',async()=>{
   const owner=createOperationCore(config());
   const calls=[];
   const core={isClosed:owner.isClosed,listTools:owner.listTools,shutdown:owner.shutdown,
     async callTool(name,args){
       calls.push({name,args});
       if(name==='observe_client'||name==='read_visual_observation')return {
-        metadata:{schema:1,slot:2,mimeType:'image/webp',privateField:'not projected'},
+        metadata:{schema:1,slot:2,mimeType:'image/webp'},
         imageBase64:args.includeImage===false?null:'UklGRgAAAABXRUJQ',
       };
       return {schema:1};
     }};
-  const mcp=createMcpHandler(core,'playtest');
-  const code=createCodeModeClient(core,'playtest');
-  const t=code.tester;
+  const mcp=createMcpHandler(core),client=createAgentClient(core);
+  const t=client.tester;
+  const actions=[{slot:2,kind:'wait',atMs:0,durationMs:100}];
   try {
     const operations=[
-      ['inspect_profiles',{},()=>t.profiles.inspect()],
-      ['launch_profile',{slot:2},()=>t.profiles.launch({slot:2})],
-      ['observe_client',{slot:2,width:320,height:180},()=>t.observation.capture({slot:2,width:320,height:180})],
-      ['inspect_client_ui',{slot:2},()=>t.observation.inspectUi({slot:2})],
-      ['start_visual_observation',{slots:[2]},()=>t.observation.start({slots:[2]})],
-      ['get_multi_client_visual_state',{slots:[2]},()=>t.observation.state({slots:[2]})],
-      ['read_visual_observation',{slot:2,includeImage:false},()=>t.observation.read({slot:2,includeImage:false})],
-      ['stop_visual_observation',{slots:[2]},()=>t.observation.stop({slots:[2]})],
-      ['probe_qa',{slot:2,restart:true},()=>t.testing.probe({slot:2,restart:true})],
-      ['probe_qa',{slot:2,inspectRun:true},()=>t.testing.inspectRun({slot:2})],
-      ['probe_qa',{archivedRunId:'a'.repeat(32)},()=>t.testing.readArchived({archivedRunId:'a'.repeat(32)})],
-      ['summarize_test_evidence',{slots:[2],window:'begin'},()=>t.evidence.summarize({slots:[2],window:'begin'})],
-      ['get_diagnostics_overview',{},()=>t.diagnostics.overview()],
-      ['list_issue_candidates',{run:'demo'},()=>t.diagnostics.list({run:'demo'})],
-      ['get_issue_details',{run:'demo',id:'issue'},()=>t.diagnostics.details({run:'demo',id:'issue'})],
-      ['query_diagnostic_evidence',{run:'demo',id:'issue'},()=>t.diagnostics.evidence({run:'demo',id:'issue'})],
-      ['agent_capabilities',{inspectProfiles:true},()=>t.capabilities({inspectProfiles:true})],
+      ['inspect_profiles',{}],['launch_profile',{slot:2}],
+      ['observe_client',{slot:2,imageFormat:'webp',width:320,height:180}],
+      ['inspect_client_ui',{slot:2}],['assess_client_background_action',{slot:2,elementIndex:1,action:'invoke'}],
+      ['start_visual_observation',{slots:[2],imageFormat:'webp'}],
+      ['get_multi_client_visual_state',{slots:[2]}],
+      ['read_visual_observation',{slot:2,includeImage:false,imageFormat:'webp'}],
+      ['stop_visual_observation',{slots:[2]}],
+      ['get_computer_use_target',{slot:2}],
+      ['revalidate_computer_use_target',{slot:2,pid:5,windowId:9,createdFileTime:'10'}],
+      ['get_test_context',{slots:[2]}],['plan_peer_session',{}],
+      ['plan_player_actions',{actions}],['assess_input_route',{actions}],
+      ['probe_qa',{slot:2,restart:true}],['probe_qa',{slot:2,inspectRun:true}],
+      ['probe_qa',{archivedRunId:'a'.repeat(32)}],
+      ['summarize_test_evidence',{slots:[2],window:'begin'}],['read_game_evidence',{slot:2}],
+      ['get_diagnostics_overview',{}],['list_issue_candidates',{run:'demo'}],
+      ['get_issue_details',{run:'demo',id:'issue'}],
+      ['query_diagnostic_evidence',{run:'demo',id:'issue'}],
+      ['agent_capabilities',{inspectProfiles:true}],
     ];
     const listing=(await mcp.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
     assert.deepEqual([...new Set(operations.map(([name])=>name))].sort(),listing.map(x=>x.name).sort());
-    for(const [name,args,invoke] of operations) {
-      const direct=await invoke();
+    assert.deepEqual(Object.keys(t).sort(),listing.map(x=>x.name).sort());
+    for(const [name,args] of operations) {
+      const direct=await t[name](args);
       const directCall=calls.at(-1);
       const wire=await mcp.callTool(name,args);
       assert.deepEqual(directCall,calls.at(-1));
-      if(name==='agent_capabilities') {
-        assert.equal(direct.available.length,17);
-        assert.ok(direct.available.includes('observation.capture'));
-        assert.equal(direct.playtest.autonomousGameplay,wire.playtest.autonomousGameplay);
-      } else assert.deepEqual(direct,JSON.parse(JSON.stringify(wire)));
+      assert.deepEqual(direct,JSON.parse(JSON.stringify(wire)));
     }
-    assert.equal(t.input,undefined);
-    assert.equal(t.profiles.close,undefined);
-    assert.equal(t.testing.context,undefined);
-    assert.equal(t.evidence.read,undefined);
+    assert.equal(t.close_profile,undefined);
+    assert.equal(t.prepare_probe_qa,undefined);
+    assert.equal(t.read_probe_qa_result,undefined);
     const count=calls.length;
-    await assert.rejects(t.observation.capture({slot:2,imageFormat:'png'}),/Invalid tool arguments/);
-    await assert.rejects(t.testing.probe({coordinateNative:true}),/Invalid tool arguments/);
-    await assert.rejects(t.capabilities({publishToDesktop:true}),/Invalid tool arguments/);
-    await assert.rejects(t.testing.readArchived({}),/Invalid tool arguments/);
+    await assert.rejects(t.observe_client({}),/Invalid tool arguments/);
+    await assert.rejects(t.probe_qa({archivedRunId:undefined}),/Invalid tool arguments/);
+    await assert.rejects(t.agent_capabilities({unlisted:true}),/Invalid tool arguments/);
     assert.equal(calls.length,count);
-  }finally{code.close();mcp.shutdown();}
+  }finally{client.close();mcp.shutdown();}
 });
 
 test('direct Playtest images have independent bounded budget and no PNG fallback',async()=>{
   const owner=createOperationCore(config());
   let image='x'.repeat(3*1024*1024),mime='image/webp';
-  const code=createCodeModeClient({isClosed:owner.isClosed,listTools:owner.listTools,
+  const code=createAgentClient({isClosed:owner.isClosed,listTools:owner.listTools,
     callTool:async(name,args)=>name==='observe_client'?{
       metadata:{schema:1,slot:2,mimeType:mime},
       imageBase64:image,
-    }:{schema:1}},'playtest');
+    }:{schema:1}});
   try {
     const t=code.tester;
     mime='image/png';
-    await assert.rejects(t.observation.capture({slot:2}),/VISUAL_FORMAT_MISMATCH/);
+    await assert.rejects(t.observe_client({slot:2,imageFormat:'webp'}),/VISUAL_FORMAT_MISMATCH/);
     mime='image/webp';
     image='x'.repeat(4*1024*1024+1);
-    await assert.rejects(t.observation.capture({slot:2}),/MCP_IMAGE_RESPONSE_TOO_LARGE/);
+    await assert.rejects(t.observe_client({slot:2,imageFormat:'webp'}),/MCP_IMAGE_RESPONSE_TOO_LARGE/);
     image='x'.repeat(3*1024*1024);
-    assert.equal((await t.observation.capture({slot:2})).imageBase64,image);
-    await assert.rejects(t.observation.capture({slot:2}),/MCP_IMAGE_RESPONSE_TOO_LARGE/);
-    assert.equal((await t.profiles.inspect()).schema,1);
+    assert.equal((await t.observe_client({slot:2,imageFormat:'webp'})).imageBase64,image);
+    await assert.rejects(t.observe_client({slot:2,imageFormat:'webp'}),/MCP_IMAGE_RESPONSE_TOO_LARGE/);
+    assert.equal((await t.inspect_profiles()).schema,1);
   }finally{code.close();owner.shutdown();}
 });
 
-test('direct Playtest refuses experimental catalog attachment',()=>{
+test('direct SDK refuses experimental catalog attachment',()=>{
   const core={isClosed:()=>false,callTool:async()=>{},listTools:()=>[{name:'run_experimental_multi_client_actions'}]};
-  assert.throws(()=>createCodeModeClient(core,'playtest'),/does not admit experimental input/);
+  assert.throws(()=>createAgentClient(core),/does not admit experimental input/);
 });
 
 test('operation core requests deferred persistent image only for its local sampler',async()=>{
@@ -5994,19 +5947,19 @@ test('compact input and explicit actions share the same route assessment and rej
       foreground:slot===1,visible:true,minimized:false,
       verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
   }});
-  const code=createCodeModeClient(core);
+  const code=createAgentClient(core);
   const groups=[{slot:2,atMs:0,durationMs:300,hold:['move_forward','jump'],
     look:{deltaX:30,deltaY:-6,steps:3}}];
   const actions=expandActionGroups(groups);
   try {
-    const compact=await code.tester.input.assess({groups});
-    const expanded=await code.tester.input.assess({actions});
+    const compact=await code.tester.assess_input_route({groups});
+    const expanded=await code.tester.assess_input_route({actions});
     assert.deepEqual(compact.actionTimeline,expanded.actionTimeline);
     assert.deepEqual(compact.aiTargets,expanded.aiTargets);
     assert.equal(compact.execution,'NOT_DISPATCHED');
     assert.equal(nativeCalls,4);
-    await assert.rejects(code.tester.input.assess({groups,actions}),/Invalid tool arguments/);
-    await assert.rejects(code.tester.input.assess({}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.assess_input_route({groups,actions}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.assess_input_route({}),/Invalid tool arguments/);
     assert.equal(nativeCalls,4);
   }finally{code.close();core.shutdown();}
 });

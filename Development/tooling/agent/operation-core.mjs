@@ -25,7 +25,7 @@ import {createProbeQaOperations} from './probe-qa-operations.mjs';
 import {createEvidenceOperations} from './evidence-operations.mjs';
 import {createVisualOperations} from './visual-operations.mjs';
 
-import {slotOf,keysExactly} from './agent-contract.mjs';
+import {slotOf,keysExactly,rejectRetiredAgentSurface} from './agent-contract.mjs';
 import {validateNativeWindowTarget,
   sameNativeVisualTarget,
   validateNativeReport,
@@ -137,6 +137,8 @@ export function createOperationCore(config,{
   mapRevisionStatus=mapContractSourceStatus,
   qaClock=()=>Date.now(),
 }={}) {
+  rejectRetiredAgentSurface(config.surface);
+  if(config.experimentalMc02InputEnabled&&config.experimentalMultiClientInputEnabled)throw new Error('Select only one experimental native input mode');
   // The canonical transport already validates/projects its fresh response.
   // Injected providers must pass the same validators before any consumer.
   // Select once; never use a caller-supplied flag to bypass validation.
@@ -396,7 +398,7 @@ export function createOperationCore(config,{
   }
   async function callTool(name,args) {
     requireOpen();
-    if(name==='probe_qa'||name==='prepare_probe_qa'||name==='read_probe_qa_result') {
+    if(name==='probe_qa') {
       return probeQa.callProbeTool(name,args);
     }
     // All diagnostic calls are read-only, scoped to one configured Data/

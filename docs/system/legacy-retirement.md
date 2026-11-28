@@ -9,6 +9,19 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired agent surface projections and duplicate Probe ingress — 28 November 2026
+
+One normal descriptor catalog is shared by stdio MCP and the trusted
+`createAgentClient(core)` SDK. The former explicit surface selectors refuse,
+not silently widen old host configurations. The old grouped SDK and
+`prepare_probe_qa`/`read_probe_qa_result` public aliases are removed. The
+private Probe checkpoint and distinct existing planning/evidence operations
+remain; explicit WebP projection belongs to the common visual owner.
+The SDK still refuses experimental input cores; existing opt-in MCP and
+native gates remain. Historical source:
+[prior revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/tree/c59e7a85deafe9bd2db24bea1d574be802adb565).
+No new runtime, dependency, worker, permission or executed test.
+
 ## Retired legacy profile runtime fallback — 28 November 2026
 
 The retained controller, binding readiness and Data Storage admit only the

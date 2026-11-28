@@ -72,14 +72,14 @@ export function createProbeQaOperations(config,{
     plan.terminalReport=frozen;
     return frozen;
   }
-  // One private Probe checkpoint owner, shared by canonical and legacy ingress.
+  // One private Probe checkpoint owner; probe_qa is the only public ingress.
   async function prepareProbeQa(slot) {
     requireOpen();
     if(config.mode==='human-plus-four-ai'&&slot===1) {
       throw new Error('MC01 human host is protected from AI computer-use targeting');
     }
     // Preparing again invalidates any older result token for the same slot.
-    // A direct legacy prepare cannot inherit a previous native run ID.
+    // A new local checkpoint cannot inherit a previous native run ID.
     // The coordinated wrapper reattaches its admitted ID to the new
     // canonical plan after the ONE original probe_qa call completes.
     probeQaPlans.delete(slot);
@@ -144,7 +144,7 @@ export function createProbeQaOperations(config,{
         revalidationTool:'revalidate_computer_use_target',
         commandInputTool:'NOT_AVAILABLE'},
       requirements:'Copied QA world; Skills Probe installed; approved Player/admin; confirmed target profile and command-entry capability',
-      next:'After an authorized operator or verified AI Computer Use executes the original command, call read_probe_qa_result for this sessionId.',
+      next:'After an authorized operator or verified AI Computer Use executes the original command, call probe_qa for this same slot.',
       commandSent:false,gameplayAcceptance:'NOT_VERIFIED'};
   }
   async function readProbeQaResult(slot,sessionId) {
@@ -256,7 +256,7 @@ export function createProbeQaOperations(config,{
       }
     }
     // Opt-in AI convenience path over the SAME original Probe checkpoint.
-    // Legacy calls without the flag are byte-for-byte behavior-compatible.
+    // Calls without the flags use the same private checkpoint.
     // Desktop delivery is only a short-lived presentation mirror, never
     // another result store, runner, approval or proof of gameplay input.
     if(name==='probe_qa' && args &&
@@ -493,8 +493,7 @@ export function createProbeQaOperations(config,{
         if(plan?.terminalReport&&args.restart!==true) {
           return plan.terminalReport;
         }
-        // One user-facing tool. Existing prepare/read tools remain for
-        // backward-compatible callers, but AI need not carry a session ID.
+        // One user-facing tool; the caller never carries a private session ID.
         if(!plan||args.restart===true) {
           let mapPlan=null,mapSourceRevision=null;
           const mapScope=args.scope??'full';
@@ -699,19 +698,6 @@ export function createProbeQaOperations(config,{
         }
         return settleProbeQa(slot,plan,{...compact,target});
       } finally {probeQaBusy.delete(slot);}
-    }
-    if(name==='prepare_probe_qa') {
-      keysExactly(args,['slot']);
-      const slot=slotOf(args.slot??2);
-      return prepareProbeQa(slot);
-    }
-    if(name==='read_probe_qa_result') {
-      keysExactly(args,['slot','sessionId']);
-      const slot=slotOf(args.slot);
-      if(typeof args.sessionId!=='string'||!/^[a-f0-9]{24}$/.test(args.sessionId)) {
-        throw new Error('Invalid tool arguments');
-      }
-      return readProbeQaResult(slot,args.sessionId);
     }
     throw new Error('Unknown Probe QA tool');
   }

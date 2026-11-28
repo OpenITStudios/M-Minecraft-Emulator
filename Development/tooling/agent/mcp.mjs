@@ -1,18 +1,16 @@
 #!/usr/bin/env node
-// Single stdio adapter for playtesting and retained compatibility profiles.
+// Stdio adapter for the one canonical agent operation contract.
 import {pathToFileURL} from 'node:url';
 import {createOperationCore,REQUEST_LIMIT,boundedMcpText,publicToolError,parseConfiguration} from './operation-core.mjs';
-import {createCodeModeSurface} from './code-mode.mjs';
-import {assertAgentSurface,mcpImageMime} from './agent-contract.mjs';
+import {rejectRetiredAgentSurface,mcpImageMime} from './agent-contract.mjs';
 export * from './operation-core.mjs';
 
 // The 2026-07-28 protocol removes initialize and requires per-request
 // metadata. Do not advertise it through this retained legacy lifecycle.
 const SUPPORTED_PROTOCOLS = new Set(['2025-06-18','2025-11-25']);
 
-export function createMcpHandler(core,surface='legacy') {
-  assertAgentSurface(surface);
-  const route=surface==='legacy'?core:createCodeModeSurface(core.listTools(),core.callTool,surface);
+export function createMcpHandler(core,retiredSurface) {
+  rejectRetiredAgentSurface(retiredSurface);
   const pendingIds=new Set();
   async function handle(message) {
     if(core.isClosed())return null;
@@ -34,18 +32,18 @@ export function createMcpHandler(core,surface='legacy') {
           capabilities:{tools:{listChanged:false}},serverInfo:{name:'lazy-tester-agent',version:'0.1.0'}});
       }
       if (message.method==='ping') return result({});
-      if (message.method==='tools/list') return result({tools:route.listTools()});
+      if (message.method==='tools/list') return result({tools:core.listTools()});
       if (message.method==='tools/call') {
         const name=message.params?.name;
         if (typeof name!=='string') return err(-32602,'Tool name is required');
         try {
-          const data=await route.callTool(name,message.params?.arguments??{});
+          const data=await core.callTool(name,message.params?.arguments??{});
           if(core.isClosed())return null;
           if (name==='observe_client' || name==='read_visual_observation') {
             // Cached rolling observation returns metadata alone unless a
             // newer frame is explicitly requested by the model.
             const content=[{type:'text',text:boundedMcpText(data.metadata)}];
-            const mimeType=mcpImageMime(data,surface==='playtest');
+            const mimeType=mcpImageMime(data,message.params?.arguments?.imageFormat==='webp');
             if(mimeType!==null)content.push({type:'image',mimeType,data:data.imageBase64});
             return result({content,isError:false});
           }
@@ -60,13 +58,11 @@ export function createMcpHandler(core,surface='legacy') {
     finally {pendingIds.delete(id);}
   }
 
-  return {handle,callTool:route.callTool,shutdown:core.shutdown};
+  return {handle,callTool:core.callTool,shutdown:core.shutdown};
 }
 
 export function createHandler(config,dependencies) {
-  const surface=assertAgentSurface(config.surface??'legacy',
-    config.experimentalMc02InputEnabled||config.experimentalMultiClientInputEnabled);
-  return createMcpHandler(createOperationCore(config,dependencies),surface);
+  return createMcpHandler(createOperationCore(config,dependencies));
 }
 
 const MAX_PENDING_REQUESTS=16;

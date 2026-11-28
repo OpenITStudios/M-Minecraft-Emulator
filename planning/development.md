@@ -22,8 +22,15 @@ target stores reopen. Schema 1 destination is selected-root/Migrated; old
 replay uses unused default Data. Partial target refuses; explicit Locate of
 verified complete schema 2 is recovery. Old root/binding presence prevents
 fresh setup; no auto-import, fallback or pair expansion. Fixtures NOT_EXECUTED.
-Next: CONTINUE ZLR-03 one agent contract with retained safety/capability gates,
-then ZLR-04 consumer cleanup/integration.
+ZLR-03: one normal 23-tool catalog, same MCP/SDK tool names and core. Former
+surface selectors and Probe prepare/read aliases refuse; trusted new
+createAgentClient(core) derives methods from the original catalog, retains
+budgets/closure and refuses experimental attachment. Existing explicit MCP
+input gates, private checkpoint, full metadata and native authorities remain.
+Explicit WebP requests share compact visual receipts; no auto-format fallback.
+Source fixtures authored/adapted NOT_EXECUTED. Old host configurations require
+operator review; no automatic permission widening.
+Next: CONTINUE ZLR-04 final affected-consumer and source integration review.
 No compiler, test, CI, runtime, data migration or performance execution.
 No release or version bump.
 

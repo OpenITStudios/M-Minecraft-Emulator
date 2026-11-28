@@ -13,13 +13,9 @@ export function mcpImageMime(data,requireWebp=false) {
   return mime;
 }
 
-// An explicit opt-in is required to widen an old read/plan connection.
-export function assertAgentSurface(surface,experimental=false) {
-  if(!['legacy','code-mode','playtest'].includes(surface))throw new Error('Unknown agent surface');
-  if(surface!=='legacy'&&experimental) {
-    throw new Error('Code Mode surface does not admit experimental input');
-  }
-  return surface;
+// Old explicit profiles must fail, not silently acquire a wider contract.
+export function rejectRetiredAgentSurface(surface) {
+  if(surface!==undefined)throw new Error('Agent surface retired; remove the old selection and review the unified contract');
 }
 
 // Only fixed application errors are exposed over MCP. Filesystem and

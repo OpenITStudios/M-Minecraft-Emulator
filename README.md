@@ -23,7 +23,7 @@ The new [capture/recording source workstream](planning/development.md#capture-an
 | Review current desktop navigation safely | Open Play → Settings → General / Data Storage; inspect read-only status, without changing game data | [Current workspace](docs/product/unified-workspace.md) |
 | Review retired coordinate HUD research | Git history only | [Retirement register](docs/system/legacy-retirement.md) |
 | Develop or package locally **when explicitly authorized** | `DEV.cmd` | [Developer controller](Development/tooling/developer/README.md), [distribution](Development/engine/distribution/README.md) |
-| Manual or AI-assisted map playtest | Desktop or optional `Development/tooling/agent/mcp.mjs --surface playtest` via trusted local Code Mode | [Playtest workflow and proof limits](Development/tooling/agent/README.md) |
+| Manual or AI-assisted map playtest | Desktop or optional `Development/tooling/agent/mcp.mjs` via trusted local Code Mode | [Playtest workflow and proof limits](Development/tooling/agent/README.md) |
 | Review the original team's Skills Probe results | Existing MCP tool `probe_qa` | [Map-Aware Probe QA](docs/system/map-aware-probe-qa.md) |
 | Check map-specific requirements **without executing them** | Optional approved map contract + `probe_qa` | [Contract and scope](docs/system/map-aware-probe-qa.md) |
 | Compare new team/Probe ZIP snapshots | Explicit offline `team:update:inspect` | [Team source review](docs/system/education-team-source-updates.md) |
@@ -43,11 +43,10 @@ A process or preview is not evidence of a signed-in playable world.
 
 **MCP / Code Mode (optional):** manual desktop use requires no AI host,
 MCP connection or Code Mode setting. If the user chooses AI assistance,
-select `--surface playtest` explicitly; ordinary MCP and host-provided
-Code Mode use the same tool contract and retained controller. A trusted local
-host may instead attach `createCodeModeClient(core,'playtest')` directly,
-without stdio MCP framing. The restricted
-`--surface code-mode` profile is read/plan-only, not a host feature toggle.
+ordinary MCP and host-provided Code Mode use the same 23 normal tools and
+retained controller. A trusted local host may attach `createAgentClient(core)`
+directly, without stdio framing. Former `--surface` selections refuse; review
+the unified catalog and host approvals before updating an old configuration.
 No automatic activation; actual autonomous gameplay input is not verified.
 Normal tools inspect profiles, explicitly request launches, plan actions,
 read bounded evidence, and optionally capture windows. Independent

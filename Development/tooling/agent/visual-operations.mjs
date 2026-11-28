@@ -7,6 +7,29 @@ import {previewSize} from './gpu-frame-source.mjs';
 import {OBSERVATION_LIMITS,projectF3VisualReview,reviewVisibleXYZFromFrame} from './visual-observer.mjs';
 import {assessCuaStrictBackgroundAction,validateCuaStrictBackgroundIntent} from './visual-capture.mjs';
 
+// Compact explicit WebP receipts once, after existing native identity checks.
+function compactVisualReceipt(name,result) {
+  const m=result.metadata;
+  if(name==='observe_client')return {metadata:{
+    schema:m.schema,slot:m.slot,provider:m.provider,mimeType:m.mimeType,
+    width:m.width,height:m.height,capturedAtMs:m.capturedAtMs,
+    frameRef:m.frameRef,hasNewImage:m.hasNewImage,
+    background:m.background,screenshotStatus:m.screenshotStatus,
+    gameInput:m.gameInput,
+  },imageBase64:result.imageBase64};
+  return {metadata:{
+    schema:m.schema,slot:m.slot,status:m.status,active:m.active??false,
+    freshFrameAvailable:m.freshFrameAvailable??false,sequence:m.sequence,
+    hasNewImage:m.hasNewImage,frameAgeMs:m.frameAgeMs??null,
+    ...(m.mimeType?{mimeType:m.mimeType}:{}),
+    width:m.width??null,height:m.height??null,
+    sourceFrameAtMs:m.sourceFrameAtMs??null,sourceTimeKind:m.sourceTimeKind??null,
+    successfulSamples:m.successfulSamples??0,captureErrors:m.captureErrors??0,
+    ...(m.errorCode?{errorCode:m.errorCode}:{}),
+    gameInput:m.gameInput,
+  },imageBase64:result.imageBase64};
+}
+
 export function createVisualOperations(config,{
   capture,inspectCua,gpuSourceFactory,visualObserverFactory,readNative,
   mc02Enabled,multiEnabled,requireOpen,isNativeBusy,setNativeBusy,
@@ -293,7 +316,8 @@ export function createVisualOperations(config,{
       if(args.screenReview!==undefined){
         metadata.f3ScreenXYZ=reviewVisibleXYZFromFrame(metadata,args.screenReview);
       }
-      return {...observation,metadata};
+      const result={...observation,metadata};
+      return args.imageFormat==='webp'&&args.screenReview===undefined?compactVisualReceipt('read_visual_observation',result):result;
     },
     async stop_visual_observation(args) {
       keysExactly(args,['slots']);
@@ -367,7 +391,7 @@ export function createVisualOperations(config,{
       const size=visualSize(args);
       const result=await captureVerifiedFrame(slot,size,args.afterFrame);
       if(args.imageFormat==='png'&&result.metadata.mimeType==='image/webp')throw new Error('VISUAL_FORMAT_MISMATCH');
-      return result;
+      return args.imageFormat==='webp'?compactVisualReceipt('observe_client',result):result;
     }
   };
   return {

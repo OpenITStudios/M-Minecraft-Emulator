@@ -1,6 +1,5 @@
 // Operator-selected agent configuration; no native operation or lifecycle ownership.
 import path from 'node:path';
-import {assertAgentSurface} from './agent-contract.mjs';
 import {validateDiagnosticsRoot} from './diagnostics-local.mjs';
 import {validateTestingArchiveRoot} from './testing-result-store.mjs';
 import {validateCuaExecutable} from './visual-capture.mjs';
@@ -8,8 +7,6 @@ import {validateGpuExecutable} from './gpu-frame-source.mjs';
 
 export function parseConfiguration(argv, env = process.env) {
   let mode = 'human-plus-four-ai';
-  let surface = 'legacy';
-  let surfaceSelected=false;
   let executable = env.LAZY_TESTER_AGENT_EXE ?? '';
   let evidenceDirectory = env.LAZY_TESTER_EVIDENCE_DIR ?? '';
   let diagnosticsDirectory = env.LAZY_TESTER_DIAGNOSTICS_DIR ?? '';
@@ -22,18 +19,12 @@ export function parseConfiguration(argv, env = process.env) {
   let experimentalMultiClientInputEnabled=false;
   for (let i=0;i<argv.length;i++) {
     const flag=argv[i];
-    if (!['--surface','--mode','--exe','--evidence-dir','--diagnostics-dir','--testing-archive-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
-      throw new Error('Accepted arguments: [--surface legacy|code-mode|playtest] --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <project|Data/Diagnostics>] [--testing-archive-dir <project|Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
+    if(flag==='--surface')throw new Error('Agent surface retired; remove --surface and review the unified contract');
+    if (!['--mode','--exe','--evidence-dir','--diagnostics-dir','--testing-archive-dir','--probe-zip','--map-contract','--cua-exe','--gpu-capture-exe','--mc02-input-experimental','--multi-client-input-experimental'].includes(flag) || i===argv.length-1) {
+      throw new Error('Accepted arguments: --mode human-plus-four-ai|five-ai --exe <lazy-tester.exe> [--evidence-dir <folder>] [--diagnostics-dir <project|Data/Diagnostics>] [--testing-archive-dir <project|Data/Testing>] [--map-contract <map-test-contract.json>] [--cua-exe <cua-driver.exe>] [--gpu-capture-exe <lazy-tester-gpu-capture.exe>]');
     }
     const value=argv[++i];
     if (flag==='--mode') mode=value;
-    if (flag==='--surface') {
-      // Optional connection profile selection must never silently override
-      // an earlier restricted profile.
-      if(surfaceSelected)throw new Error('Select exactly one agent surface');
-      surfaceSelected=true;
-      surface=value;
-    }
     if (flag==='--exe') executable=value;
     if (flag==='--evidence-dir') evidenceDirectory=value;
     if (flag==='--diagnostics-dir') diagnosticsDirectory=value;
@@ -51,7 +42,6 @@ export function parseConfiguration(argv, env = process.env) {
       experimentalMultiClientInputEnabled=true;
     }
   }
-  assertAgentSurface(surface,experimentalMc02InputEnabled||experimentalMultiClientInputEnabled);
   if(experimentalMc02InputEnabled&&experimentalMultiClientInputEnabled) {
     throw new Error('Select only one experimental native input mode');
   }
@@ -105,7 +95,7 @@ export function parseConfiguration(argv, env = process.env) {
   }
   if (cuaExecutable) validateCuaExecutable(cuaExecutable);
   if (gpuExecutable) validateGpuExecutable(gpuExecutable);
-  return Object.freeze({mode, surface, executable, evidenceDirectory,diagnosticsDirectory,
+  return Object.freeze({mode, executable, evidenceDirectory,diagnosticsDirectory,
     testingArchiveDirectory,probeZip,mapContractPath,
     cuaExecutable,gpuExecutable,experimentalMc02InputEnabled,
     experimentalMultiClientInputEnabled});

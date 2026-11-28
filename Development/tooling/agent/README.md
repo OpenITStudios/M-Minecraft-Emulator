@@ -21,35 +21,22 @@ Codex subscription, local LLM, Code Mode feature, Node host or capture worker
 is required for manual operation. Do not start a bridge, register tools,
 install packages or change the user's host settings automatically.
 
-### Choose whether to connect
+### One agent contract
 
-| User workflow | Connection |
-| --- | --- |
-| Manual application only | No MCP connection; nothing to configure |
-| AI-assisted playtest | Explicit `--surface playtest` (15 MCP tools) |
-| Restricted analysis/planning | Explicit `--surface code-mode` (13 MCP tools) |
-| Existing MCP client | `--surface legacy` (25 default tools; retained compatibility) |
+Manual desktop operation needs no AI connection. For optional AI assistance,
+ordinary MCP and the explicitly attached trusted SDK use the same 23 normal
+operation names, descriptors, semantic validation and operation core.
+The old `--surface` selector and all three former profiles are retired.
+Existing explicitly restricted configurations are refused; review the unified
+catalog and host approval policy before removing the obsolete flag.
+The old grouped SDK factory is removed; opt into `createAgentClient(core)`
+and use the exact MCP tool names. Host Code Mode remains a host feature,
+not a Lazy Tester mode. No automatic connection or permission grant.
 
-The profile names select Lazy Tester's **tool contract**, not a host
-feature switch. In particular, `--surface code-mode` is the restricted
-read/plan profile, not a request to turn on Codex Code Mode. Playtest tools
-can be called using ordinary MCP or composed using a host's supported Code
-Mode feature. The host owns code execution, script budgets, model usage
-and approvals. Users choose whether to enable that feature; no change
-to host settings is made by Lazy Tester.
-
-Development direction: Code Mode first for AI orchestration, ordinary MCP for
-compatibility, and no AI requirement for manual use. The explicit Playtest
-direct SDK and MCP share the same admitted operations and projection;
-host-owned isolation and approvals remain mandatory.
-
-Use one connection for the chosen workflow. The manual application
-and optional MCP connection reuse the same controller. Do not run duplicate
-bridges for the same task or silently widen a restricted profile.
-Independent keyboard/mouse execution is still blocked; there is no
-production autonomous gameplay tool or automatic close. The intended
-future control contract remains Execute / Observe / Stop, not a preset
-game engine. No new server, sandbox or dependency.
+Use one core/connection per workflow. The manual app and AI connection reuse
+the original native controller. Independent gameplay input remains unverified;
+no automatic close, arbitrary command or new provider. Existing explicitly
+gated input experiments remain MCP-only; the SDK refuses experimental cores.
 
 ### Optional local connection
 
@@ -61,13 +48,13 @@ local paths, and retain host-controlled approval settings:
 ```toml
 [mcp_servers.lazy_tester]
 command = 'C:\Tools\node.exe'
-args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--surface', 'playtest', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe']
+args = ['D:\Source\M-Minecraft-Emulator\Development\tooling\agent\mcp.mjs', '--mode', 'human-plus-four-ai', '--exe', 'D:\LazyTester\App\lazy-tester.exe']
 default_tools_approval_mode = 'prompt'
 ```
 
 For visual observation, add `--gpu-capture-exe` and the reviewed absolute
-path to the matching WebP-capable WGC worker; without it, Playtest image
-requests refuse explicitly. Configure other capture, evidence, diagnostic,
+path to the matching WebP-capable WGC worker. Explicit WebP requests refuse
+without it; no silent format fallback. Configure other capture, evidence, diagnostic,
 Probe or map-contract paths only if needed. Native app capture approval
 remains held. No automatic startup, credentials, sign-in, world join,
 map import or command dispatch.
@@ -84,7 +71,7 @@ on a user PC.
 
 ### One product catalog, existing operations only
 
-| Task | Public playtest tool |
+| Task | Canonical tool |
 | --- | --- |
 | Discover sources and inspect profiles in one optional preflight | agent_capabilities (inspectProfiles=true) |
 | Inspect / explicitly launch an AI-owned profile | inspect_profiles, launch_profile |
@@ -94,20 +81,16 @@ on a user PC.
 | Read bounded analytics / game results for one or several slots | summarize_test_evidence |
 | Query imported issue evidence when needed | get_diagnostics_overview, list_issue_candidates, get_issue_details, query_diagnostic_evidence |
 
-All 15 names are existing operations with existing native admission.
-`read_game_evidence` is no longer advertised or admitted in playtest: use
-`summarize_test_evidence({slots:[slot]})` for the same bounded evidence source.
-Legacy and restricted Code Mode retain the old single-slot method.
-The same descriptor catalog and projection serve both standard MCP and
-Codex Code Mode on this connection. The independently trusted Node SDK
-below offers explicit Playtest coverage; its default remains read/plan-only.
-The 13-tool restricted profile is retained (including compact input previews). Legacy also accepts
-optional inspectProfiles=true; publication and combined inspection cannot
-both be requested in the same call. No public
-planning, duplicate context, old Probe aliases, low-level HWND targeting,
-screen-text review, native reservation, status publication or input
-experiment in playtest. Experimental core attachment is refused.
-MC01 stays protected in hybrid mode. `five-ai` is a slot policy, not proof
+The table lists the main playtest workflow. The same catalog also retains
+`get_test_context`, `plan_peer_session`, `plan_player_actions`,
+`assess_input_route`, `read_game_evidence`, `get_computer_use_target`,
+`revalidate_computer_use_target` and `assess_client_background_action`
+where their distinct bounded evidence, planning or target checks are needed.
+The two old Probe preparation/result tool names are retired: use
+`probe_qa` with an explicit slot and `restart:true` only when restarting.
+Explicit native coordination and status publication remain subject to their
+original gates. Neither native ACK nor a configured source proves gameplay.
+MC01 is protected in hybrid mode. `five-ai` is a slot policy, not proof
 of autonomous play.
 
 ### Minimal playtest / report workflow
@@ -122,7 +105,7 @@ of autonomous play.
    may compose multiple explicit single-slot launches serially, stopping on
    refusal or uncertain outcome; no server-side launch batch or retries.
    A launch receipt is not a game/world/login receipt.
-2. For a quick look, call `observe_client({slot:2})`: one WGC WebP
+2. For a quick look, call `observe_client({slot:2,imageFormat:'webp'})`: one WGC WebP
    preview, 640x360 by default, no sampler startup or separate read.
    Override both width and height only as needed (each 160–1536); e.g.
    320x180 for a glance, 960x540 for detail. Same worker, direct WebP
@@ -136,10 +119,10 @@ of autonomous play.
    sending unchanged images. afterSequence is scoped to that running sampler;
    omit it after restart. Stop before changing sampler resolution or
    starting a separate one-shot on that slot. No automatic HD escalation.
-   An image hash is not gameplay proof. WebP is required for Playtest image
-   routes; if no reviewed optional WGC worker is configured, return
-   WEBP_CAPTURE_REQUIRES_WGC rather than silently use CUA PNG. CUA remains
-   semantic/no-image inspection and Legacy PNG compatibility.
+   An image hash is not gameplay proof. Use imageFormat='webp' explicitly
+   for one-shot preview, sampler start and reads that require WebP. Without a
+   configured WGC worker, return WEBP_CAPTURE_REQUIRES_WGC rather than silently
+   use CUA PNG. PNG and semantic UI remain available through the same contract.
 3. Establish the evidence boundary **before** the first gameplay action.
    Call `summarize_test_evidence({slots:[2],window:'begin'})` once for the
    selected slots. The existing pinned file cursor reads at most 128 bytes
@@ -180,9 +163,8 @@ of autonomous play.
    Existing analytics/log attribution remains operator-named and unverified;
    even appended records may belong to another world/player. Do not treat
    missing errors, bounded/truncated coverage or unbound records as PASS.
-   Without a window flag the prior tail summary is unchanged. Legacy may
-   use the additive read-only window option; restricted code-mode does not
-   advertise/admit it. Baselines are lost at core shutdown.
+   Without a window flag the prior tail summary is unchanged. Both adapters
+   use the same explicit window option. Baselines are lost at core shutdown.
 
 Configured source flags are not proof of provider availability. The
 operator remains in control of manual app actions. Code Mode uses the
@@ -198,11 +180,10 @@ world/session identity or guarantee of gameplay sameness. It binds slot,
 verified process/window/birth/session, format, dimensions and the original
 encoded-image hash; it requires no server-side image/history store. Suppress
 only exact byte matches requested by the caller; never suppress based on
-assumed visual similarity. Playtest observe/read image responses project
-compact receipts (size, status, timestamp, sequence/reference, freshness
-where applicable); native identity and validation remain in the core. Full
-legacy responses and the existing multi-client metadata/baseline contract
-are preserved. One-shot deduplication still performs capture, resize and
+assumed visual similarity. Explicit WebP observe/read requests project compact
+receipts in the shared visual operations owner, not in an adapter. Full
+metadata reads, screen review and the existing multi-client identity/baseline
+contract remain available without a second catalog. One-shot deduplication still performs capture, resize and
 WebP encoding; identical frames now skip Base64 conversion as well as
 image delivery in the MCP response. A stopped persistent
 worker reserves its slot until close is observed; retry only after it exits.
@@ -214,7 +195,7 @@ option only when appropriate. OpenAI API vision accepts WebP and documents
 model-specific image sizing: https://developers.openai.com/api/docs/guides/images-vision.
 Actual Codex MCP image handling, native latency, compression ratios, clarity
 and token savings remain unverified. No automatic PNG retry or format lie.
-Legacy defaults remain PNG; explicit imageFormat='webp' with optional size is
+Default PNG behavior remains; explicit imageFormat='webp' with optional size is
 available only on non-experimental WGC connections. Resized WebP does not
 admit the legacy F3/XYZ review path or authorize coordinate-based input.
 Manual product screenshot remains original-resolution lossless WebP with its
@@ -232,12 +213,12 @@ https://openai.com/index/vpt/. Code execution with MCP supports filtering
 intermediate results before model context:
 https://www.anthropic.com/research/code-execution-with-mcp.
 
-The existing **read-only** planner in the restricted/legacy profiles accepts
+The existing **read-only** planner in the unified contract accepts
 either the original `actions` or compact `groups`, never both. The trusted
-SDK's existing `tester.input.plan` and `tester.input.assess` accept the same groups. For example:
+SDK's existing `tester.plan_player_actions` and `tester.assess_input_route` accept the same groups. For example:
 
 ```js
-await tester.input.plan({groups:[
+await tester.plan_player_actions({groups:[
   {slot:2,atMs:0,durationMs:600,hold:['move_forward','strafe_right']},
   {slot:2,atMs:100,durationMs:300,look:{deltaX:80,deltaY:-12,steps:3}},
   {slot:2,atMs:200,durationMs:100,hold:['jump','attack']}
@@ -267,7 +248,7 @@ or actions, never both. They expand once before the original native compiler,
 so the same per-slot action/pulse limits, camera delta, timing, lease,
 identity, neutral and recovery checks remain. Feedback uses the same
 canonical expanded actions and fingerprint; no caller expansion round-trip.
-No additional preview/execute tool is exposed in Playtest (15 tools). Actual input is still blocked; raw keys,
+No additional execution tool is exposed in the normal contract. Actual input is still blocked; raw keys,
 sprint, menu pointer, scroll, inventory, hotbar and backend calibration are
 not newly supported. No preset, random humanization, native ABI change,
 new scheduler, or experimental activation.
@@ -298,18 +279,15 @@ not a measured timing, resource or token improvement.
 
 ### Direct SDK for independently trusted hosts
 
-For a separately authorized trusted PC-local host, create one
-`createOperationCore(config)` from `operation-core.mjs`. Attach
-`createCodeModeClient(core,'playtest')` from `code-mode.mjs` per script for
-all 15 existing Playtest operations through 17 named methods (three Probe
-methods share one operation). The default `createCodeModeClient(core)`
-retains the restricted read/plan contract. The trusted host passes only the
-fixed `tester` facade to its permission-controlled execution environment
-and closes the facade in finally. If MCP is needed, attach
-`createMcpHandler(core,'playtest')` (or the matching restricted profile);
-do not start a second core for the same workflow. The existing stdio entry `mcp.mjs` and
-all 25 default legacy tool names remain compatible. No arbitrary-code execution
-tool, Deno/Node guest, dependency, new controller or PC permission is added.
+Create one `createOperationCore(config)` from `operation-core.mjs`, then
+attach `createAgentClient(core)` from `code-mode.mjs`. Its frozen `tester`
+object uses the 23 exact MCP operation names and derives argument keys from
+the original descriptor catalog. The trusted host passes only the facade to
+its permission-controlled execution environment and closes it in finally.
+If MCP is needed, attach `createMcpHandler(core)`; do not create a second core.
+Old profile selectors and the old grouped SDK API are retired, not aliases.
+No arbitrary-code execution tool, dependency, new controller or PC permission.
+The SDK refuses experimental input cores; original explicit MCP input gates remain.
 Direct SDK call budgets apply per client facade; Codex owns its own cell budget.
 MCP retains its existing request/response limits, not the direct SDK's per-script
 64-call budget. The stdio adapter retains at most 64 KiB plus an optional CR
@@ -337,18 +315,16 @@ The same-image native CLI uses authenticated IPC per request; a persistent
 replacement channel is not introduced without measured benefit and equivalent
 admission. Runtime connection latency and host compatibility remain unverified.
 
-For Playtest, use `tester.capabilities({inspectProfiles:true})`,
-`tester.profiles.launch({slot:2})`, `tester.observation.capture({slot:2})`,
-`tester.observation.start/read/stop` and the existing evidence/diagnostics
-methods as needed. Observation results return compact metadata and optional
-WebP Base64 separately; unchanged frames retain the same omission contract.
-`tester.testing.probe({slot:2})` may prepare a command but never dispatches
-it. Explicit restart, archive and evidence-window operations reuse their
-original admission. The restricted facade retains `tester.testing.context`
-and action previews. Neither facade grants native reservation, publication,
-writer leases, arbitrary commands, profile close or input dispatch.
+For playtest, use `tester.agent_capabilities({inspectProfiles:true})`,
+`tester.launch_profile({slot:2})`,
+`tester.observe_client({slot:2,imageFormat:'webp'})`, and the same observation,
+evidence, planning and diagnostic operation names as MCP.
+`tester.probe_qa({slot:2})` prepares or reads the original checkpoint, never
+dispatches a command. Explicit restart, archive, native coordination and
+status publication use their original core admission. No new native permission,
+arbitrary commands, profile close or gameplay dispatch are introduced.
 Each facade permits 64 attempted calls, one in flight, 64 KiB input,
-128 KiB text per call and 1 MiB aggregate text. Playtest has a separate
+128 KiB text per call and 1 MiB aggregate text. The SDK has a separate
 4 MiB Base64 aggregate image budget, also the existing per-image ceiling;
 image delivery does not stringify and parse Base64 again. The trusted
 host must independently enforce script time, memory, output and OS
@@ -372,14 +348,12 @@ protocol conformance tests executed.
 - `operation-core.mjs` is the single coordinator for session-bound
   state, admission and recovery. `agent-configuration.mjs` owns operator
   configuration. `probe-qa-operations.mjs` owns one private checkpoint set
-  per core; canonical and legacy Probe tools share the same prepare/read
-  operations. `evidence-operations.mjs` owns the separate explicit capture
+  per core; only probe_qa exposes the private prepare/read operations. `evidence-operations.mjs` owns the separate explicit capture
   baselines and bounded evidence projection. `visual-operations.mjs` owns
   the existing visual read gate, capture, observer and GPU startup/stop;
   the core retains native admission and input recovery. No new worker or transport.
-- `tool-catalog.mjs` owns the one descriptor inventory. `code-mode.mjs`
-  declares the shared SDK routes and projects the playtest/compatibility subsets
-  from the original descriptor catalog.
+- `tool-catalog.mjs` owns the one descriptor inventory. The SDK derives its
+  frozen methods from it; MCP lists the same descriptors and calls the same core.
 - The canonical native transport already validates its receipts. The core
   selects it once or validates injected provider results at the same seam;
   fresh target reads, independent consumer validation and native gates remain.
@@ -393,13 +367,13 @@ Trusted host integration (source example, not a runnable guest sandbox):
 
 ```js
 import {createOperationCore,parseConfiguration} from './operation-core.mjs';
-import {createCodeModeClient} from './code-mode.mjs';
+import {createAgentClient} from './code-mode.mjs';
 
 const core = createOperationCore(parseConfiguration(operatorSelectedArgs));
-const client = createCodeModeClient(core,'playtest');
+const client = createAgentClient(core);
 try {
   // A trusted local host can compose this bounded API without MCP framing.
-  const context = await client.tester.capabilities({inspectProfiles:true});
+  const context = await client.tester.agent_capabilities({inspectProfiles:true});
   // Keep only the needed bounded evidence; do not log private source paths.
   returnToAuthorizedCaller(context);
 } finally {
