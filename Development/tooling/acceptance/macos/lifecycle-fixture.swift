@@ -3,6 +3,8 @@
 import AppKit
 import Foundation
 import Darwin
+import ScreenCaptureKit
+import CoreGraphics
 
 @MainActor
 private final class LaunchResult {
@@ -34,6 +36,48 @@ private struct PathObservation: Codable {
     var allPrivate: Bool { summary.values.allSatisfy { $0 } }
 }
 
+// Synthetic visible content only. No generated input, foreign window control,
+// accessibility permissions, or capture of the user's desktop.
+@MainActor
+private final class WorkspaceMarker: NSView {
+    let slot: String
+    let clickFile: URL
+    private var clicked = false
+
+    init(slot: String, clickFile: URL, frame: NSRect) {
+        self.slot = slot
+        self.clickFile = clickFile
+        super.init(frame: frame)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let color: NSColor = slot == "A"
+            ? (clicked ? .green : .red)
+            : (clicked ? .yellow : .blue)
+        color.setFill()
+        bounds.fill()
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        guard !clicked, window?.isKeyWindow == true else { return }
+        clicked = true
+        needsDisplay = true
+        displayIfNeeded()
+        // Only this synthetic marker is written. No input event leaves the view.
+        try? Data([1]).write(to: clickFile, options: .withoutOverwriting)
+    }
+}
+
+@MainActor
+private final class CaptureResult<T> {
+    var completed = false
+    var value: T?
+}
+
 @main
 @MainActor
 struct LifecycleFixture {
@@ -49,10 +93,18 @@ struct LifecycleFixture {
         if let id = Bundle.main.bundleIdentifier, id.hasPrefix(prefix),
            UUID(uuidString: String(id.dropFirst(prefix.count))) != nil {
             guard arguments.isEmpty || (arguments.count == 2 &&
-                  arguments[0] == "--profile-probe-child" && slots.contains(arguments[1]))
+                  ["--profile-probe-child", "--workspace-probe-child"].contains(arguments[0]) &&
+                  slots.contains(arguments[1]))
             else { exit(2) }
             let app = NSApplication.shared
             app.setActivationPolicy(.accessory)
+            if arguments.first == "--workspace-probe-child" {
+                do {
+                    let window = try showWorkspaceWindow(slot: arguments[1])
+                    withExtendedLifetime(window) { app.run() }
+                } catch { exit(2) }
+                return
+            }
             if !arguments.isEmpty {
                 do { try observeProfile(slot: arguments[1]) }
                 catch { exit(2) }
@@ -60,14 +112,21 @@ struct LifecycleFixture {
             app.run()
             return
         }
-        guard arguments.isEmpty || arguments == ["--profile-probe"] else {
+        guard arguments.isEmpty || arguments == ["--profile-probe"] ||
+              arguments == ["--workspace-probe"] else {
             receipt("REFUSED"); exit(2)
         }
         do {
-            let result = try run(pair: !arguments.isEmpty)
+            let workspace = arguments == ["--workspace-probe"]
+            if workspace {
+                guard #available(macOS 14.0, *), CGPreflightScreenCaptureAccess()
+                else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
+            }
+            let result = try run(pair: !arguments.isEmpty, workspace: workspace)
             receipt(result.status, profiles: result.profiles)
             if result.status != "SYNTHETIC_EXIT_OBSERVED" &&
-               result.status != "SYNTHETIC_PRIVATE_PATHS_OBSERVED" { exit(1) }
+               result.status != "SYNTHETIC_PRIVATE_PATHS_OBSERVED" &&
+               result.status != "SYNTHETIC_WINDOW_MARKERS_OBSERVED" { exit(1) }
         } catch let failure as FixtureFailure {
             receipt(failure.status)
             exit(1)
@@ -82,6 +141,13 @@ struct LifecycleFixture {
             "schema": 1, "scope": "SYNTHETIC_APPKIT_LIFECYCLE",
             "status": status, "runtimeAdmission": false
         ]
+        if status == "SYNTHETIC_WINDOW_MARKERS_OBSERVED" {
+            report["capture"] = "SEQUENTIAL_WINDOW_SNAPSHOTS"
+            report["interaction"] = "MANUAL_NATIVE_WINDOW_CLICKS"
+            report["sharedWorkspace"] = "NOT_VERIFIED"
+            report["inactiveLoginSession"] = "NOT_VERIFIED"
+            report["minecraft"] = "NOT_VERIFIED"
+        }
         if !profiles.isEmpty {
             report["profiles"] = profiles
             report["preferencesIsolation"] = "NOT_OBSERVED"
@@ -117,7 +183,7 @@ struct LifecycleFixture {
         return path == boundary || path.hasPrefix(boundary + "/")
     }
 
-    private static func observeProfile(slot: String) throws {
+    private static func fixtureRoot() throws -> URL {
         // No caller-provided path. Derive it only from our fresh fixture bundle.
         let bundle = Bundle.main.bundleURL.resolvingSymlinksInPath()
         let root = bundle.deletingLastPathComponent()
@@ -125,6 +191,11 @@ struct LifecycleFixture {
               root.lastPathComponent.hasPrefix(rootPrefix),
               UUID(uuidString: String(root.lastPathComponent.dropFirst(rootPrefix.count))) != nil
         else { throw FixtureFailure(status: "INVALID_FIXTURE_ROOT") }
+        return root
+    }
+
+    private static func observeProfile(slot: String) throws {
+        let root = try fixtureRoot()
         let profile = profileRoot(root, slot)
         let fm = FileManager.default
         // Observe standard path resolution only. Never read or write preferences,
@@ -160,6 +231,146 @@ struct LifecycleFixture {
         return observation
     }
 
+    private static func clickFile(_ root: URL, _ slot: String) -> URL {
+        root.appendingPathComponent("workspace-click-" + slot)
+    }
+
+    private static func showWorkspaceWindow(slot: String) throws -> NSWindow {
+        let root = try fixtureRoot()
+        guard let visible = NSScreen.main?.visibleFrame,
+              visible.width >= 650, visible.height >= 260 else {
+            throw FixtureFailure(status: "WORKSPACE_DISPLAY_UNAVAILABLE")
+        }
+        let width: CGFloat = 300
+        let height: CGFloat = 200
+        let x = visible.midX + (slot == "A" ? -width - 12 : 12)
+        let window = NSWindow(contentRect: NSRect(x: x, y: visible.midY - height / 2,
+                                                    width: width, height: height),
+                              styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window.title = "Lazy Tester Fixture " + slot
+        window.isReleasedWhenClosed = false
+        let marker = WorkspaceMarker(slot: slot, clickFile: clickFile(root, slot),
+                                     frame: NSRect(x: 0, y: 0, width: width, height: height))
+        marker.autoresizingMask = [.width, .height]
+        window.contentView = marker
+        window.makeKeyAndOrderFront(nil)
+        return window
+    }
+
+    @available(macOS 14.0, *)
+    private static func shareableWindows() throws -> [SCWindow] {
+        let result = CaptureResult<SCShareableContent>()
+        SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: true) { content, error in
+            DispatchQueue.main.async {
+                result.value = error == nil ? content : nil
+                result.completed = true
+            }
+        }
+        guard wait(10, until: { result.completed }), let content = result.value
+        else { throw FixtureFailure(status: "WINDOW_ENUMERATION_UNCONFIRMED") }
+        return content.windows
+    }
+
+    @available(macOS 14.0, *)
+    private static func captureMarker(_ window: SCWindow) throws -> String {
+        let result = CaptureResult<CGImage>()
+        let config = SCStreamConfiguration()
+        config.width = 320
+        config.height = 240
+        config.showsCursor = false
+        config.ignoreShadowsSingleWindow = true
+        // Capture exactly one verified fixture window, never a display.
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        SCScreenshotManager.captureImage(contentFilter: filter, configuration: config) { image, error in
+            DispatchQueue.main.async {
+                result.value = error == nil ? image : nil
+                result.completed = true
+            }
+        }
+        guard wait(10, until: { result.completed }), let image = result.value,
+              image.width == config.width, image.height == config.height
+        else { throw FixtureFailure(status: "WINDOW_CAPTURE_UNCONFIRMED") }
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        var marker: String?
+        // Sample five interior points; a blank, mixed, or unexpected image refuses.
+        for (dx, dy) in [(0, 0), (-12, 0), (12, 0), (0, -12), (0, 12)] {
+            guard let color = bitmap.colorAt(x: image.width / 2 + dx, y: image.height / 2 + dy)?
+                .usingColorSpace(.deviceRGB), color.alphaComponent > 0.9
+            else { throw FixtureFailure(status: "WINDOW_MARKER_UNCONFIRMED") }
+            let rgb = [color.redComponent, color.greenComponent, color.blueComponent]
+            let pattern = rgb.map { $0 > 0.65 ? "1" : ($0 < 0.35 ? "0" : "?") }.joined()
+            let colors = ["100": "red", "001": "blue", "010": "green", "110": "yellow"]
+            guard let observed = colors[pattern], marker == nil || marker == observed
+            else { throw FixtureFailure(status: "WINDOW_MARKER_UNCONFIRMED") }
+            marker = observed
+        }
+        guard let marker = marker else { throw FixtureFailure(status: "WINDOW_MARKER_UNCONFIRMED") }
+        return marker
+    }
+
+    @available(macOS 14.0, *)
+    private static func capturePair(_ applications: [NSRunningApplication], id: String,
+                                    bundle: URL, exe: URL, expectedIDs: [CGWindowID]?)
+        throws -> (ids: [CGWindowID], markers: [String]) {
+        guard applications.count == slots.count,
+              applications.allSatisfy({ exactLiveApplication($0, id: id, bundle: bundle, exe: exe) })
+        else { throw FixtureFailure(status: "OWNERSHIP_UNCONFIRMED") }
+        guard CGPreflightScreenCaptureAccess()
+        else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
+        let windows = try shareableWindows()
+        var ids: [CGWindowID] = []
+        var markers: [String] = []
+        for (index, application) in applications.enumerated() {
+            // Retained app identity plus exactly one owned window; title is
+            // a fixture discriminator, not authority. Recheck before capture.
+            let candidates = windows.filter {
+                $0.owningApplication?.processID == application.processIdentifier
+            }
+            guard candidates.count == 1, let window = candidates.first,
+                  window.title == "Lazy Tester Fixture " + slots[index],
+                  window.windowID != 0,
+                  expectedIDs == nil || expectedIDs?[index] == window.windowID,
+                  exactLiveApplication(application, id: id, bundle: bundle, exe: exe)
+            else { throw FixtureFailure(status: "WINDOW_IDENTITY_UNCONFIRMED") }
+            ids.append(window.windowID)
+            markers.append(try captureMarker(window))
+            guard exactLiveApplication(application, id: id, bundle: bundle, exe: exe)
+            else { throw FixtureFailure(status: "OWNERSHIP_UNCONFIRMED") }
+        }
+        guard Set(ids).count == slots.count else {
+            throw FixtureFailure(status: "WINDOW_IDENTITY_UNCONFIRMED")
+        }
+        // These are sequential bounded snapshots, not simultaneous live streams.
+        return (ids, markers)
+    }
+
+    @available(macOS 14.0, *)
+    private static func workspaceProbe(_ applications: [NSRunningApplication], id: String,
+                                       root: URL, bundle: URL, exe: URL) throws {
+        let fm = FileManager.default
+        let initial = try capturePair(applications, id: id, bundle: bundle, exe: exe, expectedIDs: nil)
+        guard initial.markers == ["red", "blue"],
+              slots.allSatisfy({ !fm.fileExists(atPath: clickFile(root, $0).path) })
+        else { throw FixtureFailure(status: "WORKSPACE_BASELINE_UNCONFIRMED") }
+
+        for (index, slot) in slots.enumerated() {
+            // Physical user interaction only; no focus stealing or event injection.
+            let message = "Click inside fixture window " + slot + " only (30 seconds).\n"
+            FileHandle.standardError.write(Data(message.utf8))
+            guard wait(30, until: {
+                fm.fileExists(atPath: clickFile(root, slot).path) ||
+                applications.contains(where: { $0.isTerminated })
+            }) else { throw FixtureFailure(status: "MANUAL_INTERACTION_UNCONFIRMED") }
+            let snapshot = try capturePair(applications, id: id, bundle: bundle, exe: exe,
+                                           expectedIDs: initial.ids)
+            let expected = index == 0 ? ["green", "blue"] : ["green", "yellow"]
+            guard snapshot.markers == expected,
+                  fm.fileExists(atPath: clickFile(root, slot).path),
+                  index != 0 || !fm.fileExists(atPath: clickFile(root, "B").path)
+            else { throw FixtureFailure(status: "WORKSPACE_MARKER_MISMATCH") }
+        }
+    }
+
     private static func exactLiveApplication(_ app: NSRunningApplication,
                                               id: String, bundle: URL, exe: URL) -> Bool {
         guard !app.isTerminated, app.processIdentifier > 0,
@@ -172,7 +383,7 @@ struct LifecycleFixture {
     }
 
     private static func launch(id: String, root: URL, bundle: URL, exe: URL,
-                               slot: String? = nil) throws -> NSRunningApplication {
+                               slot: String? = nil, workspace: Bool = false) throws -> NSRunningApplication {
         let result = LaunchResult()
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
@@ -180,7 +391,9 @@ struct LifecycleFixture {
         config.activates = false
         config.addsToRecentItems = false
         config.promptsUserIfNeeded = false
-        if let slot = slot {
+        if let slot = slot, workspace {
+            config.arguments = ["--workspace-probe-child", slot]
+        } else if let slot = slot {
             let profile = profileRoot(root, slot)
             config.arguments = ["--profile-probe-child", slot]
             // Hypothesis for synthetic children only, not a Minecraft launch recipe.
@@ -212,7 +425,7 @@ struct LifecycleFixture {
         else { throw FixtureFailure(status: "EXIT_UNCONFIRMED") }
     }
 
-    private static func run(pair: Bool) throws -> (status: String, profiles: [[String: Bool]]) {
+    private static func run(pair: Bool, workspace: Bool) throws -> (status: String, profiles: [[String: Bool]]) {
         let fm = FileManager.default
         let id = prefix + UUID().uuidString.lowercased()
         let root = fm.temporaryDirectory.resolvingSymlinksInPath()
@@ -241,7 +454,7 @@ struct LifecycleFixture {
             try close(app, id: id, bundle: bundle, exe: exe)
             return ("SYNTHETIC_EXIT_OBSERVED", [])
         }
-        for slot in slots {
+        for slot in slots where !workspace {
             let profile = profileRoot(root, slot)
             try fm.createDirectory(at: profile, withIntermediateDirectories: false,
                                    attributes: [.posixPermissions: 0o700])
@@ -249,12 +462,22 @@ struct LifecycleFixture {
                                    withIntermediateDirectories: false)
         }
         // Both instances use exactly the same bundle and identifier.
-        let a = try launch(id: id, root: root, bundle: bundle, exe: exe, slot: "A")
-        let b = try launch(id: id, root: root, bundle: bundle, exe: exe, slot: "B")
+        let a = try launch(id: id, root: root, bundle: bundle, exe: exe, slot: "A", workspace: workspace)
+        let b = try launch(id: id, root: root, bundle: bundle, exe: exe, slot: "B", workspace: workspace)
         guard exactLiveApplication(a, id: id, bundle: bundle, exe: exe),
               exactLiveApplication(b, id: id, bundle: bundle, exe: exe),
               a.processIdentifier != b.processIdentifier, !a.isEqual(b)
         else { throw FixtureFailure(status: "INDEPENDENT_INSTANCE_UNCONFIRMED") }
+        if workspace {
+            guard #available(macOS 14.0, *)
+            else { throw FixtureFailure(status: "WORKSPACE_OS_UNSUPPORTED") }
+            try workspaceProbe([a, b], id: id, root: root, bundle: bundle, exe: exe)
+            try close(a, id: id, bundle: bundle, exe: exe)
+            guard exactLiveApplication(b, id: id, bundle: bundle, exe: exe)
+            else { throw FixtureFailure(status: "PEER_EXIT_OR_IDENTITY_CHANGED") }
+            try close(b, id: id, bundle: bundle, exe: exe)
+            return ("SYNTHETIC_WINDOW_MARKERS_OBSERVED", [])
+        }
         guard wait(5, until: {
             slots.allSatisfy { fm.fileExists(atPath: observationFile(root, $0).path) }
         }) else { throw FixtureFailure(status: "PATH_OBSERVATION_UNCONFIRMED") }

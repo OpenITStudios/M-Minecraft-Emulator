@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-04e: staged workspace parity design)
+## Current status — cross-platform-native (MAC-04f: synthetic window feasibility)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,42 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-04f — two exact native window snapshots (P3a, source only)
+
+Extend the existing self-only Swift/AppKit fixture with explicit
+`--workspace-probe`. The normal single and profile probe modes remain.
+Requires macOS 14+ and pre-existing screen capture permission; no prompt
+or elevated execution. Launch two children from one fixture bundle without
+HOME overrides, display two native colored windows, and verify distinct
+retained app identities. ScreenCaptureKit enumeration is in memory; filter
+to exactly one window per verified original PID, fixture title and stable
+CGWindowID. Refuse unknown or changed target. Use Apple's
+[SCShareableContent](https://developer.apple.com/documentation/screencapturekit/scshareablecontent),
+[window-only filter](https://developer.apple.com/documentation/screencapturekit/sccontentfilter/init(desktopindependentwindow:))
+and [SCScreenshotManager](https://developer.apple.com/documentation/screencapturekit/scscreenshotmanager/captureimage(contentfilter:configuration:completionhandler:)).
+No display capture, background stream, external image output, recording,
+general input injection, Accessibility permission or new runtime dependency.
+
+First bounded screenshot pair must show red A / blue B. Manual physical
+click A changes A to green while B stays blue; then click B changes B
+to yellow while A stays green. Re-capture both using original window IDs,
+sample five interior pixels and reject missing, unexpected or stale markers.
+Normal close A must leave B's original app alive; then normal close B.
+All outputs are synthetic, runtimeAdmission=false. Failure preserves
+the fixture and uncertain processes, never retries mutation, adopts or
+force-closes a foreign process.
+
+Proof ceiling: candidate source only, not compiled or executed. Three
+sequential screenshot pairs are NOT live simultaneous previews. Manual
+clicking actual native windows is NOT selected input through one workspace
+and does not prove gameplay, cross-user/inactive-session capture or
+interactive control. P3b would require a real shared preview/selection
+consumer and scoped interaction evidence. Candidate B remains conditional;
+no cross-user endpoint or service implemented. No changes to Windows,
+product startup, CI, tests, activation or release holds. Do not repeat
+synthetic work beyond its decision value: actual game isolation and
+shared workspace evidence remain the decisive gates.
 
 ### MAC-04e — full workspace parity, staged design (2026-11-28)
 
@@ -498,7 +534,8 @@ MAC-04a adds the explicit non-product Mac development shell route;
 MAC-04b authors a synthetic AppKit lifecycle acceptance fixture;
 MAC-04c extends it with explicit two-instance path observations;
 MAC-04d records authentication counterevidence and alternate native topology;
-MAC-04e records operator-confirmed final workspace parity and staged design.
+MAC-04e records operator-confirmed final workspace parity and staged design;
+MAC-04f adds same-login synthetic window capture/interaction feasibility source.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

@@ -146,7 +146,8 @@ acceptance program for a future approved Mac phase. It builds no game
 adapter and is not part of the desktop, DEV.cmd, startup, MCP or package.
 The fixture accepts no target path and refuses root. It supports no arguments
 for the original single-instance lifecycle or the explicit `--profile-probe`
-option for two synthetic instances of the same bundle. It copies
+option for two synthetic instances of the same bundle, or the explicit
+`--workspace-probe` mode for two synthetic visible windows. It copies
 its own compiled executable into a fresh private temporary application bundle,
 uses AppKit to request a new application, retains the original running-app
 object, verifies bundle/executable identity and requests normal termination.
@@ -163,6 +164,17 @@ read or written. One normal close must leave the other original app alive.
 Both observed exits and path results are synthetic only; shared or unresolved
 paths are reported as a non-success status. Only booleans leave the parent
 report, not local paths or PIDs. Preferences/authentication remain NOT_OBSERVED.
+The workspace mode requires macOS 14+ and already-authorized screen capture
+permission; it does not request or grant permission. It opens only its own
+two windows and samples five interior pixels of each exact owned window with
+ScreenCaptureKit. The operator manually clicks A then B; the expected color
+changes in the chosen window only. No desktop capture, images written to disk,
+input injection, Accessibility access or cross-user transport. Three pairs of
+sequential screenshots and two bounded manual waits are not live simultaneous
+preview or shared interactive workspace proof. Normal close A preserves B,
+then close B. Only scoped statuses are emitted, always runtimeAdmission=false.
+The existing no-argument/profile modes retain their behavior. All modes are
+source-authored and NOT_EXECUTED.
 The temporary fixture bundle is retained and
 may be removed by that operator after confirming exit. The result is scoped
 to a synthetic app, never game isolation or gameplay proof. Source not compiled
