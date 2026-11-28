@@ -173,6 +173,31 @@ the package. This is static artifact intake, not localtest or native
 verification. The existing Mac artifact collector remains the owner
 of later codesign checks; no new runtime or validation route.
 
+### Small Mach-O metadata report without uploading the executable
+
+When full-file transfer fails, reuse the existing Node 22+ toolchain and
+the unchanged extracted `minecraft-edu` executable. Download the
+[existing collector](acceptance/macos/education-target.mjs) if the
+repository is not checked out. From PowerShell, with both files in the
+current folder:
+
+```powershell
+node .\education-target.mjs --mach-o "$PWD\minecraft-edu" | Set-Content -Encoding UTF8 .\minecraft-metadata.json
+```
+
+Send only minecraft-metadata.json. This is explicit static artifact intake,
+not localtest. The collector reads one fixed executable basename with
+bounded random reads, hashes through small buffers, and reports declared
+64-bit Intel/ARM slices, embedded CodeDirectory identity/team comparisons,
+flags, CMS/DER blob presence, selected XML entitlement-key indications
+and linked-library name indications. It does not disclose paths, raw
+entitlements or certificates, run game code, install anything or validate
+signatures. Unsupported layouts refuse. XML key indications are lexical,
+not semantic/effective values; missing linked-library hints do not rule
+out static or dynamic loading. No hard guarantee against concurrent
+replacement. Source fixtures authored NOT_EXECUTED. The existing Mac
+codesign route remains unchanged and required for actual signature proof.
+
 ## macOS synthetic lifecycle fixture (source prepared)
 
 `acceptance/macos/lifecycle-fixture.swift` is a separately compiled, opt-in

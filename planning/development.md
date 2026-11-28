@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-06a: observed bundle metadata)
+## Current status — cross-platform-native (MAC-06b: bounded Mach-O evidence intake)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,40 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-06b — bounded offline Mach-O evidence intake
+
+The operator supplied minecraft-edu (512129360 bytes) and then seven
+7z volumes (six 104857600-byte parts plus 35989534 bytes, total
+665135134 bytes). File catalog metadata observed; Python and container
+access failed with ClientError before any file bytes were inspected.
+Do not claim archive integrity or extraction. Do not request another
+large upload or smaller archive parts.
+
+Extend the existing education-target.mjs evidence owner with explicit
+`--mach-o` mode, Windows-compatible Node standard library only. No
+product change or dependency. Read exact executable basename with
+bounded offsets, 64-bit little-endian thin and big-endian FAT/FAT64
+headers, slice and load-command bounds, LC_CODE_SIGNATURE SuperBlob,
+CodeDirectory primary/alternate flags and expected identifier/team
+comparisons, CMS/DER blob presence, selected lexical XML key indications
+and selected linked dylib name hints. Hash through 1 MiB buffers; recheck
+file metadata. Reject malformed layouts, no arbitrary output of embedded
+strings, paths or group values. Source references pinned Apple XNU
+[f6217f8 loader.h](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/EXTERNAL_HEADERS/mach-o/loader.h),
+[fat.h](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/EXTERNAL_HEADERS/mach-o/fat.h)
+and [cs_blobs.h](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/osfmk/kern/cs_blobs.h).
+Unsupported byte order/architecture and oversized metadata refuse.
+No cryptographic or effective entitlement verification, no runtime
+admission, no proof of active auth libraries or profile isolation.
+Hash/metadata are not an atomic pin. Original native codesign route
+preserved. Authored synthetic format/refusal fixtures NOT_EXECUTED.
+
+Small input is now one JSON report (see tooling README), not another
+binary transfer. Explicit offline artifact reading is not localtest
+or a request to run game or source tests. No actual report obtained
+in this turn; integration remains BLOCKED. All Windows, CI, test,
+native activation and release holds preserved.
 
 ### MAC-06a — user-supplied 1.26.33.0 bundle metadata
 
@@ -840,7 +874,8 @@ and adds the historical Microsoft Intune installation name;
 MAC-05d records current-release external binary evidence and prioritizes
 OS-user isolation feasibility without changing product acceptance;
 MAC-06 records the offline Windows artifact intake and virtual-desktop limits;
-MAC-06a records actual user-supplied bundle metadata and exact discovery identity.
+MAC-06a records actual user-supplied bundle metadata and exact discovery identity;
+MAC-06b adds bounded cross-platform Mach-O evidence intake after transfer failure.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
