@@ -252,6 +252,21 @@ describe("Emulator source verification routing", () => {
     expect(app.scripts["build:lazy-tester"]).toContain(" -- --locked");
   });
 
+  it("keeps default source checks distinct from product and held feature builds", () => {
+    for (const name of ["check:rust", "check:rust:target", "test:rust"]) {
+      expect(app.scripts[name]).not.toMatch(/--features|--all-features/);
+    }
+    expect(app.scripts["dev:lazy-tester"]).toContain("--features lazy-tester-package");
+    expect(app.scripts["build:lazy-tester"]).toContain("--features lazy-tester-package");
+    expect(app.scripts["build:lazy-tester"]).not.toMatch(/--all-features|mc02-native-input|multi-client-native-input/);
+    const manifest = readFileSync(new URL("../src-tauri/Cargo.toml", import.meta.url), "utf8");
+    expect(manifest).toContain('default = ["custom-protocol"]');
+    expect(manifest).toContain('lazy-tester-package = ["native-workspace-preview"]');
+    const build = readFileSync(new URL("../src-tauri/build.rs", import.meta.url), "utf8");
+    expect(build).toContain('if experimental_input && std::env::var("PROFILE").as_deref() == Ok("release")');
+    expect(build).toContain('native-workspace-preview requires a Tauri CLI configuration overlay');
+  });
+
   it("uses the product route for normal development and keeps private preview explicit", () => {
     expect(root.scripts.dev).toBe("npm --prefix apps/desktop run dev:app");
     expect(app.scripts["dev:app"]).toBe("npm run dev:lazy-tester");

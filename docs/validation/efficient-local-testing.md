@@ -294,3 +294,28 @@ DLL, corrupted private data or false stopped status. If only a minor UI
 cosmetic issue occurs, mark it and continue unaffected independent cases.
 Quick screening is deliberately narrower than release verification and
 must never be reported as `SOURCE_EXECUTION` full regression PASS.
+
+
+## Prelocal efficiency and correctness (PLA-01–08)
+
+**Source-only; NOT_EXECUTED.** Reuse existing source and native routes, not a new runner. Use the exact candidate SHA and match receipts to the actual feature set.
+
+| Source coverage | Existing route | Limitation |
+| --- | --- | --- |
+| Standard source screen | `DEV.cmd check:quick` | Default desktop Cargo features, runtime-core and frontend screen; not product packaging |
+| Full source preflight | `DEV.cmd preflight` or existing `verify:source` | Default desktop features and full existing source suites; `--all-targets` does not enable optional features |
+| Product-feature compile/build | Existing `DEV.cmd dev` / separately approved package route | Uses `lazy-tester-package` and reviewed overlay/payload; BLOCKED while standard ABI v4 digest pair is absent |
+| Native preview | Existing explicit preview route | Separate identity, empty resource overlay, not product acceptance |
+| Experimental input, synthetic handoff, standalone GPU capture | Existing explicitly gated routes or source candidates | Outside normal verification graph; do not add `--all-features`, auto-build or approve held binaries |
+
+Cargo feature selection is independent of target selection ([Cargo Book](https://doc.rust-lang.org/cargo/commands/cargo-check.html#feature-selection)). Do not mark uncompiled feature branches, optional binaries or ignored native fixtures as tested. No speculative lockfile/dependency or global lint cleanup; require actual feature/compiler evidence. The existing standard native digest, experimental input, screenshot and recorder approval holds remain.
+
+| PLA scope | Existing evidence/fixture owner | Required later observation |
+| --- | --- | --- |
+| 01 | Native session transport and desktop page fixtures | Uncertain Settings/Storage: original pending worker finishes, exact full Inspect reconciles, no replay; healthy read remains one transaction |
+| 02 | Session controller routing and agent CLI/MCP fixtures | Metadata operations return only operation-specific receipt; no unrelated profile observations; held input ACK remains distinct |
+| 03/04 | Scheduling, caption, workspace rollback and native helper fixtures | Settled live cadence vs attention/input; hung-caption recovery; original process handle wait and checkpoint retention; thread admission refusal |
+| 05/06 | Storage, workspace and capture routing fixtures | Same cache count/partial and mutation protection; one verified capture target when approved; no changed selection/category wire bytes |
+| 07/08 | Existing repository structure/lock and verification-routing suites | Concise handoff, exact feature scope, no retired provider payload, all changed consumers; no unsupported acceptance claim |
+
+Use the existing matched-workload evidence baseline for IPC/CPU/RAM/GPU/latency. A source reduction in calls is not a measured improvement. Do not run or activate held functionality merely to close this source audit.

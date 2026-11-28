@@ -4,6 +4,8 @@
 [development.md](development.md). Always use current `Local` source and
 [root rules](../AGENTS.md), not an old archived `Next` field.
 
+The [complete handoff through PLA implementation](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/4ddb3c34311ccbe81b4f831cd743426d6cd90ee5/planning/development.md) is preserved at its original Git revision, including earlier Work IDs and evidence. The current concise handoff supersedes its Next fields.
+
 **Local-test plan:** [Computer Use Windows local-test guide](../docs/validation/ai-computer-use-localtest.md)
 (separate authorization required before running any checks or games).
 
