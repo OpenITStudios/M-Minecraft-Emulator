@@ -5,6 +5,7 @@ import Foundation
 import Darwin
 import ScreenCaptureKit
 import CoreGraphics
+import CoreFoundation
 import Security
 
 @MainActor
@@ -27,6 +28,8 @@ private struct PathObservation: Codable {
     let applicationSupport: Bool
     let caches: Bool
     let temporary: Bool
+    let preferenceBefore: String?
+    let preferenceAfter: String?
 
     var summary: [String: Bool] {
         ["environmentHome": environmentHome, "foundationHome": foundationHome,
@@ -357,7 +360,9 @@ struct LifecycleFixture {
            UUID(uuidString: String(id.dropFirst(prefix.count))) != nil {
             guard arguments.isEmpty || (arguments.count == 2 &&
                   ["--profile-probe-child", "--workspace-probe-child"].contains(arguments[0]) &&
-                  slots.contains(arguments[1]))
+                  slots.contains(arguments[1])) ||
+                  (arguments.count == 3 && arguments[0] == "--preferences-probe-child" &&
+                   slots.contains(arguments[1]) && ["write", "read"].contains(arguments[2]))
             else { exit(2) }
             let app = NSApplication.shared
             app.setActivationPolicy(.accessory)
@@ -369,7 +374,10 @@ struct LifecycleFixture {
                 return
             }
             if !arguments.isEmpty {
-                do { try observeProfile(slot: arguments[1]) }
+                do {
+                    try observeProfile(slot: arguments[1],
+                                       preferencePhase: arguments.count == 3 ? arguments[2] : nil)
+                }
                 catch { exit(2) }
             }
             app.run()
@@ -386,7 +394,8 @@ struct LifecycleFixture {
             return
         }
         guard arguments.isEmpty || arguments == ["--profile-probe"] ||
-              arguments == ["--workspace-probe"] || arguments == ["--shared-workspace-probe"] else {
+              arguments == ["--workspace-probe"] || arguments == ["--shared-workspace-probe"] ||
+              arguments == ["--preferences-probe"] else {
             receipt("REFUSED"); exit(2)
         }
         do {
@@ -396,12 +405,14 @@ struct LifecycleFixture {
                 guard #available(macOS 14.0, *), CGPreflightScreenCaptureAccess()
                 else { throw FixtureFailure(status: "CAPTURE_PERMISSION_UNAVAILABLE") }
             }
-            let result = try run(pair: !arguments.isEmpty, workspace: workspace, shared: shared)
+            let result = try run(pair: !arguments.isEmpty, workspace: workspace, shared: shared,
+                                 preferences: arguments == ["--preferences-probe"])
             receipt(result.status, profiles: result.profiles)
             if result.status != "SYNTHETIC_EXIT_OBSERVED" &&
                result.status != "SYNTHETIC_PRIVATE_PATHS_OBSERVED" &&
                result.status != "SYNTHETIC_WINDOW_MARKERS_OBSERVED" &&
-               result.status != "SYNTHETIC_WORKSPACE_SELECTION_OBSERVED" { exit(1) }
+               result.status != "SYNTHETIC_WORKSPACE_SELECTION_OBSERVED" &&
+               result.status != "SYNTHETIC_PRIVATE_PREFERENCES_OBSERVED" { exit(1) }
         } catch let failure as FixtureFailure {
             receipt(failure.status)
             exit(1)
@@ -433,7 +444,13 @@ struct LifecycleFixture {
         }
         if !profiles.isEmpty {
             report["profiles"] = profiles
-            report["preferencesIsolation"] = "NOT_OBSERVED"
+            if status == "SYNTHETIC_PRIVATE_PREFERENCES_OBSERVED" {
+                report["preferencesIsolation"] = "SYNTHETIC_DOMAIN_ONLY"
+            } else if status == "SYNTHETIC_SHARED_OR_UNRESOLVED_PREFERENCES" {
+                report["preferencesIsolation"] = "SHARED_OR_UNRESOLVED"
+            } else {
+                report["preferencesIsolation"] = "NOT_OBSERVED"
+            }
             report["authenticationIsolation"] = "NOT_OBSERVED"
             report["minecraftIsolation"] = "NOT_VERIFIED"
         }
@@ -455,8 +472,9 @@ struct LifecycleFixture {
         root.appendingPathComponent("Profile-" + slot, isDirectory: true)
     }
 
-    private static func observationFile(_ root: URL, _ slot: String) -> URL {
-        root.appendingPathComponent("observation-" + slot + ".json")
+    private static func observationFile(_ root: URL, _ slot: String,
+                                        phase: String? = nil) -> URL {
+        root.appendingPathComponent("observation-" + slot + (phase.map { "-" + $0 } ?? "") + ".json")
     }
 
     private static func contained(_ candidate: URL?, in root: URL) -> Bool {
@@ -477,12 +495,49 @@ struct LifecycleFixture {
         return root
     }
 
-    private static func observeProfile(slot: String) throws {
+    // Only the fresh UUID fixture bundle's own current-user/any-host
+    // preference domain. This can leave a tiny synthetic preference in the
+    // real user's Library if HOME is ignored. Never read game or global
+    // preferences, never touch Keychain, never reset an existing domain.
+    private static func preferenceObservation(slot: String, phase: String) throws -> (String, String) {
+        guard let id = Bundle.main.bundleIdentifier, id.hasPrefix(prefix),
+              UUID(uuidString: String(id.dropFirst(prefix.count))) != nil,
+              slots.contains(slot), ["write", "read"].contains(phase)
+        else { throw FixtureFailure(status: "PREFERENCE_DOMAIN_UNCONFIRMED") }
+        let domain = id as CFString
+        let key = "LazyTesterSyntheticMarker" as CFString
+        func sync() throws {
+            guard CFPreferencesSynchronize(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+            else { throw FixtureFailure(status: "PREFERENCE_SYNC_UNCONFIRMED") }
+        }
+        func observed() throws -> String {
+            guard let value = CFPreferencesCopyValue(key, domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+            else { return "ABSENT" }
+            guard let marker = value as? String, slots.contains(marker)
+            else { throw FixtureFailure(status: "PREFERENCE_DOMAIN_UNCONFIRMED") }
+            return marker
+        }
+        try sync()
+        let before = try observed()
+        if phase == "write" {
+            // A is first. B may see A in a shared domain; allow only that
+            // exact fixture marker, never replace unexpected/preexisting data.
+            guard before == "ABSENT" || (slot == "B" && before == "A")
+            else { throw FixtureFailure(status: "PREFERENCE_DOMAIN_UNCONFIRMED") }
+            CFPreferencesSetValue(key, slot as CFString, domain,
+                                  kCFPreferencesCurrentUser, kCFPreferencesAnyHost)
+            try sync()
+        }
+        return (before, try observed())
+    }
+
+    private static func observeProfile(slot: String, preferencePhase: String? = nil) throws {
         let root = try fixtureRoot()
         let profile = profileRoot(root, slot)
         let fm = FileManager.default
-        // Observe standard path resolution only. Never read or write preferences,
-        // Keychain, application-support or cache contents; no game is involved.
+        // Ordinary profile mode remains path-only. The explicit preferences
+        // mode writes only its UUID fixture domain marker; no game data.
+        let preference = try preferencePhase.map { try preferenceObservation(slot: slot, phase: $0) }
         let home = ProcessInfo.processInfo.environment["HOME"].map {
             URL(fileURLWithPath: $0, isDirectory: true)
         }
@@ -492,15 +547,17 @@ struct LifecycleFixture {
             foundationHome: contained(URL(fileURLWithPath: NSHomeDirectory()), in: profile),
             applicationSupport: contained(fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first, in: profile),
             caches: contained(fm.urls(for: .cachesDirectory, in: .userDomainMask).first, in: profile),
-            temporary: contained(fm.temporaryDirectory, in: profile))
+            temporary: contained(fm.temporaryDirectory, in: profile),
+            preferenceBefore: preference?.0, preferenceAfter: preference?.1)
         // Write only a new receipt at the fixed, fixture-owned path.
-        try JSONEncoder().encode(observation).write(to: observationFile(root, slot),
+        try JSONEncoder().encode(observation).write(to: observationFile(root, slot, phase: preferencePhase),
                                                     options: .withoutOverwriting)
     }
 
     private static func readObservation(root: URL, slot: String,
-                                        application: NSRunningApplication) throws -> PathObservation {
-        let url = observationFile(root, slot)
+                                        application: NSRunningApplication,
+                                        phase: String? = nil) throws -> PathObservation {
+        let url = observationFile(root, slot, phase: phase)
         let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
         guard values.isRegularFile == true, values.isSymbolicLink == false,
               let size = values.fileSize, (1...4096).contains(size)
@@ -704,7 +761,8 @@ struct LifecycleFixture {
     }
 
     private static func launch(id: String, root: URL, bundle: URL, exe: URL,
-                               slot: String? = nil, workspace: Bool = false) throws -> NSRunningApplication {
+                               slot: String? = nil, workspace: Bool = false,
+                               preferencePhase: String? = nil) throws -> NSRunningApplication {
         let result = LaunchResult()
         let config = NSWorkspace.OpenConfiguration()
         config.createsNewApplicationInstance = true
@@ -716,7 +774,8 @@ struct LifecycleFixture {
             config.arguments = ["--workspace-probe-child", slot]
         } else if let slot = slot {
             let profile = profileRoot(root, slot)
-            config.arguments = ["--profile-probe-child", slot]
+            config.arguments = preferencePhase.map { ["--preferences-probe-child", slot, $0] }
+                ?? ["--profile-probe-child", slot]
             // Hypothesis for synthetic children only, not a Minecraft launch recipe.
             config.environment = ["HOME": profile.path,
                                   "TMPDIR": profile.appendingPathComponent("Temp", isDirectory: true).path]
@@ -746,7 +805,8 @@ struct LifecycleFixture {
         else { throw FixtureFailure(status: "EXIT_UNCONFIRMED") }
     }
 
-    private static func run(pair: Bool, workspace: Bool, shared: Bool) throws -> (status: String, profiles: [[String: Bool]]) {
+    private static func run(pair: Bool, workspace: Bool, shared: Bool,
+                            preferences: Bool) throws -> (status: String, profiles: [[String: Bool]]) {
         let fm = FileManager.default
         let id = prefix + UUID().uuidString.lowercased()
         let root = fm.temporaryDirectory.resolvingSymlinksInPath()
@@ -781,6 +841,59 @@ struct LifecycleFixture {
                                    attributes: [.posixPermissions: 0o700])
             try fm.createDirectory(at: profile.appendingPathComponent("Temp", isDirectory: true),
                                    withIntermediateDirectories: false)
+        }
+        if preferences {
+            // Reuse the same bundle, profile roots and retained launch/close
+            // helpers. Ordered writes, then fresh process reads while the
+            // peer remains alive; no timing guess or new runtime route.
+            func start(_ slot: String, _ phase: String) throws -> (NSRunningApplication, PathObservation) {
+                let app = try launch(id: id, root: root, bundle: bundle, exe: exe,
+                                     slot: slot, preferencePhase: phase)
+                guard wait(5, until: {
+                    fm.fileExists(atPath: observationFile(root, slot, phase: phase).path)
+                }), exactLiveApplication(app, id: id, bundle: bundle, exe: exe)
+                else { throw FixtureFailure(status: "PREFERENCE_OBSERVATION_UNCONFIRMED") }
+                return (app, try readObservation(root: root, slot: slot, application: app, phase: phase))
+            }
+            func distinct(_ a: NSRunningApplication, _ b: NSRunningApplication) throws {
+                guard exactLiveApplication(a, id: id, bundle: bundle, exe: exe),
+                      exactLiveApplication(b, id: id, bundle: bundle, exe: exe),
+                      a.processIdentifier != b.processIdentifier, !a.isEqual(b)
+                else { throw FixtureFailure(status: "INDEPENDENT_INSTANCE_UNCONFIRMED") }
+            }
+            let (a, aw) = try start("A", "write")
+            let (b, bw) = try start("B", "write")
+            try distinct(a, b)
+            try close(a, id: id, bundle: bundle, exe: exe)
+            guard exactLiveApplication(b, id: id, bundle: bundle, exe: exe)
+            else { throw FixtureFailure(status: "PEER_EXIT_OR_IDENTITY_CHANGED") }
+            let (ar, av) = try start("A", "read")
+            try distinct(ar, b)
+            try close(b, id: id, bundle: bundle, exe: exe)
+            guard exactLiveApplication(ar, id: id, bundle: bundle, exe: exe)
+            else { throw FixtureFailure(status: "PEER_EXIT_OR_IDENTITY_CHANGED") }
+            let (br, bv) = try start("B", "read")
+            try distinct(ar, br)
+            try close(ar, id: id, bundle: bundle, exe: exe)
+            guard exactLiveApplication(br, id: id, bundle: bundle, exe: exe)
+            else { throw FixtureFailure(status: "PEER_EXIT_OR_IDENTITY_CHANGED") }
+            try close(br, id: id, bundle: bundle, exe: exe)
+            let reports = [("A", aw, av), ("B", bw, bv)].map { slot, write, read in
+                var report = write.summary
+                report["freshProfilePathsPrivate"] = read.allPrivate
+                report["markerInitiallyAbsent"] = write.preferenceBefore == "ABSENT"
+                report["ownMarkerAfterWrite"] = write.preferenceAfter == slot
+                report["ownMarkerAfterReopen"] = read.preferenceBefore == slot && read.preferenceAfter == slot
+                return report
+            }
+            let privatePreferences = reports.allSatisfy {
+                $0["markerInitiallyAbsent"] == true &&
+                $0["ownMarkerAfterWrite"] == true && $0["ownMarkerAfterReopen"] == true
+            }
+            // Path and preference evidence stay distinct. Positive markers
+            // do not prove Keychain, authentication or Minecraft isolation.
+            return (privatePreferences ? "SYNTHETIC_PRIVATE_PREFERENCES_OBSERVED" :
+                    "SYNTHETIC_SHARED_OR_UNRESOLVED_PREFERENCES", reports)
         }
         // Both instances use exactly the same bundle and identifier.
         let a = try launch(id: id, root: root, bundle: bundle, exe: exe, slot: "A", workspace: workspace)

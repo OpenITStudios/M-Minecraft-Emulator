@@ -242,6 +242,19 @@ with the selected image reused in the viewport. The panel is not an embedded
 game window and does not send input events or access another user session.
 No screenshots are persisted. Any unconfirmed selection, focus or marker
 refuses; existing single/profile/workspace modes remain available.
+The explicit `--preferences-probe` mode reuses the same synthetic bundle,
+HOME/TMPDIR profile roots, exact launch/close helpers and receipt owner.
+A writes a marker to a fresh UUID bundle's current-user/any-host
+CFPreferences domain, B observes before writing its own marker, then A
+and B each close and reopen while the other retained app remains live.
+Reports contain only path and marker comparison booleans. The mode may
+leave a small UUID-domain synthetic preference in the actual user's
+Library if HOME redirection is ignored; no automatic deletion, no
+existing preference domain, game, token or Keychain access. A positive
+result applies only to this synthetic domain; authentication, game
+storage, native workspace and runtime admission remain unverified.
+This is future held acceptance source, not a localtest request.
+
 The explicit `--rendezvous-probe` mode is a separate one-shot synthetic
 cross-user feasibility witness in the same source file. It requires two
 already-consented, distinct standard users in graphical login sessions,

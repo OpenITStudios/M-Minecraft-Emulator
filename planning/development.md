@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-07d: cooperative rendezvous witness)
+## Current status — cross-platform-native (MAC-08a: same-user priority and preference witness)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,61 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-08a — restore same-user native priority; synthetic preference witness
+
+Operator selected the Windows-like approach as investigation priority:
+same OS user, same GUI desktop, one official unmodified installation,
+independent native processes and data/account contexts, one existing
+controller and workspace. Pause MAC-07e and further distinct-user
+transport work; MAC-07a–d remain historical fallback research only,
+not active product topology or automatic fallback. Supersedes the
+investigation priority of MAC-05d/06c/07c, not their observed evidence,
+security boundaries or five-instance acceptance requirements.
+
+Re-reviewed actual Windows suspended-process bootstrap and existing
+MAC-04c fixture: Windows redirection relies on reviewed compatibility
+DLLs and Win32 namespaces, not merely environment variables. Apple
+NSWorkspace.OpenConfiguration supports a new instance and process-local
+environment; these are candidate mechanisms, not proof of Education
+private storage. PluralMacPlus previously reviewed at 458d8e2 shares
+Keychain and uses a preferences compatibility shim; no copy, patch,
+injection, re-signing or shim adopted. No supported Education-specific
+profile-path option established in reviewed public sources. Official
+[Minecraft account management](https://edusupport.minecraft.net/hc/en-us/articles/360061382672-Sign-Into-Minecraft-Education)
+describes last-player persistence and switching without clearing saved
+passwords. Shared cache permission does NOT prove a shared active
+account; conversely, concurrent independent active accounts and restart
+persistence are not established. Do not read or manipulate credentials,
+token caches or MSAL configuration. Static main Mach-O still unread.
+
+Extend existing lifecycle-fixture.swift (no new product owner) with
+explicit --preferences-probe: same unique synthetic bundle identifier,
+two HOME/TMPDIR roots, current-user/any-host CFPreferences domain,
+one synthetic key, ordered A/B writes, exact retained app close/reopen
+A and B with peer liveness checks, fresh readbacks. Use documented
+[CFPreferencesCopyValue](https://developer.apple.com/documentation/corefoundation/cfpreferencescopyvalue(_:_:_:_:))
+and [CFPreferencesSynchronize](https://developer.apple.com/documentation/corefoundation/cfpreferencessynchronize(_:_:_:))
+for exact domain reads/flushes, not a global preferences reset. Only
+fresh UUID fixture namespace, refuse unexpected values, no real game
+preferences or Keychain. Small synthetic preference may remain in real
+user Library if HOME is ignored; disclose, no automatic cleanup.
+Path observations remain separate from preference comparisons.
+Positive markers do not establish general preferences, auth, world
+or Minecraft isolation. Previous modes unchanged; source NOT_EXECUTED.
+
+Ordered next gates: (1) one original signed app and two retained native
+processes; (2) actual supported game-owned private data/settings route,
+including caches and cloud destinations; (3) two independently licensed
+manual sign-ins, independent active identities and sign-out/reopen
+without cross-account effect or overwrite; (4) native window capture
+and human-selected input in same desktop; (5) five profiles and measured
+overhead. Do not admit runtime on synthetic results. Source-only review
+can pursue existing artifact metadata and a supported game-owned route,
+but actual independence requires matching Mac observation. No localtest
+request, no compile, CI, dependency, release or Windows runtime change.
+Distinct-user path remains paused unless same-user is ruled out and
+operator selects the fallback. All previous holds preserved.
 
 ### MAC-07d — cooperative cross-session rendezvous witness
 
@@ -1249,7 +1304,8 @@ MAC-06d records bounded Mach-O observations of two actual bundled frameworks;
 MAC-07a reviews Standard-session transport and exact-target admission boundaries;
 MAC-07b adds a test-only synthetic transport admission contract;
 MAC-07c maps public native APIs and identifies the remaining trusted rendezvous gate;
-MAC-07d prepares a one-shot cooperative cross-session rendezvous witness.
+MAC-07d prepares a one-shot cooperative cross-session rendezvous witness;
+MAC-08a restores same-user priority and adds an opt-in synthetic preference witness.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
