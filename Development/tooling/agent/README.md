@@ -140,30 +140,37 @@ of autonomous play.
    routes; if no reviewed optional WGC worker is configured, return
    WEBP_CAPTURE_REQUIRES_WGC rather than silently use CUA PNG. CUA remains
    semantic/no-image inspection and Legacy PNG compatibility.
-3. Actual gameplay input is BLOCKED_NO_VERIFIED_INPUT_BACKEND. A human can
-   play using the normal app; do not turn a planned action into executed
-   evidence or enable experiments to fill the gap. Close remains manual
-   until the full desktop recording/window release admission can be reused.
-   Native product capture/recording approval is still held; the optional
-   WGC source requires a separately reviewed matching worker and host;
-   CUA PNG compatibility and WGC are not runtime verified.
-4. Before gameplay, call `summarize_test_evidence({slots:[2],window:'begin'})`
-   to record a bounded local capture baseline for the selected slots. After
-   play, call the same tool with `window:'read'`. Reuses the existing pinned
-   file cursor: baseline reads at most 128 bytes, then reads bounded appended
-   bytes plus the original anchor. No native query, polling or new tool.
-   Explicit begin replaces only the selected in-memory baselines; failed
-   begin clears them. Read never silently falls back to historical log tails.
-   Replacement, truncation, changed anchor or missing baseline reports
-   unavailable evidence. Definitive continuity failure invalidates that slot's
-   baseline; only a new explicit begin can establish another one. At most
-   20 records/slot, bounded summary timeline. Byte-boundary scanning
+3. Establish the evidence boundary **before** the first gameplay action.
+   Call `summarize_test_evidence({slots:[2],window:'begin'})` once for the
+   selected slots. The existing pinned file cursor reads at most 128 bytes
+   for the baseline. Explicit begin replaces only the selected in-memory
+   baselines; failed begin clears them. Do not rebase during the same test.
+   A baseline is not verified game-session identity. If original Probe is
+   relevant, use `probe_qa` to prepare its own checkpoint before an
+   authorized human/admin executes the original command.
+4. Perform the intended gameplay only through an authorized available
+   interface. Actual AI gameplay input remains
+   BLOCKED_NO_VERIFIED_INPUT_BACKEND; a human can play using the normal app.
+   Do not turn planned actions into executed evidence or enable experiments
+   to fill the gap. Observe only as needed using step 2; never start another
+   sampler for the same slot. Native product capture/recording approval is
+   still held; the optional WGC source requires a separately reviewed
+   matching worker and host. CUA PNG compatibility and WGC are not runtime
+   verified.
+5. After the intended gameplay, stop any sampler no longer needed and read
+   the same evidence window with `summarize_test_evidence({slots:[2],window:'read'})`.
+   This reads bounded appended bytes plus the original anchor; no native
+   query, polling or new tool. Read never silently falls back to historical
+   log tails. Replacement, truncation, changed anchor or missing baseline
+   reports unavailable evidence. Definitive continuity failure invalidates
+   that slot's baseline; only a new explicit begin can establish another one.
+   At most 20 records/slot, bounded summary timeline. Byte-boundary scanning
    decodes only eligible lines; Probe rejects marker overflow immediately.
-   Partial lines and record limits are explicit. Baseline is not verified
-   game-session identity. Use original Probe only when relevant; it prepares
-   a command for an authorized human/admin and reads original reported
-   results, not map gameplay success.
-5. Code Mode filters/compares bounded observations and writes the report
+   Partial lines and record limits are explicit. If Probe was used, read its
+   original reported result via `probe_qa`; it is not map gameplay success.
+   Close remains manual until full desktop recording/window release
+   admission can be reused; never retry uncertain lifecycle mutations.
+6. Code Mode filters/compares bounded observations and writes the report
    in the host conversation. No new report database, background runner
    or second telemetry engine. Record map/revision (operator-confirmed),
    slots, test objective, actions actually performed and who performed
