@@ -244,7 +244,7 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
     buildScript,
     read('Development/apps/desktop/src-tauri/Cargo.toml'),
     read('Development/tooling/acceptance/windows/bootstrap-ordering/CMakeLists.txt'),
-    read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs'));
+    read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/reviewed_bootstrap_payload.rs'));
   const inspectionPolicy=read('Development/apps/desktop/src/app/inspectionScheduling.ts');
   assert.ok(inspectionPolicy.includes('export function periodicInspectionInterval(') &&
     inspectionPolicy.includes("(page === 'workspace' && !workspaceSettledIdle) ||") &&
@@ -401,7 +401,8 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
     && gameSessions.includes('super::super::inspect_native_workspace()?.processes.is_empty()'),
     'Read-only Settings may reuse pinned image but all mutation admission must still perform fresh registration checks');
   const gameBootstrap=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs');
-  const presentationPreparation=gameBootstrap.slice(gameBootstrap.indexOf('    fn prepare_presentation('),gameBootstrap.indexOf('    fn enroll('));
+  const reviewedPayload=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/reviewed_bootstrap_payload.rs');
+  const presentationPreparation=reviewedPayload.slice(reviewedPayload.indexOf('    pub(super) fn prepare_presentation('),reviewedPayload.indexOf('    pub(super) fn enroll('));
   const managedLaunch=gameSessions.slice(gameSessions.indexOf('    fn launch_inner('),gameSessions.indexOf('    fn mc02_input('));
   assert.ok((managedLaunch.match(/load_performance\(\)/g)??[]).length===1
     && managedLaunch.indexOf('let limits = crate::engine::manager_settings::load_performance()?;')<managedLaunch.indexOf('game_preset::apply_inactive')

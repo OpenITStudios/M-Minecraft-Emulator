@@ -215,7 +215,7 @@ native binaries:
 
 The source authority for their approved SHA-256 values is
 `REVIEWED_EDUCATION_BOOTSTRAP` in
-[the native controller](../../Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs).
+[the reviewed bootstrap payload owner](../../Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/reviewed_bootstrap_payload.rs).
 The existing staging script verifies **both** hashes before use. The current
 v4 policy is `None`: no old DLL pair is admitted. In the separately authorized
 PC-local phase, use the existing [native CMake procedure](../../Development/tooling/acceptance/windows/bootstrap-ordering/README.md)
