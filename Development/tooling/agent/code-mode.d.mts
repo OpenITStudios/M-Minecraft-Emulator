@@ -30,7 +30,7 @@ export interface Tester {
   observation:{state(args?:{slots?:Slot[];since?:Json[]}):Result};
   input:{
     plan(args:({actions:Action[];groups?:never}|{groups:ActionGroup[];actions?:never})&{includeTimeline?:boolean;includeClientFrames?:boolean}):Result;
-    assess(args:{actions:Action[]}):Result;
+    assess(args:{actions:Action[];groups?:never}|{groups:ActionGroup[];actions?:never}):Result;
   };
   capabilities(args?:Record<string,never>):Result;
 }

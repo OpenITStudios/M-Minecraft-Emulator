@@ -3,7 +3,7 @@
 // Every native mutation goes through the existing authenticated Lazy Tester controller.
 import {createHash,randomBytes} from 'node:crypto';
 import path from 'node:path';
-import {planPeerSession,planPlayerActions,expandActionGroups} from './control-plan.mjs';
+import {planPeerSession,planPlayerActions,resolveActionInput} from './control-plan.mjs';
 import {compilePlayerInputTimeline,compilePerClientInputFrames} from './input-timeline.mjs';
 import {prepareInputRoute} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
@@ -1695,8 +1695,7 @@ export function createOperationCore(config,{
     }
     if (name==='plan_player_actions') {
       keysExactly(args,['actions','groups','includeTimeline','includeClientFrames']);
-      if (Object.hasOwn(args,'actions')===Object.hasOwn(args,'groups')||
-          (args.includeTimeline!==undefined &&
+      if ((args.includeTimeline!==undefined &&
            typeof args.includeTimeline!=='boolean') ||
           (args.includeClientFrames!==undefined &&
            typeof args.includeClientFrames!=='boolean') ||
@@ -1704,7 +1703,7 @@ export function createOperationCore(config,{
         throw new Error('Invalid tool arguments');
       }
       const compact=Object.hasOwn(args,'groups');
-      const actions=compact?expandActionGroups(args.groups):args.actions;
+      const actions=resolveActionInput(args);
       if(args.includeClientFrames===true) {
         // Pure preview: NEVER contacts native controller or sends input.
         return compilePerClientInputFrames(config.mode,actions);
@@ -1785,11 +1784,12 @@ export function createOperationCore(config,{
     }
     if (name==='evaluate_experimental_multi_client_outcomes') {
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
-      keysExactly(args,['actions','receipt','after','reviews']);
+      keysExactly(args,['actions','groups','receipt','after','reviews']);
+      const actions=resolveActionInput(args);
       // The same compiler defines which AI slots and outcome categories
       // were requested. A caller cannot invent an evaluation of MC01
       // human actions or an unrelated attack/interaction.
-      const scheduled=prepareMultiClientPulseBatches(config.mode,args.actions);
+      const scheduled=prepareMultiClientPulseBatches(config.mode,actions);
       if(args.receipt?.actionFingerprint!==fingerprintPulsePlan(config.mode,scheduled)) {
         throw new Error('TEAM_ACTION_RECEIPT_MISMATCH');
       }
@@ -1809,13 +1809,13 @@ export function createOperationCore(config,{
       const comparison=summarizeTeamVisualState(
         config.mode,scheduled.slots,reading,args.receipt.visualBaseline);
       return evaluateTeamActionFeedback(
-        config.mode,args.actions,args.receipt,comparison,
+        config.mode,actions,args.receipt,comparison,
         args.after,args.reviews??[]);
     }
     if (name==='run_experimental_observed_actions') {
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
-      keysExactly(args,['actions','basis']);
-      const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
+      keysExactly(args,['actions','groups','basis']);
+      const schedule=prepareMultiClientPulseBatches(config.mode,resolveActionInput(args));
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       // Compile and validate the caller's exact visual baseline even if
       // reconnect recovery is still required. The existing observer must
@@ -1900,7 +1900,7 @@ export function createOperationCore(config,{
             arguments:{slots:schedule.slots,since:prior},
           },
           nextEvaluation:{tool:'evaluate_experimental_multi_client_outcomes',
-            requiredInputs:['actions','receipt','after','reviews']},
+            requiredInputs:[Object.hasOwn(args,'groups')?'groups':'actions','receipt','after','reviews']},
           note:'Compare newer per-client samples and explicitly review PNGs via read_visual_observation; unchanged or changed PNG bytes alone cannot prove Minecraft movement.'};
       } finally {
         if(observedSequence===observedRound) observedSequence=null;
@@ -1908,9 +1908,9 @@ export function createOperationCore(config,{
     }
     if (name==='run_experimental_multi_client_actions') {
       if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
-      keysExactly(args,['actions']);
+      keysExactly(args,['actions','groups']);
       // Compile the FULL cross-slot plan before any input request.
-      const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
+      const schedule=prepareMultiClientPulseBatches(config.mode,resolveActionInput(args));
       return runMultiClientSchedule(schedule);
     }
     if (name==='stop_experimental_mc02_actions') {
@@ -1947,11 +1947,11 @@ export function createOperationCore(config,{
     }
     if (name==='run_experimental_mc02_actions') {
       if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
-      keysExactly(args,['slot','actions']);
+      keysExactly(args,['slot','actions','groups']);
       if(args.slot!==2)throw new Error('MC02_SEQUENCE_INVALID_ACTIONS');
       // Pure compile before native admission: malformed timelines cannot
       // spawn a child process or send a single MC02 game-input packet.
-      const batch=prepareMc02PulseBatch(args.actions);
+      const batch=prepareMc02PulseBatch(resolveActionInput(args));
       if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const abort=new AbortController();
@@ -2042,10 +2042,10 @@ export function createOperationCore(config,{
       } finally {inFlight=false;}
     }
     if (name==='assess_input_route') {
-      keysExactly(args,['actions']);
+      keysExactly(args,['actions','groups']);
       // Validate all actions and the human/AI ownership before touching
       // the native controller. The request only inspects existing windows.
-      const required=prepareInputRoute(config.mode,args.actions);
+      const required=prepareInputRoute(config.mode,resolveActionInput(args));
       if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const started=Date.now();

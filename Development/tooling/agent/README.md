@@ -226,7 +226,7 @@ https://www.anthropic.com/research/code-execution-with-mcp.
 
 The existing **read-only** planner in the restricted/legacy profiles accepts
 either the original `actions` or compact `groups`, never both. The trusted
-SDK's existing `tester.input.plan` accepts the same groups. For example:
+SDK's existing `tester.input.plan` and `tester.input.assess` accept the same groups. For example:
 
 ```js
 await tester.input.plan({groups:[
@@ -253,8 +253,13 @@ control's authored end (horizon),
 concurrency and the blocked execution gate. Ask includeTimeline or
 includeClientFrames only when reviewing details. The local source export
 `expandActionGroups` in control-plan.mjs expands to the same canonical
-actions for trusted host composition. No additional preview/execute tool
-is exposed in Playtest (15 tools). Actual input is still blocked; raw keys,
+actions for trusted host composition. The existing explicitly gated MC02,
+multi-client, observed-action and feedback routes also accept either groups
+or actions, never both. They expand once before the original native compiler,
+so the same per-slot action/pulse limits, camera delta, timing, lease,
+identity, neutral and recovery checks remain. Feedback uses the same
+canonical expanded actions and fingerprint; no caller expansion round-trip.
+No additional preview/execute tool is exposed in Playtest (15 tools). Actual input is still blocked; raw keys,
 sprint, menu pointer, scroll, inventory, hotbar and backend calibration are
 not newly supported. No preset, random humanization, native ABI change,
 new scheduler, or experimental activation.

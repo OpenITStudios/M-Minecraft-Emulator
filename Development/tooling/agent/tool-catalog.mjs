@@ -1,4 +1,6 @@
 // Canonical MCP descriptors. No transport, native calls or session state.
+const ACTION_GROUPS={type:'array',minItems:1,maxItems:32,description:'Compact groups expand into at most 32 canonical actions; camera samples preserve total relative delta. Existing route limits apply after expansion.',items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:2000},hold:{type:'array',maxItems:8,uniqueItems:true,items:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use']}},look:{type:'object',properties:{deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512},steps:{type:'integer',minimum:1,maximum:32},curve:{type:'string',enum:['linear','smooth']}},required:['deltaX','deltaY'],additionalProperties:false}},required:['slot','atMs','durationMs'],anyOf:[{required:['hold']},{required:['look']}],additionalProperties:false}};
+const ACTION_INPUT_ONE_OF=[{required:['actions']},{required:['groups']}];
 export const TOOL_LIST=[
   {name:'start_visual_observation',description:'Start a time-limited LOCAL read-only frame sampler for 1-5 AI-owned Minecraft windows. No continuous images are sent to the model and no gameplay inputs occur.',inputSchema:{type:'object',properties:{slots:{type:'array',minItems:1,maxItems:5,uniqueItems:true,items:{type:'integer',minimum:1,maximum:5}},intervalMs:{type:'integer',minimum:400,maximum:5000},durationMs:{type:'integer',minimum:5000,maximum:90000},imageFormat:{type:'string',enum:['png','webp']},width:{type:'integer',minimum:160,maximum:1536},height:{type:'integer',minimum:160,maximum:1536}},dependentRequired:{width:['height'],height:['width']},required:['slots'],additionalProperties:false}},
   {name:'get_multi_client_visual_state',
@@ -46,8 +48,8 @@ export const TOOL_LIST=[
   {name:'inspect_profiles',description:'Read five profile states from the authenticated native Lazy Tester controller (not game login or world readiness).',inputSchema:{type:'object',properties:{},additionalProperties:false}},
   {name:'launch_profile',description:'Explicitly request native Minecraft launch for an AI-controlled profile. Human MC01 cannot be launched in hybrid mode.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'plan_peer_session',description:'Inspect native profiles and provide conservative human/AI host-and-join guidance. No world control or join is performed.',inputSchema:{type:'object',properties:{},additionalProperties:false}},
-  {name:'plan_player_actions',description:'Validate concurrent player actions or compact groups (choose one); grouped preview defaults to a compact receipt. PREVIEW ONLY: no Minecraft input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}},includeTimeline:{type:'boolean'},includeClientFrames:{type:'boolean'},groups:{type:'array',minItems:1,maxItems:32,description:'Compact groups expand into at most 32 canonical actions; camera samples preserve total relative delta. Preview only.',items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:2000},hold:{type:'array',maxItems:8,uniqueItems:true,items:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use']}},look:{type:'object',properties:{deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512},steps:{type:'integer',minimum:1,maximum:32},curve:{type:'string',enum:['linear','smooth']}},required:['deltaX','deltaY'],additionalProperties:false}},required:['slot','atMs','durationMs'],anyOf:[{required:['hold']},{required:['look']}],additionalProperties:false}}},oneOf:[{required:['actions']},{required:['groups']}],additionalProperties:false}},
-  {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}}},required:['actions'],additionalProperties:false}},
+  {name:'plan_player_actions',description:'Validate concurrent player actions or compact groups (choose one); grouped preview defaults to a compact receipt. PREVIEW ONLY: no Minecraft input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}},includeTimeline:{type:'boolean'},includeClientFrames:{type:'boolean'},groups:ACTION_GROUPS},oneOf:ACTION_INPUT_ONE_OF,additionalProperties:false}},
+  {name:'assess_input_route',description:'Read-only native identity check for AI gameplay input: bind validated multi-client action timeline to real MC HWND/PID; ALWAYS reports no verified independent game-input backend and NEVER sends input.',inputSchema:{type:'object',properties:{actions:{type:'array',minItems:1,maxItems:32,items:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},kind:{type:'string',enum:['move_forward','move_backward','strafe_left','strafe_right','jump','sneak','attack','use','look_left','look_right','look_relative','wait']},atMs:{type:'integer',minimum:0,maximum:30000},durationMs:{type:'integer',minimum:50,maximum:5000},deltaX:{type:'integer',minimum:-512,maximum:512},deltaY:{type:'integer',minimum:-512,maximum:512}},required:['slot','kind','atMs','durationMs'],additionalProperties:false}},groups:ACTION_GROUPS},oneOf:ACTION_INPUT_ONE_OF,additionalProperties:false}},
   {name:'summarize_test_evidence',description:'Read up to 20 bounded team [ANALYTICS] and [GAME_RESULTS] records per profile. Only sanitized summaries reach the model; no game identity or gameplay PASS is inferred.',inputSchema:{type:'object',properties:{slots:{type:'array',items:{type:'integer',minimum:1,maximum:5},minItems:1,maxItems:5,uniqueItems:true},window:{type:'string',enum:['begin','read'],description:'With explicit slots, begin a local capture baseline or read appended complete records since it. No game-session attribution.'}},dependentRequired:{window:['slots']},additionalProperties:false}},
   {name:'read_game_evidence',description:'Read one compact allowlisted 1-20 record projection of team analytics/results or optional generic diagnostics. No raw game JSON, player record IDs, credentials or gameplay PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5}},required:['slot'],additionalProperties:false}},
   {name:'probe_qa',description:'Canonical Testing entry. inspectRun=true reads the original controller per-slot reservation, bounded parent status and optional Data/Testing archive reconciliation without starting a run, taking ownership or proving AI liveness. coordinateNative=true reserves a cooperating run; archivedRunId reads source-only immutable summaries. No automatic game command, operator approval, takeover or verified map PASS.',inputSchema:{type:'object',properties:{slot:{type:'integer',minimum:1,maximum:5},inspectRun:{type:'boolean'},restart:{type:'boolean'},scope:{type:'string',enum:['full','smoke','affected']},publishToDesktop:{type:'boolean'},coordinateNative:{type:'boolean'},archivedRunId:{type:'string',pattern:'^[a-f0-9]{32}$'}},additionalProperties:false}},
@@ -114,7 +116,8 @@ const EXPERIMENTAL_MC02_SEQUENCE_TOOLS=[
           deltaX:{type:'integer',minimum:-127,maximum:127},
           deltaY:{type:'integer',minimum:-127,maximum:127},
         },required:['slot','kind','atMs','durationMs'],additionalProperties:false}},
-    },required:['slot','actions'],additionalProperties:false}},
+      groups:ACTION_GROUPS,
+    },required:['slot'],oneOf:ACTION_INPUT_ONE_OF,additionalProperties:false}},
   {name:'stop_experimental_mc02_actions',
     description:'Cancel an active experimental MC02 sequence; when idle, request an exact-owner native neutral-state write. Transport ACK only, not gameplay release proof.',
     inputSchema:{type:'object',properties:{slot:{type:'integer',const:2}},
@@ -136,7 +139,8 @@ const EXPERIMENTAL_MULTI_CLIENT_TOOLS=[
         deltaX:{type:'integer',minimum:-127,maximum:127},
         deltaY:{type:'integer',minimum:-127,maximum:127},
       },required:['slot','kind','atMs','durationMs'],additionalProperties:false}},
-    },required:['actions'],additionalProperties:false}},
+      groups:ACTION_GROUPS,
+    },oneOf:ACTION_INPUT_ONE_OF,additionalProperties:false}},
   {name:'stop_experimental_multi_client_actions',
     description:'Cancel the whole active cross-slot experiment if a requested slot participates, or request exact-owner neutral writes for listed idle AI clients. Never sends global keyboard/mouse input.',
     inputSchema:{type:'object',properties:{
@@ -153,6 +157,7 @@ const EXPERIMENTAL_OBSERVED_TEAM_TOOL={
   description:'EXPERIMENTAL: require an explicitly delivered current PNG and exact recent visual baseline for EVERY selected AI slot, then reuse the original native batch. Follow with get_multi_client_visual_state to inspect newer samples; PNG delivery is not proof of model review or gameplay success.',
   inputSchema:{type:'object',properties:{
     actions:EXPERIMENTAL_MULTI_CLIENT_TOOLS[0].inputSchema.properties.actions,
+    groups:ACTION_GROUPS,
     basis:{type:'array',minItems:1,maxItems:5,uniqueItems:true,
       items:{type:'object',properties:{
         slot:{type:'integer',minimum:1,maximum:5},
@@ -172,7 +177,7 @@ const EXPERIMENTAL_OBSERVED_TEAM_TOOL={
       },required:['slot','sequence','samples','collectedAt',
         'sourceFrameAtMs','sourceTimeKind','producerSequence','captureIdentity'],
         additionalProperties:false}},
-  },required:['actions','basis'],additionalProperties:false},
+  },required:['basis'],oneOf:ACTION_INPUT_ONE_OF,additionalProperties:false},
 };
 
 // Optional read-only result classification. Input receipt and AI review are
@@ -182,6 +187,7 @@ const EXPERIMENTAL_TEAM_FEEDBACK_TOOL={
   description:'EXPERIMENTAL READ-ONLY: classify per-client movement, camera, attack and interaction reports against exact newer same-window frame metadata. A model-reported visual change is NEVER verified Minecraft movement or attack success.',
   inputSchema:{type:'object',properties:{
     actions:EXPERIMENTAL_MULTI_CLIENT_TOOLS[0].inputSchema.properties.actions,
+    groups:ACTION_GROUPS,
     receipt:{type:'object'},
     after:{type:'array',minItems:1,maxItems:5,items:{anyOf:[
       EXPERIMENTAL_OBSERVED_TEAM_TOOL.inputSchema.properties.basis.items,
@@ -195,7 +201,7 @@ const EXPERIMENTAL_TEAM_FEEDBACK_TOOL={
       ]},
       cue:{type:'string',maxLength:160},
     },required:['slot','category','assessment'],additionalProperties:false}},
-  },required:['actions','receipt','after'],additionalProperties:false},
+  },required:['receipt','after'],oneOf:ACTION_INPUT_ONE_OF,additionalProperties:false},
 };
 
 export function toolsForMode(experimental,multi) {

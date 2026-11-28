@@ -19,7 +19,7 @@ const ROUTES = [
   ['diagnostics.evidence','query_diagnostic_evidence',['run','id','cursor','limit']],
   ['observation.state','get_multi_client_visual_state',['slots','since']],
   ['input.plan','plan_player_actions',['actions','groups','includeTimeline','includeClientFrames']],
-  ['input.assess','assess_input_route',['actions']],
+  ['input.assess','assess_input_route',['actions','groups']],
   ['capabilities','agent_capabilities',[]],
 ];
 // Both transports derive their admitted keys and named methods from these routes.

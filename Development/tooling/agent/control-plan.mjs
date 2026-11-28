@@ -152,6 +152,14 @@ export function expandActionGroups(groups) {
   return actions;
 }
 
+// One authoring contract across preview, assessment and held native routes.
+export function resolveActionInput(args) {
+  if(Object.hasOwn(args,'actions')===Object.hasOwn(args,'groups')) {
+    throw new Error('Invalid tool arguments');
+  }
+  return Object.hasOwn(args,'groups')?expandActionGroups(args.groups):args.actions;
+}
+
 // This is a bounded multi-player INTENT contract, reusable when an actual
 // per-client input transport is proven. The current bridge does not dispatch it.
 export function planPlayerActions(mode,actions) {

@@ -6,6 +6,8 @@ import path from 'node:path';
 import {createOperationCore,createMcpHandler,attachMcpStdio} from './mcp.mjs';
 import {PassThrough,Writable} from 'node:stream';
 import {createCodeModeClient,createCodeModeSurface} from './code-mode.mjs';
+import {expandActionGroups} from './control-plan.mjs';
+import {prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {parseConfiguration,parseCapturedLine,readGameEvidence,createHandler,coordinateTestingRunNative,inspectTestingRunNative,parseTestingInspectionReceipt,testingRecoveryNextAction,validateNativeReport,validateNativeWindowTarget,boundedMcpText,sendExperimentalMc02Native,fingerprintActions,
   sendExperimentalAiWriterLeaseNative,sameNativeVisualTarget,makeAiLeaseEpoch,
   matchesNativeMultiClientBatchReceipt,
@@ -5932,4 +5934,99 @@ test('observed action fingerprint and transport share the original compiled sche
     assert.notEqual(fingerprintActions('human-plus-four-ai',actions),expected);
     assert.equal(receipt.gameplayObserved,false);
   }finally{h.shutdown();}
+});
+
+test('compact input and explicit actions share the same route assessment and reject ambiguity',async()=>{
+  let nativeCalls=0;
+  const core=createOperationCore(config(),{native:async(_exe,operation,slot)=>{
+    nativeCalls++;
+    return {schema:1,ok:true,operation,slot,pid:500+slot,windowId:2000+slot,
+      createdFileTime:'134000000000000001',sessionId:1,
+      foreground:slot===1,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+  }});
+  const code=createCodeModeClient(core);
+  const groups=[{slot:2,atMs:0,durationMs:300,hold:['move_forward','jump'],
+    look:{deltaX:30,deltaY:-6,steps:3}}];
+  const actions=expandActionGroups(groups);
+  try {
+    const compact=await code.tester.input.assess({groups});
+    const expanded=await code.tester.input.assess({actions});
+    assert.deepEqual(compact.actionTimeline,expanded.actionTimeline);
+    assert.deepEqual(compact.aiTargets,expanded.aiTargets);
+    assert.equal(compact.execution,'NOT_DISPATCHED');
+    assert.equal(nativeCalls,4);
+    await assert.rejects(code.tester.input.assess({groups,actions}),/Invalid tool arguments/);
+    await assert.rejects(code.tester.input.assess({}),/Invalid tool arguments/);
+    assert.equal(nativeCalls,4);
+  }finally{code.close();core.shutdown();}
+});
+
+test('held experimental routes accept compact groups through the canonical native compiler only',async()=>{
+  const fixture=teamVisualFixture();
+  const groups=fixture.slots.map(slot=>({slot,atMs:0,durationMs:320,hold:['move_forward']}));
+  const actions=expandActionGroups(groups);
+  const expected=prepareMultiClientPulseBatches('human-plus-four-ai',actions);
+  let leaseCalls=0,nativeReads=0;
+  const batches=[];
+  const h=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    native:async(...args)=>{nativeReads++;return fixture.native(...args);},
+    aiLease:async(...args)=>{leaseCalls++;return leaseAck(...args);},
+    aiMultiBatch:async(_exe,entries)=>{batches.push(entries);return {
+      schema:1,slots:entries.map(e=>e.slot),status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',gameplayObserved:false};
+    },
+    aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',gameplayObserved:false}),
+  });
+  try {
+    const listing=(await h.handle({jsonrpc:'2.0',id:1,method:'tools/list'})).result.tools;
+    for(const name of ['run_experimental_multi_client_actions','run_experimental_observed_actions','evaluate_experimental_multi_client_outcomes']){
+      const schema=listing.find(t=>t.name===name).inputSchema;
+      assert.ok(schema.properties.groups);
+      assert.deepEqual(schema.oneOf,[{required:['actions']},{required:['groups']}]);
+    }
+    await assert.rejects(h.callTool('run_experimental_multi_client_actions',{actions,groups}),/Invalid tool arguments/);
+    const tooMany=Array.from({length:13},(_,i)=>({slot:2,atMs:i*100,durationMs:50,hold:['jump']}));
+    await assert.rejects(h.callTool('run_experimental_multi_client_actions',{groups:tooMany}),/INVALID_ACTIONS/);
+    await assert.rejects(h.callTool('run_experimental_multi_client_actions',{groups:[{slot:2,atMs:0,durationMs:100,look:{deltaX:128,deltaY:0,steps:1}}]}),/INVALID_ACTIONS/);
+    await assert.rejects(h.callTool('run_experimental_multi_client_actions',{groups:[{slot:1,atMs:0,durationMs:100,hold:['jump']}]}),/INVALID_ACTIONS/);
+    assert.deepEqual([leaseCalls,nativeReads,batches.length],[0,0,0]);
+    await h.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
+    await h.callTool('run_experimental_multi_client_actions',{groups});
+    assert.deepEqual(batches[0],expected.batches);
+    const basis=(await h.callTool('get_multi_client_visual_state',{})).frames.map(f=>f.baseline);
+    fixture.markDelivered();
+    const receipt=await h.callTool('run_experimental_observed_actions',{groups,basis});
+    assert.deepEqual(batches[1],expected.batches);
+    assert.equal(receipt.actionFingerprint,fingerprintActions('human-plus-four-ai',actions));
+    assert.equal(receipt.nextEvaluation.requiredInputs[0],'groups');
+    const after=(await h.callTool('get_multi_client_visual_state',receipt.nextObservation.arguments)).frames.map(f=>f.baseline);
+    const result=await h.callTool('evaluate_experimental_multi_client_outcomes',{groups,receipt,after});
+    assert.equal(result.gameplayAcceptance,'NOT_VERIFIED');
+    assert.equal(batches.length,2);
+  }finally{h.shutdown();}
+});
+
+test('MC02 group normalization preserves native batch limits and the original opt-in',async()=>{
+  const groups=[{slot:2,atMs:0,durationMs:320,hold:['move_forward']}];
+  let batches=0;
+  const disabled=createHandler(config());
+  const enabled=createHandler({...config(),experimentalMc02InputEnabled:true},{
+    mc02Batch:async(_exe,pulses)=>{
+      batches++;
+      assert.deepEqual(pulses,prepareMultiClientPulseBatches('human-plus-four-ai',expandActionGroups(groups)).batches[0].pulses);
+      return {schema:1,slot:2,status:'EXPERIMENTAL_MC02_SEQUENCE_TRANSPORT_ACKNOWLEDGED',pulsesAcknowledged:pulses.length,gameplayObserved:false};
+    },
+    mc02Input:async()=>({schema:1,slot:2,status:'NATIVE_MC02_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',gameplayObserved:false}),
+  });
+  try {
+    await assert.rejects(disabled.callTool('run_experimental_mc02_actions',{slot:2,groups}),/EXPERIMENT_DISABLED/);
+    await assert.rejects(enabled.callTool('run_experimental_mc02_actions',{slot:2,groups,actions:[]}),/Invalid tool arguments/);
+    await assert.rejects(enabled.callTool('run_experimental_mc02_actions',{slot:2,groups:[{slot:3,atMs:0,durationMs:100,hold:['jump']}]}),/INVALID_ACTIONS/);
+    assert.equal(batches,0);
+    const result=await enabled.callTool('run_experimental_mc02_actions',{slot:2,groups});
+    assert.equal(result.gameplayObserved,false);
+    assert.equal(batches,1);
+  }finally{disabled.shutdown();enabled.shutdown();}
 });
