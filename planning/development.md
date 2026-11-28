@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-05d: current binary counterevidence and isolation priority)
+## Current status — cross-platform-native (MAC-06: offline artifact evidence handoff)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,42 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-06 — Windows-compatible artifact evidence route (2026-11-28)
+
+The operator agrees to continue the remaining work without requiring a Mac
+for static artifact review. Reconfirmed the official 26.33 download alias
+redirects to the MAC-02 DMG; web retrieval is unsupported and an explicit
+read-only HTTP HEAD from the available source environment failed DNS.
+No bytes obtained. Do not retry indefinitely or substitute unrelated builds.
+
+The [7-Zip official format list](https://www.7-zip.org/) supports read-only
+extraction of DMG, HFS and APFS on Windows. Prepare the minimal manual
+[offline evidence intake](../Development/tooling/README.md#macos-offline-package-review-from-windows)
+for the existing artifact investigation: package SHA-256 and unchanged
+Info.plist first; optional extracted main Mach-O only when required.
+No Mac test, installer, new parser, runtime dependency or extraction
+automation. Actual extraction compatibility of this specific DMG is
+unverified. A Windows-extracted file cannot establish macOS signature,
+Gatekeeper, loaded-image or profile isolation acceptance.
+
+[Apple Remote Desktop](https://support.apple.com/en-gw/guide/remote-desktop/apd4f46319e/mac)
+explicitly documents observing a virtual desktop belonging to a different
+authenticated user without interrupting the console user. This supports
+further research of topology B, not a supported same-host embedding API
+or five concurrent interactive Minecraft sessions. [Apple screen sharing
+limits](https://support.apple.com/en-ie/guide/mac-help/mchl1883115d/27/mac/27)
+permit only one active High Performance session per Mac. Standard mode
+same-host concurrency, gameplay input, performance and per-window
+presentation remain unverified. No remote management enablement, user
+creation, network listener or new service. Final shared workspace parity
+is unchanged.
+
+Decision: no further speculative product or synthetic source until a
+decisive artifact or isolation mechanism is available. The first evidence
+input is small package metadata, not a request for localtest. All previous
+native, CI, test and release holds remain; NOT_EXECUTED. Actual Mac
+integration remains BLOCKED.
 
 ### MAC-05d — current release evidence and isolation priority (2026-11-28)
 
@@ -756,7 +792,8 @@ MAC-05b adds generic static signature and explicit singleton metadata observatio
 MAC-05c tightens candidate signature observation with reviewed expected team
 and adds the historical Microsoft Intune installation name;
 MAC-05d records current-release external binary evidence and prioritizes
-OS-user isolation feasibility without changing product acceptance.
+OS-user isolation feasibility without changing product acceptance;
+MAC-06 records the offline Windows artifact intake and virtual-desktop limits.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

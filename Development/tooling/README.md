@@ -139,6 +139,37 @@ The tool is not mounted in product, DEV.cmd, MCP or startup. See
 [development handoff](../../planning/development.md). Source fixtures are
 included in the existing native-feasibility test route, NOT_EXECUTED.
 
+## macOS offline package review from Windows
+
+Use only a copy of the [official Minecraft Education download](https://aka.ms/meeclientmacos).
+The current reviewed candidate is 1.26.33.0; see the development handoff
+for the exact published package hash and source revision. The archive is
+not executable on Windows and no installation or native test is needed.
+
+1. Record the original DMG filename and SHA-256 using PowerShell
+   `Get-FileHash -LiteralPath 'C:\path\Minecraft_Education_1.26.33.0.dmg' -Algorithm SHA256`
+   (replace the example path with the actual file). Do not confuse the
+   archive hash with a hash of an extracted executable.
+2. If [7-Zip](https://www.7-zip.org/) is already available or separately
+   chosen by the operator, open the DMG as an archive. It supports DMG,
+   HFS and APFS; this specific archive has not been inspected. If a nested
+   filesystem image is present, browse it as an archive. Extract only
+   `minecraft-edu.app/Contents/Info.plist` (actual bundle name may differ)
+   into a separate disposable directory; do not mount or execute content.
+3. Supply the hash, original package filename and unchanged Info.plist
+   as the first small evidence set. The main executable name will be
+   derived from CFBundleExecutable, not guessed. Only if later needed,
+   extract that exact file separately for offline Mach-O metadata review.
+   Do not upload the whole package if too large or commit proprietary
+   bundle bytes, game files, accounts or worlds to Git.
+
+The operator can instead supply an unchanged authorized DMG copy if it
+fits the available file transfer. Unknown archive layout or failed
+extraction remains blocked; do not install random extractors or repair
+the package. This is static artifact intake, not localtest or native
+verification. The existing Mac artifact collector remains the owner
+of later codesign checks; no new runtime or validation route.
+
 ## macOS synthetic lifecycle fixture (source prepared)
 
 `acceptance/macos/lifecycle-fixture.swift` is a separately compiled, opt-in
