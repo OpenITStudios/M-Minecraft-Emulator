@@ -43,6 +43,7 @@ Sandboxie/VMware provider route is retired.
 | Shared visual tokens, shell, launcher and settings styles | `src/lazytester.css` |
 | Health and recovery guidance | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
 | Authored diagnostic categories, stable support codes and user error messages | `src/app/presentation/sessionFeedback.ts` |
+| Selective desktop issue summary | `src/app/presentation/issueReport.ts`, mounted `LazyTesterApp.svelte` feedback, General Settings Copy report |
 | Validated desktop protocol | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Only raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` |
 | Game lifecycle / retained process identity | `src-tauri/src/engine/independent_bootstrap/session_controller.rs` |
@@ -55,6 +56,50 @@ An observed running process or registered thumbnail does **not** certify
 gameplay, sign-in, visible pixels or multiplayer. Minecraft owns login,
 worlds and rendering; Lazy Tester never stores credentials or force-closes
 unverified games.
+
+## Selective issue report
+
+General Settings shows **Issue report / Copy report** only after a problem
+has been observed in the current desktop lifetime. This is a local,
+sanitized support summary, not native instrumentation, a security audit
+log, crash dump or gameplay acceptance. No new polling, IPC, service,
+disk writes, upload, raw error text, screenshots, process identifiers,
+account or world data. Existing feedback, recovery and native admission
+remain unchanged. Reports are ephemeral until manually copied; app
+exit/crash loses unsaved observations. Clipboard failure leaves selectable
+JSON text. The report is not available before General Settings can open.
+
+Compact JSON schema 1: `v` schema; `scope` desktop-observed; `issues`
+contains at most 48 distinct code/slot entries, first observed wall-clock
+Unix seconds `t`, optional launcher slot `s`. State observations are
+deduplicated across the current desktop lifetime and do not have a count.
+Discrete recorded capture/preference failures include attempt count `n`
+(saturating) and most recent observed time `l` when repeated. An overflow
+sets `truncated:true`; no stored row is evicted or overwritten. Codes
+describe unconfirmed outcomes or attention, not necessarily root causes.
+No report is produced for normal success, polling, known preflight
+blocks, unsupported platform or native exit rejected before release.
+
+Existing LT codes are defined in `sessionFeedback.ts`; additional report
+codes:
+
+| Code | Observed problem |
+| --- | --- |
+| LT-GAM-05 | Game window unavailable/not responding |
+| LT-CAP-01 / 02 / 04 | Screenshot / recording start / recording stop not confirmed |
+| LT-CAP-03 / 05 | Recording status unavailable / observed Failed receipt |
+| LT-AGT-01 / 02 | Native release unconfirmed / startup reconciliation needed |
+| LT-AGT-03 / 04 / 05 | Probe checkpoint unavailable / Probe reported attention / earlier agent status stale |
+| LT-SET-07 | Web cache preference save unconfirmed |
+
+The summary does not include success denominators, unobserved native
+failures, exact native error causes or historical process exits. It cannot
+measure performance, availability or failure rates. Existing developer
+performance collectors and private evidence remain their original owners.
+Reference patterns: [OWASP logging guidance](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html),
+[Google SRE monitoring](https://sre.google/sre-book/monitoring-distributed-systems/),
+and [OpenTelemetry recording errors](https://opentelemetry.io/docs/specs/semconv/general/recording-errors/).
+No new SDK or logging framework is installed.
 
 ## Profile layout and legacy compatibility
 

@@ -8,6 +8,7 @@
   import LauncherRail from './LauncherRail.svelte';
   import AgentActivityNotice from './AgentActivityNotice.svelte';
   import {presentAgentActivity} from './app/presentation/agentActivity.js';
+  import {IssueReport, reportableFeedback, type IssueCode} from './app/presentation/issueReport.js';
   import GeneralSettings from './GeneralSettings.svelte';
   import DataStorage from './DataStorage.svelte';
   import {canRequestProfileLaunch, projectSessionHealth, reconcileLaunchReceipts, type LaunchReceiptState, type SessionHealthAction} from './app/presentation/sessionHealth.js';
@@ -116,7 +117,7 @@
       if(disposed)return;
       recordings=result;recordingStatusKnown=true;recordingWatch=result.some(recordingActive);
     }catch{
-      if(!disposed){recordingStatusKnown=false;recordingWatch=true;}
+      if(!disposed){recordingStatusKnown=false;recordingWatch=true;noteIssue('LT-CAP-03');}
     }finally{recordingStatusPending=false;}
   }
   async function recordingAction(){
@@ -133,7 +134,10 @@
       if(stop)await lazyTester.stopRecording(slot);
       else if(target)await lazyTester.startRecording(slot,target);
     }catch{
-      if(!disposed)recordingNotice={slot,message:stop?'Stop request failed':'Recording start failed'};
+      if(!disposed){
+        recordingNotice={slot,message:stop?'Stop request failed':'Recording start failed'};
+        noteIssue(stop?'LT-CAP-04':'LT-CAP-02',slot,true);
+      }
     }finally{
       await refreshRecordingStatus();
       activeOperation = null;
@@ -157,7 +161,10 @@
       const receipt=await lazyTester.screenshot(slot,target);
       if(receipt&&!disposed)screenshotNotice={slot,message:`Screenshot saved · ${receipt.width} × ${receipt.height}`};
     }catch{
-      if(!disposed)screenshotNotice={slot,message:'Screenshot unavailable. No successful save was confirmed.'};
+      if(!disposed){
+        screenshotNotice={slot,message:'Screenshot unavailable. No successful save was confirmed.'};
+        noteIssue('LT-CAP-01',slot,true);
+      }
     }finally{activeOperation = null;}
   }
   let manualRefreshRequested=false, manualRefreshing=false;
@@ -174,6 +181,12 @@
   let mounted = false, disposed = false, dirty = false, detached = false;
   // Alert context is authored, not a retained raw backend exception.
   let issueKey: UserMessageKey | null = null, connectionIssueKey: UserMessageKey | null = null;
+  const issueReport = new IssueReport();
+  let issueReportAvailable = false;
+  function noteIssue(code: IssueCode, slot?: ProfileSlot, countAttempt=false) {
+    if (issueReport.note(code,slot,countAttempt)) issueReportAvailable=true;
+  }
+  function readIssueReport() { return issueReport.read(); }
   let previewIssue = '', selectedIdentity = '';
   // Optional native controller mirror; no new timer or MCP process.
   let agentActivity:AgentActivityReport|null=null;
@@ -192,6 +205,7 @@
   // UI receipt uncertainty only; native session admission remains authoritative.
   let launchFailures: ReadonlyMap<ProfileSlot, LaunchReceiptState> = new Map();
   function recordLaunchFailure(slot: ProfileSlot, state: LaunchReceiptState) {
+    if (!disposed) noteIssue(userFeedback('launch').code,slot);
     if (launchFailures.get(slot) !== state)
       launchFailures = new Map(launchFailures).set(slot,state);
   }
@@ -244,6 +258,33 @@
     observed: nativeBackend === 'WindowsNative' && !initializing && available && !!binding?.configured,
     previewsVisible: page === 'workspace' && !detached,
   });
+  // Project only already-observed problem signals; no new native read or timer.
+  $: if (mounted && !disposed) {
+    if (issueKey!==null && reportableFeedback(issueKey)) noteIssue(userFeedback(issueKey).code);
+    if (connectionIssueKey!==null) noteIssue(userFeedback(connectionIssueKey).code);
+    if (bindingIssue && !locationIssue && nativeBackend!=='Unsupported')
+      noteIssue(userFeedback(nativeBackend===null?'backend':'binding').code);
+    if (locationIssue) noteIssue(userFeedback('location').code);
+    if (closeFailure) noteIssue(userFeedback('closeAll').code);
+    if (previewIssue) noteIssue(userFeedback('preview').code);
+    for (const slot of uncertainWindowSlots) noteIssue(userFeedback('recovery').code,slot);
+    for (const item of healthIssues) {
+      const code = item.kind==='window'?'LT-GAM-05':
+        userFeedback(item.kind==='launcher'?'profile':item.kind).code;
+      noteIssue(code,item.slot);
+    }
+    if (settings?.audioIssue) noteIssue(userFeedback('audio').code);
+    if (recordingStatusKnown)
+      for (const item of recordings) if (item.state==='Failed') noteIssue('LT-CAP-05',item.slot);
+    if (agentActivity?.stale) noteIssue('LT-AGT-05');
+    else if (agentActivity) for (const item of agentActivity.items) {
+      if (item.importance!=='ATTENTION') continue;
+      if (item.status==='NATIVE_RELEASE_UNCONFIRMED') noteIssue('LT-AGT-01',item.slot);
+      else if (item.status==='STARTUP_RECONCILIATION_REQUIRED') noteIssue('LT-AGT-02',item.slot);
+      else if (item.status==='CHECKPOINT_EXPIRED_OR_UNAVAILABLE') noteIssue('LT-AGT-03',item.slot);
+      else if (item.status==='PROBE_REPORT_AVAILABLE') noteIssue('LT-AGT-04',item.slot);
+    }
+  }
   $: attentionCount = healthIssues.length + uncertainWindowSlots.size;
   // Only fully observed, healthy Play may slow reconciliation. A selected
   // native binding and registered background previews provide event hints,
@@ -630,6 +671,7 @@
       // An uncertain save must not be represented as the old or new value.
       if(settings)settings={...settings,storagePreferences:undefined};
       storageNotice='Web cache preference could not be confirmed. Refresh settings.';
+      if (!disposed) noteIssue('LT-SET-07',undefined,true);
     } finally {activeOperation = null;}
   }
   async function saveAudio(mode:'Keep'|'Mute') {
@@ -1424,6 +1466,7 @@
           audioQueued={queuedAudio!==null} {savingPerformance}
           {performanceDirty} {performanceValid}
           {settingsNotice} {performanceNotice}
+          {issueReportAvailable} onReadIssueReport={readIssueReport}
           onRequestPerformanceSave={requestPerformanceSave} onSaveAudio={saveAudio}/>
       {:else if page==='storage'}
         <DataStorage {profiles} {selectedSlot} {selectedProfile} {selectedStorage} {selectedPath}

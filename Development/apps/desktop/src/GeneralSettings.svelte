@@ -23,6 +23,19 @@
   export let performanceNotice: string;
   export let onRequestPerformanceSave: () => void;
   export let onSaveAudio: (mode: BackgroundAudio) => Promise<void>;
+  export let issueReportAvailable = false;
+  export let onReadIssueReport: () => string | null;
+  let issueReportText = '', issueReportNotice = '';
+  async function copyIssueReport() {
+    issueReportText = onReadIssueReport() ?? '';
+    if (!issueReportText) return;
+    try {
+      await navigator.clipboard.writeText(issueReportText);
+      issueReportNotice='Issue report copied.';
+    } catch {
+      issueReportNotice='Select and copy the report text below.';
+    }
+  }
 
   // Preserve a deliberate user's keyboard context when an existing save
   // disables its own control. These headings remain outside the Tab order;
@@ -87,4 +100,13 @@
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
           <section class="lazytester-group" aria-labelledby="lazytester-app-behavior-section"><h2 id="lazytester-app-behavior-section">Audio</h2><div class="lazytester-settings-panel"><div class="lazytester-setting"><div><h3 bind:this={audioHeading} tabindex="-1">Mute Background Games</h3><p>Mute audio from background games.</p>{#if settings?.audioIssue}<p class="lazytester-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Audio control is unavailable in this controller.</p>{/if}</div><label class="lazytester-audio-toggle"><input type="checkbox" role="switch" checked={settings?.backgroundAudio==='Mute'} disabled={busy||audioQueued||refreshing||resizing||!available||!settings?.backgroundAudio} aria-label="Mute background games" on:change={changeAudioWithFocus}/></label></div></div></section>
           {#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
+          {#if issueReportAvailable}
+            <section class="lazytester-group" aria-labelledby="lazytester-issue-report-section">
+              <h2 id="lazytester-issue-report-section">Issue report</h2>
+              <p class="lazytester-help">Problems observed since this app opened. Nothing is sent automatically.</p>
+              <button type="button" class="lazytester-secondary" on:click={copyIssueReport}>Copy report</button>
+              {#if issueReportNotice}<p role="status">{issueReportNotice}</p>{/if}
+              {#if issueReportText}<textarea aria-label="Issue report JSON" readonly rows="4" value={issueReportText}></textarea>{/if}
+            </section>
+          {/if}
         </div>
