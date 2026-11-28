@@ -141,6 +141,27 @@ test('repository fixture-only changes use the existing suite; mixed or unknown p
   assert.equal(legacyArgs(task).args.at(-1),'check:repository-tests');
 });
 
+test('agent fixture-only changes use one existing suite; implementation, mixed and unknown changes stay full',()=>{
+  const fixture='Development/tooling/agent/testing-result-store.test.mjs';
+  const visual='Development/tooling/agent/visual-observer.test.mjs';
+  assert.equal(classifyPath(fixture),'agent-tests');
+  assert.deepEqual(planForPaths([fixture,visual,'planning/development.md'],SHA).taskIds,['agent.tests']);
+  for(const path of [
+    'Development/tooling/agent/operation-core.mjs',
+    'Development/tooling/agent/code-mode.d.mts',
+    'Development/tooling/agent/native-gpu-capture/src/main.rs',
+    'Development/tooling/agent/nested/example.test.mjs',
+    'Development/tooling/repository/verify.test.mjs',
+    'Development/apps/desktop/src/LazyTesterApp.svelte',
+    'Development/package.json'
+  ])assert.deepEqual(planForPaths([fixture,path],SHA).taskIds,['source.validate'],path);
+  assert.equal(planForPaths([fixture,'Data/profiles.json'],SHA).status,'BLOCKED');
+  const task=tasks.find(t=>t.id==='agent.tests');
+  assert.equal(task.risk,'build');
+  assert.equal(task.requiresApproval,false);
+  assert.equal(legacyArgs(task).args.at(-1),'check:agent-tests');
+});
+
 test('docs accompanying frontend or Rust source do not force redundant full checks',()=>{
   assert.deepEqual(planForPaths(['planning/development.md','Development/apps/desktop/src/App.svelte'],SHA).taskIds,['frontend.validate']);
   assert.deepEqual(planForPaths(['docs/system/architecture.md','Development/engine/runtime-core/src/lib.rs'],SHA).taskIds,['rust.validate']);

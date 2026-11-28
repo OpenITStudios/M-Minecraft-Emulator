@@ -23,6 +23,7 @@ const POLICY = Object.freeze({
   'lock': {risk:'source-write', approval:true},
   'repository-structure': {risk:'read', approval:false},
   'check:repository-tests': {risk:'build', approval:false},
+  'check:agent-tests': {risk:'build', approval:false},
   'check:frontend': {risk:'build', approval:false},
   'check:rust': {risk:'build', approval:false},
   'check': {risk:'build', approval:false},
@@ -133,9 +134,10 @@ export function classifyPath(path) {
   if(/(?:^|\/)(?:Cargo\.toml|Cargo\.lock|build\.rs|rust-toolchain(?:\.toml)?)$/.test(path) ||
      path.includes('/.cargo/config') || path.startsWith('.cargo/')) return 'unknown';
   if(path.startsWith('Development/tooling/acceptance/windows/bootstrap-ordering/')) return 'native';
-  // Only fixture files in the existing repository suite may use its smaller route.
+  // Only fixtures in the existing top-level suites use smaller routes.
   // Implementation, configuration and mixed source changes keep full verification.
   if(/^Development\/tooling\/(?:repository|dependencies)\/[^/]+\.test\.mjs$/.test(path)) return 'repository-tests';
+  if(/^Development\/tooling\/agent\/[^/]+\.test\.mjs$/.test(path)) return 'agent-tests';
   if(/\.rs$/.test(path) && (path.startsWith('Development/apps/desktop/src-tauri/src/') ||
      path.startsWith('Development/engine/runtime-core/src/'))) return 'rust';
   if(/\.(?:ts|svelte|css)$/.test(path) && (path.startsWith('Development/apps/desktop/src/') ||
@@ -160,6 +162,8 @@ export function planForPaths(paths,revision) {
     changedCount:paths.length,scopes:kinds,taskIds:['repository.validate'],reason:'Documentation-only structural validation.'};
   if(executableScopes.length===1 && executableScopes[0]==='repository-tests') return {status:'READY',sourceSha:revision,
     changedCount:paths.length,scopes:kinds,taskIds:['repository.tests'],reason:'Repository/dependency fixture-only iteration; full verification remains required for candidate acceptance.'};
+  if(executableScopes.length===1 && executableScopes[0]==='agent-tests') return {status:'READY',sourceSha:revision,
+    changedCount:paths.length,scopes:kinds,taskIds:['agent.tests'],reason:'Agent fixture-only iteration; no Rust/frontend build. Full verification remains required for candidate acceptance.'};
   if(executableScopes.length===1 && executableScopes[0]==='frontend') return {status:'READY',sourceSha:revision,
     changedCount:paths.length,scopes:kinds,taskIds:['frontend.validate'],reason:'Frontend and documentation validation; no Rust check.'};
   if(executableScopes.length===1 && executableScopes[0]==='rust') return {status:'READY',sourceSha:revision,

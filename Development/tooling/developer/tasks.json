@@ -32,6 +32,12 @@
       "scope": "repository"
     },
     {
+      "id": "agent.tests",
+      "description": "Run existing top-level agent fixtures without native or frontend compilation",
+      "command": "check:agent-tests",
+      "scope": "source"
+    },
+    {
       "id": "frontend.validate",
       "description": "Run Svelte typecheck and frontend tests without Cargo",
       "command": "check:frontend",

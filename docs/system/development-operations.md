@@ -61,7 +61,7 @@ with no stored last-success marker. An affected-path run is not full candidate
 verification; complete the existing full-source, Windows and game acceptance
 at the final validation boundary.
 Documentation accompanying only frontend or Rust code does not unnecessarily
-escalate it to the full suite. Repository/dependency fixture-only iteration uses `DEV.cmd check:repository-tests` (existing `test:repository` suite, no native compile). Cargo manifests, lockfiles, build scripts,
+escalate it to the full suite. Repository/dependency fixture-only iteration uses `DEV.cmd check:repository-tests` (existing `test:repository` suite, no native compile). Top-level agent fixture-only iteration uses `DEV.cmd check:agent-tests` (existing agent fixtures via `test:agent`, no frontend/native compilation); implementation and mixed changes still require full verification. Cargo manifests, lockfiles, build scripts,
 mixed/native and unknown changes take the full-source route; native DLL
 acceptance and Windows/Minecraft tests remain separately unverified.
 No path or arbitrary command from user/AI input becomes a shell invocation.

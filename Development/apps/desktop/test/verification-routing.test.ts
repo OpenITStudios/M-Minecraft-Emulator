@@ -12,6 +12,10 @@ describe("Emulator source verification routing", () => {
     expect(root.scripts["verify:source"]).toContain("npm run test:localtest");
     expect(root.scripts["verify:quick"]).not.toContain("test:localtest");
     expect(root.scripts["test:localtest"].match(/tooling\/agent\//g)).toHaveLength(1);
+    expect(root.scripts["test:agent"]).toBe("node --test tooling/agent/*.test.mjs");
+    expect(root.scripts["test:localtest"]).toContain(root.scripts["test:agent"].split("node --test ")[1]);
+    expect(root.scripts["verify:source"]).not.toContain("npm run test:agent");
+    expect(router).toContain('"check:agent-tests" { Invoke-RepositoryNpm -NpmArguments @("run", "test:agent") }');
   });
 
   it("defers redundant five-hive DataLocation inspection until Data Storage navigation", () => {
