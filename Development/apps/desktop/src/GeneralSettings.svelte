@@ -2,12 +2,12 @@
   // Presentation only; parent owns state, saved settings, admission and native IPC.
   import {tick} from 'svelte';
   import type {BackgroundAudio, SettingsReport, EducationInstallationReport} from './app/bridge/lazyTester.js';
-  import {userMessage} from './app/presentation/sessionFeedback.js';
+  import {userMessage, educationInstallationNotice} from './app/presentation/sessionFeedback.js';
 
   export let settings: SettingsReport | null;
   export let installation: EducationInstallationReport | null = null;
   export let installationPending = false;
-  const updaterLabel = {Ready:'Task ready',Busy:'Queued or running',Disabled:'Disabled',Missing:'Task not found',Unknown:'Unavailable'} as const;
+  $: installationNotice = educationInstallationNotice(installation);
   export let workspaceLayout: 'Bottom' | 'Right';
   export let layoutPersistenceIssue: string;
   export let onChooseWorkspaceLayout: (value: 'Bottom' | 'Right') => void;
@@ -115,12 +115,10 @@
             <h2 id="lazytester-education-installation">Minecraft Education</h2>
             <div class="lazytester-settings-panel" aria-live="polite">
               {#if installationPending}<p>Checking installation…</p>
-              {:else if installation}
-                <div class="lazytester-setting"><div><h3>Registered version</h3><p>{installation.registeredVersion}</p></div></div>
-                <div class="lazytester-setting"><div><h3>Official updater</h3><p>{updaterLabel[installation.updater]}</p></div></div>
-                <div class="lazytester-setting"><div><h3>Image review</h3><p>{installation.reviewedImage?'Reviewed image found':'Compatibility review required'}</p></div></div>
-                <p class="lazytester-help">Last check only. Launch revalidates the installation and native compatibility. Use Refresh to check again.</p>
-              {:else}<p>Installation status unavailable. Use Refresh to check again.</p>{/if}
+              {:else}
+                {#if installation}<div class="lazytester-setting"><h3>Version</h3><span>{installation.registeredVersion}</span></div>{/if}
+                {#if installationNotice}<p class="lazytester-help">{installationNotice}</p>{/if}
+              {/if}
             </div>
           </section>
           <section class="lazytester-group" aria-labelledby="lazytester-issue-report-section">

@@ -5,7 +5,7 @@ import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, f
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
-import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
+import {userMessage, userFeedback, educationInstallationNotice, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, agentNeedsFastInspection, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
 
 describe('Education installation observation',()=>{
@@ -17,6 +17,19 @@ describe('Education installation observation',()=>{
     for(const invalid of [{...report,schema:2},{...report,path:'private'}, {...report,registeredVersion:'bad'},
       {...report,registeredVersion:'1.'+'0'.repeat(64)},{...report,updater:'Running'},
       {...report,reviewedImage:1}]) expect(()=>parseEducationInstallation(invalid)).toThrow();
+  });
+  it('shows only an actionable installation notice and never a healthy image review label',()=>{
+    const healthy=parseEducationInstallation(report);
+    expect(educationInstallationNotice(healthy)).toBeNull();
+    expect(educationInstallationNotice(null)).toContain('Refresh');
+    expect(educationInstallationNotice({...healthy,updater:'Busy',reviewedImage:false})).toContain('updating');
+    expect(educationInstallationNotice({...healthy,reviewedImage:false})).toContain('compatibility update');
+    expect(educationInstallationNotice({...healthy,updater:'Disabled'})).toContain('disabled');
+    expect(educationInstallationNotice({...healthy,updater:'Missing'})).toContain('unavailable');
+    expect(educationInstallationNotice({...healthy,updater:'Unknown'})).toContain('Refresh');
+    const settings=readFileSync(new URL('../src/GeneralSettings.svelte',import.meta.url),'utf8');
+    expect(settings).not.toMatch(/Image review|Reviewed image found|Task ready|Official updater/);
+    expect(settings).toContain('{#if installationNotice}');
   });
   it('keeps version inspection out of passive session refresh and startup',()=>{
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');

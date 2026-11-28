@@ -20,9 +20,20 @@ and post-pin checks; hashes once per explicit observation and releases pin.
 Normal session wire, passive polling and startup remain unchanged. One
 read-only Tauri route uses the existing manager gate; no raw path/hash in
 receipt, no launch permission, no task execution. TS contract fixtures
-authored NOT_EXECUTED. Pending: native updater/task behavior and costs,
-safe official check action, capability-specific admission, future recipe
-review and end-to-end update acceptance.
+authored NOT_EXECUTED.
+Third slice (baseline [2671af6](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/2671af695d0819aba967862766b51c21f0f7e5a3)):
+operator UX feedback: one version row only when healthy; one authored
+notice for actionable exceptions, never technical image-review or task
+state rows. Installation check on Settings entry precedes session settings
+so a blocked native payload does not suppress independent observation.
+No new requests, timer, backend authority or schema change. UI fixtures
+authored NOT_EXECUTED. Capability review: existing default-OFF native
+F3, experimental AI and heap experiments are compile-time isolated;
+ordinary and AI DLL admission are separately digest-pinned, with no
+verified new game ABI. Preserve these existing boundaries rather than
+add a duplicate capability manager or enable unsupported optional features.
+Pending: native updater/task behavior and costs, safe official check
+action, future exact recipe/ABI review and end-to-end update acceptance.
 No new binary is admitted, and the ABI v4/local-test holds below remain.
 
 Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).

@@ -1,6 +1,18 @@
 // UI-only messages. Never display native error strings or use this projection
 // to authorize Launch, Close, Restore or storage writes.
-import type {NativeBackendSupport, ProfileSlot} from '../bridge/lazyTester.js';
+import type {NativeBackendSupport, ProfileSlot, EducationInstallationReport} from '../bridge/lazyTester.js';
+
+// One actionable notice for the last observed installation, not a launch gate.
+// Do not expose scheduler states, hashes or successful internal review in UI.
+export function educationInstallationNotice(report: EducationInstallationReport | null): string | null {
+  if (!report) return 'Installation status unavailable. Refresh to check again.';
+  if (report.updater === 'Busy') return 'Minecraft is updating. Refresh when it finishes.';
+  if (!report.reviewedImage) return 'This Minecraft version is not yet supported. A Lazy Tester compatibility update is required.';
+  if (report.updater === 'Disabled') return 'Automatic Minecraft updates are disabled.';
+  if (report.updater === 'Missing') return 'Automatic Minecraft updater unavailable.';
+  if (report.updater === 'Unknown') return 'Update status unavailable. Refresh to check again.';
+  return null;
+}
 
 export type FeedbackArea = 'Application' | 'Connection' | 'Launcher' | 'Game' | 'Display' | 'Settings' | 'Storage';
 

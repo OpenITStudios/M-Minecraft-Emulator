@@ -165,10 +165,14 @@ download. No automatic uninstall/reinstall or world/account migration.
 
 Official guidance: [Update to a new version](https://edusupport.minecraft.net/hc/en-us/articles/360047705032-Update-to-a-New-Version-of-Minecraft-Education)
 and [Windows installation](https://edusupport.minecraft.net/hc/en-us/articles/13106858087956-Windows-Installation-Guide).
-General Settings displays the last observed registry version, updater task
-state and exact reviewed-image match. The report is refreshed on Settings
-entry or explicit header Refresh, not passive session inspection, app
-startup or a new timer. It reuses the signed resolver and post-pin file
+General Settings shows only the last observed Minecraft version and, when
+needed, one actionable notice. The internal updater state and reviewed-image
+match remain validation data, not permanent UI rows or a positive readiness
+claim. Settings entry observes installation independently before the
+session settings request, so a native payload hold does not itself prevent
+the installation check. The report is refreshed on Settings entry or
+explicit header Refresh, not passive session inspection, app startup or
+a new timer. It reuses the signed resolver and post-pin file
 identity checks, hashes once, releases the temporary pin, and returns no
 path or hash to the UI. A match does not prove native ABI or gameplay;
 a failed check clears the displayed receipt without invalidating unrelated

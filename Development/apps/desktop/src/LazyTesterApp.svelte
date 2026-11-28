@@ -623,6 +623,10 @@
         await presentCurrentViewport(active);
         if (!current()) return;
       }
+      // Installation status does not require a usable session controller or
+      // admitted native payload. It remains independently readable in Settings.
+      if(next==='settings') await refreshInstallation(issued);
+      if (!current()) return;
       if(next==='settings'||next==='storage') {
         lastInspectionStartedAt=performance.now();
         sessionObservationHint=false;
@@ -630,8 +634,6 @@
         if (!current()) return;
         publishProfiles(snapshot.profiles);observeSettings(snapshot.settings);available=true;
       }
-      if(next==='settings') await refreshInstallation(issued);
-      if (!current()) return;
       if(next==='storage') {
         try {
           const location=await lazyTester.dataLocation();
