@@ -102,6 +102,26 @@ VMware contract. Authored Rust/UI fixtures NOT_EXECUTED. No binary admission,
 release, version bump, CI or native performance claim. Re-pin actual HEAD
 for the existing staged PC-local handoff below.
 
+**Reliability & efficiency closure — REV-01–08 (Unreleased, source only):**
+Baseline `d8b03d0e9090e7e12fbaa0ec061dfc3f0536d19f`. Move existing Rust
+format checks before compilation/testing, once per crate; correct preflight
+next-action message to respect native payload admission. Actual formatting
+and format PASS remain NOT_EXECUTED; do not claim existing source is
+rustfmt-clean. Recorder uses bounded original-process wait and bounded
+reader cancellation/join; uncertain cleanup refuses new recordings for
+the manager lifetime, not proof of exit. Session request timeout and later
+pending admission request cancellation of only the original client worker;
+retain the worker and uncertainty until original result/disconnect and
+fresh full Inspect; no replay or forced controller/game termination.
+Shared provider runner still has its direct-child kill/wait contract and
+bounded I/O-worker admission; changing its process ownership is deferred
+rather than dropping an unconfirmed child without a retention design.
+Keep exceptional checkpoint durability, per-request peer verification,
+generation/image pins and polling until measured bottlenecks justify a
+change (REV-05–07). No new worker, service, dependency or binary admission.
+Authored source fixtures NOT_EXECUTED; Windows cancellation/exit, pipe
+recovery and performance remain unverified.
+
 ## Proof ceiling and unresolved gates
 
 - Native presentation ABI v4 digest pair not admitted; standard dev/package/new launch held. Exact DLLs require independent review; never substitute arbitrary bytes.

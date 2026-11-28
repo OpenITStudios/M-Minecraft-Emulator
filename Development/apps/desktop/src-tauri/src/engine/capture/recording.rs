@@ -10,7 +10,7 @@ use std::{
     sync::{Arc,Mutex,OnceLock,atomic::{AtomicBool,AtomicU64,AtomicU8,Ordering}},
     thread,time::{Duration,Instant},
 };
-use windows_sys::Win32::System::JobObjects::*;
+use windows_sys::Win32::{Foundation::WAIT_OBJECT_0,System::{JobObjects::*,IO::CancelSynchronousIo,Threading::WaitForSingleObject}};
 
 const STARTING:u8=0;
 const RECORDING:u8=1;
@@ -22,11 +22,12 @@ const POLL:Duration=Duration::from_millis(200);
 const FRAME_TIMEOUT:Duration=Duration::from_secs(15);
 const STOP_TIMEOUT:Duration=Duration::from_secs(10);
 const READER_TIMEOUT:Duration=Duration::from_secs(2);
+const PROCESS_CLEANUP_MS:u32=2000;
 
 #[derive(Clone,Serialize)]
 #[serde(rename_all="camelCase")]
 pub struct RecordingReceipt{pub slot:u32,pub state:&'static str,pub frames:u64,pub recovery_file:Option<String>}
-struct Run{state:AtomicU8,stop:AtomicBool,terminal_progress:AtomicBool,frames:AtomicU64,pixel_rate:u64,recovery_file:OnceLock<String>}
+struct Run{state:AtomicU8,stop:AtomicBool,terminal_progress:AtomicBool,cleanup_unconfirmed:AtomicBool,frames:AtomicU64,pixel_rate:u64,recovery_file:OnceLock<String>}
 impl Run{
     fn active(&self)->bool{self.state.load(Ordering::Acquire)<SAVED}
     fn receipt(&self,slot:u32)->RecordingReceipt{
@@ -50,6 +51,9 @@ fn index(slot:u32)->io::Result<usize>{
     Ok((slot-1) as usize)
 }
 fn admit(slots:&[Option<Arc<Run>>;5],idx:usize,rate:u64)->io::Result<()>{
+    if slots.iter().flatten().any(|r|r.cleanup_unconfirmed.load(Ordering::Acquire)){
+        return Err(io::Error::other("Recording cleanup unconfirmed; recording disabled for this manager lifetime"));
+    }
     if slots[idx].as_ref().is_some_and(|r|r.active()){
         return Err(io::Error::other("Minecraft instance already has an active recording"));
     }
@@ -92,7 +96,7 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
     let image=worker::reviewed_image("ffmpeg.exe",video::REVIEWED_FFMPEG_SHA256)?;
     let parent=path.parent().ok_or_else(||io::Error::other("Recording save folder unavailable"))?;
     let temp=tempfile::Builder::new().prefix(".lazy-tester-video-").suffix(".part").tempfile_in(parent)?;
-    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),terminal_progress:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()});
+    let run=Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),terminal_progress:AtomicBool::new(false),cleanup_unconfirmed:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()});
     let mut all=slots()?;
     admit(&all,idx,rate)?;
     let active=Arc::clone(&run);
@@ -110,9 +114,9 @@ pub(super) fn start(slot:u32,expected:OwnedProcess)->io::Result<bool>{
 // A kill-on-close job owns only the recorder child, never Minecraft.
 // Assign immediately after spawn; the candidate must be reviewed as a
 // self-contained encoder that launches no descendants.
-struct Recorder{child:Child,_job:OwnedHandle}
-impl Recorder{
-    fn spawn(image:&worker::Image,target:&Target,temp:&tempfile::NamedTempFile)->io::Result<Self>{
+struct Recorder<'a>{child:Child,job:Option<OwnedHandle>,run:&'a Run}
+impl<'a> Recorder<'a>{
+    fn spawn(image:&worker::Image,target:&Target,temp:&tempfile::NamedTempFile,run:&'a Run)->io::Result<Self>{
         let job_raw=unsafe{CreateJobObjectW(std::ptr::null(),std::ptr::null())};
         if job_raw.is_null(){return Err(io::Error::last_os_error());}
         let job=unsafe{OwnedHandle::from_raw_handle(job_raw as _)};
@@ -125,34 +129,60 @@ impl Recorder{
         let child=Command::new(&image.path).args(video::args(target.hwnd(),target.size)?)
             .creation_flags(0x08000000).stdin(Stdio::piped())
             .stdout(Stdio::from(temp.as_file().try_clone()?)).stderr(Stdio::piped()).spawn()?;
-        let mut rec=Self{child,_job:job};
+        let rec=Self{child,job:Some(job),run};
         if unsafe{AssignProcessToJobObject(job_raw,rec.child.as_raw_handle() as _)}==0{
-            let error=io::Error::last_os_error();
-            if rec.child.kill().is_ok(){let _=rec.child.wait();}
-            return Err(error);
+            return Err(io::Error::last_os_error()); // same bounded Drop cleanup
         }
         Ok(rec)
     }
 }
-impl Drop for Recorder{
+impl Drop for Recorder<'_>{
     fn drop(&mut self){
         if !matches!(self.child.try_wait(),Ok(Some(_))){
-            if self.child.kill().is_ok(){let _=self.child.wait();}
+            let _=self.child.kill();
+        }
+        // Close only the recorder job before waiting on its original handle.
+        drop(self.job.take());
+        if unsafe{WaitForSingleObject(self.child.as_raw_handle() as _,PROCESS_CLEANUP_MS)}!=WAIT_OBJECT_0{
+            self.run.cleanup_unconfirmed.store(true,Ordering::Release);
         }
     }
 }
 
+// Retain the exact reader thread until it exits or bounded cancellation
+// fails. No new recording can accumulate workers after uncertain cleanup.
+struct ProgressReader<'a>{worker:Option<thread::JoinHandle<()>>,run:&'a Run}
+impl ProgressReader<'_>{
+    fn finish(&mut self)->io::Result<()>{
+        let Some(worker)=self.worker.take() else{return Ok(())};
+        let deadline=Instant::now()+READER_TIMEOUT;
+        while !worker.is_finished()&&Instant::now()<deadline{
+            // Cancellation is only a request; is_finished/join is the proof.
+            unsafe{CancelSynchronousIo(worker.as_raw_handle() as _)};
+            thread::sleep(Duration::from_millis(10));
+        }
+        if !worker.is_finished(){
+            self.run.cleanup_unconfirmed.store(true,Ordering::Release);
+            return Err(io::Error::other("Recording reader cleanup unconfirmed"));
+        }
+        worker.join().map_err(|_|io::Error::other("Recording progress reader failed"))
+    }
+}
+impl Drop for ProgressReader<'_>{
+    fn drop(&mut self){let _=self.finish();}
+}
+
 fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,path:PathBuf,run:&Arc<Run>)->io::Result<()>{
     if run.stop.load(Ordering::Acquire){return Err(io::Error::other("Recording cancelled before start"));}
-    let mut rec=Recorder::spawn(&image,&target,&temp)?;
+    let mut rec=Recorder::spawn(&image,&target,&temp,run)?;
     let stderr=rec.child.stderr.take().ok_or_else(||io::Error::other("Recording progress unavailable"))?;
     let reader_run=Arc::clone(run);
     let (tx,rx)=std::sync::mpsc::sync_channel(1);
     // Progress is numeric metadata only. No logs or private media are copied.
     // One bounded pipe reader; the child/job close releases its writer.
-    let reader=thread::Builder::new().name("recording-progress".into()).spawn(move||{
+    let mut reader=ProgressReader{worker:Some(thread::Builder::new().name("recording-progress".into()).spawn(move||{
         let _=tx.send(read_progress(stderr,&reader_run));
-    })?;
+    })?),run};
     let started=Instant::now();
     let mut stopping=None;
     let mut progress_complete=false;
@@ -208,13 +238,12 @@ fn record(target:Target,image:worker::Image,mut temp:tempfile::NamedTempFile,pat
     Ok(())
     })();
     drop(rec); // close job/writer before bounded reader completion
-    // A received result (or disconnect) means the reader is returning.
-    // Never join a potentially blocked pipe reader after a timeout.
     let completion=if progress_complete {Ok(Ok(true))} else {rx.recv_timeout(READER_TIMEOUT)};
-    if !matches!(&completion,Err(std::sync::mpsc::RecvTimeoutError::Timeout)) {
-        reader.join().map_err(|_|io::Error::other("Recording progress reader failed"))?;
-    }
+    reader.finish()?;
     supervised?;
+    if run.cleanup_unconfirmed.load(Ordering::Acquire){
+        return Err(io::Error::other("Recording process cleanup unconfirmed"));
+    }
     let ended=completion.map_err(|_|io::Error::other("Recording progress completion unavailable"))??;
     if !ended||run.frames.load(Ordering::Acquire)==0{return Err(io::Error::other("Recording has no final frame receipt"));}
     target.verify()?;
@@ -309,7 +338,7 @@ fn read_progress(mut input:impl Read,run:&Run)->io::Result<bool>{
 #[cfg(test)]
 mod tests{
     use super::*;
-    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),terminal_progress:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()})}
+    fn run(rate:u64)->Arc<Run>{Arc::new(Run{state:AtomicU8::new(STARTING),stop:AtomicBool::new(false),terminal_progress:AtomicBool::new(false),cleanup_unconfirmed:AtomicBool::new(false),frames:AtomicU64::new(0),pixel_rate:rate,recovery_file:OnceLock::new()})}
     #[test]
     fn admission_prevents_duplicate_and_aggregate_overcommit(){
         let mut slots:[Option<Arc<Run>>;5]=[const{None};5];
@@ -319,6 +348,16 @@ mod tests{
         assert!(admit(&slots,1,100).is_ok());
         slots[0].as_ref().unwrap().state.store(SAVED,Ordering::Release);
         assert!(admit(&slots,0,MAX_ACTIVE_PIXEL_RATE).is_ok());
+    }
+    #[test]
+    fn unconfirmed_cleanup_refuses_all_new_recordings(){
+        let mut slots:[Option<Arc<Run>>;5]=[const{None};5];
+        let old=run(1);
+        old.state.store(FAILED,Ordering::Release);
+        old.cleanup_unconfirmed.store(true,Ordering::Release);
+        slots[0]=Some(old);
+        assert!(admit(&slots,0,1).is_err());
+        assert!(admit(&slots,1,1).is_err());
     }
     #[test]
     fn starting_receipt_does_not_mix_an_unpromoted_frame_with_starting(){

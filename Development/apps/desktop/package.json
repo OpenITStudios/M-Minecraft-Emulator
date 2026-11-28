@@ -19,7 +19,7 @@
     "typecheck": "svelte-check --tsgo --tsconfig ./tsconfig.json",
     "check:rust": "npm run prepare:icons && cargo check --all-targets --locked --target x86_64-pc-windows-msvc --manifest-path src-tauri/Cargo.toml",
     "test:rust": "cargo test --all-targets --locked --target x86_64-pc-windows-msvc --manifest-path src-tauri/Cargo.toml",
-    "verify:source": "npm run typecheck && npm run test && npm run build:frontend && npm run check:rust && npm run test:rust && npm run format:rust",
+    "verify:source": "npm run format:rust && npm run typecheck && npm run test && npm run build:frontend && npm run check:rust && npm run test:rust",
     "prepare:package-binaries": "node scripts/prepare-package-binaries.mjs",
     "test": "vitest run test",
     "check:dependencies": "node ../../tooling/repository/check-dependency-lock.mjs",

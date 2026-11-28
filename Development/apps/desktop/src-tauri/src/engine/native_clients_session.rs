@@ -1134,6 +1134,18 @@ struct PendingRequest {
 }
 
 #[cfg(windows)]
+impl PendingRequest {
+    // Only this original client worker is targeted, never a game or the
+    // controller actor. A cancel request does not prove completion.
+    fn request_io_cancel(&self) {
+        use std::os::windows::io::AsRawHandle;
+        if !self.worker.is_finished() {
+            unsafe { windows_sys::Win32::System::IO::CancelSynchronousIo(self.worker.as_raw_handle() as _) };
+        }
+    }
+}
+
+#[cfg(windows)]
 enum PendingWorkerWait {
     // A response belongs to the unique original worker only.
     Completed(io::Result<SessionReply>),
@@ -1169,6 +1181,9 @@ impl Controller {
         if let Some(pending) = &self.pending {
             match pending.replies.try_recv() {
                 Err(std::sync::mpsc::TryRecvError::Empty) => {
+                    // Retry cancellation only, never the original request.
+                    // The same worker remains retained until a result/disconnect.
+                    pending.request_io_cancel();
                     return Err(io::Error::new(
                         io::ErrorKind::WouldBlock,
                         "The previous session request is still running; games are preserved",
@@ -1594,6 +1609,7 @@ fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::t
             // Retain its receiver, buffers, peer pin and thread. Never
             // start a second worker or blindly resend its mutation.
             owner.uncertain = true;
+            if let Some(pending)=&owner.pending { pending.request_io_cancel(); }
             issue_report::note(Code::IpcReplyTimeout, context, None);
             Err(io::Error::new(
                 io::ErrorKind::TimedOut,

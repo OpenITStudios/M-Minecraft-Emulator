@@ -230,6 +230,10 @@ test('scoped frontend and native source checks avoid accidental full verificatio
   assert.ok(desktopScripts['verify:source'].includes('npm run build:frontend'));
   assert.ok(desktopScripts['verify:source'].includes('npm run test:rust'));
   assert.ok(rootScripts['verify:source'].includes('npm run test:runtime'));
+  assert.ok(rootScripts['verify:source'].indexOf('npm run format:runtime') < rootScripts['verify:source'].indexOf('npm run check:desktop'));
+  assert.ok(desktopScripts['verify:source'].startsWith('npm run format:rust && '));
+  assert.match(developer,/NEXT: verify native ABI v4 payload admission/);
+  assert.doesNotMatch(developer,/NEXT: \.\\DEV\.cmd dev/);
 });
 
 test('benchmark uses exact Local checkout and two cache-preserving passes', () => {

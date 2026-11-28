@@ -325,7 +325,7 @@ function Invoke-NativeSourcePreflight {
     }
 
     Write-Host "SOURCE PREFLIGHT COMPLETE for $sha (not Minecraft acceptance)."
-    Write-Host "NEXT: .\DEV.cmd dev  (manual UI test; no legacy installer)"
+    Write-Host "NEXT: verify native ABI v4 payload admission before separately approved dev/package; source PASS is not launch permission."
     Write-Host "No installer, VM, Sandboxie process, licensed sign-in or Minecraft session was tested."
 }
 

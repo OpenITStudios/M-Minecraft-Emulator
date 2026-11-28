@@ -83,9 +83,15 @@ the next existing 200 ms supervision wake starts the 10 s exit deadline
 unless already stopping. EOF, successful child exit and positive frame
 count are still required for publication. After child/job close, the
 supervisor waits up to 2 s for the reader result and joins a completed
-reader, including on ordinary supervision errors. An unclosed pipe can
-still leave a detached reader on timeout; this is a failure, not a saved
-receipt, and requires native containment verification.
+reader, including on ordinary supervision errors. Recorder cleanup closes
+its own job and waits up to 2 s on its original process handle; reader
+cleanup requests cancellation on its own thread for up to 2 s. Neither
+cancellation nor kill is proof of exit. If process or reader completion is
+unconfirmed, all further recording starts in this manager lifetime are
+refused, even on another slot; the terminal Failed receipt does not prove
+cleanup. The manager does not terminate Minecraft or automatically restart.
+An unclosed pipe can still retain a detached thread or OS process; native
+containment remains unverified.
 The same 15 s frame-progress deadline covers both startup and mid-stream
 stalls: only a completed, monotonic frame-count report resets it. A game
 that produces no new frames for 15 s is conservatively failed, including
