@@ -21,6 +21,15 @@ test('issue review keeps native and UI observations separate, with no inferred r
   assert.equal(result.issues[1].recovery,'UNCONFIRMED');
   assert.ok(result.routes[0].source.endsWith('native_clients_session.rs'));
 });
+test('receipt and Probe investigation follows extracted source owners',()=>{
+  const v={v:2,scope:'desktop-process',issues:[{c:'LT-AGT-03',t:1}],
+    native:{v:1,issues:[{c:'IPC_TARGET_RECEIPT_INVALID',op:'target',s:2,t:1,n:1}]}};
+  const result=review(v);
+  const route=code=>result.routes[result.issues.find(row=>row.c===code).route];
+  assert.ok(route('IPC_TARGET_RECEIPT_INVALID').source.endsWith('/session_protocol.rs'));
+  assert.ok(route('LT-AGT-03').source.endsWith('/probe-qa-operations.mjs'));
+  assert.equal(result.rootCause,'NOT_ESTABLISHED');
+});
 test('review bounds output, ranks unresolved recurrences, preserves unknown coverage',()=>{
   const value={v:2,scope:'desktop-process',issues:[],nativeUnavailable:true,truncated:true};
   for(const c of ['LT-DIS-03','LT-GAM-02','LT-STO-06'])for(let s=1;s<=5;s++)

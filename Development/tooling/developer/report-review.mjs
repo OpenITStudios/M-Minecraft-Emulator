@@ -8,6 +8,7 @@ const OWNERS=Object.freeze({
   "bootstrap": "Development/apps/desktop/src-tauri/src/app_bootstrap.rs",
   "binding": "Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/profile_binding.rs",
   "transport": "Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs",
+  "protocol": "Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs",
   "session": "Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs",
   "workspace": "Development/apps/desktop/src-tauri/src/engine/workspace_surface/controller.rs",
   "preview": "Development/apps/desktop/src-tauri/src/engine/workspace_surface/previews.rs",
@@ -19,7 +20,7 @@ const OWNERS=Object.freeze({
   "screenshot": "Development/apps/desktop/src-tauri/src/engine/capture/screenshot.rs",
   "recording": "Development/apps/desktop/src-tauri/src/engine/capture/recording.rs",
   "agent": "Development/tooling/agent/operation-core.mjs",
-  "probe": "Development/tooling/agent/probe-qa.mjs",
+  "probe": "Development/tooling/agent/probe-qa-operations.mjs",
   "activity": "Development/tooling/agent/activity-status.mjs"
 });
 const ROUTES=[
@@ -29,8 +30,8 @@ const ROUTES=[
   ["LT-APP-05 LT-SET-05 LT-SET-06",3,"ui","Check expected refusal; do not remove the admission gate."],
   ["LT-PRO-01 LT-PRO-02",2,"binding","Check profile/catalog admission and actual observed failure; preserve data."],
   ["LT-CON-01",2,"transport","Check whether current observation failed in transport, receipt parsing, or workspace release."],
-  ["LT-GAM-01 LT-GAM-05",2,"session","Check original process/window observation and launch admission."],
-  ["LT-GAM-02 LT-GAM-03 LT-GAM-04",1,"session","Check normal-close and retained ownership receipts; never replay an uncertain close."],
+  ["LT-GAM-01 LT-GAM-05",2,"session","Check original process/window observation (owned_game_windows.rs) and launch admission."],
+  ["LT-GAM-02 LT-GAM-03 LT-GAM-04",1,"session","Check retained ownership receipts and owned_game_windows.rs normal-close checks; never replay an uncertain close."],
   ["LT-DIS-01 LT-DIS-02 LT-DIS-05 LT-DIS-06",2,"workspace","Check selected window identity and presentation receipt."],
   ["LT-DIS-03",1,"workspace","Check original restoration checkpoint and helper ownership; Inspect alone is not restore proof."],
   ["LT-DIS-04",3,"preview","Check exact-target DWM registration and invalidation."],
@@ -39,15 +40,15 @@ const ROUTES=[
   ["LT-STO-06",1,"clear","Check pending cleanup journal and verified disposition; preserve account/world data."],
   ["LT-SET-01 LT-SET-04",2,"session","Check settings operation and selected profile receipt."],
   ["LT-SET-02 LT-SET-07",2,"settings","Check validated preferences and actual save receipt."],
-  ["LT-SET-03",2,"audio","Check audio synchronization and bounded fallback; do not infer COM root cause."],
+  ["LT-SET-03",2,"audio","Check COM synchronization and session_controller/audio_maintenance.rs cadence; do not infer COM root cause."],
   ["LT-CAP-01",3,"screenshot","Check selected capture receipt and no-clobber save; cancellation is not failure."],
   ["LT-CAP-02 LT-CAP-03 LT-CAP-04 LT-CAP-05",2,"recording","Check recording admission, worker result and finalization/recovery receipt."],
   ["LT-AGT-01 LT-AGT-02",1,"agent","Check original lease/neutral and reconciliation evidence; never dispatch a replacement input."],
-  ["LT-AGT-03 LT-AGT-04",2,"probe","Check original Probe receipt completeness and checkpoint origin, not gameplay PASS."],
+  ["LT-AGT-03 LT-AGT-04",2,"probe","Check checkpoint origin and original receipt completeness in probe-qa.mjs; not gameplay PASS."],
   ["LT-AGT-05",3,"activity","Check report freshness and origin; stale evidence is not current failure proof."],
   ["IPC_WORKER_START_FAILED",2,"transport","Check fallible worker admission and numeric OS error; no worker was admitted."],
   ["IPC_TRANSPORT_FAILED",1,"transport","Check exact transport failure and uncertainty gate; do not infer whether mutation reached actor."],
-  ["IPC_INPUT_RECEIPT_INVALID IPC_TARGET_RECEIPT_INVALID IPC_INSPECT_RECEIPT_INVALID",1,"transport","Check exact receipt validator and original request/target contract; keep uncertainty gate."],
+  ["IPC_INPUT_RECEIPT_INVALID IPC_TARGET_RECEIPT_INVALID IPC_INSPECT_RECEIPT_INVALID",1,"protocol","Check exact receipt predicates and original request/target contract; keep the transport uncertainty gate."],
   ["IPC_REPLY_TIMEOUT IPC_REPLY_LOST",1,"transport","Check original worker and bounded reply handling; full Inspect reconciles transport, not original operation."],
 ];
 const CATALOG=new Map(ROUTES.flatMap(([codes,priority,owner,check])=>

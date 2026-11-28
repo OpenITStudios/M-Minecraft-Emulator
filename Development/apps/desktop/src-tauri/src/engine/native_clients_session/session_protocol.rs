@@ -2,9 +2,10 @@
 use crate::engine::{manager_settings, process_identity::OwnedProcess};
 use serde::{Deserialize, Serialize};
 use std::io;
-use super::{AgentActivityReport, TestingRunInspection, TestingRunView};
+use super::agent_activity::AgentActivityReport;
+use super::controller_testing_runs::{TestingRunInspection, TestingRunView};
 #[cfg(feature="mc02-native-input")]
-use super::{AgentControlMode, AiInputFrame, Mc02BatchOrigin};
+use super::controller_ai_input_leases::{AgentControlMode, AiInputFrame, Mc02BatchOrigin};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -389,13 +389,20 @@
         let other = OwnedProcess { pid:42, created_file_time:"123456".into(), session_id:1,
             window_handle:"0x1234".into(), responding:true };
         let observed = [other];
-        let owned = Ok(vec![(42,123456)]);
-        assert!(report_data_admission(true, &owned, &observed).is_ok());
-        assert!(report_data_admission(false, &owned, &observed).is_err());
-        assert!(report_data_admission(true, &Ok(vec![(42,123455)]), &observed).is_err());
+        let owned = Ok(all_observed_processes_owned(&[(42,123456)], &observed));
+        assert!(report_data_admission(true, &owned).is_ok());
+        assert!(report_data_admission(false, &owned).is_err());
+        let unowned = Ok(all_observed_processes_owned(&[(42,123455)], &observed));
+        assert!(report_data_admission(true, &unowned).unwrap_err().to_string().contains("unmanaged"));
+        assert!(report_data_admission(false, &unowned).unwrap_err().to_string().contains("Close this Minecraft"));
+        let mut malformed = observed[0].clone();
+        malformed.created_file_time = "invalid".into();
+        assert!(!all_observed_processes_owned(&[(42,123456)], &[malformed]));
+        assert!(!all_observed_processes_owned(&[], &observed));
+        assert!(all_observed_processes_owned(&[], &[]));
         let failed = Err(io::Error::new(io::ErrorKind::PermissionDenied, "Identity unavailable"));
         for selected_idle in [true, false] {
-            let error = report_data_admission(selected_idle, &failed, &observed).unwrap_err();
+            let error = report_data_admission(selected_idle, &failed).unwrap_err();
             assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
             assert_eq!(error.to_string(), "Identity unavailable");
         }

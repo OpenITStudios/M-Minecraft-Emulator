@@ -822,7 +822,8 @@ impl Sessions {
         let observed = super::super::inspect_native_workspace()?.processes;
         // One report-local observation of the original retained handles.
         // Do not carry this result into a later request or mutation.
-        let owned = self.owned_data_processes();
+        let ownership = self.owned_data_processes()
+            .map(|owned| all_observed_processes_owned(&owned, &observed));
         slots
             .map(|slot| {
                 let store = self.store(slot)?;
@@ -831,7 +832,7 @@ impl Sessions {
                 // Cache deletion, profile clear, launch and settings writes each
                 // recheck their own authority at the moment of mutation.
                 let admission = report_data_admission(
-                    self.running[slot as usize - 1].is_none(), &owned, &observed);
+                    self.running[slot as usize - 1].is_none(), &ownership);
                 let replay_admission = || {
                     admission.as_ref().map(|_| ()).map_err(|error| {
                         io::Error::new(error.kind(), error.to_string())
@@ -1136,16 +1137,26 @@ fn mutation_storage_slots(slot: u32, selected_storage: Option<bool>) -> std::ops
 
 // Reuse one observation for the read-only report, retaining per-slot admission
 // and propagating a failed native identity check to every report entry.
-fn report_data_admission(selected_idle: bool, owned: &io::Result<Vec<(u32,u64)>>,
-    observed: &[OwnedProcess]) -> io::Result<()> {
-    let owned = owned.as_ref().map_err(|error| io::Error::new(error.kind(), error.to_string()))?;
-    require_data_idle(selected_idle, owned, observed)
+fn all_observed_processes_owned(owned: &[(u32,u64)], observed: &[OwnedProcess]) -> bool {
+    observed.iter().all(|process| {
+        let birth = process.created_file_time.parse::<u64>().ok();
+        owned.iter().any(|(pid,expected_birth)|
+            process.pid == *pid && birth == Some(*expected_birth))
+    })
+}
+
+fn report_data_admission(selected_idle: bool, ownership: &io::Result<bool>) -> io::Result<()> {
+    let all_owned = *ownership.as_ref().map_err(|error| io::Error::new(error.kind(), error.to_string()))?;
+    require_profile_data_idle(selected_idle, || all_owned)
 }
 
 fn require_data_idle(selected_idle: bool, owned: &[(u32,u64)], observed: &[OwnedProcess]) -> io::Result<()> {
+    require_profile_data_idle(selected_idle, || all_observed_processes_owned(owned, observed))
+}
+
+fn require_profile_data_idle(selected_idle: bool, all_owned: impl FnOnce() -> bool) -> io::Result<()> {
     if !selected_idle { return Err(invalid("Close this Minecraft session normally before changing its launcher data.")); }
-    if observed.iter().any(|process| !owned.iter().any(|(pid,birth)|
-        process.pid == *pid && process.created_file_time.parse::<u64>().ok() == Some(*birth))) {
+    if !all_owned() {
         return Err(invalid("An unmanaged Minecraft session is open. Close it normally before changing launcher data; managed sessions in other launchers may stay open."));
     }
     Ok(())
