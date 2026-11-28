@@ -1,14 +1,46 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-13b: fixed-home source evidence)
+## Current status — macOS development PAUSED (operator decision)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
 (MC01–MC05), one official installation per host, one UI, one retained
 session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
-native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
+native launch remains BLOCKED at Mac profile isolation; Mac source work PAUSED. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-HOLD — operator pauses macOS development
+
+Operator explicitly closes the Mac workstream for now because a Mac is
+not accessible. Plan A only is retained as historical selected direction;
+do not resume Mac work automatically on a generic continuation request.
+Resume only when the operator explicitly reopens this workstream.
+Preserve all source, fixtures, evidence, unresolved game storage/account
+isolation and main executable artifact limitations. Mac runtime admission
+remains false. No rollback, runtime edit, packaging change or release.
+
+Windows preservation audit: compare pre-Mac convergence base
+10ed48c6ce6592ccef680623ffc643e8cd6aa9ec to
+e5c014b79f500aa0c5048223c966f47f2ce244c6 (39 commits, 39 changed paths),
+including the last 11 commits since b5c8b5c2a52ec27242be301b1a353793d8de0232.
+Reviewed the shared controller/IPC, capability, identity, UI scheduling,
+icon, package and dependency diffs. Windows source is not byte-identical:
+status projection/close selection/slot validation moved to shared core,
+UI capability predicates still accept exactly WindowsNative, and window
+identity comparison/selection keys preserve their four original fields.
+Windows installation report retains the untagged original wire shape;
+new startup capability is Mac cfg-only. Mac-specific dependencies and
+workspace module are cfg-gated, with changes to shared Cargo.lock;
+Windows dependency declarations/target, package:windows, existing
+Windows icon requirements, native DLL sources, bootstrap profile
+storage/authentication, DWM and installer config were not changed in
+the comparison. The source verification suite includes an additional
+offline Mac metadata fixture; this does not activate a Mac game backend.
+Source review found no intended Windows behavioral change; build, lock
+resolution, regression and native behavior NOT_EXECUTED, not a parity
+or compatibility proof. Windows work can continue independently when
+requested; all existing test/CI/release holds remain. Mac status PAUSED.
 
 ### MAC-13b — current Swift Foundation corroborates fixed-home candidate
 
