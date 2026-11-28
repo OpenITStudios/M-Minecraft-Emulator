@@ -169,7 +169,7 @@ describe('Retained-controller Settings observation',()=>{
     const fresh=source.slice(source.indexOf('fn fresh_settings_report('),source.indexOf('fn apply_preset('));
     expect(fresh).not.toContain('self.reap()');
     expect(fresh).toContain('self.settings_report(|_| Ok(super::super::inspect_native_workspace()?.processes.is_empty()))');
-    const preset=source.slice(source.indexOf('fn apply_preset('),source.indexOf('// Reuse one observation for the read-only report'));
+    const preset=source.slice(source.indexOf('fn apply_preset('),source.indexOf('fn require_preset_idle('));
     expect(preset).toMatch(/self\.reap\(\);[^\n]*\n\s*let mut report = self\.fresh_settings_report\(\)\?;\s*require_preset_idle\(report\.can_apply_preset\)\?/);
     const dispatch=source.slice(source.indexOf('let reply_snapshot = ReplySnapshot::for_request'),source.indexOf('let _ = envelope.reply.send(reply)'));
     expect(dispatch).toContain('matches!(&envelope.request, SessionRequest::InspectSettings)');
@@ -181,6 +181,24 @@ describe('Retained-controller Settings observation',()=>{
     expect(dispatch).toMatch(/let mut snapshot = reply_snapshot\.collect\(&mut sessions\);[\s\S]*?else if saved_settings \{\s*settings = Some\(sessions\.fresh_settings_report\(\)/);
     expect(dispatch.slice(0,dispatch.indexOf('let mut snapshot = reply_snapshot.collect(&mut sessions);'))).not.toContain('sessions.fresh_settings_report()');
     expect(source).toMatch(/fn snapshot\(&mut self\) -> SessionSnapshot \{\s*self\.reap\(\);\s*self\.snapshot_without_reaping\(true\)/);
+  });
+});
+describe('Controller storage ownership',()=>{
+  it('shares cache admission while preserving held download and selected-data routes',()=>{
+    const controller=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap/session_controller.rs',import.meta.url),'utf8');
+    const storage=readFileSync(new URL('../src-tauri/src/engine/independent_bootstrap/session_controller/profile_storage_operations.rs',import.meta.url),'utf8');
+    expect(controller).toContain('mod profile_storage_operations;');
+    const download=controller.slice(controller.indexOf('SessionRequest::ClearProfileDownloadCache { slot } =>'),controller.indexOf('SessionRequest::ClearProfileCache { slot, selected_storage } =>'));
+    expect(download.indexOf('if !crate::engine::manager_settings::DOWNLOAD_CACHE_REVIEWED')).toBeGreaterThanOrEqual(0);
+    expect(download.indexOf('if !crate::engine::manager_settings::DOWNLOAD_CACHE_REVIEWED')).toBeLessThan(download.indexOf('sessions.clear_cache_target(slot, profile_storage::CacheTarget::Download)'));
+    expect(controller).toContain('.clear_cache_target(slot, profile_storage::CacheTarget::Web)');
+    expect(controller).toContain('const SELECTED_WORLD_DISPOSITION_REVIEWED: bool = false;');
+    expect(controller).toContain('const SELECTED_PACK_DISPOSITION_REVIEWED: bool = false;');
+    const clear=storage.slice(storage.indexOf('fn clear_cache_target('),storage.indexOf('fn change_game_settings('));
+    expect(clear).toContain('self.admit_profile_mutation(slot)?;');
+    expect(clear).toContain('require_no_pending_profile_clear(self.store(slot)?)?;');
+    expect(clear).toMatch(/if matches!\(target, profile_storage::CacheTarget::Web\) \{\s*self\.pending_storage_maintenance\[slot as usize - 1\] = false;/);
+    expect(clear).toContain('profile_storage::clear_cache_target(&self.store(slot)?.private, target, true)');
   });
 });
 describe('Passive idle observation boundary',()=>{

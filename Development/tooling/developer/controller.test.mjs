@@ -564,6 +564,7 @@ test('extracted controller owners retain scoped counterpart review',()=>{
   const cases=[
     ['owned_game_windows.rs',['agent-input-lease','native-desktop-session','native-input-v4']],
     ['audio_maintenance.rs',['native-desktop-session']],
+    ['profile_storage_operations.rs',['agent-input-lease','native-desktop-session']],
     ['reply_snapshot.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
     ['tests.rs',['agent-input-lease','native-desktop-session','native-input-v4']]
   ];

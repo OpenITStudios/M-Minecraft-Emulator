@@ -215,6 +215,8 @@ const NAMED_OWNERS=Object.freeze([
   ['fn open_private_temporary',OWNERSHIP_ENGINE+'independent_bootstrap/profile_storage_handles.rs'],
   ['fn child_environment',OWNERSHIP_ENGINE+'independent_bootstrap/child_process_environment.rs'],
   ['struct Sessions',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller.rs'],
+  ['fn admit_profile_mutation',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/profile_storage_operations.rs'],
+  ['fn resolve_selective_review',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/profile_storage_operations.rs'],
   ['struct NormalCloseProgress',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/owned_game_windows.rs'],
   ['struct AudioIdleGate',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/audio_maintenance.rs'],
   ['enum ReplySnapshot',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller/reply_snapshot.rs'],

@@ -308,6 +308,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/tests.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/registered_image.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/profile_storage_operations.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/owned_game_windows.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/reply_snapshot.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/tests.rs'
@@ -324,6 +325,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session/controller_testing_runs.rs',
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/profile_storage_operations.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/owned_game_windows.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/reply_snapshot.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/tests.rs'
@@ -352,6 +354,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/tests.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/registered_image.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/profile_storage_operations.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/owned_game_windows.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/audio_maintenance.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/reply_snapshot.rs',
@@ -388,6 +391,7 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
         'Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs',
+        'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/profile_storage_operations.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/owned_game_windows.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/audio_maintenance.rs',
         'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/reply_snapshot.rs',
