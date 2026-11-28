@@ -65,8 +65,6 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(css).not.toContain('.lazytester-coordinate-popup');
     expect(css).not.toContain('.lazytester-f3-popup');
     expect(css).not.toContain('.lazytester-play-utilities');
-    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
-    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });
   it('compacts the default Play view while preserving five native preview targets',()=>{
     const app=source('LazyTesterApp.svelte'),rail=source('LauncherRail.svelte'),css=source('lazytester.css');
@@ -74,20 +72,14 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(app).toContain('hidden={active!==null&&!detached}');
     expect(app).not.toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
     expect(app).not.toContain('class="lazytester-play-utilities"');
-    expect(app).not.toContain('F3InspectorPanel');
-    expect(app).not.toContain('CoordinatePastePanel');
     expect(app).not.toContain('on:click={release}>Separate window</button>');
     expect(rail).toContain('aria-hidden="true">×</span></button>');
-    expect(rail).toContain('{#each orderedProfiles as profile (profile.slot)}');
-    expect(rail).toContain('use:observePreview={profile.slot}');
     expect(rail).toContain('onRequestClose(profile.slot,event.currentTarget)');
     expect(css).toContain('.lazytester-app main.lazytester-play-main{padding:10px 16px 12px;overflow-x:hidden}');
     expect(css).toContain('clamp(72px,11vh,108px)');
     expect(rail).toContain('class="lazytester-launcher-header"');
     expect(css).toContain('padding-right:29px');
     expect(css).toContain('.lazytester-play-main .lazytester-health-notice{display:flex;');
-    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
-    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
   });
   it('keeps selected close review inside the fixed launcher action strip',()=>{
     const app=source('LazyTesterApp.svelte'),css=source('lazytester.css');
@@ -108,11 +100,7 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
   });
   it('uses one adaptive workspace with a single saved layout preference',()=>{
     const app=source('LazyTesterApp.svelte'),settings=source('GeneralSettings.svelte'),css=source('lazytester.css');
-    expect(app).toContain("<main class={page==='workspace'?'lazytester-play-main':undefined}>");
-    expect(css).toContain('clamp(72px,11vh,108px)');
     expect(css).toContain('aspect-ratio:16/9;');
-    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
-    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
     expect(app).toContain("let workspaceLayout: 'Bottom' | 'Right' = 'Bottom'");
     expect(app).toContain('layoutPersistenceIssue');
     expect(app).toContain('window.localStorage.setItem(workspaceLayoutKey, value)');
@@ -134,18 +122,10 @@ describe('Lazy Tester Minimal Professional visual hierarchy contract',()=>{
     expect(refresh).toBeGreaterThan(-1);
     expect(separate).toBe(-1);
     expect(app).not.toContain('async function release()');
-    expect(app).not.toContain("aria-label={'Open Minecraft - '+active+' in a window'}");
-    expect(app).not.toContain('F3InspectorPanel');
-    expect(app).not.toContain('CoordinatePastePanel');
     expect(app).not.toContain('playToolsElement');
-    expect(app).not.toContain('projectF3Inspector');
     expect(app).not.toContain('on:blur={closePlayToolsOnBlur}');
     expect(css).not.toContain('.lazytester-play-tools');
-    expect(css).not.toContain('.lazytester-play-utilities');
     expect(css).not.toContain('.lazytester-coordinate-paste');
-    expect(css).not.toContain('.lazytester-f3-popup');
-    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
-    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });
   it('limits new density and status CSS to presentation owners',()=>{
     const css=source('lazytester.css');

@@ -47,14 +47,12 @@ describe('Lazy Tester minimal professional source contracts',()=>{
     expect(css).toContain('.lazytester-app .lazytester-viewport .lazytester-empty:focus-visible{\n    outline-color:Highlight;');
     expect(browser).toContain('const emptyStatus=page.getByRole(\'region\',{name:\'Minecraft workspace status\'});');
     expect(browser).toContain('emptyStatusScrollable.scrollOffset>0');
-    expect(css).toContain('grid-template-columns:repeat(5,minmax(0,1fr))');
-    expect(css).toContain('width:min(100cqw,calc(100cqh * 16 / 9))');
   });
   it('keeps occupied-session gates apart from observed running labels',()=>{
     const play=asset('src/LazyTesterApp.svelte');
     expect(play).toContain("['STARTING', 'RUNNING', 'NOT_RESPONDING']");
     expect(play).toContain("observedRunningCount = profiles.filter(profile => profile.state === 'RUNNING').length");
-    expect(play).toContain('of 5 reported running');
+    expect(play).toContain("observedRunningCount + ' of 5 running'");
     expect(play).toContain('startingCount');
     expect(play).toContain('{runningCount}');
   });

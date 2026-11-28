@@ -116,7 +116,12 @@ describe("Emulator source verification routing", () => {
     expect(parent).not.toContain("graphicsDrafts");
     expect(parent).not.toContain("queuedPreset");
     expect(child).not.toContain("graphics-preset");
-    expect(child).toContain("All five launchers use the optimized graphics preset");
+    // Graphics policy belongs to the native owner, not Settings copy.
+    const nativeSettings = readFileSync(new URL("../src-tauri/src/engine/manager_settings.rs", import.meta.url), "utf8");
+    const nativeSessions = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/session_controller.rs", import.meta.url), "utf8");
+    expect(child).not.toContain("graphicsPresets");
+    expect(nativeSettings).toContain("let graphics = [GraphicsPreset::Low; 5];");
+    expect(nativeSessions).toContain("game_preset::apply_inactive(std::slice::from_ref(store))?;");
     expect(parent).toContain("on:click={()=>navigate('storage')}>Data Storage</button>");
     expect(parent).not.toContain('id="graphics-preset"');
     for(const control of ['active-fps','background-fps'])

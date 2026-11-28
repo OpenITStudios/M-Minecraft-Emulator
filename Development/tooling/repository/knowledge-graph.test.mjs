@@ -72,6 +72,24 @@ test('legacy WORKING is not promoted; historical sources remain excluded',()=>fi
   assert.equal(index.byId.get('document.system.graph').authority,'REFERENCE');
   assert.equal(index.byId.get('document.system.old').authority,'HISTORICAL');
   assert.equal(explainResourcePath(index,'document.docs.router','document.system.old').status,'UNKNOWN_RESOURCE');
+  assert.ok(!findResources(index,'old',{domain:'system'}).some(item=>item.resource.id==='document.system.old'));
+  assert.ok(findResources(index,'old',{domain:'system',includeHistorical:true})
+    .some(item=>item.resource.id==='document.system.old'));
+}));
+test('reclassified canonical history cannot route current work even through an active link',()=>fixture(({root,put})=>{
+  const id='document.system.retired-provider';
+  put('docs/system/README.md',metadata('document.system.router','system','ROUTER')+
+    '# System\n\n[Graph](graph.md)\n[Old provider](retired-provider.md)\n');
+  put('docs/system/retired-provider.md',metadata(id,'system','CONTRACT','HISTORICAL','HISTORICAL')+
+    '# Superseded provider\n\n## Retired route\n');
+  const index=buildKnowledgeIndex(root);
+  assert.equal(index.byId.get(id).authority,'HISTORICAL');
+  assert.equal(index.byId.get(id).lifecycle,'HISTORICAL');
+  assert.equal(explainResourcePath(index,'document.system.router',id).status,'UNKNOWN_RESOURCE');
+  assert.ok(!index.edges.some(edge=>edge.to===id));
+  assert.ok(!findResources(index,'retired-provider',{domain:'system'}).some(item=>item.resource.id===id));
+  assert.ok(findResources(index,'retired-provider',{domain:'system',includeHistorical:true})
+    .some(item=>item.resource.id===id));
 }));
 test('SOURCE_ONLY is current source guidance and DRAFT cannot become current authority',()=>fixture(({root,put})=>{
   put('docs/system/graph.md',metadata('document.system.graph','system','GUIDE','WORKING','SOURCE_ONLY')+
