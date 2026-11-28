@@ -127,7 +127,7 @@ impl Sessions {
         // persist the data-location pointer. Reject missing/unreviewed DLLs
         // BEFORE any of those profile-side effects or a game launch.
         drop(BootstrapLibrary::reviewed()?);
-        let stores = registered_slots::<5>(true)?.into_iter().map(Some).collect();
+        let stores = registered_slots::<5>()?.into_iter().map(Some).collect();
         Ok(Self {
             stores,
             running: (0..5).map(|_| None).collect(),

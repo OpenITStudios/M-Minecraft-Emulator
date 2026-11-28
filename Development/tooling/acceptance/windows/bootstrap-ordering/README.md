@@ -1,5 +1,13 @@
 # Self-owned early-import ordering experiment
 
+**Current source boundary (28 November 2026):** registered historical startup
+observation requires a reviewed payload and existing reviewed profile replay
+(or the existing five-slot product catalog). The former uncalled fresh
+registered two-slot preparation route is retired; fresh pair helpers remain
+only in Rust fixtures. Explicit five-profile replay preparation and product
+profile creation are unchanged. Earlier experiment descriptions below are
+historical, not additional current launch paths. Tests NOT_EXECUTED.
+
 ## Selective native file-information processing — NGE-02
 
 The existing NtSetInformationFile hook skips file-type and canonical-path

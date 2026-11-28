@@ -9,6 +9,18 @@ lifecycle: ACTIVE
 
 # Selected Windows isolation pilot and inactive legacy inventory
 
+## Retired uncalled registered fresh-pair preparation — 28 November 2026
+
+Remove the unused `prepare_registered` wrapper and its false observation /
+fresh pair storage route. All retained registered callers require reviewed
+replay or the existing five-slot product catalog; direct replay lookup refuses
+unsupported slot counts and absent review policy before filesystem access.
+Keep fresh-pair and replay convenience helpers under `cfg(test)`, original
+product profile creation, explicit five-profile preparation, image and payload
+admission and data preservation unchanged. Historical source is recoverable
+from [the preceding revision](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/b7181346e0ad467b9b5aae66335e0e1c05b398fc/Development/apps/desktop/src-tauri/src/engine/independent_bootstrap.rs).
+No data creation or migration executed. Fixtures NOT_EXECUTED.
+
 ## Retired uncalled Testing ownership transfer — 28 November 2026
 
 The private `transfer_with_sealed_admission` mutation had no caller or production

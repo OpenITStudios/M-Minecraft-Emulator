@@ -680,7 +680,7 @@ pub(super) fn migrate_reviewed() -> io::Result<()> {
     if open()?.is_some() {
         return Ok(());
     }
-    let sources = registered_slots::<5>(true)?;
+    let sources = registered_slots::<5>()?;
     migrate_sources(&home()?.join("Data"), &sources)?;
     drop(open()?.ok_or_else(|| invalid("Migrated profiles did not reopen"))?);
     Ok(())
@@ -902,7 +902,7 @@ pub(crate) fn location(action: DataLocationAction, persist_location: bool) -> io
         ),
         // Product absence was already observed above. Use only the
         // existing reviewed replay path; no second product open/recovery.
-        None => match registered_replay_slots::<5>(true) {
+        None => match registered_replay_slots::<5>() {
             Ok(stores) => {
                 let current = stores[0].private_path.parent().map(Path::to_path_buf);
                 (

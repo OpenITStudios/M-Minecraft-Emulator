@@ -1,7 +1,6 @@
-//! Private first stage of the Education bootstrap experiment.
-//! Explicit same-manager startup observation only; no provider admission.
-//! Exact development payload approved for one startup experiment by the operator.
-//! Tests keep the game policy empty; direct-start game compatibility remains UNKNOWN.
+//! Shared native Education bootstrap for the retained session controller and
+//! explicit historical startup observation. Reviewed image, payload and
+//! profile admission remain mandatory; test fixtures do not authorize gameplay.
 #![allow(dead_code)]
 
 use crate::engine::instance_focus_events;
@@ -495,45 +494,30 @@ pub(super) mod profile_binding;
 #[path = "independent_bootstrap/product_profiles.rs"]
 pub(super) mod product_profiles;
 
-/// Source-only two-slot preparation. No game/DLL code can be resumed here.
-/// The existing registered-image resolver remains the only target selector.
-pub(super) fn prepare_registered() -> io::Result<[PendingEducationBootstrap; 2]> {
-    prepare_registered_mode(false, None)
-}
-fn prepare_registered_mode<const N: usize>(
-    observe: bool,
-    presentation_library: Option<&BootstrapLibrary>,
+// Explicit legacy observation uses reviewed profiles and the reviewed payload;
+// there is no registered fresh-profile preparation route.
+fn prepare_registered_observation<const N: usize>(
+    payload: &BootstrapLibrary,
 ) -> io::Result<[PendingEducationBootstrap; N]> {
     if N != 2 && N != 5 {
         return Err(invalid("Unsupported Education slot count"));
     }
-    if presentation_library.is_some() && !observe {
-        return Err(invalid(
-            "Registered presentation requires reviewed profile replay",
-        ));
-    }
-    let (target, image, singleton_caller_rva) = registered_image::registered_image(observe)?;
+    let (target, image, singleton_caller_rva) = registered_image::registered_image(true)?;
     let path = Path::new(&target);
-    let presentation_policy = presentation_library
-        .map(|library| crate::engine::manager_settings::load_performance().map(|limits|(library,limits)))
-        .transpose()?;
-    let stores = registered_slots::<N>(observe)?;
-    if observe {
-        let changed = game_preset::apply(&stores)?;
-        use std::io::Write;
-        writeln!(io::stdout(), "{{\"event\":\"graphics-preset\",\"preset\":\"Simple12\",\"changedProfiles\":{changed}}}")?;
-    }
+    let limits = crate::engine::manager_settings::load_performance()?;
+    let stores = registered_slots::<N>()?;
+    let changed = game_preset::apply(&stores)?;
+    use std::io::Write;
+    writeln!(io::stdout(), "{{\"event\":\"graphics-preset\",\"preset\":\"Simple12\",\"changedProfiles\":{changed}}}")?;
     let mut children = Vec::with_capacity(N);
     for mut store in stores {
-        if observe {
-            store.singleton_caller_rva = singleton_caller_rva;
-        }
+        store.singleton_caller_rva = singleton_caller_rva;
         children.push(create_suspended_process(
             path,
             image.try_clone()?,
             Some(store),
-            observe,
-            presentation_policy,
+            true,
+            Some((payload, limits)),
             None,
             #[cfg(feature="mc02-native-input")]
             None,
@@ -1075,7 +1059,7 @@ pub(super) fn prepare_registered_enrolled() -> io::Result<PreparedEducationEnrol
 }
 fn prepare_registered_enrolled_for<const N: usize>() -> io::Result<PreparedEducationEnrollment<N>> {
     let payload = BootstrapLibrary::reviewed()?;
-    let children = prepare_registered_mode::<N>(true, Some(&payload))?;
+    let children = prepare_registered_observation::<N>(&payload)?;
     for child in &children {
         payload.enroll(child)?;
     }
@@ -1290,6 +1274,7 @@ fn directory_path(file: &File) -> io::Result<PathBuf> {
     Ok(PathBuf::from(OsString::from_wide(&value[4..])))
 }
 
+#[cfg(test)]
 fn fresh_root(parent: &Path) -> io::Result<PathBuf> {
     let mut guid: windows_sys::core::GUID = unsafe { mem::zeroed() };
     if unsafe { CoCreateGuid(&mut guid) } < 0 {
@@ -1461,6 +1446,7 @@ fn create_private_slot_at(logical: &File, private_path: &Path, slot: u32) -> io:
     })
 }
 
+#[cfg(test)]
 fn fresh_slots(logical: File, parent: &Path) -> io::Result<[SlotStorage; 2]> {
     let logical_path = directory_path(&logical)?;
     let root = fresh_root(parent)?;
@@ -1527,6 +1513,7 @@ const REVIEWED_REPLAY: Option<[u8; 32]> = Some([
     0xbb, 0x0c, 0x76, 0x37, 0xc1, 0x04, 0xfa, 0x85, 0xe8, 0xdc, 0x42, 0x70, 0xa9, 0xa4, 0xa8, 0xaf,
 ]);
 
+#[cfg(test)]
 fn reopen_slots(
     logical: File,
     parent: &Path,
@@ -1670,7 +1657,7 @@ fn prepare_five_profiles() -> io::Result<i32> {
         io::Error::new(io::ErrorKind::AlreadyExists, "Five-profile preparation already active"),
     )?;
     // Existing pair replay is the trust anchor; no root path or profile override is accepted.
-    let pair = registered_slots::<2>(true)?;
+    let pair = registered_slots::<2>()?;
     let payload_root = std::env::current_exe()?
         .parent()
         .ok_or_else(|| invalid("Missing replay payload root"))?
@@ -1778,73 +1765,50 @@ fn replay_roots() -> io::Result<(File, PathBuf)> {
     Ok((a, parent))
 }
 
-fn registered_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N]> {
-    if N != 2 && N != 5 {
-        return Err(invalid("Unsupported replay slot count"));
-    }
-    if N == 5 && observe && cfg!(feature = "lazy-tester-package") {
+fn registered_slots<const N: usize>() -> io::Result<[SlotStorage; N]> {
+    if N == 5 && cfg!(feature = "lazy-tester-package") {
         if let Some(stores) = product_profiles::open()? {
             return Vec::from(stores).try_into().map_err(|_| invalid("Invalid product profile count"));
         }
     }
-    registered_replay_slots::<N>(observe)
+    registered_replay_slots::<N>()
 }
 
 // The caller may already have established product catalog absence in the
 // same observation. Do not reopen that catalog on the legacy fallback.
-fn registered_replay_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N]> {
-    // Authorized observation reuses an existing pair or refuses. An unset
-    // review policy must never silently become fresh account/world storage.
-    let replay = if observe {
-        Some(
-            (if N == 2 {
-                REVIEWED_REPLAY
-            } else {
-                REVIEWED_FIVE_REPLAY
-            })
-            .ok_or_else(|| {
-                io::Error::new(
-                    io::ErrorKind::Unsupported,
-                    "No reviewed existing Education profile pair",
-                )
-            })?,
-        )
-    } else {
-        None
-    };
+fn registered_replay_slots<const N: usize>() -> io::Result<[SlotStorage; N]> {
+    if N != 2 && N != 5 {
+        return Err(invalid("Unsupported replay slot count"));
+    }
+    // Require the reviewed replay before touching Known Folders or storage.
+    let expected = (if N == 2 { REVIEWED_REPLAY } else { REVIEWED_FIVE_REPLAY })
+        .ok_or_else(|| io::Error::new(
+            io::ErrorKind::Unsupported,
+            "No reviewed existing Education profile pair",
+        ))?;
     let (a, parent) = replay_roots()?;
-    if let Some(expected) = replay {
-        use std::io::Read;
-        let binding = if N == 5 && cfg!(feature = "lazy-tester-package") {
-            Some(profile_binding::binding_path(false)?)
-        } else { None };
-        let path = if let Some((path, _pins)) = &binding {
-            path.clone()
-        } else { std::env::current_exe()?
-            .parent()
-            .ok_or_else(|| invalid("Missing replay payload root"))?
-            .join(if N == 2 {
-                "independent-bootstrap/replay-profile-pair.bin"
-            } else {
-                "independent-bootstrap/replay-profile-five.bin"
-            }) };
-        let mut file = pin_image(&path)?;
-        let size = 168 + N * 24;
-        if file.metadata()?.len() != size as u64 {
-            return Err(invalid("Invalid replay capability size"));
-        }
-        let mut bytes = vec![0u8; size];
-        file.read_exact(&mut bytes)?;
-        return reopen_slots_for::<N>(a, &parent, &bytes, expected);
+    use std::io::Read;
+    let binding = if N == 5 && cfg!(feature = "lazy-tester-package") {
+        Some(profile_binding::binding_path(false)?)
+    } else { None };
+    let path = if let Some((path, _pins)) = &binding {
+        path.clone()
+    } else { std::env::current_exe()?
+        .parent()
+        .ok_or_else(|| invalid("Missing replay payload root"))?
+        .join(if N == 2 {
+            "independent-bootstrap/replay-profile-pair.bin"
+        } else {
+            "independent-bootstrap/replay-profile-five.bin"
+        }) };
+    let mut file = pin_image(&path)?;
+    let size = 168 + N * 24;
+    if file.metadata()?.len() != size as u64 {
+        return Err(invalid("Invalid replay capability size"));
     }
-    if N != 2 {
-        return Err(invalid(
-            "Five-slot replay requires an explicit reviewed capability",
-        ));
-    }
-    Vec::from(fresh_slots(a, &parent)?)
-        .try_into()
-        .map_err(|_| invalid("Invalid fresh slot count"))
+    let mut bytes = vec![0u8; size];
+    file.read_exact(&mut bytes)?;
+    reopen_slots_for::<N>(a, &parent, &bytes, expected)
 }
 
 struct Configuration {
@@ -2508,10 +2472,10 @@ mod tests {
     #[test]
     fn five_slot_policy_rejects_unreviewed_or_out_of_range_sets() {
         assert!(
-            matches!(registered_slots::<5>(true), Err(error) if error.kind() == io::ErrorKind::Unsupported)
+            matches!(registered_slots::<5>(), Err(error) if error.kind() == io::ErrorKind::Unsupported)
         );
-        assert!(registered_slots::<0>(true).is_err());
-        assert!(registered_slots::<6>(true).is_err());
+        assert!(registered_slots::<0>().is_err());
+        assert!(registered_slots::<6>().is_err());
         let id = FILE_ID_INFO {
             VolumeSerialNumber: 7,
             FileId: windows_sys::Win32::Storage::FileSystem::FILE_ID_128 {
@@ -2539,8 +2503,12 @@ mod tests {
     fn registered_observation_requires_replay_policy_before_storage_lookup() {
         // Test policy is deliberately absent. Refuse before Known Folders,
         // registry access or fresh profile allocation; never involve the game.
-        assert!(matches!(registered_slots::<2>(true), Err(error)
+        assert!(matches!(registered_slots::<2>(), Err(error)
             if error.kind() == io::ErrorKind::Unsupported));
+        assert!(matches!(registered_replay_slots::<5>(), Err(error)
+            if error.kind() == io::ErrorKind::Unsupported));
+        assert_eq!(registered_replay_slots::<0>().err().unwrap().kind(), io::ErrorKind::InvalidData);
+        assert_eq!(registered_replay_slots::<6>().err().unwrap().kind(), io::ErrorKind::InvalidData);
     }
 
     #[test]
@@ -4033,11 +4001,10 @@ mod tests {
         assert_eq!(path.file_name(), Some(OsStr::new("bootstrap-ordering.exe")));
         let root = path.parent().unwrap();
         let library = BootstrapLibrary::load(root, fixture_digests(root)).unwrap();
-        // Registered pacing must not allocate fresh account-bearing slots.
-        assert!(
-            matches!(prepare_registered_mode::<2>(false, Some(&library)), Err(error)
-            if error.kind() == io::ErrorKind::InvalidData)
-        );
+        // Without a reviewed replay, registered preparation refuses before
+        // looking up or allocating storage (the former fresh mode is gone).
+        assert!(matches!(registered_replay_slots::<2>(), Err(error)
+            if error.kind() == io::ErrorKind::Unsupported));
         // A policy request without storage refuses before process creation.
         assert!(create_fixture_configured(
             &path,
