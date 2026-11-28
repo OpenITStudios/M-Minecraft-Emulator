@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-06d: bounded framework Mach-O observations)
+## Current status — cross-platform-native (MAC-07a: standard-session transport review)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,90 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-07a — standard-session transport review and admission boundary
+
+Continue the selected five-profile native Mac goal without repeating
+the binary-transfer research. Static main Mach-O receipt is still absent;
+work on a transport candidate in parallel, not a relaxation of target
+identity, independent authentication or native acceptance.
+
+Original [Apple Remote Desktop session choice documentation](https://support.apple.com/en-gw/guide/remote-desktop/apd4f46319e/mac)
+explicitly separates sharing the console from connecting to the authenticated
+user's virtual desktop. If nobody is logged in, or the authenticated user
+is the console user, the visible screen is the console. Therefore successful
+authentication, a connection, a virtual request or a granted result alone
+cannot prove an independent session. Apple's [login session model](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/SystemContexts.html)
+describes isolated, transient login contexts and trusted explicit
+cross-session connections. [Standard and High Performance settings](https://support.apple.com/en-ie/guide/mac-help/mchl1883115d/27/mac/27)
+describe adaptive Standard capture and one active High Performance session
+per Mac. High Performance virtual displays are not equivalent to distinct
+user login sessions. No official proof of five concurrent same-host
+Standard sessions or game rendering was found.
+[Apple VNC guidance](https://support.apple.com/ro-ro/guide/remote-desktop/apde0dd523e/mac)
+warns about weak protection of input and broad desktop access.
+
+Reviewed original independent source at immutable refs (no imports):
+- [madeye/rv](https://github.com/madeye/rv/tree/2f620fb28316f5cb8894d2e9c33c4505a97c059f)
+  MIT; Cargo.toml and crates/rv-session/Cargo.toml, src/session.rs and
+  src/ard.rs. Authenticates via ARD then uses ordinary RFB connector.
+  ARD credentials are encrypted but session traffic is not TLS. Required
+  encryption selects VeNCrypt or refuses; prefer/auto can fall back to
+  plain. No explicit ARD virtual-session select in reviewed connect path;
+  unbounded command queue and OpenSSL vendored dependency are not a
+  suitable default for Lazy Tester. Reference for RFB/frame ownership
+  only; not an admitted transport.
+- [peetinc/noVNC-ARD](https://github.com/peetinc/noVNC-ARD/tree/d699293635083c9e0c30c8f9480993865653772a)
+  MPL-2.0; ard/session-select.js and ard/ard-patch.js (Session Select
+  state machine). Explicit virtual/console choice and pending/granted
+  results before post-init, full-tunnel mode advertised. Auto selection
+  can choose console; virtual choice does not itself verify the actual
+  login identity. Patched browser client, proxy and license obligations;
+  no adoption, copied crypto, code port or claim of official Apple API.
+- [vincent-vnc-mcp](https://github.com/cookiemonster0921/vincent-vnc-mcp/tree/1dfe3d849d99128411ee762f2c26d256c7c5b092)
+  README and vnc_client.py: author reports a dedicated non-console user
+  with localhost VNC on macOS 15.6; single connection with reconnect,
+  screenshot polling, additional SSH/Tailscale/FFmpeg components, and
+  explicit headless GPU caveat. No proof of five distinct users or
+  real-time gameplay; no installer or dependency adopted.
+
+Decision: Standard Screen Sharing is a feasibility candidate only.
+Prioritize smallest supported native route before writing a Rust RFB
+client. Compare (A) Apple-owned, manually authorized virtual-session
+viewer as interim feasibility witness, (B) a scoped session-local
+endpoint with exact target window capture and explicitly authorized
+input if supported, (C) an embedded Standard ARD client only if
+identity, protected transport, relative gameplay input and costs
+are demonstrated. A standalone viewer is not final workspace parity.
+No new transport dependency selected. No generic VNC password,
+unprotected fallback, automatic account creation, SSH/Tailscale,
+remote management enablement, root or credential persistence.
+Do not reimplement cryptography or treat loopback as authentication.
+A dedicated session-local endpoint remains a candidate, not an extra
+manager, and requires explicit authenticated, scoped cooperation.
+
+Next architecture gate (MAC-07b): use the same existing controller
+as sole owner of lifecycle, slot mapping, normal-close and input lease
+authority. Presentation transport may not launch/close/adopt games or
+infer identity from username, desktop name, port, pixels or success
+status. Require independently observed authorized UID, transient
+login session, exact retained app/process/window and connection
+generation. Refuse console/shared-desktop result or unknown target;
+revoke frames and input on identity loss, logoff, reconnect or focus
+change; no stale input replay. Allow only one selected input writer;
+explicit neutral release before switching and no mutation retry
+after unknown delivery. Bounded latest frame per slot, active viewport
+priority, lower-rate previews, no default five full-rate streams,
+clipboard disabled. No raw desktop capture of other users. Measure
+relative mouse/camera, key press/release, foreground/console separation,
+native GPU/render continuity, CPU/RAM/GPU and latency in future matched
+native evidence; do not substitute screenshot polling or remote
+desktop FPS for game performance. Transport disconnect is not game
+exit. Require original two independent sessions before five.
+If only desktop-wide capture/control works without exact game identity,
+do not admit product automation. Preserve existing Windows wire,
+23-tool catalog and all native, CI, test and release holds.
+Source research only; no runtime or native/CI/test execution.
 
 ### MAC-06d — bounded framework Mach-O observations (static only)
 
@@ -976,7 +1060,8 @@ MAC-06 records the offline Windows artifact intake and virtual-desktop limits;
 MAC-06a records actual user-supplied bundle metadata and exact discovery identity;
 MAC-06b adds bounded cross-platform Mach-O evidence intake after transfer failure;
 MAC-06c records observed provisioning allowlist and authentication framework metadata;
-MAC-06d records bounded Mach-O observations of two actual bundled frameworks.
+MAC-06d records bounded Mach-O observations of two actual bundled frameworks;
+MAC-07a reviews Standard-session transport and exact-target admission boundaries.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
