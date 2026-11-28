@@ -33,7 +33,7 @@ pub use self::session_protocol::{
 };
 pub(crate) use self::session_protocol::SessionReply;
 #[cfg(any(windows, test))]
-pub(super) use self::session_protocol::{profile_session_state, normal_close_mask};
+pub(super) use virtual_clients_core::session_lifecycle::{profile_session_state, normal_close_mask};
 use self::session_protocol::SESSION_FRAME_LIMIT;
 #[cfg(windows)]
 pub(super) use self::session_protocol::validate_request;

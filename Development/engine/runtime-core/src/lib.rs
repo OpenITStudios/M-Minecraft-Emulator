@@ -5,6 +5,7 @@
 pub mod independent_engine;
 mod inspection_budget;
 mod process;
+pub mod session_lifecycle;
 pub use inspection_budget::InspectionBudget;
 
 // The desktop uses this bounded process runner for reviewed on-demand helpers.

@@ -9,6 +9,7 @@ use crate::engine::{
     process_identity::OwnedProcess,
 };
 use std::{io::Write, time::{Duration, Instant}};
+use virtual_clients_core::session_lifecycle::valid_profile_slot;
 #[cfg(test)]
 use crate::engine::native_clients_session::SelectiveCategory;
 #[cfg(feature="mc02-native-input")]
@@ -147,7 +148,7 @@ impl Sessions {
         #[cfg(feature="mc02-native-input")] experimental_input:Option<AgentControlMode>,
     )->io::Result<()> {
         if self.exiting {return Err(invalid("Minecraft sessions are closing. Finish closing them before starting another game."));}
-        if !(1..=5).contains(&slot) {
+        if !valid_profile_slot(slot) {
             return Err(invalid("Unknown Minecraft profile"));
         }
         let index = slot as usize - 1;

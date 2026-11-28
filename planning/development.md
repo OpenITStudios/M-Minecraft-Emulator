@@ -1,14 +1,36 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-09b: bundle resource evidence)
+## Current status — cross-platform-native (MAC-10: shared lifecycle policy)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
 (MC01–MC05), one official installation per host, one UI, one retained
 session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
-implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
+native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-10 — shared native lifecycle policy, independent of profile routing
+
+Operator selected parallel source progress for Plan A (same OS user and
+desktop, single original signed installation, one controller). Move the
+existing active five-profile status projection and normal-close selection
+from desktop session_protocol.rs into runtime-core/src/session_lifecycle.rs.
+Share valid_profile_slot with the existing Windows request validation and
+launch entry. Existing Windows caller/re-export and status/close regression
+fixtures retain their behavior and wire; no changes to IPC schema, process
+identity values, native launch/exit authority, profiles, or dependencies.
+Do not reuse the separate historical four-slot SessionSlot catalog.
+
+MAC-10 is a small shared pure-policy slice, not a portable native identity
+or controller implementation. FILETIME/HWND/session values remain Windows
+wire metadata; no cast of Mac birth time or CGWindowID to Windows authority.
+Source committed, existing tests NOT_EXECUTED. The native lifecycle/workspace
+source lane can proceed independently of game storage evidence; game launch
+admission remains blocked and the existing Mac shell continues to refuse it.
+Next: reuse the existing AppKit fixture evidence and map original-process
+ownership to the retained controller boundary before any product launch.
+No new controller, service, fallback topology, CI, localtest or release.
 
 ### MAC-09b — inspect remaining accessible bundle resources
 

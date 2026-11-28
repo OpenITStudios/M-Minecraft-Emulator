@@ -2,6 +2,8 @@
 use crate::engine::{manager_settings, process_identity::OwnedProcess};
 use serde::{Deserialize, Serialize};
 use std::io;
+#[cfg(windows)]
+use virtual_clients_core::session_lifecycle::valid_profile_slot;
 use super::agent_activity::AgentActivityReport;
 use super::controller_testing_runs::{TestingRunInspection, TestingRunView};
 #[cfg(windows)]
@@ -13,40 +15,6 @@ use super::controller_ai_input_leases::{admit_native_input_frame, validate_ai_in
 
 // Includes the terminating newline. Serialized JSON must be strictly smaller.
 pub(super) const SESSION_FRAME_LIMIT: usize = 32768;
-
-// Project only facts already collected by the retained native owner. A
-// missing window or uncertain observation must not relabel an owned live
-// process as a stopped, relaunchable profile. No OS handle or state here.
-#[cfg(any(windows, test))]
-pub(in crate::engine) fn profile_session_state(
-    retained: bool,
-    responding: Option<bool>,
-    has_issue: bool,
-    storage_available: bool,
-) -> &'static str {
-    if retained {
-        match responding {
-            Some(true) => "RUNNING",
-            Some(false) => "NOT_RESPONDING",
-            None if has_issue => "NOT_RESPONDING",
-            None => "STARTING",
-        }
-    } else if has_issue || !storage_available {
-        "ATTENTION"
-    } else {
-        "STOPPED"
-    }
-}
-
-// Select exactly one slot or the complete roster. Selection is not close
-// permission: the native owner still verifies lifetime and normal exit.
-#[cfg(any(windows, test))]
-pub(in crate::engine) fn normal_close_mask(slot:Option<u32>)->io::Result<[bool;5]> {
-    if slot.is_some_and(|value|!(1..=5).contains(&value)) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
-    }
-    Ok(std::array::from_fn(|index|slot.is_none_or(|value|value==index as u32+1)))
-}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -412,7 +380,7 @@ pub(super) fn serialized_request_size(request: &SessionRequest) -> io::Result<us
 #[cfg(windows)]
 pub(in crate::engine) fn validate_request(request: &SessionRequest) -> io::Result<()> {
     if let SessionRequest::InspectAgentTarget {slot}=*request {
-        if !(1..=5).contains(&slot) {
+        if !valid_profile_slot(slot) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
         }
     }
@@ -441,24 +409,24 @@ pub(in crate::engine) fn validate_request(request: &SessionRequest) -> io::Resul
         }
     }
     if let SessionRequest::ConfirmSelectedPacks { slot, selections, confirmation_token } = request {
-        if !(1..=5).contains(slot) || selections.iter().any(|s| s.category == SelectiveCategory::Worlds) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        if !valid_profile_slot(*slot) || selections.iter().any(|s| s.category == SelectiveCategory::Worlds) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selected-pack confirmation"));
         }
     }
     if let SessionRequest::ConfirmSelectedWorlds { slot, selections, confirmation_token } = request {
-        if !(1..=5).contains(slot) || selections.iter().any(|s| s.category != SelectiveCategory::Worlds) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+        if !valid_profile_slot(*slot) || selections.iter().any(|s| s.category != SelectiveCategory::Worlds) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selected-world confirmation"));
         }
     }
     match request {
         SessionRequest::TestingInspect {slot,owner_id} => {
-            if !(1..=5).contains(slot)||!valid_testing_id(owner_id) {
+            if !valid_profile_slot(*slot)||!valid_testing_id(owner_id) {
                 return Err(io::Error::new(io::ErrorKind::InvalidInput,
                     "Invalid read-only Testing inspection"));
             }
         }
         SessionRequest::TestingReserve {slot,owner_id,run_id,replace_run_id} => {
-            if !(1..=5).contains(slot)||!valid_testing_id(owner_id)||
+            if !valid_profile_slot(*slot)||!valid_testing_id(owner_id)||
                 !valid_testing_id(run_id)||
                 replace_run_id.as_deref().is_some_and(|v|!valid_testing_id(v)){
                 return Err(io::Error::new(io::ErrorKind::InvalidInput,
@@ -467,7 +435,7 @@ pub(in crate::engine) fn validate_request(request: &SessionRequest) -> io::Resul
         }
         SessionRequest::TestingFinalize {slot,owner_id,run_id,
             reported_status,report_digest} => {
-            if !(1..=5).contains(slot)||!valid_testing_id(owner_id)||
+            if !valid_profile_slot(*slot)||!valid_testing_id(owner_id)||
                 !valid_testing_id(run_id)||
                 !valid_testing_outcome(reported_status)||
                 !valid_testing_digest(report_digest) {
@@ -484,14 +452,14 @@ pub(in crate::engine) fn validate_request(request: &SessionRequest) -> io::Resul
         }
     }
     if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name,..}=*request {
-        if !(1..=5).contains(&slot) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|byte|byte.is_ascii_hexdigit()) || *confirmation_name!=format!("Minecraft - {slot}") {
+        if !valid_profile_slot(slot) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|byte|byte.is_ascii_hexdigit()) || *confirmation_name!=format!("Minecraft - {slot}") {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,"Confirm the exact launcher name before clearing all data"));
         }
     }
     if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
         manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
     }
-    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot, .. } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot, .. } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot, .. } | SessionRequest::RestoreGameSettings { slot, .. } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot, .. } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot, .. } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot, .. } | SessionRequest::RestoreGameSettings { slot, .. } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !valid_profile_slot(slot))
     {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -507,7 +475,7 @@ pub(in crate::engine) fn validate_request(request: &SessionRequest) -> io::Resul
     }
     #[cfg(feature="mc02-native-input")]
     if let SessionRequest::LaunchAiExperiment {slot,mode}=*request {
-        if !(1..=5).contains(&slot) ||
+        if !valid_profile_slot(slot) ||
            (mode==AgentControlMode::HumanPlusFourAi && slot==1) {
             return Err(io::Error::new(io::ErrorKind::InvalidInput,
                 "Hybrid MC01 belongs to the human and has no AI channel"));
