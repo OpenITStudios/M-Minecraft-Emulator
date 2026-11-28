@@ -242,6 +242,26 @@ with the selected image reused in the viewport. The panel is not an embedded
 game window and does not send input events or access another user session.
 No screenshots are persisted. Any unconfirmed selection, focus or marker
 refuses; existing single/profile/workspace modes remain available.
+The explicit `--rendezvous-probe` mode is a separate one-shot synthetic
+cross-user feasibility witness in the same source file. It requires two
+already-consented, distinct standard users in graphical login sessions,
+both manually launching the fixture with `listen` or `connect`, the same
+pre-provisioned disposable canonical directory under `/Users/Shared/`,
+and the other user's expected numeric UID. The directory must belong to
+the listener, disallow group/other writes, and permit only intended
+cooperating access (including partner traversal/socket access); review
+ACLs explicitly before any future execution. The source does not create
+users/directories or alter ACLs. It binds one fresh fixed socket leaf,
+uses nonblocking bounded I/O, reciprocal kernel getpeereid comparisons,
+and exchanges only eight bytes per side (marker and reported security
+session ID), verifying distinct graphical security sessions through
+SessionGetInfo. The session report is NOT kernel-bound to the peer UID;
+code identity, per-message sender, virtual desktop, game ownership,
+capture, input and full concurrency remain NOT_VERIFIED. No credentials,
+registration, TCP, retry, game, or permissions request. One 120-second
+total deadline per invocation; socket leaf is retained for operator
+cleanup, never blindly removed. Do not use this as product transport.
+No execution requested during source phase.
 All modes are source-authored and NOT_EXECUTED.
 The temporary fixture bundle is retained and
 may be removed by that operator after confirming exit. The result is scoped

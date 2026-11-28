@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-07c: public native session API review)
+## Current status — cross-platform-native (MAC-07d: cooperative rendezvous witness)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,57 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-07d — cooperative cross-session rendezvous witness
+
+Reviewed original Apple [root/login sessions](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/SystemContexts.html)
+documentation: cooperative BSD sockets are an explicit cross-login-session
+communication mechanism. [NSXPCListenerEndpoint](https://developer.apple.com/documentation/foundation/nsxpclistenerendpoint)
+is passed over existing XPC connections; anonymous endpoints do not
+establish the first trusted channel themselves. [NSXPCConnection](https://developer.apple.com/documentation/foundation/nsxpcconnection)
+supports audit session identifiers and code-signing requirements after
+connection; launch-agent names remain scoped, privileged daemon option
+does not solve a non-root design. [getpeereid(3)](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getpeereid.3.html)
+returns effective credentials captured at connect/listen, not per-message
+or code identity. [SessionGetInfo](https://developer.apple.com/documentation/security/sessiongetinfo(_:_:_:))
+can query a known security session ID; it does not bind a peer-reported
+session number to a socket. Apple [Fast User Switching](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/FastUserSwitching.html)
+confirms SecuritySessionId differs from POSIX session/user identifiers.
+
+Decision: prepare a smallest cooperative witness rather than a production
+transport or extra daemon. Extend the existing synthetic lifecycle fixture
+with explicit --rendezvous-probe listen/connect modes, one fresh fixed
+AF_UNIX leaf under a manually pre-provisioned canonical /Users/Shared
+directory owned by listener, no group/other directory write, explicit
+partner UID and prior ACL review. Reject root, wrong peer, missing
+graphical context, ambiguous/existing socket leaf, stale/invalid session
+or timeout. One nonblocking connection and 120-second total deadline
+per invocation, reciprocal getpeereid, exchange fixed eight-byte marker
+and reported security session ID only, query both graphical sessions
+through SessionGetInfo. No credentials, data access, process/game launch,
+input, capture, TCP, account creation, ACL edits, background service,
+auto-reconnect or unlink of unknown leaf. Existing single/profile/
+workspace modes untouched. Output only scoped booleans/status, no raw
+UIDs/session IDs/paths. Fixture NOT_EXECUTED, no compile or test.
+
+Important distinction: even success would show connection-time expected
+UID and two reported graphical security sessions, not independent
+kernel binding of peer session, code identity, per-message sender,
+virtual desktop or game lifetime. Pre-provisioned directory ACLs are
+not verified by fixture and need prior operator review; POSIX mode
+checks are not a full trust boundary. Source probe is not an admitted
+transport and must not carry game frames or commands. XPC bootstrap,
+native signature and exact session/window authority remain unproven.
+No dependency or product activation; no Windows wire/lifecycle change.
+
+Next: MAC-07e compare a documented OS-provided peer audit identity
+mechanism or explicitly authenticated scoped endpoint that binds the
+actual login context and signed code, without root, and determine if
+native capture remains viable. Do not expand the synthetic channel
+into production by assumption or repeat static research that cannot
+change the decision. Actual two/five instance identity, isolation,
+relative input and render continuity require matched Mac evidence.
+All previous native, CI, test and release holds preserved.
 
 ### MAC-07c — public native session API review and transport security boundary
 
@@ -1197,7 +1248,8 @@ MAC-06c records observed provisioning allowlist and authentication framework met
 MAC-06d records bounded Mach-O observations of two actual bundled frameworks;
 MAC-07a reviews Standard-session transport and exact-target admission boundaries;
 MAC-07b adds a test-only synthetic transport admission contract;
-MAC-07c maps public native APIs and identifies the remaining trusted rendezvous gate.
+MAC-07c maps public native APIs and identifies the remaining trusted rendezvous gate;
+MAC-07d prepares a one-shot cooperative cross-session rendezvous witness.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

@@ -5,6 +5,7 @@ import Foundation
 import Darwin
 import ScreenCaptureKit
 import CoreGraphics
+import Security
 
 @MainActor
 private final class LaunchResult {
@@ -151,6 +152,195 @@ private final class CaptureResult<T> {
     var value: T?
 }
 
+// Synthetic one-shot cross-user rendezvous. No game, pixels, input or
+// credentials. The UID comes from the connected kernel socket; the session
+// number is reported by the cooperating fixture, NOT bound to that peer by
+// the kernel. This is deliberately insufficient for production admission.
+private enum RendezvousProbe {
+    private static let marker: UInt32 = 0x4c545231
+    private static func refuse() -> FixtureFailure {
+        FixtureFailure(status: "SYNTHETIC_RENDEZVOUS_REFUSED")
+    }
+
+    private static func graphicalSession(_ requested: SecuritySessionId) throws -> SecuritySessionId {
+        var id = SecuritySessionId()
+        var attributes = SessionAttributeBits()
+        guard SessionGetInfo(requested, &id, &attributes) == 0,
+              id != 0, id != callerSecuritySession,
+              attributes.contains(.sessionHasGraphicAccess),
+              !attributes.contains(.sessionIsRoot) else { throw refuse() }
+        return id
+    }
+
+    private static func metadata(_ path: String) throws -> stat {
+        var value = stat()
+        guard lstat(path, &value) == 0 else { throw refuse() }
+        return value
+    }
+
+    private static func nonblocking(_ fd: Int32) throws {
+        let flags = fcntl(fd, F_GETFL)
+        var yes: Int32 = 1
+        guard flags >= 0, fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0,
+              setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes,
+                         socklen_t(MemoryLayout<Int32>.size)) == 0 else { throw refuse() }
+    }
+
+    private static func ready(_ fd: Int32, _ event: Int16, _ deadline: Double) throws {
+        let remaining = deadline - ProcessInfo.processInfo.systemUptime
+        guard remaining > 0 else { throw refuse() }
+        var item = pollfd(fd: fd, events: event, revents: 0)
+        // No retry after interruption or timeout. A single total deadline.
+        guard Darwin.poll(&item, 1, Int32(min(120_000, ceil(remaining * 1000)))) == 1,
+              item.revents & event != 0,
+              item.revents & Int16(POLLNVAL | POLLERR) == 0 else { throw refuse() }
+    }
+
+    private static func checkPeer(_ fd: Int32, _ expected: uid_t) throws {
+        var uid: uid_t = 0
+        var gid: gid_t = 0
+        guard getpeereid(fd, &uid, &gid) == 0, uid == expected,
+              uid != 0, uid != geteuid() else { throw refuse() }
+    }
+
+    private static func transfer(_ fd: Int32, _ bytes: inout [UInt8],
+                                 writing: Bool, deadline: Double) throws {
+        var done = 0
+        while done < bytes.count {
+            try ready(fd, Int16(writing ? POLLOUT : POLLIN), deadline)
+            let remaining = bytes.count - done
+            let n = bytes.withUnsafeMutableBytes { buffer -> Int in
+                guard let base = buffer.baseAddress else { return -1 }
+                if writing { return Darwin.write(fd, base.advanced(by: done), remaining) }
+                return Darwin.read(fd, base.advanced(by: done), remaining)
+            }
+            guard n > 0, n <= remaining else { throw refuse() }
+            done += n
+        }
+    }
+
+    private static func record(_ id: SecuritySessionId) -> [UInt8] {
+        [marker, UInt32(id)].flatMap { value in
+            [UInt8(truncatingIfNeeded: value >> 24),
+             UInt8(truncatingIfNeeded: value >> 16),
+             UInt8(truncatingIfNeeded: value >> 8),
+             UInt8(truncatingIfNeeded: value)]
+        }
+    }
+
+    private static func exchange(_ fd: Int32, server: Bool, own: SecuritySessionId,
+                                 expected: uid_t, deadline: Double) throws {
+        try nonblocking(fd)
+        try checkPeer(fd, expected)
+        var local = record(own)
+        var remote = [UInt8](repeating: 0, count: 8)
+        if !server { try transfer(fd, &local, writing: true, deadline: deadline) }
+        try transfer(fd, &remote, writing: false, deadline: deadline)
+        func word(_ offset: Int) -> UInt32 {
+            remote[offset..<offset+4].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        }
+        let reported = SecuritySessionId(word(4))
+        guard word(0) == marker, reported != 0, reported != callerSecuritySession,
+              reported != own, try graphicalSession(reported) == reported,
+              try graphicalSession(callerSecuritySession) == own else { throw refuse() }
+        if server { try transfer(fd, &local, writing: true, deadline: deadline) }
+        try checkPeer(fd, expected)
+        guard try graphicalSession(callerSecuritySession) == own else { throw refuse() }
+    }
+
+    // Both users must explicitly launch the same source-built fixture.
+    // Parent is a disposable, already-provisioned /Users/Shared directory,
+    // owned by the listener, non-writable by other users. The selected
+    // partner needs traversal and socket access; no ACL changes here.
+    // Only a fresh fixed leaf is bound. Preserve it for manual cleanup
+    // rather than unlink a potentially replaced filesystem object.
+    static func run(_ args: [String]) throws {
+        guard args.count == 4, args[0] == "--rendezvous-probe",
+              ["listen", "connect"].contains(args[1]),
+              let partner = uid_t(args[3]), partner != 0, partner != geteuid(),
+              geteuid() != 0, getuid() == geteuid() else { throw refuse() }
+        let server = args[1] == "listen"
+        let dir = args[2]
+        guard dir.hasPrefix("/Users/Shared/"),
+              URL(fileURLWithPath: dir).standardizedFileURL.resolvingSymlinksInPath().path == dir
+              else { throw refuse() }
+        let parent = try metadata(dir)
+        guard parent.st_mode & mode_t(S_IFMT) == mode_t(S_IFDIR),
+              parent.st_uid == (server ? geteuid() : partner),
+              parent.st_mode & mode_t(S_IWGRP | S_IWOTH) == 0 else { throw refuse() }
+        let path = dir + "/lazytester-rendezvous.sock"
+        let bytes = Array(path.utf8)
+        var address = sockaddr_un()
+        guard !bytes.contains(0), bytes.count < MemoryLayout.size(ofValue: address.sun_path)
+              else { throw refuse() }
+        address.sun_family = sa_family_t(AF_UNIX)
+        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        withUnsafeMutableBytes(of: &address.sun_path) { dest in
+            dest.initializeMemory(as: UInt8.self, repeating: 0)
+            for (i, byte) in bytes.enumerated() { dest[i] = byte }
+        }
+        let own = try graphicalSession(callerSecuritySession)
+        let deadline = ProcessInfo.processInfo.systemUptime + 120
+        let fd = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else { throw refuse() }
+        defer { Darwin.close(fd) }
+        try nonblocking(fd)
+
+        if server {
+            var existing = stat()
+            guard lstat(path, &existing) != 0, errno == ENOENT else { throw refuse() }
+            // Process-local creation mask; directory is not modified.
+            let oldMask = umask(0o007)
+            let result = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
+            }
+            umask(oldMask)
+            guard result == 0, Darwin.listen(fd, 1) == 0 else { throw refuse() }
+            try ready(fd, Int16(POLLIN), deadline)
+            let peer = Darwin.accept(fd, nil, nil)
+            guard peer >= 0 else { throw refuse() }
+            defer { Darwin.close(peer) }
+            try exchange(peer, server: true, own: own, expected: partner, deadline: deadline)
+        } else {
+            let leaf = try metadata(path)
+            guard leaf.st_mode & mode_t(S_IFMT) == mode_t(S_IFSOCK),
+                  leaf.st_uid == partner else { throw refuse() }
+            let result = withUnsafePointer(to: &address) {
+                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                    Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+                }
+            }
+            if result != 0 {
+                guard errno == EINPROGRESS else { throw refuse() }
+                try ready(fd, Int16(POLLOUT), deadline)
+                var error: Int32 = 0
+                var length = socklen_t(MemoryLayout<Int32>.size)
+                guard getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &length) == 0,
+                      error == 0 else { throw refuse() }
+            }
+            try exchange(fd, server: false, own: own, expected: partner, deadline: deadline)
+        }
+    }
+
+    static func receipt(_ observed: Bool) {
+        let report: [String: Any] = [
+            "schema": 1, "scope": "SYNTHETIC_RENDEZVOUS",
+            "status": observed ? "COOPERATIVE_PEER_OBSERVED" : "REFUSED",
+            "connectionTimePeerUidMatched": observed,
+            "distinctReportedGraphicalSessionObserved": observed,
+            "peerSessionBinding": "NOT_VERIFIED",
+            "peerCodeIdentity": "NOT_VERIFIED",
+            "virtualDesktop": "NOT_VERIFIED",
+            "minecraft": "NOT_VERIFIED", "runtimeAdmission": false
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: report, options: .sortedKeys),
+              let text = String(data: data, encoding: .utf8) else { exit(2) }
+        print(text)
+    }
+}
+
 @main
 @MainActor
 struct LifecycleFixture {
@@ -183,6 +373,16 @@ struct LifecycleFixture {
                 catch { exit(2) }
             }
             app.run()
+            return
+        }
+        if arguments.first == "--rendezvous-probe" {
+            do {
+                try RendezvousProbe.run(arguments)
+                RendezvousProbe.receipt(true)
+            } catch {
+                RendezvousProbe.receipt(false)
+                exit(1)
+            }
             return
         }
         guard arguments.isEmpty || arguments == ["--profile-probe"] ||
