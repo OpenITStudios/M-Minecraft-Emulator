@@ -3,7 +3,7 @@
 ## Current status
 
 Branch `Local`; Unreleased. Work: `prelocal-modularity-efficiency`.
-MOD-01–09 closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). SIM-MOD-01–06: [exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/d3d8740735e2ecece69bdd8b9900ac8ec172f466/planning/development.md). SIM-MOD-07: peer endpoint and pipe fixtures separate; borrow original client pipe for sequential reply instead of duplicate handle; shared finite wait conversion. Worker, authentication and ACK/cancellation unchanged in policy. Source only; fixtures NOT_EXECUTED.
+MOD-01–09 closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). SIM-MOD-01–07: [exact prior handoff](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/3f7658dbcde7ed616b7d6b08832ce1da3eb2be61/planning/development.md). SIM-MOD integration: 7 commits, 27 paths compared; selected module declarations, visibility, feature routes, dispatch, verifier and fixture consumers inspected. Offline report now routes six storage/settings codes to profile_storage_operations; unrelated location, clear recovery and general settings routes retained. Fixture authored NOT_EXECUTED.
 Final review baseline: `bf2588dc527d137fe75e4cdf6559130259b1dcf3`. Original work baseline: `ed320acd98065300e48dce9f574af0bfd7e7f18b`.
 No source test, compiler, formatter, build, CI, PC or runtime execution.
 
@@ -20,9 +20,7 @@ No source test, compiler, formatter, build, CI, PC or runtime execution.
 
 | MOD-09 | Correct staging, packaging and readiness digest-owner paths; repair stale startup fixture boundaries and classify extracted Rust test files correctly. Source fixtures authored NOT_EXECUTED. |
 
-Next: focused integration audit of SIM-MOD-01–07, then STOP at source proof; preserve native holds. Re-pin actual HEAD for any separately
-approved PC-local stage. The existing native DLL and release holds remain.
-No compilation, runtime improvement or whole-product readiness claimed.
+Next: STOP at scoped source proof (SOURCE_READY_FOR_LOCAL, not execution approval). Re-pin actual HEAD for any separately approved PC-local stage. DLL and release holds remain. Exhaustive semantic review, compilation, runtime and performance NOT_EXECUTED.
 
 ## Prior source work and continuity
 
