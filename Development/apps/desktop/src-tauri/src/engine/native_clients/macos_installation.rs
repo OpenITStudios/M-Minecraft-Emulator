@@ -1,6 +1,7 @@
 //! Explicit Mac installation candidate inspection, never game admission.
 //! Only fixed Applications paths; no account/profile data, game execution,
 //! publisher pin, updater operation, or arbitrary caller-supplied path.
+//! On-demand AppKit discovery is observation only, never adoption.
 use core_foundation::{base::{CFType, TCFType}, string::CFString, url::CFURL};
 use security_framework_sys::code_signing::{
     kSecCSCheckAllArchitectures, kSecCSCheckNestedCode, kSecCSNoNetworkAccess,
@@ -9,6 +10,9 @@ use security_framework_sys::code_signing::{
     SecRequirementRef, SecStaticCodeRef,
 };
 use serde::{Deserialize, Serialize};
+use objc2::rc::autoreleasepool;
+use objc2_app_kit::NSRunningApplication;
+use objc2_foundation::NSString;
 use std::{
     fs::{self, Metadata, OpenOptions},
     io::{self, Cursor, Read},
@@ -56,6 +60,7 @@ pub struct MacEducationInstallationReport {
     signature: SignatureObservation,
     publisher: &'static str,
     multiple_instances_prohibited: Option<bool>,
+    observed_application_count: Option<u32>,
     runtime_admission: bool,
 }
 
@@ -68,6 +73,7 @@ fn report(status: CandidateStatus, version: Option<String>) -> MacEducationInsta
         signature: SignatureObservation::NotChecked,
         publisher: "NotPinned",
         multiple_instances_prohibited: None,
+        observed_application_count: None,
         runtime_admission: false,
     }
 }
@@ -240,8 +246,22 @@ fn inspect_at(applications: &Path, verify: impl FnOnce(&Path) -> SignatureObserv
     }
 }
 
+// AppKit's bundle-id list is an atomic, run-loop-sensitive snapshot of
+// user applications, not all processes, exact installed-image identity or
+// an ownership token. Preserve even unmatched/manual copies; never adopt.
+// No polling, PID enumeration, launch, termination or profile assignment.
+fn observe_application_count() -> Option<u32> {
+    autoreleasepool(|_| {
+        let identifier = NSString::from_str(EXPECTED_BUNDLE_ID);
+        let applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(&identifier);
+        u32::try_from(applications.count()).ok()
+    })
+}
+
 pub(super) fn inspect() -> MacEducationInstallationReport {
-    inspect_at(Path::new("/Applications"), observe_static_signature)
+    let mut result = inspect_at(Path::new("/Applications"), observe_static_signature);
+    result.observed_application_count = observe_application_count();
+    result
 }
 
 #[cfg(test)]
@@ -281,13 +301,17 @@ mod tests {
         assert_eq!(observed.status, CandidateStatus::Candidate);
         assert_eq!(observed.version.as_deref(), Some("1.26.33"));
         assert!(!observed.runtime_admission);
+        assert_eq!(observed.observed_application_count, None);
         let wire = serde_json::to_value(observed).unwrap();
         assert_eq!(wire, serde_json::json!({"schema":1,"platform":"macos","status":"Candidate",
             "version":"1.26.33","signature":"Unconfirmed","publisher":"NotPinned",
-            "multipleInstancesProhibited":null,"runtimeAdmission":false}));
+            "multipleInstancesProhibited":null,"observedApplicationCount":null,"runtimeAdmission":false}));
         // An expected identity/team observation still cannot pin the official
         // distribution or authorize launch, even with the singleton key absent.
-        let matched = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);
+        let mut matched = inspect_at(&root, |_| SignatureObservation::ExpectedTeamMatched);
+        // Synthetic discovery count is not a managed-session receipt.
+        matched.observed_application_count = Some(5);
+        assert_eq!(serde_json::to_value(&matched).unwrap()["observedApplicationCount"], 5);
         assert_eq!(matched.signature, SignatureObservation::ExpectedTeamMatched);
         assert_eq!(matched.publisher, "NotPinned");
         assert!(!matched.runtime_admission);

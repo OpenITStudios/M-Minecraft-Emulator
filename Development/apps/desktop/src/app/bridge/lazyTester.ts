@@ -55,12 +55,14 @@ export function parseStartupCapabilities(value: unknown): StartupCapabilities {
 export interface MacEducationInstallationReport {
   schema:1; platform:'macos'; status:'Missing'|'Candidate'|'Ambiguous'|'Unconfirmed';
   version:string|null; signature:'NotChecked'|'ExpectedTeamMatched'|'Unconfirmed';
-  publisher:'NotPinned'; multipleInstancesProhibited:boolean|null; runtimeAdmission:false;
+  publisher:'NotPinned'; multipleInstancesProhibited:boolean|null; observedApplicationCount:number|null; runtimeAdmission:false;
 }
 export function parseMacEducationInstallation(value:unknown):MacEducationInstallationReport {
-  if (!record(value) || !exact(value,['schema','platform','status','version','signature','publisher','multipleInstancesProhibited','runtimeAdmission']) ||
+  if (!record(value) || !exact(value,['schema','platform','status','version','signature','publisher','multipleInstancesProhibited','observedApplicationCount','runtimeAdmission']) ||
       value.schema!==1 || value.platform!=='macos' || value.runtimeAdmission!==false || value.publisher!=='NotPinned' ||
       (value.multipleInstancesProhibited!==null && typeof value.multipleInstancesProhibited!=='boolean') ||
+      (value.observedApplicationCount!==null && (typeof value.observedApplicationCount!=='number' ||
+        !Number.isInteger(value.observedApplicationCount) || value.observedApplicationCount<0 || value.observedApplicationCount>0xffffffff)) ||
       (value.status==='Candidate' ? !['ExpectedTeamMatched','Unconfirmed'].includes(value.signature as string) :
         value.signature!=='NotChecked' || value.multipleInstancesProhibited!==null) ||
       typeof value.status!=='string' || !['Missing','Candidate','Ambiguous','Unconfirmed'].includes(value.status) ||

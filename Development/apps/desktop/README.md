@@ -52,6 +52,10 @@ payload and Mac icon reuse are deliberate. No auto-install, release,
 Minecraft launch or managed data access. The normal Windows
 `dev:app` and existing build/release gates are unchanged.
 
+The explicit installation check also reports AppKit's current count of
+applications with the Education bundle identifier. This is a read-only
+snapshot, not verified image identity, managed profiles or launch authority.
+No background watcher or adoption of existing games.
 The shell must show unsupported native management, not five ready
 profiles. Build/launch and permission behavior remain NOT_EXECUTED.
 See [cross-platform handoff](../../../planning/development.md) for the

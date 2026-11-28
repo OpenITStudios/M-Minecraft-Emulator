@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-10: shared lifecycle policy)
+## Current status — cross-platform-native (MAC-11a: native application discovery)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,33 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-11a — AppKit discovery in the existing Mac inspection route
+
+Advance the native lifecycle lane without enabling game launch. Reuse
+the resolved objc2 0.6.5 and objc2-app-kit/foundation 0.3.2 packages
+as direct Mac-only bindings, with narrow features and no new package
+version. Update the desktop manifest and existing lock entry together.
+Apple NSRunningApplication runningApplications(withBundleIdentifier:)
+provides an atomic, run-loop-sensitive list of matching user apps,
+not a full system process inventory or signed image attestation.
+Reviewed the [Apple API](https://developer.apple.com/documentation/appkit/nsrunningapplication)
+and [pinned binding reference](https://docs.rs/objc2-app-kit/0.3.2/objc2_app_kit/struct.NSRunningApplication.html).
+Add one read-only aggregate count to the existing explicit installation
+inspection, typed bridge and shell notice. A missing count stays unknown;
+even zero is not permission to launch. No PID, path, account value,
+background polling, new IPC command, transport, process adoption,
+or termination of externally opened applications. No change to Windows
+wire or lifecycle. Native original-object retention and normal close
+remain in the existing unexecuted AppKit synthetic fixture; before a
+product launch they must be bound to the actual single controller,
+verified loaded image, and private profile admission. Do not manufacture
+Mac FILETIME/HWND values. MAC-10 shared status/close policy unchanged.
+Source committed; Rust/TypeScript regression source amended, NOT_EXECUTED.
+Cargo resolution and native execution not verified. Plan A only;
+native launch remains BLOCKED on storage/account isolation.
+Next: native window observation and original-object ownership boundary;
+no managed launch, capture/input permission changes, CI, test or release.
 
 ### MAC-10 — shared native lifecycle policy, independent of profile routing
 

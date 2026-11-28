@@ -509,7 +509,7 @@
       // No stale positive receipt after a failed check.
     } finally {installationPending=false;}
   }
-  // User-initiated Mac candidate metadata only. No game/session request.
+  // User-initiated Mac candidate metadata and AppKit discovery only. No game/session request.
   async function checkMacInstallation() {
     if (!macInstallationInspection || nativeBackend !== 'Unsupported' || installationPending || disposed) return;
     installationPending=true;
@@ -525,6 +525,9 @@
         : result.status==='Missing' ? 'No candidate at the checked Applications locations.'
         : result.status==='Ambiguous' ? 'Multiple installation candidates found. No installation selected.'
         : 'Installation metadata could not be confirmed.';
+      macInstallationNotice += result.observedApplicationCount===null
+        ? ' Running application count unavailable.'
+        : ' AppKit reports '+result.observedApplicationCount+' matching application(s). None are managed by Lazy Tester.';
     } catch {
       if (!disposed) macInstallationNotice='Installation inspection unavailable.';
     } finally { installationPending=false; }
