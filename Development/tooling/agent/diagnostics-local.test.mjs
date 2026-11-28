@@ -233,6 +233,10 @@ test('legacy v1 imports remain readable without migration or false integrity cla
     assert.equal(records.evidenceIntegrity,'LEGACY_NOT_CHECKSUMMED');
     assert.equal(records.records.length,2);
     assert.deepEqual((await readdir(dir)).sort(),['events.jsonl','index.json']);
+    // A full page does not allow an invalid later record to go unnoticed.
+    await writeFile(path.join(dir,'events.jsonl'),fixture('legacy-run')+'{bad json}\n');
+    await assert.rejects(()=>queryDiagnosticEvidence(store,'legacy-run',issues.issues[0].id,{limit:1}));
+
   }finally{await rm(root,{recursive:true,force:true});}
 });
 

@@ -92,11 +92,13 @@ export function validCaptureCursor(cp) {
 // every historical record.
 function recentCapturedRecords(data,limit,discardLeading,incompleteTail) {
   const records=[];
-  let end=incompleteTail?data.lastIndexOf('\n'):data.length;
+  // Find LF boundaries in bytes and decode only the lines actually scanned.
+  let end=incompleteTail?data.lastIndexOf(10):data.length;
   while(end>0 && records.length<limit) {
-    const newline=data.lastIndexOf('\n',end-1);
+    const newline=data.lastIndexOf(10,end-1);
     if(discardLeading && newline<0) break;
-    const event=parseCapturedLine(data.slice(newline+1,end).replace(/\r$/,''));
+    const lineEnd=data[end-1]===13?end-1:end;
+    const event=parseCapturedLine(data.toString('utf8',newline+1,lineEnd));
     if(event) records.push(event);
     end=newline;
   }
@@ -187,7 +189,7 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
       const incompleteTrailingLineIgnored=
         buffer.length>0 && buffer[buffer.length-1]!==10;
       let records=probeOnly||checkpoint!==null?[]:
-        recentCapturedRecords(buffer.toString('utf8'),recordLimit,start>0,
+        recentCapturedRecords(buffer,recordLimit,start>0,
           incompleteTrailingLineIgnored);
       let windowCoverage=null;
       // Exact stable-file checkpoint. File timestamps cannot establish that
@@ -221,16 +223,16 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
         if(createHash('sha256').update(anchor).digest('hex')!==cp.anchorSha256) {
           return unstableEvidence(slot,prefix+'_CAPTURE_PREFIX_CHANGED');
         }
-        let added=buffer.subarray(from).toString('utf8');
+        let added=buffer.subarray(from);
         // A partial line present at preparation must never be completed
         // later and then mistaken for newly collected test evidence.
         if(!cp.completeLastLine) {
-          const firstNewline=added.indexOf('\n');
-          added=firstNewline<0?'':added.slice(firstNewline+1);
+          const firstNewline=added.indexOf(10);
+          added=added.subarray(firstNewline<0?added.length:firstNewline+1);
         }
         // Incomplete active writer tails are ignored until the next read.
-        if(added && !added.endsWith('\n')) {
-          added=added.slice(0,added.lastIndexOf('\n')+1);
+        if(added.length&&added.at(-1)!==10) {
+          added=added.subarray(0,added.lastIndexOf(10)+1);
         }
         if(evidenceCheckpoint!==null) {
           const scanned=recentCapturedRecords(added,recordLimit+1,false,false);
@@ -239,9 +241,16 @@ export async function readGameEvidence(directory,slot,maxRecords=EVIDENCE_LIMIT,
           windowCoverage={recordLimitReached:limited,
             baselinePartialLineExcluded:!cp.completeLastLine};
         } else {
-          probeEvents=added.split(/\r?\n/).map(parseProbeCapturedLine).filter(Boolean);
-          if(probeEvents.length>200) {
-            return unstableEvidence(slot,'PROBE_MARKER_VOLUME_EXCEEDED');
+          for(let start=0;start<added.length;) {
+            const end=added.indexOf(10,start); // All eligible lines end in LF.
+            const lineEnd=added[end-1]===13?end-1:end;
+            const event=parseProbeCapturedLine(added.toString('utf8',start,lineEnd));
+            start=end+1;
+            if(!event)continue;
+            if(probeEvents.length===200) {
+              return unstableEvidence(slot,'PROBE_MARKER_VOLUME_EXCEEDED');
+            }
+            probeEvents.push(event);
           }
         }
       }

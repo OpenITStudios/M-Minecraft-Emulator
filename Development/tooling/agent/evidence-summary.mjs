@@ -137,9 +137,18 @@ export function summarizeEvidenceReports(slots,reports) {
   // Prioritize actionable anomalies while retaining recent context.
   const selectedPositions=new Set();
   for (let i=Math.max(0,events.length-20);i<events.length;i++) selectedPositions.add(i);
-  const important=[];
-  for (let i=0;i<events.length;i++) if(events[i].severity==='ATTENTION') important.push(i);
-  for (const i of important.slice(-MAX_SIGNAL_COUNT)) selectedPositions.add(i);
+  let attentionCount=0,resultCount=0,teamGameResultSummaryCount=0,teamLevelScoreCount=0;
+  for(let i=events.length-1;i>=0;i--) {
+    const event=events[i];
+    if(event.severity==='ATTENTION') {
+      if(attentionCount<MAX_SIGNAL_COUNT)selectedPositions.add(i);
+      attentionCount++;
+    } else if(event.severity==='RESULT')resultCount++;
+    if(event.source==='game_results') {
+      if(event.eventType==='export_summary')teamGameResultSummaryCount++;
+      if(event.eventType==='level_score')teamLevelScoreCount++;
+    }
+  }
   const timeline=[...selectedPositions].sort((a,b)=>a-b).slice(-MAX_TIMELINE)
     .map(i=>{
       // Team record IDs can embed player identifiers. Keep them solely
@@ -147,20 +156,13 @@ export function summarizeEvidenceReports(slots,reports) {
       const {recordId,...safe}=events[i];
       return safe;
     });
-  const attention=events.filter(event=>event.severity==='ATTENTION');
-  const results=events.filter(event=>event.severity==='RESULT');
-  const gameResultSummaries=events.filter(event=>
-    event.source==='game_results'&&event.eventType==='export_summary');
-  const teamLevelScores=events.filter(event=>
-    event.source==='game_results'&&event.eventType==='level_score');
   const missing=sources.filter(s=>s.status!=='CAPTURE_FILE_PRESENT').map(s=>s.slot);
   return {
     schema:1, source:'TEAM_SKILLS_PROBE_CAPTURE_MARKERS',
     requestedSlots:selected, sources,
     records:events.length, duplicatesSuppressed:duplicates,
-    timeline,attentionCount:attention.length,resultCount:results.length,
-    teamGameResultSummaryCount:gameResultSummaries.length,
-    teamLevelScoreCount:teamLevelScores.length,
+    timeline,attentionCount,resultCount,
+    teamGameResultSummaryCount,teamLevelScoreCount,
     missingSlots:missing,
     verdict:'EVIDENCE_ONLY_NOT_GAMEPLAY_ACCEPTANCE',
     worldIdentity:'NOT_VERIFIED', playerToProfileIdentity:'NOT_VERIFIED',

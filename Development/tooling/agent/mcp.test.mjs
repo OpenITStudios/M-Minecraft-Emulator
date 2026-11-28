@@ -6030,3 +6030,41 @@ test('MC02 group normalization preserves native batch limits and the original op
     assert.equal(batches,1);
   }finally{disabled.shutdown();enabled.shutdown();}
 });
+
+test('byte-scanned evidence retains UTF-8, CRLF, partial boundaries and exact record caps',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-evidence-byte-lines-'));
+  const file=path.join(root,'MC02.log');
+  const row=(index)=>'2026-11-02T08:00:00Z log [ANALYTICS]'+
+    JSON.stringify({schema:1,type:'stage_attempt',index,stage:'café 日本語'})+'\r\n';
+  try {
+    await writeFile(file,'old partial café');
+    const before=await readGameEvidence(root,2,20,{probeOnly:true});
+    await appendFile(file,' discarded\r\n'+Array.from({length:22},(_,i)=>row(i)).join('')+
+      '2026-11-02T08:00:00Z log [ANALYTICS]{"type":"partial');
+    const window=await readGameEvidence(root,2,3,{evidenceCheckpoint:before.captureCursor});
+    assert.deepEqual(window.events.map(e=>e.data.index),[19,20,21]);
+    assert.ok(window.events.every(e=>e.data.stage==='café 日本語'));
+    assert.deepEqual(window.windowCoverage,{recordLimitReached:true,baselinePartialLineExcluded:true});
+    assert.equal(window.incompleteTrailingLineIgnored,true);
+    const normal=await readGameEvidence(root,2,3);
+    assert.deepEqual(normal.events,window.events);
+  }finally{await rm(root,{recursive:true,force:true});}
+});
+
+test('Probe byte scan refuses the 201st complete marker, never returns a truncated accepted run',async()=>{
+  const root=await mkdtemp(path.join(tmpdir(),'lazy-probe-volume-'));
+  const file=path.join(root,'MC02.log');
+  const row='[probe:probe] INFO tick=120 issue=RESULT id=P01 result=pass build=dev detail=ok\r\n';
+  try {
+    await writeFile(file,'baseline\n');
+    const before=await readGameEvidence(root,2,20,{probeOnly:true});
+    await appendFile(file,row.repeat(200));
+    const full=await readGameEvidence(root,2,20,{probeCheckpoint:before.captureCursor});
+    assert.equal(full.probeEvents.length,200);
+    await appendFile(file,row);
+    const overflow=await readGameEvidence(root,2,20,{probeCheckpoint:before.captureCursor});
+    assert.equal(overflow.status,'CAPTURE_FILE_UNSTABLE');
+    assert.equal(overflow.reason,'PROBE_MARKER_VOLUME_EXCEEDED');
+    assert.deepEqual(overflow.events,[]);
+  }finally{await rm(root,{recursive:true,force:true});}
+});

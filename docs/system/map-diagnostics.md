@@ -135,8 +135,10 @@ For a selected v2 run, metadata-only issue queries validate the manifest
 and index SHA-256; a deeper evidence query separately checks the archived
 JSONL digest. Evidence records are projected through an allowlist and
 paginated, not passed through unchanged. Normal evidence queries scan a
-bounded <=4 MiB archive but hold only one requested page of projected
-records in memory; no persistent background database is necessary yet.
+bounded <=4 MiB archive, validate every record even after the requested
+page fills, and hold only one page of projected records. Line-by-line
+iteration avoids materializing an array of all lines. No persistent
+background database is necessary yet.
 
 ## Codex connection is optional and read-only
 

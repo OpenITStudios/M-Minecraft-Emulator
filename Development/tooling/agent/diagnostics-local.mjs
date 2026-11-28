@@ -495,7 +495,14 @@ export async function queryDiagnosticEvidence(root,run,id,{cursor=0,limit=6}={})
   const content=await readArchiveEvidence(storage);
   const records=[];
   let total=0;
-  for(const line of content.trimEnd().split('\n')) {
+  // Still validate the entire archive for an exact total and fail-closed
+  // pagination, but do not allocate an array of every line.
+  const text=content.trimEnd();
+  for(let start=0;start<=text.length;) {
+    const newline=text.indexOf('\n',start);
+    const end=newline<0?text.length:newline;
+    const line=text.slice(start,end);
+    start=end+1;
     const event=validEvent(JSON.parse(line),run);
     if(event.kind!==issue.kind && !(issue.kind==='assertion_mismatch' &&
       event.kind==='assertion'))continue;

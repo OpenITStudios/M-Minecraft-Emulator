@@ -157,8 +157,9 @@ of autonomous play.
    Replacement, truncation, changed anchor or missing baseline reports
    unavailable evidence. Definitive continuity failure invalidates that slot's
    baseline; only a new explicit begin can establish another one. At most
-   20 records/slot, bounded summary timeline;
-   partial lines and record limits are explicit. Baseline is not verified
+   20 records/slot, bounded summary timeline. Byte-boundary scanning
+   decodes only eligible lines; Probe rejects marker overflow immediately.
+   Partial lines and record limits are explicit. Baseline is not verified
    game-session identity. Use original Probe only when relevant; it prepares
    a command for an authorized human/admin and reads original reported
    results, not map gameplay success.
