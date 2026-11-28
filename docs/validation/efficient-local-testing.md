@@ -179,8 +179,10 @@ rejected regardless of performance. If no measurable problem is shown,
 
 The completed source batch uses existing fixtures under
 `Development/tooling/agent/`. The current `Development/package.json`
-registers all of the following suites in `test:localtest`, included in
-`verify:source` (the existing `DEV.cmd check` route). The quick
+discovers every top-level agent `*.test.mjs` suite in `test:localtest`,
+included in `verify:source` (the existing `DEV.cmd check` route).
+This includes the previously omitted activity-status and Testing archive
+fixtures without maintaining another explicit agent file list. The quick
 `verify:quick` and repository-only tests do **not** execute those agent
 fixtures. No new test runner is required. Every row is
 `TEST_AUTHORED_NOT_RUN` / `NOT_EXECUTED` until separately approved

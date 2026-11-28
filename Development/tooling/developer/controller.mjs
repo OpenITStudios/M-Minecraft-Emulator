@@ -172,7 +172,7 @@ export function planForPaths(paths,revision) {
 // binary investigator, gameplay agent, or grading/acceptance authority.
 const QUALITY_AREAS=Object.freeze({
   'agent-mcp':Object.freeze({
-    owner:'Development/tooling/agent/mcp.mjs and the existing specialized agent modules',
+    owner:'Development/tooling/agent/operation-core.mjs, native-transport.mjs and the MCP/Code Mode adapters',
     checks:[
       'Preserve the single authenticated Rust controller, per-slot owner and default-disabled AI input.',
       'Check native target PID/birth/session/HWND, frame delivery, stale cache and fail-closed writer lease paths.',
@@ -263,6 +263,12 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
       {id:'agent-mcp',sourcePaths:[
         'Development/tooling/agent/mcp.mjs',
         'Development/tooling/agent/mcp.test.mjs',
+        'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/native-transport.mjs',
+        'Development/tooling/agent/agent-contract.mjs',
+        'Development/tooling/agent/tool-catalog.mjs',
+        'Development/tooling/agent/mc02-action-sequence.mjs',
+        'Development/tooling/agent/mc02-action-sequence.test.mjs',
         'Development/tooling/agent/input-route.mjs',
         'Development/tooling/agent/input-route.test.mjs',
         'Development/tooling/agent/input-delivery.mjs',
@@ -272,7 +278,8 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
         'Development/tooling/agent/visual-observer.mjs',
         'Development/tooling/agent/visual-observer.test.mjs'
       ],inspectFiles:[
-        'Development/tooling/agent/mcp.mjs',
+        'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/native-transport.mjs',
         'Development/tooling/agent/input-delivery.mjs'
       ]},
       {id:'native-controller',sourcePaths:[
@@ -341,11 +348,16 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
       {id:'agent-mcp',sourcePaths:[
         'Development/tooling/agent/mcp.mjs',
         'Development/tooling/agent/mcp.test.mjs',
+        'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/native-transport.mjs',
+        'Development/tooling/agent/agent-contract.mjs',
+        'Development/tooling/agent/tool-catalog.mjs',
         'Development/tooling/agent/activity-status.mjs',
         'Development/tooling/agent/activity-status.test.mjs'
       ],inspectFiles:[
         'Development/tooling/agent/activity-status.mjs',
-        'Development/tooling/agent/mcp.mjs'
+        'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/native-transport.mjs'
       ]},
       {id:'native-controller',sourcePaths:[
         'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs',
@@ -380,13 +392,19 @@ const CRITICAL_REVIEW_SEAMS=Object.freeze([
       {id:'agent-scheduler',sourcePaths:[
         'Development/tooling/agent/mcp.mjs',
         'Development/tooling/agent/mcp.test.mjs',
+        'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/native-transport.mjs',
+        'Development/tooling/agent/agent-contract.mjs',
+        'Development/tooling/agent/tool-catalog.mjs',
         'Development/tooling/agent/mc02-action-sequence.mjs',
         'Development/tooling/agent/mc02-action-sequence.test.mjs',
         'Development/tooling/agent/input-timeline.mjs',
         'Development/tooling/agent/input-timeline.test.mjs',
         'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs'
       ],inspectFiles:[
-        'Development/tooling/agent/mcp.mjs',
+        'Development/tooling/agent/operation-core.mjs',
+        'Development/tooling/agent/native-transport.mjs',
+        'Development/tooling/agent/mc02-action-sequence.mjs',
         'Development/tooling/agent/input-timeline.mjs',
         'Development/apps/desktop/src-tauri/src/engine/agent_cli.rs'
       ]},

@@ -480,6 +480,24 @@ test('a single changed MCP source or activity fixture still requires reviewing u
   assert.deepEqual(fixture.crossModuleReviews[0].selectedParties,['agent-mcp']);
 });
 
+test('extracted agent owners retain cross-module review after MCP modularization',()=>{
+  for(const file of ['operation-core.mjs','native-transport.mjs','agent-contract.mjs','tool-catalog.mjs']){
+    const review=qualityReviewForPaths(['Development/tooling/agent/'+file],SHA);
+    assert.deepEqual(review.crossModuleReviews.map(s=>s.id),[
+      'agent-input-lease','agent-activity-mirror','native-input-v4'
+    ]);
+    assert.ok(review.crossModuleReviews.every(seam=>
+      seam.reviewParties[0].selectedInChangeSet&&
+      seam.reviewParties[0].inspectFiles.includes('Development/tooling/agent/operation-core.mjs')&&
+      seam.reviewParties[0].inspectFiles.includes('Development/tooling/agent/native-transport.mjs')&&
+      seam.execution==='NOT_EXECUTED'));
+  }
+  for(const file of ['mc02-action-sequence.mjs','mc02-action-sequence.test.mjs']){
+    assert.deepEqual(qualityReviewForPaths(['Development/tooling/agent/'+file],SHA)
+      .crossModuleReviews.map(s=>s.id),['agent-input-lease','native-input-v4']);
+  }
+});
+
 test('desktop-only native or UI changes route to their exact consumer boundaries',()=>{
   const session=qualityReviewForPaths(
     ['Development/apps/desktop/src-tauri/src/engine/process_identity.rs'],SHA);

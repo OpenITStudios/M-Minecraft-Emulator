@@ -7,6 +7,13 @@ const router = readFileSync(new URL("../../../tooling/windows-toolchain/dev.ps1"
 
 describe("Emulator source verification routing", () => {
 
+  it("discovers every top-level agent fixture through the existing full verification route", () => {
+    expect(root.scripts["test:localtest"]).toContain("tooling/agent/*.test.mjs");
+    expect(root.scripts["verify:source"]).toContain("npm run test:localtest");
+    expect(root.scripts["verify:quick"]).not.toContain("test:localtest");
+    expect(root.scripts["test:localtest"].match(/tooling\/agent\//g)).toHaveLength(1);
+  });
+
   it("defers redundant five-hive DataLocation inspection until Data Storage navigation", () => {
     const ui = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
     const startup = ui.split("async function initializeLaunchers() {")[1]
