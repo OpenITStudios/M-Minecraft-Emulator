@@ -242,6 +242,9 @@ mod windows_capture {
             // after the subsequent window verification could incorrectly
             // date older pixels as post-action during a slow native check.
             let readback_at_ms=frame_ms()?;
+            // Fitted pixels are owned CPU bytes. Return the WGC frame before
+            // target checks, encoding and potentially blocking pipe writes.
+            drop(frame);
             verify_target(&target,&pin)?; // do not publish after window reuse
             sequence=sequence.checked_add(1).ok_or_else(||
                 io::Error::other("Capture sequence exhausted"))?;

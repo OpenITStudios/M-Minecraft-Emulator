@@ -6,31 +6,40 @@ and profile lifetimes. DWM thumbnails and LTG1 AI observation stay unchanged.
 ## Backend decision
 FFmpeg 8.1 introduced the WGC gfxcapture source with explicit HWND, client-only
 capture and D3D11 output. NVENC accepts D3D11 hardware frames. The Matroska
-muxer handles AV1 codec private, timestamps and trailer without implementing
+muxer handles HEVC codec private, timestamps and trailer without implementing
 these formats again in Rust. Review references:
 - https://www.ffmpeg.org/doxygen/8.1/vsrc__gfxcapture_8c_source.html
 - https://ffmpeg.org/ffmpeg-codecs.html (NVENC, hardware inputs, CQ)
 - https://ffmpeg.org/ffmpeg-protocols.html (fd seekable regular file)
-- https://www.matroska.org/technical/codec_specs.html (V_AV1)
+- https://www.matroska.org/technical/codec_specs.html (V_MPEGH/ISO/HEVC)
 - https://ffmpeg.org/legal.html (distribution obligations)
+- https://developer.nvidia.com/video-encode-decode-support-matrix (RTX 3070: HEVC encode supported, AV1 encode unsupported)
+- https://ffmpeg.org/doxygen/8.1/nvenc__hevc_8c_source.html (HEVC profile and RGB input options)
+- https://ffmpeg.org/doxygen/8.1/nvenc_8c_source.html (Direct3D input registration)
+- https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html (minimize host/device transfers)
 
-The candidate explicitly selects NVIDIA D3D11 and av1_nvenc, P4, CQ 23,
+The candidate explicitly selects NVIDIA D3D11 and hevc_nvenc, Main profile, packed RGB to YUV 4:2:0,
+P4, CQ 23,
 no B-frame or lookahead queue, VFR capped at 30 FPS, original even client
 size, no audio or cursor. No hwdownload, raw frame IPC, automatic conversion,
 or encoder fallback. This is not a claim of zero GPU copies, 30 CFR,
-pixel-identical video or measured quality. The operator explicitly selected
-one encoder only: AV1 NVENC. H.264, AMF, QSV, encoder selection and startup
-retry are excluded, not pending tasks. One child per recording request;
+pixel-identical video or measured quality. The operator's RTX 3070 compatibility direction supersedes the previous
+AV1-only codec decision; retain exactly one encoder, HEVC NVENC. AV1,
+H.264, AMF, QSV, encoder selection and startup retry remain excluded.
+No application-owned CUDA context, toolkit, kernels or extra GPU scheduler:
+D3D11 hardware frames can feed NVENC directly, while screenshot encoding
+and small controller work stay on CPU. NVENC is distinct from CUDA cores.
+CUDA compute remains a measured-bottleneck option, not a dependency. One child per recording request;
 if unsupported or initialization fails, report failure without retrying.
-Recording requires a compatible NVIDIA AV1 encoder; screenshot remains
+Recording requires a compatible NVIDIA HEVC encoder; screenshot remains
 independent.
 
 One adjacent self-contained ffmpeg.exe must be reviewed and pinned by
 compiled SHA-256 (currently None); no PATH search, user executable choice,
 download, packaging, or dependency resolution. A later review must pin
 upstream release/source, build configuration (including gfxcapture, d3d11va,
-av1_nvenc, fd, pipe and matroska), dependency and driver compatibility,
-corresponding source/license notices, redistribution eligibility, actual
+hevc_nvenc, fd, pipe and matroska), dependency and driver compatibility,
+corresponding source/license notices, redistribution eligibility (including applicable HEVC patent/licensing obligations), actual
 binary size, and absence of unreviewed DLL search/dependencies. The default
 installer and executable identity are unchanged.
 
@@ -96,7 +105,8 @@ world, cache or diagnostic data.
 ## Acceptance — NOT_EXECUTED
 Review exact FFmpeg version/options and native filter negotiation; verify
 unsupported hardware fails with one attempt and no alternate encoder;
-D3D11 frames reach NVENC without CPU readback, decode the completed MKV,
+D3D11 frames reach NVENC without CPU readback, decode the completed MKV and independently verify HEVC Main video,
+4:2:0 output, dimensions and playback compatibility,
 test stop/start, immediate stop, first/later frame stalls, malformed progress,
 terminal report without child exit, natural exit racing Stop, target
 exit/resize, no-clobber, disk full,

@@ -10,7 +10,7 @@ signs in to Microsoft, or enters a world.
 Actions CI is disabled. This is the **source checkout**, not a distribution
 folder or an approved installer. Read [current status](planning/development.md)
 for the proof ceiling at the latest revision and the [Unreleased changes](planning/development.md#unreleased--rust-first-integration).
-The new [capture/recording source workstream](planning/development.md#capture-and-recording--separately-authorized-source-workstream) provides gated WebP and AV1/MKV candidates, not installed capture capability. Both binary approval gates remain closed.
+The new [capture/recording source workstream](planning/development.md#capture-and-recording--separately-authorized-source-workstream) provides gated WebP and HEVC NVENC/MKV candidates (RTX 3070-compatible codec target), not installed capture capability. Both binary approval gates remain closed.
 
 ## Choose the correct workflow
 

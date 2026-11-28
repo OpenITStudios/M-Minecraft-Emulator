@@ -51,6 +51,13 @@ Minecraft renders no new frame. A captured frame is **not proof of world
 membership, player movement, freshness at AI-consumption time, or PvP
 response latency**.
 
+The fitted observation path releases each acquired WGC frame immediately
+following readback and timestamp, before the second identity check, CPU
+encoding and stdout writes. This reduces acquired-frame lifetime, not a
+measured VRAM saving or a change to the capture cadence. No CUDA context or
+new capture backend is required. Hardware fitting and exact frame lifetime
+remain subject to native validation.
+
 The Node MCP process is responsible for explicit admission, per-slot worker
 ownership and termination, discarding stale/replaced frames and forwarding
 only selected frames to Codex. No callback into a game process is required.
@@ -103,6 +110,6 @@ dimensions above 4096 on either side. Raw and encoded limits are 64 and
 See [WGC 3.1.0 Frame](https://docs.rs/wgc/3.1.0/wgc/frame/struct.Frame.html)
 and [image-webp 0.2.4](https://docs.rs/image-webp/0.2.4/image_webp/struct.WebPEncoder.html).
 Original process handle liveness is rechecked after window identity observation. Native DWM/WGC mapping, DPI, opacity, deadline and actual file size are
-unverified. No GPU or CPU recording encoder has been selected or added.
+unverified. Recording is separately source-integrated in the product's gated HEVC NVENC path; this worker does not encode video.
 
 No tests or builds may be run until the operator explicitly authorizes them.
