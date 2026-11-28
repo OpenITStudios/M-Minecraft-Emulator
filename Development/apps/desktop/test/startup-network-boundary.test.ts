@@ -10,6 +10,11 @@ describe("Active native-first startup boundary", () => {
     expect(startup).toContain("if (disposed) return;\n        nativeBackend = capabilities.backend;");
     expect(startup.indexOf("nativeBackend === 'Unsupported'")).toBeLessThan(startup.indexOf("if(recordingAvailable) void refreshRecordingStatus()"));
     expect(startup).toContain("if (diagnostic) {\n          await tick();\n          if (!disposed) void lazyTester.reportStartup(");
+    expect(startup.match(/await loadBinding\(\)/g)).toHaveLength(1);
+    expect(startup.match(/await refresh\(\)/g)).toHaveLength(1);
+    expect(startup).not.toMatch(/setTimeout|for\s*\(let attempt/);
+    expect(active).toContain("if (!binding?.configured) await loadBinding();");
+    expect(active).toContain("Retry connection");
     const bootstrap = readFileSync(new URL("../src-tauri/src/app_bootstrap.rs", import.meta.url), "utf8");
     const normal = bootstrap.split(".invoke_handler(tauri::generate_handler![")[1]!.split("])")[0]!;
     const diagnostic = bootstrap.split(".invoke_handler(tauri::generate_handler![")[2]!.split("])")[0]!;
@@ -33,6 +38,31 @@ describe("Active native-first startup boundary", () => {
     const binding = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/profile_binding.rs", import.meta.url), "utf8");
     expect(binding).toContain("Ok(bytes) => return Ok(binding_status(Ok(bytes), validate))");
     expect(binding).toContain("existing_controller_gate(CONTROLLER_GATE_NAME)");
+  });
+
+  it("keeps startup diagnostic read-only and avoids a second product lookup in legacy location fallback", () => {
+    const native = readFileSync(new URL("../src-tauri/src/engine/native_clients.rs", import.meta.url), "utf8");
+    const binding = native.split("pub fn profile_binding(import: bool)")[1]!.split("#[cfg(")[0]!;
+    expect(binding.indexOf("startup_diagnostic_mode()")).toBeLessThan(binding.indexOf("profile_binding::run(import)"));
+    expect(binding).toContain("profile_binding::inspect_existing()");
+    expect(binding).toContain("PermissionDenied");
+    expect(native).toContain("product_profiles::location(action, !crate::app_bootstrap::startup_diagnostic_mode())");
+    const profiles = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/product_profiles.rs", import.meta.url), "utf8");
+    const location = profiles.split("pub(crate) fn location(")[1]!.split("#[cfg(test)]")[0]!;
+    expect(location).toContain("if !persist_location && !matches!(action, DataLocationAction::Inspect)");
+    expect(location).toContain("open_mode(&home, persist_location)?");
+    expect(location).toContain("None => match registered_replay_slots::<5>(true)");
+    expect(location).not.toContain("registered_slots::<5>(true)");
+    const bootstrap = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap.rs", import.meta.url), "utf8");
+    const normal = bootstrap.split("fn registered_slots<const N: usize>")[1]!.split("fn registered_replay_slots")[0]!;
+    const replay = bootstrap.split("fn registered_replay_slots<const N: usize>")[1]!.split("struct Configuration")[0]!;
+    expect(normal).toContain("product_profiles::open()?");
+    expect(normal).toContain("registered_replay_slots::<N>(observe)");
+    expect(replay).not.toContain("product_profiles::open()");
+    expect(replay).toContain("reopen_slots_for::<N>(a, &parent, &bytes, expected)");
+    const mounted = readFileSync(new URL("../src/LazyTesterApp.svelte", import.meta.url), "utf8");
+    const locationUi = mounted.split("async function loadLocation(")[1]!.split("async function openFolder(")[0]!;
+    expect(locationUi).toContain("if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();");
   });
 
   it("routes a failed window destroy through existing post-release exit recovery", () => {

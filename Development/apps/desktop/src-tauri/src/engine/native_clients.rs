@@ -43,7 +43,7 @@ pub struct DataLocation {
 // identities. Keep the existing Windows source/preview fallback unchanged.
 #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
 pub fn data_location(action: DataLocationAction) -> io::Result<DataLocation> {
-    independent_bootstrap::product_profiles::location(action)
+    independent_bootstrap::product_profiles::location(action, !crate::app_bootstrap::startup_diagnostic_mode())
 }
 
 #[cfg(all(windows, not(all(target_arch = "x86_64", feature = "lazy-tester-package"))))]
@@ -70,6 +70,12 @@ pub fn data_location(_: DataLocationAction) -> io::Result<DataLocation> {
 
 #[cfg(all(windows, target_arch = "x86_64", feature = "lazy-tester-package"))]
 pub fn profile_binding(import: bool) -> io::Result<ProfileBinding> {
+    if crate::app_bootstrap::startup_diagnostic_mode() {
+        if import {
+            return Err(io::Error::new(io::ErrorKind::PermissionDenied, "Startup diagnostic cannot import profiles"));
+        }
+        return Ok(independent_bootstrap::profile_binding::inspect_existing());
+    }
     independent_bootstrap::profile_binding::run(import)
 }
 

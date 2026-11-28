@@ -220,7 +220,7 @@ fn publish(directory: &File, bytes: &[u8]) -> io::Result<()> {
     }
     result
 }
-pub(super) fn inspect_existing() -> ProfileBinding {
+pub(in crate::engine::native_clients) fn inspect_existing() -> ProfileBinding {
     match super::product_profiles::inspect_existing() {
         Ok(Some(_)) => ProfileBinding { schema:1,required:true,configured:true,issue:None },
         Ok(None) => status(),

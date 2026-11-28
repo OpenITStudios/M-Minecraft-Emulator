@@ -833,7 +833,11 @@ fn verify_selected_location(logical: File, root: &Path) -> io::Result<()> {
     })
 }
 
-pub(crate) fn location(action: DataLocationAction) -> io::Result<DataLocation> {
+pub(crate) fn location(action: DataLocationAction, persist_location: bool) -> io::Result<DataLocation> {
+    // The hidden startup diagnostic is an observation, not setup/recovery.
+    if !persist_location && !matches!(action, DataLocationAction::Inspect) {
+        return Err(invalid("Startup diagnostic permits inspection only"));
+    }
     let home = home()?;
     let locator = locator_path(&home);
     if matches!(
@@ -884,7 +888,8 @@ pub(crate) fn location(action: DataLocationAction) -> io::Result<DataLocation> {
         }
     }
     // Report the exact catalog root from the same successful open.
-    let (current, profiles) = match open_mode(&home, true)? {
+    // A diagnostic must not roll back a cutover or publish a locator.
+    let (current, profiles) = match open_mode(&home, persist_location)? {
         Some((root, stores)) => (
             Some(root),
             stores
@@ -895,7 +900,9 @@ pub(crate) fn location(action: DataLocationAction) -> io::Result<DataLocation> {
                 })
                 .collect(),
         ),
-        None => match registered_slots::<5>(true) {
+        // Product absence was already observed above. Use only the
+        // existing reviewed replay path; no second product open/recovery.
+        None => match registered_replay_slots::<5>(true) {
             Ok(stores) => {
                 let current = stores[0].private_path.parent().map(Path::to_path_buf);
                 (

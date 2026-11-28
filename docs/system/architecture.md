@@ -129,8 +129,18 @@ Minecraft.Windows.exe candidate requires the complete requested observation
 (only full Inspect reconciles uncertain transport). A successful negative
 native process-name scan with absent controller gates before/after returns
 null (no new observation), not a fabricated stopped snapshot or proof of
-installation. Startup, explicit refresh, focus/visibility hints and mutations
-retain their existing verification routes. Settings navigation and manual
+installation. Startup performs one automatic profile initialization attempt, followed
+by one independent session observation. An unavailable binding exposes
+the existing explicit Retry connection action rather than automatically
+replaying a potentially mutating initializer. The hidden WebView startup
+diagnostic observes existing binding metadata only and its location
+inspection does not publish locators or recover interrupted cutovers.
+Location fallback after a verified absent product catalog opens only
+the reviewed legacy replay, without repeating product discovery.
+Explicit Locate/Choose retain their independent post-selection binding
+check; neither location text nor a previous UI snapshot authorizes launch.
+Explicit refresh, focus/visibility hints and mutations retain their
+existing verification routes. Settings navigation and manual
 Settings Refresh stay full; selected Storage Refresh stays on demand.
 Unhinted external preference or installation changes can remain unobserved
 until the next full inspection. The settings age is not a hard deadline

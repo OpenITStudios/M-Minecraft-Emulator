@@ -168,8 +168,11 @@ that report, and the bootstrap revalidates identities on every launch. A cancell
 file picker leaves metadata unchanged. Publication uses a create-new temporary,
 flush and same-directory [MoveFileExW](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw)
 without replacement. An incomplete/different existing binding requires deliberate
-repair; no automatic reset is provided. Fresh product stores use the separate
-catalog and location owner described above. Actual new-machine login, first-run
+repair; no automatic reset is provided. Startup makes one automatic
+initialization attempt, then offers explicit Retry connection if needed;
+the independent session observation still runs. The hidden WebView
+diagnostic only inspects existing binding/location metadata.
+Fresh product stores use the separate catalog and location owner described above. Actual new-machine login, first-run
 dialog/import and installed gameplay still need acceptance.
 
 Full exit (user decision27October2026) restores presented windows, requests normal

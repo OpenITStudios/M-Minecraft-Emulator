@@ -1787,6 +1787,12 @@ fn registered_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N
             return Vec::from(stores).try_into().map_err(|_| invalid("Invalid product profile count"));
         }
     }
+    registered_replay_slots::<N>(observe)
+}
+
+// The caller may already have established product catalog absence in the
+// same observation. Do not reopen that catalog on the legacy fallback.
+fn registered_replay_slots<const N: usize>(observe: bool) -> io::Result<[SlotStorage; N]> {
     // Authorized observation reuses an existing pair or refuses. An unset
     // review policy must never silently become fresh account/world storage.
     let replay = if observe {

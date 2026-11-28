@@ -954,16 +954,12 @@
       }
       // Capture status is needed only when the native approval gate is open.
       if(recordingAvailable) void refreshRecordingStatus();
-      // Retry the canonical Windows initializer before offering recovery.
-      for(let attempt=0;attempt<3&&!disposed;attempt++){
-        if(attempt)await new Promise(resolve=>setTimeout(resolve,attempt*1000));
-        if(disposed)return;
-        await loadBinding();
-        // Binding already verifies every existing profile and registry hive.
-        // Data-location Inspect would open all five stores a second time
-        // before Play needs them. Data Storage inspects on navigation.
-        if(binding?.configured){await refresh();return;}
-      }
+      // Initialization may prepare or recover existing data. Its failure
+      // is not proof that repeating it is safe or useful. Retry connection
+      // remains an explicit user action; do one automatic attempt.
+      await loadBinding();
+      // Session observation is independent of binding success. Never
+      // reopen all profile stores through DataLocation just to enter Play.
       if(!disposed)await refresh();
     }finally{
       if(!disposed){
