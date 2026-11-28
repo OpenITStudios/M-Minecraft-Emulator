@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-07b: synthetic transport admission contract)
+## Current status — cross-platform-native (MAC-07c: public native session API review)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,96 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-07c — public native session API review and transport security boundary
+
+Reviewed pinned MAC-07b source and existing AppKit/ScreenCaptureKit lifecycle
+fixture. Preserve the Windows controller and wire; no new production route.
+The previously selected distinct-OS-user candidate requires explicit consent
+in each existing standard graphical login context, not credentials collected
+by the manager or a root service.
+
+Native API mapping (source/documentation evidence, not executed):
+- Security.SessionGetInfo(callerSecuritySession) returns the caller's
+  transient security session identifier and attributes. Require non-root
+  graphical context and expected effective UID; graphical access alone
+  does not prove a virtual desktop or exact game. Neither POSIX getsid
+  nor username is a substitute. Reobserve after login/session change.
+  [Apple SessionGetInfo](https://developer.apple.com/documentation/security/sessiongetinfo(_:_:_:))
+  and [login session model](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/SystemContexts.html).
+  Original [AuthSession.h](https://github.com/apple-oss-distributions/Security/blob/db15acbe6a7f257a859ad9a3bb86097bfe0679d9/OSX/libsecurity_authorization/lib/AuthSession.h)
+  defines callerSecuritySession, noSecuritySession and graphical/root bits.
+- Retain original NSRunningApplication in its authorized login context,
+  compare isEqual rather than PID alone; launchDate is optional and
+  available for LaunchServices launches only. Require exact expected
+  bundle/executable observation plus separate native signing/image gate.
+  [Apple processIdentifier](https://developer.apple.com/documentation/appkit/nsrunningapplication/processidentifier)
+  and [launchDate](https://developer.apple.com/documentation/appkit/nsrunningapplication/launchdate).
+  The MAC-07b synthetic process_birth field is not an OS API selection.
+- ScreenCaptureKit SCWindow owningApplication and windowID, with
+  SCContentFilter(desktopIndependentWindow:), can scope a capture to
+  one window. CGWindowListCopyWindowInfo is documented for the current
+  user session, not a central cross-user window enumerator. Use the
+  session-local retained target; refuse lost/replaced or ambiguous
+  window. [Apple SCWindow](https://developer.apple.com/documentation/screencapturekit/scwindow)
+  and [SCContentFilter](https://developer.apple.com/documentation/screencapturekit/sccontentfilter).
+  Existing screen-capture authorization and background GPU continuity
+  still required. No desktop-wide capture or prompt/grant automation.
+- CGEvent.postToPid and CGPreflightPostEventAccess are public, but
+  postToPid returns no delivery acknowledgement and targets a process,
+  not a particular window. Not proof of relative camera motion, key-up,
+  focus, independent gameplay or neutral release. No global input fallback,
+  no injection, no permission bypass; leave input blocked until matched
+  session-local evidence. [Apple CGEvent](https://developer.apple.com/documentation/coregraphics/cgevent).
+- XPC supports system-checked peer code requirements on received messages.
+  A signed exact Lazy Tester helper identifier plus approved team, UID
+  and audit/login context must be independently established. Public
+  [XPC peer code requirement](https://developer.apple.com/documentation/xpc/xpc_connection_set_peer_code_signing_requirement(_:_:))
+  and [Apple DTS guidance](https://developer.apple.com/forums/thread/681053)
+  prefer message-bound checks over PID-based code validation.
+  Original [SecCode.h](https://github.com/apple-oss-distributions/Security/blob/db15acbe6a7f257a859ad9a3bb86097bfe0679d9/OSX/libsecurity_codesigning/lib/SecCode.h)
+  declares SecCodeCreateWithXPCMessage using the message's associated
+  audit token. A connection endpoint can be carried in XPC messages,
+  but that does not solve the initial trusted cross-session rendezvous.
+  Per-user LaunchAgent registration requires participation of each
+  user; default launchd namespaces restrict cross-login lookup.
+  [Apple XPC](https://developer.apple.com/documentation/xpc),
+  [SMAppService register](https://developer.apple.com/documentation/servicemanagement/smappservice/register())
+  and [xpc_endpoint_create](https://developer.apple.com/documentation/xpc/xpc_endpoint_create(_:)).
+  No registration, signing key, agent deployment or root broker approved.
+- Local BSD socket is a possible bootstrap research path, not an
+  admitted channel. getpeereid returns connection-time effective UID/GID,
+  not code identity or login identity. Original XNU
+  [un.h](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/sys/un.h)
+  defines LOCAL_PEERTOKEN; [uipc_usrreq.c](https://github.com/apple-oss-distributions/xnu/blob/f6217f891ac0bb64f3d375211650a4c1ff8ca1ea/bsd/kern/uipc_usrreq.c)
+  obtains it by looking up the peer socket's last_pid and current task
+  audit token. Do not equate this with per-message authenticated sender
+  identity or assume it solves PID reuse/socket delegation; availability
+  and semantics on the minimum supported macOS still require proof.
+  [Apple getpeereid](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man3/getpeereid.3.html).
+  No globally writable socket directory, claimed UID or loopback fallback.
+
+Decision: prioritize native session-local capture/observation and
+message-bound XPC identity over a custom ARD protocol/crypto stack.
+XPC cross-session bootstrap is still unproven and not selected for
+production. A manually authorized Apple Standard virtual-session viewer
+remains the interim feasibility witness (not final workspace).
+The helper may eventually serve exact local game observations and
+presentation only; one central controller retains slot, lifecycle and
+input authority. No new code, dependencies, public wire, or fixture
+duplication in this research step.
+
+Next MAC-07d: establish a minimal consented rendezvous feasibility design
+using existing accounts and explicit launch, comparing an OS-mediated
+endpoint handoff with a scoped local bootstrap. Before authoring a live
+channel, establish how the initial peer is authenticated, how the exact
+login/target identity is obtained, and how ownership is revoked without
+adoption on reconnect. If no supported boundary meets these conditions,
+keep that transport blocked; do not invent a privileged service. A
+future synthetic native witness should establish two independent graphical
+contexts before any game launch or transport input. No native evidence,
+source build/tests or CI executed. All previous image, runtime, test,
+Windows and release holds preserved; full workspace parity BLOCKED.
 
 ### MAC-07b — synthetic transport admission contract
 
@@ -1106,7 +1196,8 @@ MAC-06b adds bounded cross-platform Mach-O evidence intake after transfer failur
 MAC-06c records observed provisioning allowlist and authentication framework metadata;
 MAC-06d records bounded Mach-O observations of two actual bundled frameworks;
 MAC-07a reviews Standard-session transport and exact-target admission boundaries;
-MAC-07b adds a test-only synthetic transport admission contract.
+MAC-07b adds a test-only synthetic transport admission contract;
+MAC-07c maps public native APIs and identifies the remaining trusted rendezvous gate.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
