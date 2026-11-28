@@ -172,10 +172,13 @@ Within a read-only report or review, reuse verified handle metadata
 and pinned directory chains; never carry mutation permission across
 requests. The approximate profile-size traversal reuses the current
 Windows directory-entry metadata (no separate per-file path stat);
-each entered directory is still freshly opened and verified, reparse
-entries are excluded, and the shared budget/partial bounds are unchanged.
+the original profile root handle is revalidated and reused, each entered
+child directory is freshly opened and verified, reparse entries are
+excluded, and the shared budget/partial bounds are unchanged.
 File sizes reflect enumeration time, not an atomic snapshot. Cache and
 selective-data review/disposition retain their separate handle-based proof;
+selected-tree leaf digest reuses the identity already read from its
+retained verified handle, without changing digest bytes or file metadata;
 disk space is still queried on the individual verified path. No persistent
 size cache, background traversal, or new watcher. Selected reads and opted-in mutation receipts require one exact requested storage row; full report/default mutation consumers still require five ordered rows.
 

@@ -642,6 +642,10 @@ a read-only original native window. Only an independently authorized
 Player/admin can dispatch the original in-game command: Lazy Tester
 **never sends it**. Repeated pending reads inspect appended bytes;
 terminal snapshots are reused without re-reading the complete ZIP.
+For coordinated Testing, a fresh owner-matching FINAL reservation with
+the same reported outcome and exact report digest also replaces a repeated
+finalize request. A conflicting FINAL reference remains unconfirmed;
+archive integrity checks and explicit desktop publication remain independent.
 `restart=true` starts a separate checkpoint, not an automatic retry.
 
 A read-only Testing run may optionally be correlated with the original

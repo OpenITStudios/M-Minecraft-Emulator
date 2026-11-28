@@ -1758,10 +1758,25 @@ test('native-coordinated Testing admits one MCP process and rejects a rival',asy
   assert.equal(completed.nativeRunStatus,'FINAL');
   assert.match(completed.reportDigest,/^[a-f0-9]{64}$/);
   const snap=[catalogs,captures];
+  const beforeReuse=calls.length;
   const reused=await one.callTool('probe_qa',
     {slot:2,coordinateNative:true,publishToDesktop:true});
   assert.equal(reused.reportDigest,completed.reportDigest);
   assert.deepEqual([catalogs,captures],snap);
+  assert.deepEqual(calls.slice(beforeReuse).map(x=>x.operation),['reserve'],
+    'Fresh matching FINAL reference needs no repeated finalize');
+  // Conflict must not replay finalize, publish activity or create a new plan.
+  const run=nativeRuns.get(2);
+  const originalDigest=run.reportDigest;
+  run.reportDigest='f'.repeat(64);
+  const beforeConflict=calls.length;
+  const conflicted=await one.callTool('probe_qa',
+    {slot:2,coordinateNative:true,publishToDesktop:true});
+  assert.equal(conflicted.nativeRunStatus,'FINAL_REFERENCE_UNCONFIRMED');
+  assert.equal(conflicted.desktopDelivery,'STATUS_DELIVERY_UNAVAILABLE');
+  assert.deepEqual(calls.slice(beforeConflict).map(x=>x.operation),['reserve']);
+  assert.deepEqual([catalogs,captures],snap);
+  run.reportDigest=originalDigest;
   const rivalAgain=await two.callTool('probe_qa',
     {slot:2,coordinateNative:true,publishToDesktop:true});
   assert.equal(rivalAgain.reason,'TESTING_RUN_ALREADY_RESERVED');

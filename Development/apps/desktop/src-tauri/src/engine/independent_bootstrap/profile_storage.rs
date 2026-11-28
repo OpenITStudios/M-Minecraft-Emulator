@@ -133,8 +133,19 @@ pub(super) fn clear_old_logs(private: &File, inactive: bool) -> io::Result<()> {
     plan_expired_logs(root,ticks,budget,true,producer.owns)?.dispose()
 }
 
-pub(super) fn scan_profile_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget) {
-    scan_size(path, result, budget, 0);
+pub(super) fn scan_profile_size(private: &File, result: &mut ProfileStorage, budget: InspectionBudget) {
+    // The actor already owns this ordinary profile directory without
+    // delete sharing. Revalidate the original handle and resolve its
+    // current path, rather than opening another root directory handle.
+    if budget.exhausted() || result.files >= 100_000 || super::directory_id(private).is_err() {
+        result.partial = true;
+        return;
+    }
+    let Ok(path) = directory_path(private) else {
+        result.partial = true;
+        return;
+    };
+    scan_pinned_size(&path, result, budget, 0);
 }
 
 // Metadata only, bounded, and no traversal through junctions/symlinks. Not a cache classifier.
@@ -147,6 +158,15 @@ fn scan_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget,
         result.partial = true;
         return;
     };
+    scan_pinned_size(path, result, budget, depth);
+}
+
+// Only called while the verified ordinary directory handle is retained.
+fn scan_pinned_size(path: &Path, result: &mut ProfileStorage, budget: InspectionBudget, depth: usize) {
+    if budget.exhausted() {
+        result.partial = true;
+        return;
+    }
     let Ok(entries) = std::fs::read_dir(path) else {
         result.partial = true;
         return;
@@ -297,7 +317,8 @@ impl CachePlan {
     fn visit_pinned_tree(&mut self, path: &Path, root: &Path, depth: usize,
         directory: File) -> io::Result<()> {
         if self.selected_tree {
-            self.record_tree_entry(path, root, &directory, true)?;
+            let identity = super::directory_id(&directory)?;
+            self.record_tree_entry(path, root, &directory, true, &identity)?;
         }
         self.directories.push(directory);
         for entry in fs::read_dir(path)? {
@@ -322,7 +343,7 @@ impl CachePlan {
                     })
                     .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
                     .open(&path)?;
-                image_id(&file)?;
+                let identity = image_id(&file)?;
                 let standard = crate::engine::windows_file_identity::standard(&file)?;
                 if standard.NumberOfLinks != 1
                     || standard.Directory
@@ -337,14 +358,15 @@ impl CachePlan {
                     .bytes
                     .checked_add(standard.EndOfFile as u64)
                     .ok_or_else(|| invalid("Cache size overflow"))?;
-                if self.selected_tree { self.record_tree_entry(&path, root, &file, false)?; }
+                if self.selected_tree { self.record_tree_entry(&path, root, &file, false, &identity)?; }
                 self.files.push(file);
             }
         }
         Ok(())
     }
 
-    fn record_tree_entry(&mut self, path: &Path, root: &Path, file: &File, directory: bool) -> io::Result<()> {
+    fn record_tree_entry(&mut self, path: &Path, root: &Path, file: &File, directory: bool,
+        identity: &FILE_ID_INFO) -> io::Result<()> {
         use std::os::windows::ffi::OsStrExt;
         let relative = path.strip_prefix(root).map_err(|_| invalid("Selected tree path escaped root"))?;
         let mut record = Vec::new();
@@ -352,9 +374,9 @@ impl CachePlan {
         let name: Vec<u16> = relative.as_os_str().encode_wide().collect();
         record.extend_from_slice(&(name.len() as u64).to_le_bytes());
         for unit in name { record.extend_from_slice(&unit.to_le_bytes()); }
-        let id = if directory { super::directory_id(file)? } else { image_id(file)? };
-        record.extend_from_slice(&id.VolumeSerialNumber.to_le_bytes());
-        record.extend_from_slice(&id.FileId.Identifier);
+        // The same retained handle supplied the validated identity above.
+        record.extend_from_slice(&identity.VolumeSerialNumber.to_le_bytes());
+        record.extend_from_slice(&identity.FileId.Identifier);
         // Directory timestamps can change on unrelated enumeration; file
         // size and last-write metadata detect ordinary same-size edits.
         if !directory {
@@ -931,8 +953,19 @@ mod size_tests {
         std::fs::write(directory.join("a.bin"), [0u8; 31]).unwrap();
         let mut fresh = expired.clone();
         fresh.partial = false;
-        scan_size(&directory, &mut fresh, InspectionBudget::new(Duration::from_secs(2)), 0);
+        let retained = open_directory(&directory, FILE_READ_ATTRIBUTES | FILE_LIST_DIRECTORY).unwrap();
+        scan_profile_size(&retained, &mut fresh, InspectionBudget::new(Duration::from_secs(2)));
         assert_eq!((fresh.bytes, fresh.files, fresh.partial), (54, 2, false));
+        let mut refused = expired.clone();
+        refused.partial = false;
+        let leaf = File::open(directory.join("a.bin")).unwrap();
+        scan_profile_size(&leaf, &mut refused, InspectionBudget::new(Duration::from_secs(2)));
+        assert_eq!((refused.bytes, refused.files, refused.partial), (0, 0, true));
+        drop(leaf);
+        let mut exhausted = expired.clone();
+        exhausted.partial = false;
+        scan_profile_size(&retained, &mut exhausted, InspectionBudget::new(Duration::ZERO));
+        assert_eq!((exhausted.bytes, exhausted.files, exhausted.partial), (0, 0, true));
 
         // A junction to the ordinary nested folder must not count its
         // contents twice or become a path traversed by the size estimate.
@@ -947,7 +980,8 @@ mod size_tests {
         assert!(status.status.success());
         let mut linked = expired.clone();
         linked.partial = false;
-        scan_size(&directory, &mut linked, InspectionBudget::new(Duration::from_secs(2)), 0);
+        scan_profile_size(&retained, &mut linked, InspectionBudget::new(Duration::from_secs(2)));
+        drop(retained);
         // Remove only the disposable junction, not its target.
         std::fs::remove_dir(&link).unwrap();
         assert_eq!((linked.bytes, linked.files, linked.partial), (54, 2, true));

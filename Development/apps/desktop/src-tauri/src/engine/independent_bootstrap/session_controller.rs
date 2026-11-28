@@ -850,7 +850,7 @@ impl Sessions {
                         }
                     }
                 }
-                profile_storage::scan_profile_size(&path, &mut result, budget);
+                profile_storage::scan_profile_size(&store.private, &mut result, budget);
                 Ok(result)
             })
             .collect()

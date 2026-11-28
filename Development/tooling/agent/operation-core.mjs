@@ -914,10 +914,21 @@ export function createOperationCore(config,{
           const reportDigest=createHash('sha256')
             .update(JSON.stringify(result)).digest('hex');
           try {
-            terminalReference=await coordinateTesting(config.executable,{
-              operation:'finalize',slot,runId,ownerId:testingOwnerId,
-              reportedStatus:outcome,reportDigest,
-            });
+            // The fresh owner-matching reservation can already be FINAL.
+            // Do not send a second finalize for that exact immutable report.
+            // A different digest/outcome is a conflict, never a repair/replay.
+            terminalReference=runRef.phase==='FINAL'?runRef:
+              await coordinateTesting(config.executable,{
+                operation:'finalize',slot,runId,ownerId:testingOwnerId,
+                reportedStatus:outcome,reportDigest,
+              });
+            if(terminalReference?.phase!=='FINAL'||
+               terminalReference.slot!==slot||terminalReference.runId!==runId||
+               terminalReference.ownerMatch!==true||
+               terminalReference.reportedStatus!==outcome||
+               terminalReference.reportDigest!==reportDigest) {
+              throw new Error('TESTING_NATIVE_RECEIPT_INVALID');
+            }
           } catch {
             return {...result,operatorNextAction,testingRunId:runId,
               nativeRunStatus:'FINAL_REFERENCE_UNCONFIRMED',
