@@ -4,8 +4,15 @@ use serde::{Deserialize, Serialize};
 use std::io;
 use super::agent_activity::AgentActivityReport;
 use super::controller_testing_runs::{TestingRunInspection, TestingRunView};
+#[cfg(windows)]
+use super::controller_testing_runs::{valid_testing_id, valid_testing_digest, valid_testing_outcome};
 #[cfg(feature="mc02-native-input")]
 use super::controller_ai_input_leases::{AgentControlMode, AiInputFrame, Mc02BatchOrigin};
+#[cfg(all(windows,feature="mc02-native-input"))]
+use super::controller_ai_input_leases::{admit_native_input_frame, validate_ai_input_group, validate_ai_lease_slots, valid_ai_writer_id};
+
+// Includes the terminating newline. Serialized JSON must be strictly smaller.
+pub(super) const SESSION_FRAME_LIMIT: usize = 32768;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -350,3 +357,184 @@ impl SessionRequest {
 }
 
 pub(crate) type SessionReply = Result<SessionSnapshot, String>;
+
+// Count the exact serde JSON representation without allocating a discarded
+// frame. Actual pipe writes still serialize one complete frame before I/O.
+#[cfg(any(windows,test))]
+pub(super) fn serialized_request_size(request: &SessionRequest) -> io::Result<usize> {
+    struct Count(usize);
+    impl io::Write for Count {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0 = self.0.saturating_add(bytes.len());
+            Ok(bytes.len())
+        }
+        fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    }
+    let mut size = Count(0);
+    serde_json::to_writer(&mut size, request).map_err(io::Error::other)?;
+    Ok(size.0)
+}
+
+#[cfg(windows)]
+pub(in crate::engine) fn validate_request(request: &SessionRequest) -> io::Result<()> {
+    if let SessionRequest::InspectAgentTarget {slot}=*request {
+        if !(1..=5).contains(&slot) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+        }
+    }
+    if let SessionRequest::ReviewSelectiveInventory { selections, .. } | SessionRequest::ConfirmSelectedWorlds { selections, .. } | SessionRequest::ConfirmSelectedPacks { selections, .. } = request {
+        let mut identities = std::collections::HashSet::new();
+        let mut names = std::collections::HashSet::new();
+        if selections.is_empty() || selections.len() > 128 || selections.iter().any(|s| {
+            let roots: &[&str] = match s.category {
+                SelectiveCategory::Worlds => &["minecraftWorlds"],
+                SelectiveCategory::ResourcePacks => &["resource_packs", "development_resource_packs"],
+                SelectiveCategory::BehaviorPacks => &["behavior_packs", "development_behavior_packs"],
+            };
+            !roots.contains(&s.root.as_str()) || s.name.is_empty() || s.name.len() > 255 ||
+                s.name == "." || s.name == ".." ||
+                s.name.chars().any(|c| c.is_control() || matches!(c, '/' | '\\' | ':')) ||
+                s.identity.len() != 64 ||
+                !s.identity.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) ||
+                !identities.insert(s.identity.as_str()) ||
+                !names.insert((s.root.as_str(), s.name.to_ascii_lowercase()))
+        }) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selective review selection"));
+        }
+        // Bound the existing pipe contract before starting a transport worker.
+        if serialized_request_size(request)? >= SESSION_FRAME_LIMIT {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Selection exceeds the session request limit"));
+        }
+    }
+    if let SessionRequest::ConfirmSelectedPacks { slot, selections, confirmation_token } = request {
+        if !(1..=5).contains(slot) || selections.iter().any(|s| s.category == SelectiveCategory::Worlds) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selected-pack confirmation"));
+        }
+    }
+    if let SessionRequest::ConfirmSelectedWorlds { slot, selections, confirmation_token } = request {
+        if !(1..=5).contains(slot) || selections.iter().any(|s| s.category != SelectiveCategory::Worlds) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Invalid selected-world confirmation"));
+        }
+    }
+    match request {
+        SessionRequest::TestingInspect {slot,owner_id} => {
+            if !(1..=5).contains(slot)||!valid_testing_id(owner_id) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    "Invalid read-only Testing inspection"));
+            }
+        }
+        SessionRequest::TestingReserve {slot,owner_id,run_id,replace_run_id} => {
+            if !(1..=5).contains(slot)||!valid_testing_id(owner_id)||
+                !valid_testing_id(run_id)||
+                replace_run_id.as_deref().is_some_and(|v|!valid_testing_id(v)){
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    "Invalid Testing reservation"));
+            }
+        }
+        SessionRequest::TestingFinalize {slot,owner_id,run_id,
+            reported_status,report_digest} => {
+            if !(1..=5).contains(slot)||!valid_testing_id(owner_id)||
+                !valid_testing_id(run_id)||
+                !valid_testing_outcome(reported_status)||
+                !valid_testing_digest(report_digest) {
+                return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                    "Invalid Testing final report reference"));
+            }
+        }
+        _=>{}
+    }
+    if let SessionRequest::PublishAgentActivity {ref activity}=*request {
+        if !activity.valid_ingress() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid agent activity report"));
+        }
+    }
+    if let SessionRequest::ClearProfileData {slot,ref confirmation_token,ref confirmation_name,..}=*request {
+        if !(1..=5).contains(&slot) || confirmation_token.len()!=64 || !confirmation_token.bytes().all(|byte|byte.is_ascii_hexdigit()) || *confirmation_name!=format!("Minecraft - {slot}") {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Confirm the exact launcher name before clearing all data"));
+        }
+    }
+    if let SessionRequest::SavePerformance {active_fps,background_fps}=*request {
+        manager_settings::PerformanceSettings {active_fps,background_fps}.validate()?;
+    }
+    if matches!(*request, SessionRequest::ApplyGraphicsPreset { slot, .. } | SessionRequest::Launch { slot } | SessionRequest::CloseOne { slot } | SessionRequest::OpenProfileFolder { slot, .. } | SessionRequest::InspectProfileStorage { slot } | SessionRequest::ClearProfileCache { slot, .. } | SessionRequest::ClearProfileDownloadCache { slot } | SessionRequest::InspectSelectiveInventory { slot, .. } | SessionRequest::ReviewSelectiveInventory { slot, .. } | SessionRequest::ResetGameSettings { slot, .. } | SessionRequest::RestoreGameSettings { slot, .. } | SessionRequest::DisableImprovedInputResponse { slot } | SessionRequest::EnableTextureStreaming { slot } | SessionRequest::DisableTextureStreaming { slot } if !(1..=5).contains(&slot))
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Unknown Minecraft profile",
+        ));
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::LaunchMc02Experiment {slot}=*request {
+        if slot!=2 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Legacy experimental input launch only creates MC02"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::LaunchAiExperiment {slot,mode}=*request {
+        if !(1..=5).contains(&slot) ||
+           (mode==AgentControlMode::HumanPlusFourAi && slot==1) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Hybrid MC01 belongs to the human and has no AI channel"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::Mc02Input {
+        slot,keys,dx,dy,ttl_ms,issued_at_ms,batch_origin,
+    }=*request {
+        // Native IPC must not trust CLI-provided control values or a
+        // caller-supplied PID/birth claim. The actor separately verifies
+        // this original-process witness before any legacy state change.
+        admit_native_input_frame(slot,keys,dx,dy,ttl_ms)?;
+        if issued_at_ms==0 || batch_origin.is_some_and(|pin|!pin.valid()) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid native MC02 issue time or batch origin"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiInputGroup {
+        ref frames,issued_at_ms,deadline_at_ms,
+        ref owner_id,ref lease_epoch,
+    } = *request {
+        validate_ai_input_group(frames,issued_at_ms,deadline_at_ms)?;
+        if !valid_ai_writer_id(owner_id)||!valid_ai_writer_id(lease_epoch) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid AI writer or transaction fencing epoch"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiLeasedInput {
+        slot,keys,dx,dy,ttl_ms,issued_at_ms,
+        ref owner_id,ref lease_epoch,
+    } = *request {
+        admit_native_input_frame(slot,keys,dx,dy,ttl_ms)?;
+        if issued_at_ms==0||!valid_ai_writer_id(owner_id)||
+           !valid_ai_writer_id(lease_epoch) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid leased AI input or transaction epoch"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiLeaseAcquire {
+        ref slots,ref owner_id,mode,ref lease_epoch,neutral_only:_,
+    }=*request {
+        validate_ai_lease_slots(slots,owner_id)?;
+        if !valid_ai_writer_id(lease_epoch) ||
+           (mode==AgentControlMode::HumanPlusFourAi && slots.contains(&1)) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid AI lease epoch or protected hybrid MC01"));
+        }
+    }
+    #[cfg(feature="mc02-native-input")]
+    if let SessionRequest::AiLeaseRelease {
+        ref slots,ref owner_id,ref lease_epoch,
+    }=*request {
+        validate_ai_lease_slots(slots,owner_id)?;
+        if !valid_ai_writer_id(lease_epoch) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "Invalid AI release fencing epoch"));
+        }
+    }
+    Ok(())
+}

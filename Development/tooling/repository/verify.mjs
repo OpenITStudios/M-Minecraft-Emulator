@@ -205,6 +205,7 @@ const NAMED_OWNERS=Object.freeze([
   ['struct NativeTestingRunBook',OWNERSHIP_ENGINE+'native_clients_session/controller_testing_runs.rs'],
   ['struct AiLeaseBook',OWNERSHIP_ENGINE+'native_clients_session/controller_ai_input_leases.rs'],
   ['enum SessionRequest',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
+  ['fn validate_request',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
   ['struct SessionSnapshot',OWNERSHIP_ENGINE+'native_clients_session/session_protocol.rs'],
   ['struct PendingEducationBootstrap',OWNERSHIP_ENGINE+'independent_bootstrap.rs'],
   ['struct BootstrapLibrary',OWNERSHIP_ENGINE+'independent_bootstrap/reviewed_bootstrap_payload.rs'],

@@ -1,6 +1,6 @@
 //! Local reconnection for one retained controller, not a privileged/general broker.
 //! Same logon, session, user, integrity and executable file identity at both peers.
-use super::{read_message, SessionReply, SessionRequest};
+use super::{read_message, SessionReply, SessionRequest, SESSION_FRAME_LIMIT};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{File, OpenOptions},
@@ -422,7 +422,7 @@ fn acknowledge_confirmed_reply(writer:&mut impl Write,reply:SessionReply)->Sessi
 // Serialize one complete, bounded frame before writing to the byte-mode pipe.
 fn write_request(writer: &mut impl Write, request: &SessionRequest) -> io::Result<()> {
     let mut frame = serde_json::to_vec(request)?;
-    if frame.len() >= 32768 {
+    if frame.len() >= SESSION_FRAME_LIMIT {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "Session request exceeded its limit"));
     }
     frame.push(b'\n');
@@ -771,7 +771,7 @@ fn serve(
 
 fn send_reply(reader: &mut BufReader<&mut ServerPipe>, reply: SessionReply) -> io::Result<()> {
     let mut bytes = serde_json::to_vec(&reply)?;
-    if bytes.len() >= 32768 {
+    if bytes.len() >= SESSION_FRAME_LIMIT {
         bytes = serde_json::to_vec(&SessionReply::Err(
             "Controller response exceeded its limit".into(),
         ))?;

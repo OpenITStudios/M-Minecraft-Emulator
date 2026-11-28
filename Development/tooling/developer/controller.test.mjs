@@ -546,6 +546,7 @@ test('extracted session owners retain their precise cross-module review routes',
   const root='Development/apps/desktop/src-tauri/src/engine/native_clients_session/';
   const cases=[
     ['session_protocol.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
+    ['tests.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
     ['controller_ai_input_leases.rs',['agent-input-lease','native-input-v4']],
     ['controller_testing_runs.rs',['agent-input-lease']],
     ['agent_activity.rs',['agent-activity-mirror']]
@@ -655,6 +656,7 @@ test('P44 Rust/C++ ABI v4 consumer changes require bounded cross-owner input rev
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session/controller_ai_input_leases.rs',
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs',
+    'Development/apps/desktop/src-tauri/src/engine/native_clients_session/tests.rs',
     controller,
     'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/experimental_input_operations.rs',
     'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/owned_game_windows.rs',
