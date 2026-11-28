@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-03a)
+## Current status — cross-platform-native (MAC-03b: artifact metadata tooling)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,24 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-03b — explicit Mac artifact inspection (source only)
+
+Authored `Development/tooling/acceptance/macos/education-target.mjs` using
+existing Node and macOS plutil/lipo/codesign. Explicit offline .app only;
+no host data discovery, credential read, installation, game launch, new
+runtime dependency or controller. Collect bounded bundle metadata, SHA-256
+of executable, architecture-specific signature identity/requirement hash and
+entitlement presence; check path/metadata stability. A valid signature is
+not a publisher pin or official package provenance. Absent singleton key or
+entitlement output remains unknown; all receipts deny runtime admission.
+No automatic invocation; pure fixtures added to existing native-feasibility
+route; source review only, NOT_EXECUTED. No DMG bytes or Mac target available.
+MAC-02 isolation gate remains BLOCKED; no alternative provider or fake Mac
+launch. Tooling is an evidence collector, not a runtime adapter. Apple refs:
+[code identity](https://developer.apple.com/documentation/technotes/tn3127-inside-code-signing-requirements/),
+[architecture slices](https://developer.apple.com/documentation/apple-silicon/building-a-universal-macos-binary),
+[entitlement display](https://developer.apple.com/documentation/technotes/tn3125-inside-code-signing-provisioning-profiles).
 
 ### MAC-03a — shared UI session capability (source only)
 
@@ -157,7 +175,7 @@ managed launch until a safe mechanism is established; two PIDs are not proof.
    performance claim or source-only PASS.
 
 MAC-01 and MAC-02 change planning only; MAC-03a changes common frontend
-source and matching fixtures only. No native runtime code, dependencies,
+source and matching fixtures; MAC-03b adds explicit offline artifact tooling. No native runtime code, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
 and defensible isolation mechanism. Preserve all existing holds.

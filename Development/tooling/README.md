@@ -17,6 +17,7 @@ a second live game process/session owner.
 | `acceptance/` | Native and historical acceptance collectors; older Sandboxie/VM results are not current gameplay proof |
 | [`lazytester-particles/`](lazytester-particles/README.md) | Optional Particle Tuning v0.3 offline .mcpack builder; no automatic installation |
 | [`lazytester-textures/`](lazytester-textures/README.md) | Optional block-only Texture Lite v0.1 offline .mcpack builder; entity/PBR extension retired |
+| `acceptance/macos/education-target.mjs` | Explicit offline Mac bundle metadata collector; no native launch or runtime admission |
 | `acceptance/windows/education-target.ps1` | **Active** registered Minecraft Education executable resolver, moved from the retired isolation-source tree |
 | `local-test/` | Optional source acceptance bookkeeping, not runtime evidence until executed |
 
@@ -118,3 +119,21 @@ the existing builder owner and relevant tests**. Historical Git commits and
 RAM studies remain references, not authorization to restart optimization.
 Actual Minecraft/Windows compatibility and savings require new separate
 approval and runtime evidence. No CI or monitoring is introduced here.
+
+## macOS native artifact review (source prepared)
+
+After a separately authorized Mac metadata phase, the existing Node toolchain
+can inspect an explicit absolute path to an authorized, unchanged offline
+`.app` copy with `node Development/tooling/acceptance/macos/education-target.mjs
+"/absolute/path/Minecraft Education.app"` (one command from the checkout root).
+Requires macOS standard tools and available `lipo` (Command Line Tools).
+No install, mount, game launch, credential access or profile data scan occurs.
+The report includes bundle metadata, executable SHA-256 and architecture-specific
+signature/entitlement summaries; it does not expose local paths or raw group
+values. Empty entitlement output remains unknown. Codesign integrity is not a
+Microsoft publisher pin, official DMG verification, loaded-image proof or
+instance isolation. Use an unchanged offline copy; metadata checks are not
+atomic against concurrent replacement. Refusal emits a generic JSON status.
+The tool is not mounted in product, DEV.cmd, MCP or startup. See
+[development handoff](../../planning/development.md). Source fixtures are
+included in the existing native-feasibility test route, NOT_EXECUTED.

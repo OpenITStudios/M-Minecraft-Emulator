@@ -22,7 +22,7 @@
     "verify:source": "npm run verify:repository -- --require-committed-desktop-lock && npm run format:runtime && npm run check:desktop && npm run test:repository && npm run test:localtest && npm run test:native-feasibility && npm run test:native-performance && npm run test:presentmon && npm run check:runtime && npm run test:runtime",
     "verify:quick": "npm run check:structure && npm run check:dependencies && npm run test:repository && npm --prefix apps/desktop run check:frontend && npm run check:rust",
     "package:windows": "node apps/desktop/scripts/package-lazy-tester.mjs",
-    "test:native-feasibility": "node --test tooling/acceptance/evaluate-native-feasibility.test.mjs tooling/acceptance/watch-workspace-process.test.mjs tooling/acceptance/evaluate-appcontainer-isolation.test.mjs",
+    "test:native-feasibility": "node --test tooling/acceptance/evaluate-native-feasibility.test.mjs tooling/acceptance/watch-workspace-process.test.mjs tooling/acceptance/evaluate-appcontainer-isolation.test.mjs tooling/acceptance/macos/education-target.test.mjs",
     "native-feasibility:review": "node tooling/acceptance/evaluate-native-feasibility.mjs",
     "test:native-performance": "node --test tooling/acceptance/evaluate-native-performance.test.mjs",
     "native-performance:review": "node tooling/acceptance/evaluate-native-performance.mjs",
