@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-13a: OneAuth binary evidence)
+## Current status — cross-platform-native (MAC-13b: fixed-home source evidence)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,54 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-13b — current Swift Foundation corroborates fixed-home candidate
+
+Pinned original swiftlang/swift-foundation revision
+72996dbdde1147dd142f5b2ce4c7998c689ba9bb. Unlike the earlier historical
+CoreFoundation-only evidence, current
+[String+Path.swift](https://github.com/swiftlang/swift-foundation/blob/72996dbdde1147dd142f5b2ce4c7998c689ba9bb/Sources/FoundationEssentials/String/String%2BPath.swift#L351-L413)
+checks CFFIXED_USER_HOME through Platform.getEnvSecure before resolving
+the UID home, then HOME as fallback; the
+[Platform.swift](https://github.com/swiftlang/swift-foundation/blob/72996dbdde1147dd142f5b2ce4c7998c689ba9bb/Sources/FoundationEssentials/Platform.swift#L258-L302)
+non-Windows/Darwin branch checks issetugid before getenv.
+The [Darwin search-path sequence](https://github.com/swiftlang/swift-foundation/blob/72996dbdde1147dd142f5b2ce4c7998c689ba9bb/Sources/FoundationEssentials/FileManager/SearchPaths/FileManager%2BDarwinSearchPaths.swift)
+uses sysdir; [search-path expansion](https://github.com/swiftlang/swift-foundation/blob/72996dbdde1147dd142f5b2ce4c7998c689ba9bb/Sources/FoundationEssentials/FileManager/SearchPaths/FileManager%2BSearchPaths.swift#L89-L117)
+expands tilde using the path helper. This corroborates a plausible
+ordinary Foundation user-domain Application Support route. Counterexample:
+the FOUNDATION_FRAMEWORK shared-user branch deliberately resolves real
+home through the UID rather than ordinary tilde expansion. No claim
+that this upstream revision is the Foundation binary on the target Mac,
+that LaunchServices preserves every variable, or that the game chooses
+these APIs. Apple NSHomeDirectory public contract still describes actual
+user/app home, not a supported per-process isolation guarantee.
+
+Original Education bundle resources previously inspected in MAC-13b
+research: edu_worlds_screen.json binds file-storage mode visibility to
+external-storage permission; general_section.json offers external/package
+radio choices, not arbitrary root. Official
+[world location reference](https://edusupport.minecraft.net/hc/en-us/articles/4404785703316-Location-of-World-Files)
+documents this choice for Android, not a Mac profile selector.
+Do not modify resource UI to invent an unsupported directory option.
+
+Decision: retain existing fixed-home candidate (absolute private HOME
+and CFFIXED_USER_HOME, per-slot TMPDIR, original signed app, normal
+AppKit multi-instance, official account selection). This is a candidate
+recipe for the existing synthetic fixture only; do not mount it as a
+production game launcher. Existing --fixed-home-probe already checks
+child environment, Foundation home, Application Support, caches, temp,
+and independent preferences across reopen. No duplicate fixture needed.
+MAC-13a OneAuth evidence still makes shared-user/account and App Group
+behavior separate from ordinary home routing. No custom credential store,
+new OS user, global environment or preferences manipulation, or re-signing.
+
+Container availability check again failed before reading bytes. Do not
+retry the full main binary transfer. No new runtime/fixture changes:
+existing compact offline MAC-09 report or documented vendor route can
+narrow game-owned file/account behavior; neither substitutes for later
+authorized actual native acceptance. Source reviewed, NOT_EXECUTED.
+Native launch/presentation admission remains false, not
+SOURCE_READY_FOR_LOCAL. All test/CI/release holds remain.
 
 ### MAC-13a — actual OneAuth binary narrows the account route
 
