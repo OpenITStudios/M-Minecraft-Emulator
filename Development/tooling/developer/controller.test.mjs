@@ -542,6 +542,23 @@ test('extracted session owners retain their precise cross-module review routes',
   }
 });
 
+test('extracted controller owners retain scoped counterpart review',()=>{
+  const root='Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/';
+  const cases=[
+    ['owned_game_windows.rs',['agent-input-lease','native-desktop-session','native-input-v4']],
+    ['audio_maintenance.rs',['native-desktop-session']],
+    ['reply_snapshot.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
+    ['tests.rs',['agent-input-lease','native-desktop-session','native-input-v4']]
+  ];
+  for(const [file,expected] of cases){
+    const path=root+file;
+    const review=qualityReviewForPaths([path],SHA);
+    assert.deepEqual(review.crossModuleReviews.map(seam=>seam.id),expected,file);
+    assert.ok(review.crossModuleReviews.every(seam=>seam.reviewParties.some(p=>
+      p.selectedInChangeSet&&p.inspectFiles.includes(path))));
+  }
+});
+
 test('desktop-only native or UI changes route to their exact consumer boundaries',()=>{
   const session=qualityReviewForPaths(
     ['Development/apps/desktop/src-tauri/src/engine/process_identity.rs'],SHA);
@@ -599,7 +616,11 @@ test('P44 Rust/C++ ABI v4 consumer changes require bounded cross-owner input rev
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session/controller_ai_input_leases.rs',
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs',
-    controller,writer
+    controller,
+    'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/owned_game_windows.rs',
+    'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/reply_snapshot.rs',
+    'Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller/tests.rs',
+    writer
   ]);
   assert.deepEqual(seam.reviewParties[2].inspectFiles,[reader,header]);
   assert.ok(review.areas.some(area=>area.id==='native-input-v4'));
