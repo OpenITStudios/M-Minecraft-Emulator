@@ -10,10 +10,11 @@ use security_framework_sys::code_signing::{
     SecRequirementRef, SecStaticCodeRef,
 };
 use serde::{Deserialize, Serialize};
-use objc2::rc::autoreleasepool;
+use objc2::{rc::autoreleasepool, ClassType};
 use objc2_app_kit::NSRunningApplication;
-use objc2_foundation::NSString;
+use objc2_foundation::{NSObjectProtocol, NSString};
 use std::{
+    collections::HashSet,
     fs::{self, Metadata, OpenOptions},
     io::{self, Cursor, Read},
     os::unix::fs::{MetadataExt, OpenOptionsExt},
@@ -246,15 +247,47 @@ fn inspect_at(applications: &Path, verify: impl FnOnce(&Path) -> SignatureObserv
     }
 }
 
-// AppKit's bundle-id list is an atomic, run-loop-sensitive snapshot of
-// user applications, not all processes, exact installed-image identity or
-// an ownership token. Preserve even unmatched/manual copies; never adopt.
-// No polling, PID enumeration, launch, termination or profile assignment.
+// Recheck the original retained AppKit object, never treat a fresh PID
+// lookup as ownership. Apple explicitly requires isEqual for this comparison.
+// This is still only a run-loop-sensitive observation, not an OS process
+// handle, mapped-image proof, launch receipt or permission to close.
+fn reobserve_application_pid(app: &NSRunningApplication) -> Option<libc::pid_t> {
+    let pid = app.processIdentifier();
+    if pid <= 0 || pid as u32 == std::process::id() || app.isTerminated() {
+        return None;
+    }
+    let current = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)?;
+    if !app.isEqual(Some(current.as_super().as_super()))
+        || current.isTerminated() || app.isTerminated()
+        || current.processIdentifier() != pid || app.processIdentifier() != pid
+    {
+        return None;
+    }
+    Some(pid)
+}
+
+// Never report a smaller count by silently dropping an ambiguous app.
+fn distinct_observation_count(pids: impl IntoIterator<Item = Option<libc::pid_t>>) -> Option<u32> {
+    let mut distinct = HashSet::new();
+    for observed in pids {
+        let pid = observed?;
+        if pid <= 0 || !distinct.insert(pid) {
+            return None;
+        }
+    }
+    u32::try_from(distinct.len()).ok()
+}
+
+// On-demand bundle-id discovery only. Keep all external apps unmanaged;
+// release every temporary reference when the observation returns.
 fn observe_application_count() -> Option<u32> {
     autoreleasepool(|_| {
         let identifier = NSString::from_str(EXPECTED_BUNDLE_ID);
         let applications = NSRunningApplication::runningApplicationsWithBundleIdentifier(&identifier);
-        u32::try_from(applications.count()).ok()
+        distinct_observation_count((0..applications.count()).map(|index| {
+            let original = applications.objectAtIndex(index);
+            reobserve_application_pid(&original)
+        }))
     })
 }
 
@@ -289,6 +322,17 @@ mod tests {
     // Test input is a synthetic signature result, not an OS trust receipt.
     fn unconfirmed(_: &Path) -> SignatureObservation {
         SignatureObservation::Unconfirmed
+    }
+
+    #[test]
+    fn ambiguous_application_observations_do_not_report_partial_or_zero_count() {
+        assert_eq!(distinct_observation_count([]), Some(0));
+        assert_eq!(distinct_observation_count([Some(10), Some(11)]), Some(2));
+        assert_eq!(distinct_observation_count([Some(10), Some(10)]), None);
+        assert_eq!(distinct_observation_count([Some(10), None]), None);
+        assert_eq!(distinct_observation_count([None]), None);
+        assert_eq!(distinct_observation_count([Some(0)]), None);
+        assert_eq!(distinct_observation_count([Some(-1)]), None);
     }
 
     #[test]

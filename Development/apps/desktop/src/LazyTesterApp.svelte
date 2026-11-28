@@ -526,7 +526,7 @@
         : result.status==='Ambiguous' ? 'Multiple installation candidates found. No installation selected.'
         : 'Installation metadata could not be confirmed.';
       macInstallationNotice += result.observedApplicationCount===null
-        ? ' Running application count unavailable.'
+        ? ' Running application identities could not be confirmed.'
         : ' AppKit reports '+result.observedApplicationCount+' matching application(s). None are managed by Lazy Tester.';
     } catch {
       if (!disposed) macInstallationNotice='Installation inspection unavailable.';

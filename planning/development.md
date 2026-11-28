@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-11a: native application discovery)
+## Current status — cross-platform-native (MAC-11b: original AppKit object revalidation)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,30 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 native launch remains BLOCKED at Mac profile isolation; shared lifecycle source work continues. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-11b — revalidate original AppKit application objects
+
+Apple [processIdentifier](https://developer.apple.com/documentation/appkit/nsrunningapplication/processidentifier)
+requires NSRunningApplication isEqual rather than PID equality alone.
+The [NSRunningApplication contract](https://developer.apple.com/documentation/appkit/nsrunningapplication?language=objc)
+also permits stale time-varying properties until the main run loop and
+an object remaining valid after exit. The existing discovery path now
+reobserves each original retained array object by PID lookup, object
+equality, termination and PID rechecks, with all-or-unknown count for
+duplicates, absent or invalid observations. No new report fields,
+process table, ownership adoption or termination. The original objects
+are released at the end of the explicit inspection; this is not durable
+controller ownership, a kernel birth-time pin, or signed mapped-image
+verification. No inference of launch permission even on zero count.
+Reviewed the objc2 frameworks-0.3.2 tag 7b1abfd750a2cacaea71d6a56ecfb83cb7de560b
+manifest and 0.3.2 binding reference; enable its existing libc feature
+and matching lock dependency edge (libc already resolved). Regression
+covers missing, duplicate and invalid observations; not executed.
+Windows contract and runtime admission=false remain unchanged.
+Next: same-desktop native window observation using the existing
+workspace/fixture boundary. Durable original launch receipt/close
+ownership and profile isolation remain prerequisites for managed launch.
+No new dependencies, services, CI, testing or release.
 
 ### MAC-11a — AppKit discovery in the existing Mac inspection route
 
