@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-09: artifact routing evidence)
+## Current status — cross-platform-native (MAC-09a: Plan A only)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,37 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-09a — operator selects Plan A exclusively
+
+Same OS user, same graphical desktop, one original signed installation,
+five independent licensed profiles and the existing controller/workspace
+are the selected topology. No distinct-user transport, VM, background
+service or fallback topology work. This supersedes the fallback decision
+suggestion in MAC-09; historical evidence remains valid.
+
+The [Apple App Sandbox documentation](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox)
+associates the filesystem container with the app; [NSHomeDirectory](https://developer.apple.com/documentation/foundation/nshomedirectory())
+documents user or app home, not a per-process isolation guarantee.
+The historical [Education support thread](https://edusupport.minecraft.net/hc/en-us/community/posts/28795140075540-Technical-issues-1-21-03-Multiplayer?sort_by=votes)
+also reports an application-specific support directory and preferences
+domain separate from the usual world tree; [support follow-up](https://edusupport.minecraft.net/hc/en-us/community/posts/29066176455956-Minecraft-Edu-1-21-03-Mac-Open-Error)
+corroborates Keychain-dependent game functionality. Historical reports
+are not current storage maps or instructions to delete/reset data.
+Require independent game world/settings, app support/preferences,
+and active account/cloud behavior, not merely distinct HOME strings.
+Do not manipulate Keychain entries or patch the signed application.
+
+Existing MAC-08a/b synthetic path and preference witnesses and MAC-09
+offline collector already cover the next source question. No additional
+fixture, analyzer layer or production launch implementation is justified
+without the compact actual main executable report. Search of available
+conversation/library did not surface that report; current container access
+failed before any bytes were read. The existing Windows-side offline
+--mach-o intake in Development/tooling/README.md remains the only
+necessary artifact handoff; no native execution or localtest requested.
+Source reviewed, NOT_EXECUTED. Plan A implementation remains BLOCKED
+at evidence, not SOURCE_READY_FOR_LOCAL. Preserve every existing hold.
 
 ### MAC-09 — make the existing compact artifact intake decision-oriented
 
