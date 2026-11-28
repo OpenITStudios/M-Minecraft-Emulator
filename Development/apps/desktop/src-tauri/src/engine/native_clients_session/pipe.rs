@@ -4,7 +4,7 @@ use super::{read_message, SessionReply, SessionRequest};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{File, OpenOptions},
-    io::{self, BufReader, Write},
+    io::{self, BufReader, Read, Write},
     mem,
     os::windows::{
         ffi::OsStringExt,
@@ -21,7 +21,7 @@ use std::{
 };
 use windows_sys::Win32::{
     Foundation::{
-        GetLastError, LocalFree, ERROR_PIPE_CONNECTED, FILETIME, HANDLE, INVALID_HANDLE_VALUE,
+        GetLastError, LocalFree, ERROR_BROKEN_PIPE, ERROR_IO_PENDING, ERROR_PIPE_CONNECTED, FILETIME, HANDLE, INVALID_HANDLE_VALUE,
         WAIT_OBJECT_0, WAIT_TIMEOUT,
     },
     Security::{
@@ -31,7 +31,7 @@ use windows_sys::Win32::{
         *,
     },
     Storage::FileSystem::*,
-    System::{Diagnostics::ToolHelp::*, Pipes::*, Threading::*, IO::CancelSynchronousIo},
+    System::{Diagnostics::ToolHelp::*, Pipes::*, Threading::*, IO::{CancelIoEx, CancelSynchronousIo, GetOverlappedResult, OVERLAPPED}},
 };
 
 fn refused(reason: &'static str) -> io::Error {
@@ -394,7 +394,7 @@ impl Endpoint {
         let handle = unsafe {
             CreateNamedPipeW(
                 self.name.as_ptr(),
-                PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
                 PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_REJECT_REMOTE_CLIENTS,
                 1,
                 65536,
@@ -465,16 +465,166 @@ pub(crate) enum Activity {
     Disconnected,
 }
 
+// Only the server handle is overlapped. One worker, one operation in
+// flight, one reusable manual-reset event. No new actor or wire fields.
+const PIPE_PHASE_TIMEOUT: Duration = Duration::from_secs(5);
+
+struct ServerPipe {
+    file: File,
+    event: OwnedHandle,
+    stop_event: Arc<OwnedHandle>,
+    phase_timeout: Duration,
+    deadline: Option<Instant>,
+}
+
+impl ServerPipe {
+    fn handle(&self) -> HANDLE { self.file.as_raw_handle() as HANDLE }
+
+    fn begin_phase(&mut self) {
+        self.deadline = Some(Instant::now() + self.phase_timeout);
+    }
+
+    fn timeout_error() -> io::Error {
+        io::Error::new(io::ErrorKind::TimedOut, "Session pipe phase deadline elapsed")
+    }
+
+    fn stopped_error() -> io::Error {
+        io::Error::new(io::ErrorKind::ConnectionAborted, "Session pipe stopped")
+    }
+
+    fn completed(&self, transferred: u32) -> io::Result<usize> {
+        // A completion can win the OS wait even after the caller's phase
+        // budget elapsed. Do not publish that late frame as timely.
+        if self.deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            Err(Self::timeout_error())
+        } else {
+            Ok(transferred as usize)
+        }
+    }
+
+    fn operation(
+        &self,
+        connect: bool,
+        issue: impl FnOnce(HANDLE, *mut OVERLAPPED, *mut u32) -> i32,
+    ) -> io::Result<usize> {
+        if unsafe { WaitForSingleObject(raw(&self.stop_event), 0) } != WAIT_TIMEOUT {
+            return Err(Self::stopped_error());
+        }
+        if self.deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+            return Err(Self::timeout_error());
+        }
+        if unsafe { ResetEvent(raw(&self.event)) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let handle = self.handle();
+        // SAFETY: The worker issues exactly one operation. The overlapped
+        // structure, event, transfer count and caller's read/write buffer
+        // stay alive and unmoved until the operation has completed.
+        let mut overlap: OVERLAPPED = unsafe { mem::zeroed() };
+        overlap.hEvent = raw(&self.event);
+        let mut transferred = 0u32;
+        // Keep the raw pointer to the same storage throughout the pending
+        // operation; do not form fresh Rust references while the OS owns it.
+        let overlap_ptr = &raw mut overlap;
+        let transferred_ptr = &raw mut transferred;
+        if issue(handle, overlap_ptr, transferred_ptr) != 0 {
+            return self.completed(transferred);
+        }
+        let error = unsafe { GetLastError() };
+        if connect && error == ERROR_PIPE_CONNECTED {
+            return Ok(0);
+        }
+        if error != ERROR_IO_PENDING {
+            return Err(io::Error::from_raw_os_error(error as i32));
+        }
+
+        let milliseconds = self.deadline.map_or(u32::MAX, |deadline| {
+            deadline.saturating_duration_since(Instant::now()).as_nanos()
+                .div_ceil(1_000_000).min(u128::from(u32::MAX - 1)) as u32
+        });
+        let handles = [raw(&self.stop_event), raw(&self.event)];
+        let wake = unsafe { WaitForMultipleObjects(2, handles.as_ptr(), 0, milliseconds) };
+        if wake == WAIT_OBJECT_0 + 1 {
+            // The operation event is manual-reset and exclusively ours.
+            // Collect actual completion, not merely a signaled wait.
+            if unsafe { GetOverlappedResult(handle, overlap_ptr, transferred_ptr, 1) } != 0 {
+                return self.completed(transferred);
+            }
+            return Err(io::Error::last_os_error());
+        }
+
+        let failure = if wake == WAIT_OBJECT_0 { Self::stopped_error() }
+            else if wake == WAIT_TIMEOUT { Self::timeout_error() }
+            else { io::Error::last_os_error() };
+        // Cancellation can race a successful completion. Discard this
+        // connection's result regardless; never reuse its buffer before
+        // the kernel completes. This completion barrier intentionally
+        // retains the original worker if the OS fails to settle I/O.
+        unsafe {
+            CancelIoEx(handle, overlap_ptr);
+            GetOverlappedResult(handle, overlap_ptr, transferred_ptr, 1);
+        }
+        Err(failure)
+    }
+
+    fn connect(&mut self) -> io::Result<()> {
+        // Idle connection wait is event-driven, with shutdown wake only.
+        self.deadline = None;
+        self.operation(true, |handle, overlap, _| unsafe {
+            ConnectNamedPipe(handle, overlap)
+        }).map(|_| ())
+    }
+}
+
+impl Read for ServerPipe {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if buf.is_empty() { return Ok(0); }
+        let length = buf.len().min(u32::MAX as usize) as u32;
+        match self.operation(false, |handle, overlap, transferred| unsafe {
+            ReadFile(handle, buf.as_mut_ptr(), length, transferred, overlap)
+        }) {
+            Err(error) if error.raw_os_error() == Some(ERROR_BROKEN_PIPE as i32) => Ok(0),
+            result => result,
+        }
+    }
+}
+
+impl Write for ServerPipe {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if buf.is_empty() { return Ok(0); }
+        let length = buf.len().min(u32::MAX as usize) as u32;
+        self.operation(false, |handle, overlap, transferred| unsafe {
+            WriteFile(handle, buf.as_ptr(), length, transferred, overlap)
+        })
+    }
+
+    // No FlushFileBuffers: it would wait for the peer to consume the pipe.
+    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
 pub(crate) struct Server {
     pub requests: mpsc::Receiver<Envelope>,
     request_ready: Arc<OwnedHandle>,
     stopped: Arc<AtomicBool>,
+    stop_event: Arc<OwnedHandle>,
     worker: Option<JoinHandle<()>>,
 }
 impl Server {
     pub(crate) fn start(endpoint: Endpoint) -> io::Result<Self> {
+        Self::start_with_budget(endpoint, PIPE_PHASE_TIMEOUT)
+    }
+
+    fn start_with_budget(endpoint: Endpoint, phase_timeout: Duration) -> io::Result<Self> {
         // Bind before acknowledging startup; FIRST_PIPE_INSTANCE stays retained across reconnects.
-        let mut file = endpoint.bind()?;
+        let file = endpoint.bind()?;
+        let stop_event = Arc::new(own(unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) })?);
+        let mut file = ServerPipe {
+            file,
+            event: own(unsafe { CreateEventW(ptr::null(), 1, 0, ptr::null()) })?,
+            stop_event: Arc::clone(&stop_event),
+            phase_timeout,
+            deadline: None,
+        };
         let stopped = Arc::new(AtomicBool::new(false));
         let stop = Arc::clone(&stopped);
         let (sender, requests) = mpsc::sync_channel(1);
@@ -484,22 +634,19 @@ impl Server {
         let ready = Arc::clone(&request_ready);
         let worker = thread::Builder::new().name("lazytester-session-pipe".into()).spawn(move || {
             while !stop.load(Ordering::Acquire) {
-                let connected =
-                    unsafe { ConnectNamedPipe(file.as_raw_handle() as _, ptr::null_mut()) } != 0
-                        || unsafe { GetLastError() } == ERROR_PIPE_CONNECTED;
-                if !connected {
+                if file.connect().is_err() {
                     if stop.load(Ordering::Acquire) {
                         break;
                     }
                     unsafe {
-                        DisconnectNamedPipe(file.as_raw_handle() as _);
+                        DisconnectNamedPipe(file.handle());
                     }
                     thread::sleep(Duration::from_millis(20));
                     continue;
                 }
                 let _ = serve(&endpoint, &mut file, &sender, &stop, &ready);
                 unsafe {
-                    DisconnectNamedPipe(file.as_raw_handle() as _);
+                    DisconnectNamedPipe(file.handle());
                 }
             }
         })?;
@@ -507,6 +654,7 @@ impl Server {
             requests,
             request_ready,
             stopped,
+            stop_event,
             worker: Some(worker),
         })
     }
@@ -571,7 +719,7 @@ impl Server {
 }
 fn serve(
     endpoint: &Endpoint,
-    file: &mut File,
+    file: &mut ServerPipe,
     sender: &mpsc::SyncSender<Envelope>,
     stop: &AtomicBool,
     request_ready: &OwnedHandle,
@@ -579,8 +727,9 @@ fn serve(
     if stop.load(Ordering::Acquire) {
         return Ok(());
     }
-    let peer = endpoint.verify(file.as_raw_handle() as _, true)?;
-    let mut reader = BufReader::new(file.try_clone()?);
+    let peer = endpoint.verify(file.handle(), true)?;
+    file.begin_phase();
+    let mut reader = BufReader::new(file);
     let text =
         read_message(&mut reader)?.ok_or_else(|| io::Error::other("Manager disconnected"))?;
     if !peer.alive() {
@@ -590,7 +739,7 @@ fn serve(
     // Validate at the authenticated controller ingress as well as the client.
     // A denied request must receive an ordinary error receipt, not an ambiguous disconnect.
     if let Err(error) = super::validate_request(&request) {
-        return send_reply(file, &mut reader, Err(error.to_string()));
+        return send_reply(&mut reader, Err(error.to_string()));
     }
     let (reply, response) = mpsc::sync_channel(1);
     sender
@@ -617,10 +766,10 @@ fn serve(
             Err(_) => return Err(io::Error::other("Controller stopped")),
         }
     };
-    send_reply(file, &mut reader, reply)
+    send_reply(&mut reader, reply)
 }
 
-fn send_reply(file: &mut File, reader: &mut BufReader<File>, reply: SessionReply) -> io::Result<()> {
+fn send_reply(reader: &mut BufReader<&mut ServerPipe>, reply: SessionReply) -> io::Result<()> {
     let mut bytes = serde_json::to_vec(&reply)?;
     if bytes.len() >= 32768 {
         bytes = serde_json::to_vec(&SessionReply::Err(
@@ -628,7 +777,9 @@ fn send_reply(file: &mut File, reader: &mut BufReader<File>, reply: SessionReply
         ))?;
     }
     bytes.push(b'\n');
-    file.write_all(&bytes)?;
+    reader.get_mut().begin_phase();
+    reader.get_mut().write_all(&bytes)?;
+    reader.get_mut().begin_phase();
     if read_message(reader)?.as_deref() != Some("ack\n") {
         return Err(io::Error::other("Response was not acknowledged"));
     }
@@ -637,9 +788,13 @@ fn send_reply(file: &mut File, reader: &mut BufReader<File>, reply: SessionReply
 impl Server {
     fn stop(&mut self) -> bool {
         self.stopped.store(true, Ordering::Release);
+        // Wake idle connect and any pending overlapped operation. The
+        // worker owns its pending buffers until cancellation completes.
+        unsafe { SetEvent(raw(&self.stop_event)) };
         if let Some(worker) = self.worker.take() {
-            // Only cancel this transport thread's synchronous I/O, never game threads.
-            // Its own stack/buffers remain alive until it finishes, even on a slow cancel.
+            // Best effort for synchronous authentication/file queries only.
+            // Overlapped pipe cancellation is owned by the worker itself.
+            // Retain its stack on a slow shutdown; never terminate a game.
             let deadline = Instant::now() + Duration::from_secs(2);
             while !worker.is_finished() && Instant::now() < deadline {
                 unsafe { CancelSynchronousIo(worker.as_raw_handle() as _) };
@@ -1015,6 +1170,43 @@ mod tests {
         );
         done.send(()).unwrap();
         actor.join().unwrap();
+    }
+
+    #[test]
+    fn stalled_request_and_missing_ack_release_connection_without_replay() {
+        let (endpoint, client) = endpoints();
+        let mut server = Server::start_with_budget(endpoint, Duration::from_secs(1)).unwrap();
+
+        // Hold an authenticated client open after only a partial frame.
+        let mut partial = client.connect().unwrap();
+        partial.write_all(b"{").unwrap();
+        let mut second = client.connect().unwrap();
+        assert!(server.requests.try_recv().is_err());
+        drop(partial);
+
+        // A valid operation is admitted exactly once. Withhold its ACK
+        // even after receiving the complete response; the next peer can
+        // reconnect without changing or replaying the first request.
+        write_request(&mut second, &SessionRequest::Inspect).unwrap();
+        let envelope = server.requests.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(matches!(envelope.request, SessionRequest::Inspect));
+        envelope.reply.send(Ok(SessionSnapshot::stopped())).unwrap();
+        let mut unacked = BufReader::new(second);
+        let response = read_message(&mut unacked).unwrap().unwrap();
+        assert!(serde_json::from_str::<SessionReply>(&response).unwrap().is_ok());
+
+        let mut third = client.connect().unwrap();
+        assert!(server.requests.try_recv().is_err());
+        drop(unacked);
+        write_request(&mut third, &SessionRequest::Inspect).unwrap();
+        let envelope = server.requests.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(matches!(envelope.request, SessionRequest::Inspect));
+        envelope.reply.send(Ok(SessionSnapshot::stopped())).unwrap();
+        let mut reader = BufReader::new(third.try_clone().unwrap());
+        assert!(serde_json::from_str::<SessionReply>(
+            &read_message(&mut reader).unwrap().unwrap()).unwrap().is_ok());
+        third.write_all(b"ack\n").unwrap();
+        assert!(server.stop());
     }
 
     #[test]

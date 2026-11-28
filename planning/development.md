@@ -148,11 +148,17 @@ its successfully created stage, reuse checked storage directory. Preserve
 formats and independent image revalidation; ancestor replacement races
 against outside writers are not proven closed. BS-07: bound WebP
 destination before append and clear partial output, not codec scratch
-or peak RAM. BS-05 deferred: server synchronous request/ACK still lacks per-I/O
-deadline; proper overlapped I/O needs separate review of cancellation
-completion, buffers, peer identity, wire and actor admission; no unsafe
-PIPE_NOWAIT substitution. Cross-process lease behavior and all fixtures
-remain NOT_EXECUTED; no binary admission, new worker or service.
+or peak RAM. BS-05 follow-through (baseline `9b72f670d667698b434a683c593743d1ee6fa91d`):
+server-only overlapped pipe I/O, one original worker and manual-reset
+operation/stop events. Idle connect is event-driven; authenticated request
+frame, reply write and ACK each use a 5 s phase deadline shared across
+partial transfers. Actor execution and client wire unchanged; no replay.
+Cancel exact pending operation and wait for actual completion before
+buffer reuse/reconnect. Slow OS cancellation can retain the original
+worker; existing bounded stop refuses to claim cleanup, not a hard
+kernel deadline. Synthetic stalled request/missing ACK fixtures authored.
+Cross-process lease behavior, native pipe recovery and all fixtures remain
+NOT_EXECUTED; no binary admission, new worker or service.
 
 ## Proof ceiling and unresolved gates
 

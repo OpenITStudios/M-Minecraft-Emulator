@@ -360,6 +360,34 @@ ACK success, ACK write failure on an already-confirmed success,
 an explicit native rejection, and malformed response exclusion.
 AUTHORED_NOT_EXECUTED; Windows/IPC/game execution not verified.
 
+## Server pipe phase deadlines (BS-05)
+
+The existing single-instance server uses overlapped ConnectNamedPipe,
+ReadFile and WriteFile; the client remains synchronous. One worker,
+one manual-reset operation event and one stop event; no new thread,
+request owner, retry or wire format. Idle connect waits for a client
+or shutdown without a periodic deadline. After peer verification,
+each request frame, reply write and final ACK has its own 5 s phase
+deadline; partial reads/writes share that phase's original deadline.
+The actor's admitted operation is not subject to this handshake
+budget and continues under its original lifecycle contract. A missing
+ACK does not undo a confirmed reply. A timed-out frame never becomes
+a new admitted request; disconnect/reconnect occurs only after its
+pending I/O settles.
+
+The worker requests CancelIoEx for the exact pending operation on
+timeout/shutdown and collects completion before reusing the event,
+overlapped structure or buffer. A driver/OS cancellation failure can
+still hold the original worker at the completion barrier; the existing
+2 s server stop reports unconfirmed shutdown rather than destroying
+its stack or starting a replacement. This is not a hard wall-clock
+bound on kernel cancellation, peer verification, or admitted mutations.
+The phase budget is a conservative initial policy, not a measured
+latency target. See [Microsoft overlapped pipe I/O](https://learn.microsoft.com/en-us/windows/win32/ipc/synchronous-and-overlapped-input-and-output)
+and [CancelIoEx](https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-cancelioex).
+Disposable stalled-frame and missing-ACK fixtures are
+AUTHORED_NOT_EXECUTED; native recovery and cancellation remain unverified.
+
 ## Native AI input and Windows-session boundary
 
 The existing native controller's named-pipe admission binds the same Windows
