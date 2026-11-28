@@ -59,7 +59,8 @@ test('canonical Minecraft function displays team source commands privately',asyn
   assert.equal(code.includes('tellraw @a'),false);
   assert.ok(code.includes('Settings > Show Coordinates'));
   assert.ok(code.includes('Ctrl+Alt+C'));
-  assert.ok(code.includes('Saved Locations ada di aplikasi Lazy Tester'));
+  assert.equal(code.includes('Saved Locations'),false);
+  assert.equal(code.includes('Ctrl+V di Lazy Tester'),false);
 });
 
 test('ZIP has exactly manifest and two static function files',async()=>{

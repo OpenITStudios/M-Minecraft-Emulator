@@ -3,8 +3,8 @@ id: document.system.education-native-coordinate-hud
 class: DOCUMENT
 domain: system
 role: GUIDE
-authority: WORKING
-lifecycle: SOURCE_ONLY
+authority: HISTORICAL
+lifecycle: HISTORICAL
 ---
 
 # Education native coordinate HUD — opt-in JSON UI prototype

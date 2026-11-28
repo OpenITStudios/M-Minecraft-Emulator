@@ -11,6 +11,5 @@ tellraw @s {"rawtext":[{"text":"§f/scriptevent probe:list§r — lihat daftar p
 tellraw @s {"rawtext":[{"text":"§f/scriptevent probe:run auto§r — jalankan tes di world uji saja"}]}
 tellraw @s {"rawtext":[{"text":"§f/scriptevent probe:report§r — tampilkan laporan probe (Content Log)"}]}
 tellraw @s {"rawtext":[{"text":"§eCOORDINATES — fitur bawaan Minecraft Education§r"}]}
-tellraw @s {"rawtext":[{"text":"§fSettings > Show Coordinates. Jika Creator > Copy Coordinate UI tersedia: Ctrl+Alt+C, lalu Ctrl+V di Lazy Tester."}]}
-tellraw @s {"rawtext":[{"text":"§7Saved Locations ada di aplikasi Lazy Tester; ini bukan perubahan HUD atau clipboard otomatis."}]}
+tellraw @s {"rawtext":[{"text":"§fSettings > Show Coordinates. Jika Creator > Copy Coordinate UI tersedia, gunakan Ctrl+Alt+C secara manual."}]}
 tellraw @s {"rawtext":[{"text":"§7Help ini tidak memasang modul, menjalankan tes, atau mengirim data ke Codex."}]}

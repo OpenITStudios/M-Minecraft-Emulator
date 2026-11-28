@@ -3,11 +3,16 @@ id: document.validation.rea-source-audit-2026-10-13
 class: DOCUMENT
 domain: validation
 role: AUDIT
-authority: WORKING
-lifecycle: ACTIVE
+authority: HISTORICAL
+lifecycle: HISTORICAL
 ---
 
 # REA-aligned Full Audit — M-Minecraft-Emulator
+
+**Historical audit of the retired private-core/Sandboxie workstream.**
+These dated findings do not describe the current native product or authorize
+binary investigation. See [retirement](../system/legacy-retirement.md) and
+[current proof routes](README.md).
 
 ## Private core REA evidence campaign — 2026-10-14
 

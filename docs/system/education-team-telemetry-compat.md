@@ -23,15 +23,9 @@ in Git history only; old previously distributed .mcpack files must
 be disabled in copied QA worlds. No original world is modified or
 migrated automatically.
 
-The only currently designated optional executable/data in-game *help*
-behavior pack remains **Lazy Tester - Team Commands Help v2.2.0**.
-A separate **uninstalled, resource-only JSON UI prototype** is now
-maintained under `Development/tooling/agent/education-native-hud-prototype/`,
-solely for future manual compatibility evaluation. It is not a second
-gameplay pack, does not introduce an event listener, replaces no team
-storage/HUD writer and is excluded from all normal builds. Its static
-label is not a Save button. See
-[HUD feasibility](education-native-coordinate-hud.md).
+The resource-only JSON UI prototype was retired on 26 November 2026.
+See [retirement register](legacy-retirement.md) for the historical source;
+it is not a current help pack or F3 implementation.
 
 The sole optional Minecraft-side helper is **Lazy Tester - Team
 Commands Help v2.2.0**, now a **data-only behavior pack with Minecraft
@@ -48,8 +42,12 @@ own function named `help`, operators may instead use the unique
 list, not two alternative analytics implementations.
 
 The command list also gives operator-only native Show Coordinates and
-conditional Ctrl+Alt+C guidance. It does not create an Add-On coordinate
+conditional Ctrl+Alt+C guidance, without directing users to the retired
+desktop Saved Locations or paste UI. It does not create an Add-On coordinate
 UI, copy clipboard contents, save Minecraft positions or alter the world.
+This is an Unreleased source-text correction, not a new pack version or
+installation. The existing builder still refuses to overwrite a different
+local archive.
 
 The command list uses `tellraw @s` to show the original team commands
 and their prerequisites to the invoking player, without broadcasting

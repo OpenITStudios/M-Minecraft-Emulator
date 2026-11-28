@@ -516,7 +516,7 @@ authorized Svelte/TypeScript execution, viewport visual inspection,
 WebView2 keyboard/accessibility, Windows DWM and Minecraft acceptance.
 No prior source-only result is promoted to executable PASS.
 
-## Svelte binding and Play-popup lifecycle — source-only correction
+## Svelte binding and Play-popup lifecycle — historical source-only correction
 
 The desktop uses **Svelte 5 in legacy component syntax**, with existing
 `export let`, `$:`, `bind:this` and `on:` handlers. This bounded
@@ -525,6 +525,11 @@ to runes or a new UI/session state manager. Compiler and WebView2
 behavior remain unverified until separately authorized execution.
 
 ### Per-launcher Coordinates & Saves drafts
+
+**Retired UI history:** the panels, typed bridge and native Saved Locations
+command described below are no longer in active source. Existing notebook data
+is preserved; do not reintroduce the UI or storage handler. See the
+[retirement register](../system/legacy-retirement.md).
 
 `CoordinatePastePanel.svelte` previously retained its unsaved XYZ text
 and manually entered labels when the selected MC slot changed. The

@@ -3,11 +3,17 @@ id: document.system.independent-engine-architecture
 class: DOCUMENT
 domain: system
 role: CONTRACT
-authority: CANONICAL
-lifecycle: ACTIVE
+authority: HISTORICAL
+lifecycle: HISTORICAL
 ---
 
 # Independent Minecraft Session Engine — source-first architecture
+
+**Historical design (October 2026).** The four-slot/service/provider design
+below is superseded by the five-profile native Lazy Tester. Retained pure
+runtime-core contracts are not a mounted provider. Use the current
+[architecture](architecture.md), [implementation map](implementation-map.md)
+and [retirement register](legacy-retirement.md) for active source and policy.
 
 ## Product invariant and licensing boundary
 

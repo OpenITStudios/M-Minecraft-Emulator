@@ -3,8 +3,8 @@ id: document.system.coordinate-inspector
 class: DOCUMENT
 domain: system
 role: GUIDE
-authority: WORKING
-lifecycle: SOURCE_ONLY
+authority: HISTORICAL
+lifecycle: HISTORICAL
 ---
 
 # F3-style Coordinate Inspector — historical research

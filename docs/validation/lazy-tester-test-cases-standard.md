@@ -163,15 +163,16 @@ Uji world yang sudah disave untuk close manual di PC nyata.
 ## S6 — Settings, graphics, audio, FPS, manual XYZ/F3 (T08)
 
 **Source defaults:** active 144/background 10 FPS adalah *configured
-targets*, bukan nilai frame-rate game nyata. Preset `Preserve` tidak
-mengembalikan nilai grafis sebelum High/Low; ia berhenti menulis
-future options.txt.
+targets*, bukan nilai frame-rate game nyata. Satu preset Low berlaku
+untuk semua launcher; `Preserve` dan High/Low per-slot adalah kontrak lama,
+bukan pilihan aktif. Existing graphics.json tetap dipertahankan.
 
 **Retired desktop tests:** `STD-SET-12..16` remain listed for historical ID
 traceability, but their former Paste XYZ / F3 Inspector screens were removed
 by the operator. They are `NOT_APPLICABLE` to the current desktop and must not
-be executed or counted as standard feature failures. Pure coordinate research
-and the dormant native Saved Locations store do not expose replacement UI.
+be executed or counted as standard feature failures. The old coordinate
+research modules and native Saved Locations store are retired; existing
+notebook data is preserved and no replacement UI is exposed.
 
 | Case ID | Prioritas | Tindakan operator | PASS hanya apabila |
 | --- | --- | --- | --- |

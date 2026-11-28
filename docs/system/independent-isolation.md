@@ -3,11 +3,16 @@ id: document.system.independent-isolation
 class: DOCUMENT
 domain: system
 role: REPORT
-authority: WORKING
-lifecycle: ACTIVE
+authority: HISTORICAL
+lifecycle: HISTORICAL
 ---
 
 # Independent Minecraft session isolation
+
+**Historical feasibility assessment.** The original four-client/provider
+research below is not the active product architecture or a current work plan.
+Use [architecture](architecture.md) and [implementation map](implementation-map.md)
+for the retained five-profile native manager; see [retirement](legacy-retirement.md).
 
 Research date: 21 October 2026. Source baseline:
 `79b93ae76c03ff5d9ca128264511d2c145a0cde9` (`Local`). This is a design and
