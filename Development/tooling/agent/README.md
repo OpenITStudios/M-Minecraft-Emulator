@@ -374,7 +374,9 @@ protocol conformance tests executed.
   configuration. `probe-qa-operations.mjs` owns one private checkpoint set
   per core; canonical and legacy Probe tools share the same prepare/read
   operations. `evidence-operations.mjs` owns the separate explicit capture
-  baselines and bounded evidence projection. No new worker or transport.
+  baselines and bounded evidence projection. `visual-operations.mjs` owns
+  the existing visual read gate, capture, observer and GPU startup/stop;
+  the core retains native admission and input recovery. No new worker or transport.
 - `tool-catalog.mjs` owns the one descriptor inventory. `code-mode.mjs`
   declares the shared SDK routes and projects the playtest/compatibility subsets
   from the original descriptor catalog.

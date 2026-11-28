@@ -9,7 +9,7 @@ import {inputExecutionStatus} from './input-delivery.mjs';
 import {projectAgentActivity} from './activity-status.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
 import {summarizeGameEvidence,normalizeEvidenceSlots} from './evidence-summary.mjs';
-import {captureCuaWindow,inspectCuaWindowElements,assessCuaStrictBackgroundAction,validateCuaStrictBackgroundIntent} from './visual-capture.mjs';
+import {captureCuaWindow,inspectCuaWindowElements} from './visual-capture.mjs';
 import {diagnosticsOverview,listDiagnosticIssues,
   getDiagnosticIssue,queryDiagnosticEvidence} from './diagnostics-local.mjs';
 import {archiveTestingResult,
@@ -17,13 +17,13 @@ import {archiveTestingResult,
   from './testing-result-store.mjs';
 import {createVisualObserver,OBSERVATION_LIMITS,
   summarizeTeamVisualState,verifyTeamObservationBasis,
-  evaluateTeamActionFeedback,summarizeTeamCoordination,
-  projectF3VisualReview,reviewVisibleXYZFromFrame} from './visual-observer.mjs';
-import {createGpuFrameSource,previewSize} from './gpu-frame-source.mjs';
+  evaluateTeamActionFeedback,summarizeTeamCoordination} from './visual-observer.mjs';
+import {createGpuFrameSource} from './gpu-frame-source.mjs';
 import {readPinnedProbeCatalogCached,probeSourceRevisionStatus} from './probe-qa.mjs';
 import {readMapTestContractCached,mapContractSourceStatus} from './map-test-plan.mjs';
 import {createProbeQaOperations} from './probe-qa-operations.mjs';
 import {createEvidenceOperations} from './evidence-operations.mjs';
+import {createVisualOperations} from './visual-operations.mjs';
 
 import {slotOf,keysExactly} from './agent-contract.mjs';
 import {validateNativeWindowTarget,
@@ -161,7 +161,6 @@ export function createOperationCore(config,{
     exclusiveBusy:()=>exclusiveBusy(),callTool,
   });
   const evidenceOperations=createEvidenceOperations(config,{evidence,requireOpen});
-  let visualReadBusy=false; // only one identity-pinned screenshot at a time
   let mc02SequenceAbort=null; // pending opted-in legacy MC02 request only
   let multiSequence=null; // one bounded cross-slot request, not a game owner
   // Volatile MCP-process fail-closed input markers, not another game
@@ -188,8 +187,7 @@ export function createOperationCore(config,{
       throw new Error('AI_INPUT_RECOVERY_REQUIRED');
     }
   };
-  const exclusiveBusy=()=>inFlight||visualReadBusy;
-  let gpuStartup=null; // bounded request only; not game/session lifecycle
+  const exclusiveBusy=()=>inFlight||visualOperations.isBusy();
   const mc02Enabled=config.experimentalMc02InputEnabled===true &&
     config.mode==='human-plus-four-ai';
   const multiEnabled=config.experimentalMultiClientInputEnabled===true;
@@ -203,134 +201,6 @@ export function createOperationCore(config,{
       uncertainAiSlots.add(slot);
     }
   }
-  const gpuSource=config.gpuExecutable ?
-    gpuSourceFactory({executable:config.gpuExecutable}):null;
-  function protectedSlot(slot) {
-    if (config.mode==='human-plus-four-ai' && slot===1) {
-      throw new Error('MC01 human host is protected from AI visual observation');
-    }
-  }
-  function visualSize(args) {
-    if(args.imageFormat===undefined||args.imageFormat==='png') {
-      if(args.width!==undefined||args.height!==undefined)throw new Error('Invalid tool arguments');
-      return null;
-    }
-    if(args.imageFormat!=='webp'||mc02Enabled||multiEnabled)throw new Error('Invalid tool arguments');
-    if(!gpuSource)throw new Error('WEBP_CAPTURE_REQUIRES_WGC');
-    if((args.width===undefined)!==(args.height===undefined))throw new Error('Invalid tool arguments');
-    return previewSize(args.width,args.height);
-  }
-  async function captureVerifiedFrame(slot,onceSize=null,afterFrame=undefined,deferImage=false) {
-    protectedSlot(slot);
-    if (!config.cuaExecutable && !gpuSource) {
-      throw new Error('Visual provider is NOT_CONFIGURED; set --cua-exe or --gpu-capture-exe');
-    }
-    // A verified read-only capture may accompany an already-running
-    // experimental MC02 sequence. It must never clear that sequence's
-    // native mutation ownership on completion.
-    const alongsideSequence=mc02SequenceAbort!==null||multiSequence!==null;
-    if(visualReadBusy || (inFlight && !alongsideSequence)) {
-      throw new Error('Native operation in progress; do not overlap requests');
-    }
-    // This read-only gate is sufficient to block new native mutations
-    // via exclusiveBusy(). Never claim ownership of inFlight: a separate
-    // urgent neutral-state write may overlap a screenshot and must keep
-    // its own mutation lock until its authenticated request completes.
-    visualReadBusy=true;
-    try {
-      const before=await readNative('target',slot);
-      requireOpen();
-      // GPU provider uses a bounded one-shot or an explicitly started
-      // persistent worker. No fallback to desktop/global capture.
-      // Read ONLY from the WGC worker pinned to this same exact native
-      // process/window/birth/session. Without this check a restarted slot
-      // could receive its predecessor's cached frame.
-      // A Cua screenshot has no trustworthy pixel-presentation timestamp.
-      // The query-start time is a conservative lower bound on WHEN a
-      // screenshot request began (not when the game rendered its pixels).
-      // WGC carries a separate producer-authored readback time instead.
-      const captureStartedAtMs=Date.now();
-      const frame=gpuSource ? (onceSize?await gpuSource.captureOnce(slot,before,onceSize):gpuSource.latest(slot,before,{deferImage})) :
-        await capture(config.cuaExecutable,before);
-      requireOpen();
-      const after=await readNative('target',slot);
-      requireOpen();
-      if (before.pid!==after.pid || before.windowId!==after.windowId ||
-          before.createdFileTime!==after.createdFileTime ||
-          before.sessionId!==after.sessionId) {
-        throw new Error('Minecraft window changed during capture; screenshot discarded');
-      }
-      const webp=frame?.mimeType==='image/webp';
-      const deferred=deferImage&&gpuSource&&!onceSize&&frame?.imageRef!==undefined;
-      if(webp&&(!Number.isSafeInteger(frame.capturedAtMs)||frame.capturedAtMs<1||
-         Date.now()-frame.capturedAtMs<0||Date.now()-frame.capturedAtMs>3500)) {
-        throw new Error('GPU_PREVIEW_UNAVAILABLE');
-      }
-      if (!frame || (!webp&&frame.mimeType!=='image/png') ||
-          (webp&&(!gpuSource||mc02Enabled||multiEnabled)) ||
-          (onceSize&&(!webp||frame.width!==onceSize.width||frame.height!==onceSize.height)) ||
-          (!onceSize&&!deferred&&typeof frame.imageBase64!=='string') ||
-          (onceSize&&(Buffer.isBuffer(frame.bytes)?
-            frame.bytes.length<1||frame.bytes.length>3*1024*1024:
-            typeof frame.imageBase64!=='string')) ||
-          !Number.isInteger(frame.width) || !Number.isInteger(frame.height) ||
-          frame.width<1 || frame.height<1) {
-        throw new Error('Visual provider did not produce a usable frame');
-      }
-      const observation = {
-        metadata:{
-          schema:1,slot,mode:config.mode,
-          provider:gpuSource?(onceSize?'NATIVE_WGC_ON_DEMAND':'NATIVE_WGC_PERSISTENT'):'CUA_DRIVER_WINDOW_CAPTURE',
-          observedWindow:{pid:after.pid,windowId:after.windowId},
-          processIdentity:{pid:after.pid,windowId:after.windowId,
-            createdFileTime:after.createdFileTime,sessionId:after.sessionId},
-          width:frame.width,height:frame.height,
-          sha256:frame.sha256??null,
-          capturedAtMs:gpuSource?frame.capturedAtMs:null,
-          captureStartedAtMs:gpuSource?null:captureStartedAtMs,
-          workerSequence:gpuSource?frame.workerSequence:null,
-          sourceTimeKind:gpuSource?'WGC_READBACK_COMPLETED':
-            'CUA_QUERY_STARTED',
-          frameFreshness:gpuSource ?
-            'WGC_RECENT_TIMESTAMP_NOT_GAMEPLAY_PROOF' :
-            'UNVERIFIED_SINGLE_FRAME',
-          background:!before.foreground && !after.foreground,
-          screenshotStatus:webp?'WEBP_RETURNED_NOT_GAMEPLAY_PROOF':'PNG_RETURNED_NOT_GAMEPLAY_PROOF',
-          ...(webp?{mimeType:'image/webp',preview:onceSize?'ON_DEMAND':'SAMPLER'}:{}),
-          gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
-          note:'Pixels may be stale, blank, or unrepresentative of gameplay. Captures do not prove player login or peer-to-peer join.',
-        },
-        imageBase64:null,
-      };
-      if(onceSize) {
-        // Compare the fresh, exact-target encoded hash BEFORE Base64. Raw
-        // bytes are not returned to MCP or retained in a second cache.
-        const meta=observation.metadata,identity=meta.processIdentity;
-        if(!/^[a-f0-9]{64}$/.test(meta.sha256??''))throw new Error('GPU_PREVIEW_UNAVAILABLE');
-        const frameRef=createHash('sha256').update(JSON.stringify([
-          slot,identity.pid,identity.windowId,identity.createdFileTime,identity.sessionId,
-          meta.mimeType,meta.width,meta.height,meta.sha256,
-        ])).digest('hex');
-        const unchanged=afterFrame===frameRef;
-        return {metadata:{...meta,frameRef,hasNewImage:!unchanged,
-          ...(unchanged?{screenshotStatus:'WEBP_UNCHANGED_NOT_GAMEPLAY_PROOF'}:{})},
-          imageBase64:unchanged?null:Buffer.isBuffer(frame.bytes)?
-            frame.bytes.toString('base64'):frame.imageBase64};
-      }
-      if(deferred)observation.imageRef=frame.imageRef;
-      else observation.imageBase64=frame.imageBase64;
-      // No additional native read, frame parse or player/world inference.
-      // This is only a bounded capability hint on an existing screenshot.
-      if(webp)return observation; // No unrelated legacy F3 projection in AI previews.
-      return {
-        ...observation,
-        metadata:{...observation.metadata,
-          f3VisualReview:projectF3VisualReview(observation.metadata)},
-      };
-    } finally {
-      visualReadBusy=false;
-    }
-  }
   const revokeObservedRound=slot=>{
     if(observedSequence?.slots.includes(slot)) {
       // A single missing/revoked captured frame source invalidates
@@ -340,23 +210,13 @@ export function createOperationCore(config,{
       multiSequence?.abort.abort();
     }
   };
-  const visualObserver=visualObserverFactory({
-    capture:slot=>captureVerifiedFrame(slot,null,undefined,true),
-    sourceLabel:gpuSource?'PERSISTENT_WGC_GPU_FRAME_SOURCE':'BOUNDED_CUA_WINDOW_SNAPSHOTS',
-    onFinish:(slot)=>{
-      gpuSource?.stop([slot]);
-      revokeObservedRound(slot);
-    },
-    onCaptureFailure:(slot)=>revokeObservedRound(slot),
+  const visualOperations=createVisualOperations(config,{
+    capture,inspectCua,gpuSourceFactory,visualObserverFactory,readNative,
+    mc02Enabled,multiEnabled,requireOpen,
+    isNativeBusy:()=>inFlight,setNativeBusy:value=>{inFlight=value;},
+    hasActiveSequence:()=>mc02SequenceAbort!==null||multiSequence!==null,
+    revokeObservedRound,callTool,
   });
-  function checkedSlots(slots) {
-    if (!Array.isArray(slots) || slots.length<1 || slots.length>5 ||
-        new Set(slots).size!==slots.length) {
-      throw new Error('Choose 1-5 distinct Minecraft profiles');
-    }
-    for (const slot of slots) protectedSlot(slotOf(slot));
-    return slots;
-  }
   async function changeAiLease(operation,slots,leaseEpoch,
                                neutralOnly=false) {
     if(!multiEnabled)throw new Error('MULTI_CLIENT_EXPERIMENT_DISABLED');
@@ -461,9 +321,7 @@ export function createOperationCore(config,{
           throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
         }
         verifyTeamObservationBasis(config.mode,schedule.slots,round.basis,
-          schedule.slots.map(slot=>visualObserver.read(slot,{
-            includeImage:false,
-          }).metadata));
+          visualOperations.readMetadata(schedule.slots));
         requireOpen();
         if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
         refuseUncertain(schedule.slots);
@@ -561,70 +419,14 @@ export function createOperationCore(config,{
       return queryDiagnosticEvidence(config.diagnosticsDirectory,args.run,args.id,
         {cursor:args.cursor,limit:args.limit});
     }
-    if (name==='start_visual_observation') {
-      keysExactly(args,['slots','intervalMs','durationMs','imageFormat','width','height']);
-      const slots=checkedSlots(args.slots);
-      const webpSize=visualSize(args);
-      if (!gpuSource && !config.cuaExecutable) {
-        throw new Error('Visual provider is NOT_CONFIGURED');
-      }
-      const durationMs=args.durationMs??OBSERVATION_LIMITS.defaultDurationMs;
-      const intervalMs=args.intervalMs??
-        (gpuSource?500:OBSERVATION_LIMITS.defaultIntervalMs);
-      if (!gpuSource) {
-        return visualObserver.start(slots,{intervalMs,durationMs});
-      }
-      // Refuse invalid cadence before any native inspection or GPU spawn;
-      // the observer's own bounds still validate all provider modes.
-      if (!Number.isInteger(intervalMs) ||
-          intervalMs<OBSERVATION_LIMITS.minimumIntervalMs ||
-          intervalMs>OBSERVATION_LIMITS.maximumIntervalMs ||
-          !Number.isInteger(durationMs) ||
-          durationMs<OBSERVATION_LIMITS.minimumDurationMs ||
-          durationMs>OBSERVATION_LIMITS.maximumDurationMs) {
-        throw new TypeError('Visual observation timing is outside bounded range');
-      }
-      // The WGC producer needs spare frames, not a fixed 5 FPS for a slow
-      // on-demand reader. Keep up to 2x observer cadence, never above old 5.
-      const fps=Math.min(5,Math.max(1,Math.ceil(2000/intervalMs)));
-      if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
-      inFlight=true;
-      const startup={slots:[...slots],cancelled:false};
-      gpuStartup=startup;
-      const started=[];
-      try {
-        // Verify every owner before starting the optional read-only workers.
-        // If one fails, stop every worker started in this request. No game
-        // processes, worlds or authenticated controller instances are created.
-        for (const slot of slots) {
-          if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
-          const target=await readNative('target',slot);
-          if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
-          await gpuSource.start(slot,target,{durationMs,fps,...(webpSize?{webpSize}:{})});
-          started.push(slot);
-          if (startup.cancelled) throw new Error('GPU_OBSERVATION_START_CANCELLED');
-        }
-        const response=visualObserver.start(slots,{intervalMs,durationMs});
-        return {...response,source:'PERSISTENT_NATIVE_WGC_EXPLICIT_OPT_IN',
-          ...(webpSize?{mimeType:'image/webp',...webpSize}:{}),
-          pixelsPassedToModel:'ONLY_ON_MCP_READ'};
-      } catch(error) {
-        gpuSource.stop(started);
-        throw error;
-      } finally {
-        if (gpuStartup===startup) gpuStartup=null;
-        inFlight=false;
-      }
-    }
+    if(typeof name==='string'&&Object.hasOwn(visualOperations.tools,name))return visualOperations.tools[name](args);
     if (name==='get_multi_client_visual_state') {
       keysExactly(args,['slots','since']);
-      const slots=checkedSlots(args.slots ??
+      const slots=visualOperations.checkedSlots(args.slots ??
         (config.mode==='human-plus-four-ai'?[2,3,4,5]:[1,2,3,4,5]));
       // Local cache read only: do NOT trigger new native inspections,
       // create GPU workers, or silently hand image bytes to the model.
-      const readings=slots.map(slot=>visualObserver.read(slot,{
-        includeImage:false,
-      }).metadata);
+      const readings=visualOperations.readMetadata(slots);
       const visual=summarizeTeamVisualState(
         config.mode,slots,readings,args.since??[]);
       const state=summarizeTeamCoordination(
@@ -638,161 +440,6 @@ export function createOperationCore(config,{
         status:busy&&!state.blockedSlots.length?
           'MCP_OPERATION_IN_PROGRESS':state.status,
       }};
-    }
-    if (name==='read_visual_observation') {
-      keysExactly(args,['slot','afterSequence','includeImage','screenReview','imageFormat']);
-      if(args.imageFormat!==undefined&&!['png','webp'].includes(args.imageFormat))throw new Error('Invalid tool arguments');
-      const slot=slotOf(args.slot);
-      protectedSlot(slot);
-      // An AI may submit one visually transcribed Position line only AFTER
-      // an earlier explicit image read. The review itself returns text only.
-      if (args.screenReview!==undefined && args.includeImage!==false) {
-        throw new Error('Screen text review requires includeImage=false');
-      }
-      if (args.includeImage!==undefined && typeof args.includeImage!=='boolean') {
-        throw new Error('Invalid tool arguments');
-      }
-      const afterSequence=args.afterSequence??0;
-      const wantsImage=args.screenReview===undefined && args.includeImage!==false;
-      // First inspect metadata ONLY. Never record a PNG as delivered before
-      // checking that the original native child still owns its PID/HWND.
-      const first=visualObserver.read(slot,{afterSequence,includeImage:false});
-      let observation=first;
-      if(first.metadata.freshFrameAvailable===true&&args.imageFormat!==undefined&&
-         (first.metadata.mimeType??'image/png')!=='image/'+args.imageFormat)throw new Error('VISUAL_FORMAT_MISMATCH');
-      const mustRevalidate=first.metadata.freshFrameAvailable===true &&
-        (args.screenReview!==undefined ||
-         (wantsImage && first.metadata.sequence>afterSequence));
-      if(mustRevalidate){
-        let live;
-        try {
-          live=await readNative('target',slot);
-        } catch {
-          // No native identity proof means no cached PNG or screen-text
-          // review, even if the timestamp still falls within 3.5 seconds.
-          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
-        }
-        requireOpen();
-        if(!sameNativeVisualTarget(live,first.metadata.captureIdentity)){
-          // Positive replacement: revoke just this slot's stale observer
-          // frame/worker. Native game process and other slots are untouched.
-          visualObserver.stop([slot]);
-          gpuSource?.stop([slot]);
-          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
-        }
-        // A sampler may advance/revoke its cache during the native await.
-        // Check continuity using metadata ONLY: a rejected new frame must
-        // never be recorded as "already delivered" before the AI sees it.
-        const verified=visualObserver.read(slot,{afterSequence,includeImage:false});
-        const a=first.metadata,b=verified.metadata;
-        if(b.freshFrameAvailable!==true||
-           b.sequence!==a.sequence||
-           b.successfulSamples!==a.successfulSamples||
-           b.collectedAt!==a.collectedAt||
-           b.sourceFrameAtMs!==a.sourceFrameAtMs||
-           b.sourceTimeKind!==a.sourceTimeKind||
-           b.producerSequence!==a.producerSequence||b.mimeType!==a.mimeType||
-           !sameNativeVisualTarget(b.captureIdentity,a.captureIdentity)){
-          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
-        }
-        // Both reads above were metadata-only. With no async yield between
-        // this check and the actual PNG read, only the same validated cache
-        // frame may become deliverable and eligible for a later text review.
-        observation=wantsImage?
-          visualObserver.read(slot,{afterSequence,includeImage:true}):verified;
-        if(wantsImage && (observation.metadata.hasNewImage!==true||
-           observation.metadata.sequence!==b.sequence||
-           !sameNativeVisualTarget(
-             observation.metadata.captureIdentity,b.captureIdentity)||
-           typeof observation.imageBase64!=='string')){
-          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
-        }
-      }
-      // No new image or usable frame: return the first metadata-only
-      // receipt. Never attempt an unfenced second read.
-      // This remains an ephemeral cache READ, not a screenshot, game input,
-      // player/world attribution or automatic clipboard operation.
-      const metadata={...observation.metadata,
-        ...(observation.metadata.mimeType==='image/webp'?{}:
-          {f3VisualReview:projectF3VisualReview(observation.metadata)})};
-      if(args.screenReview!==undefined){
-        metadata.f3ScreenXYZ=reviewVisibleXYZFromFrame(metadata,args.screenReview);
-      }
-      return {...observation,metadata};
-    }
-    if (name==='stop_visual_observation') {
-      keysExactly(args,['slots']);
-      const slots=checkedSlots(args.slots);
-      const cancelStartup=gpuStartup!==null &&
-        slots.some(slot=>gpuStartup.slots.includes(slot));
-      if (cancelStartup) {
-        // Cancel the entire unfinished batch. Slots not yet started will
-        // fail admission after the current await instead of spawning later.
-        gpuStartup.cancelled=true;
-        gpuSource?.stop(gpuStartup.slots);
-      }
-      const response=visualObserver.stop(slots);
-      gpuSource?.stop(slots);
-      return cancelStartup ? {...response,
-        status:'STARTUP_CANCELLATION_REQUESTED',
-        startOutcome:'UNCONFIRMED_UNTIL_START_REQUEST_SETTLES'} : response;
-    }
-    if (name==='assess_client_background_action') {
-      keysExactly(args,['slot','elementIndex','action']);
-      const slot=slotOf(args.slot);
-      protectedSlot(slot);
-      // Reject malformed intent before any native/UIA observation; clients
-      // cannot upgrade an assessment with a token, fallback or retry flag.
-      // This one shared validator is also used by the pure assessor.
-      const intent=validateCuaStrictBackgroundIntent({
-        elementIndex:args.elementIndex,action:args.action,
-      });
-      // Always refresh via the existing identity-fenced read. A previous
-      // tool result or caller-supplied UIA label is never a current action
-      // authority. No input API is called from this read-only assessor.
-      const inspected=await callTool('inspect_client_ui',{slot});
-      return assessCuaStrictBackgroundAction(inspected,intent);
-    }
-    if (name==='inspect_client_ui') {
-      keysExactly(args,['slot']);
-      const slot=slotOf(args.slot);
-      protectedSlot(slot);
-      if(!config.cuaExecutable) {
-        return {schema:1,slot,status:'BACKGROUND_UNAVAILABLE',
-          reason:'CUA_UIA_NOT_CONFIGURED',
-          screenshotCaptured:false,actionPermitted:false,
-          gameplayInput:'NOT_VERIFIED'};
-      }
-      if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
-      // Use the existing one-native-read gate. This semantic read neither
-      // owns game lifecycle nor introduces a second input/visual scheduler.
-      visualReadBusy=true;
-      try {
-        const before=await readNative('target',slot);
-        requireOpen();
-        const ui=await inspectCua(config.cuaExecutable,before);
-        requireOpen();
-        const after=await readNative('target',slot);
-        requireOpen();
-        if(!sameNativeVisualTarget(after,before)) {
-          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
-        }
-        return {...ui,slot,identity:{pid:after.pid,windowId:after.windowId,
-          createdFileTime:after.createdFileTime,sessionId:after.sessionId}};
-      } finally {visualReadBusy=false;}
-    }
-    if (name==='observe_client') {
-      keysExactly(args,['slot','imageFormat','width','height','afterFrame']);
-      const slot=slotOf(args.slot);
-      protectedSlot(slot);
-      if(args.afterFrame!==undefined&&(args.imageFormat!=='webp'||
-         typeof args.afterFrame!=='string'||!/^[a-f0-9]{64}$/.test(args.afterFrame))) {
-        throw new Error('Invalid tool arguments');
-      }
-      const size=visualSize(args);
-      const result=await captureVerifiedFrame(slot,size,args.afterFrame);
-      if(args.imageFormat==='png'&&result.metadata.mimeType==='image/webp')throw new Error('VISUAL_FORMAT_MISMATCH');
-      return result;
     }
     if (name==='get_computer_use_target' ||
         name==='revalidate_computer_use_target') {
@@ -881,7 +528,7 @@ export function createOperationCore(config,{
       keysExactly(args,['slots']);
       // User may name slots in any order. The native atomic lease
       // contract needs ascending distinct slots, not UI request order.
-      const slots=checkedSlots(args.slots).sort((a,b)=>a-b);
+      const slots=visualOperations.checkedSlots(args.slots).sort((a,b)=>a-b);
       if(multiSequence) {
         if(!slots.some(slot=>multiSequence.slots.includes(slot))) {
           throw new Error('MULTI_CLIENT_SEQUENCE_INVALID_ACTIONS');
@@ -955,9 +602,7 @@ export function createOperationCore(config,{
       if(!Array.isArray(args.receipt?.visualBaseline)) {
         throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
       }
-      const reading=scheduled.slots.map(slot=>visualObserver.read(slot,{
-        includeImage:false,
-      }).metadata);
+      const reading=visualOperations.readMetadata(scheduled.slots);
       // This read does NOT generate a screenshot. The caller-supplied
       // before/after images must have been viewed separately. This only
       // binds recent cache identities and timestamps to an unverified
@@ -980,9 +625,7 @@ export function createOperationCore(config,{
       // input or imply the model actually reviewed the pixels.
       let state=verifyTeamObservationBasis(
         config.mode,schedule.slots,args.basis,
-        schedule.slots.map(slot=>visualObserver.read(slot,{
-          includeImage:false,
-        }).metadata));
+        visualOperations.readMetadata(schedule.slots));
       refuseUncertain(schedule.slots);
       // A frame was verified when CAPTURED, not at action time. A client can
       // exit/restart between cache collection and AI dispatch. Revalidate
@@ -1007,8 +650,7 @@ export function createOperationCore(config,{
           if(!sameNativeVisualTarget(live,frame.baseline?.captureIdentity)) {
             // Known different native child: revoke only this slot's obsolete
             // visual cache and GPU producer. Do not touch another game.
-            visualObserver.stop([frame.slot]);
-            gpuSource?.stop([frame.slot]);
+            visualOperations.revokeSlot(frame.slot);
             throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
           }
         }
@@ -1017,9 +659,7 @@ export function createOperationCore(config,{
         // ALL awaits, before the single controller is allowed to dispatch.
         state=verifyTeamObservationBasis(
           config.mode,schedule.slots,args.basis,
-          schedule.slots.map(slot=>visualObserver.read(slot,{
-            includeImage:false,
-          }).metadata));
+          visualOperations.readMetadata(schedule.slots));
         refuseUncertain(schedule.slots);
         requireOpen();
       } finally {
@@ -1252,15 +892,14 @@ export function createOperationCore(config,{
         uncertainSlots:multiEnabled?[...uncertainAiSlots]:[],
         startupReconcileSlots:multiEnabled?[...startupReconcileSlots]:[],
         ...probeQa.activitySnapshot(),
-        visualSamplers:typeof visualObserver.activity==='function'?
-          visualObserver.activity():[],
+        visualSamplers:visualOperations.activity(),
       });
       const result={...capabilities(config.mode,mc02Enabled,multiEnabled),activity,
         ...(profileInspection!==null?{profileInspection}:{}),
         // Configuration is not provider liveness, runtime proof, or approval.
         configuredSources:{
           native:!!config.executable,
-          visual:gpuSource?'WGC':config.cuaExecutable?'CUA':'NOT_CONFIGURED',
+          visual:visualOperations.source(),
           semanticUi:!!config.cuaExecutable,
           evidence:!!config.evidenceDirectory,
           diagnostics:!!config.diagnosticsDirectory,
@@ -1325,9 +964,7 @@ export function createOperationCore(config,{
     if(multiSequence)markAiUncertain(multiSequence.slots);
     mc02SequenceAbort?.abort();
     multiSequence?.abort.abort();
-    if (gpuStartup) gpuStartup.cancelled=true;
-    visualObserver.shutdown();
-    gpuSource?.shutdown();
+    visualOperations.shutdown();
   }};
 }
 

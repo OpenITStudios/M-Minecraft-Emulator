@@ -532,6 +532,7 @@ test('agent configuration and Probe QA owners retain scoped review routes',()=>{
   for(const [file,expected] of [
     ['agent-configuration.mjs',['agent-input-lease','agent-activity-mirror','native-input-v4']],
     ['probe-qa-operations.mjs',['agent-input-lease','agent-activity-mirror']],
+    ['visual-operations.mjs',['agent-input-lease','agent-activity-mirror','native-input-v4']],
     ['evidence-operations.mjs',[]],
   ]){
     const path=root+file;

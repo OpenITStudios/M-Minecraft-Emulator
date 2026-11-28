@@ -227,6 +227,8 @@ const NAMED_OWNERS=Object.freeze([
   ['fn inspect_file_authenticode',OWNERSHIP_ENGINE+'instance_identity/windows/image_signature.rs'],
   ['fn compare_package_families',OWNERSHIP_ENGINE+'instance_identity/windows/package_identity.rs'],
   ['function createOperationCore',OWNERSHIP_AGENT+'operation-core.mjs'],
+  ['function createVisualOperations',OWNERSHIP_AGENT+'visual-operations.mjs'],
+  ['let visualReadBusy',OWNERSHIP_AGENT+'visual-operations.mjs'],
   ['function createProbeQaOperations',OWNERSHIP_AGENT+'probe-qa-operations.mjs'],
   ['const probeQaPlans',OWNERSHIP_AGENT+'probe-qa-operations.mjs'],
   ['function createEvidenceOperations',OWNERSHIP_AGENT+'evidence-operations.mjs'],
