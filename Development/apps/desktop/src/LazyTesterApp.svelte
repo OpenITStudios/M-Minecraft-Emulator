@@ -23,6 +23,7 @@
   let binding: ProfileBinding | null = null;
   let installation: EducationInstallationReport | null = null;
   let installationPending = false;
+  let macInstallationInspection = false, macInstallationNotice = '';
   let nativeBackend: NativeBackendSupport | null = null;
   let bindingIssue = '', locationIssue = '';
   let dataLocation:DataLocation|null=null;
@@ -507,6 +508,23 @@
     } catch {
       // No stale positive receipt after a failed check.
     } finally {installationPending=false;}
+  }
+  // User-initiated Mac candidate metadata only. No game/session request.
+  async function checkMacInstallation() {
+    if (!macInstallationInspection || nativeBackend !== 'Unsupported' || installationPending || disposed) return;
+    installationPending=true;
+    macInstallationNotice='';
+    try {
+      const result=await lazyTester.macEducationInstallation();
+      if (disposed) return;
+      macInstallationNotice=result.status==='Candidate'
+        ? 'Installation candidate '+result.version+' found. Publisher and profile isolation are not verified; launch is unavailable.'
+        : result.status==='Missing' ? 'No candidate in the two standard Applications locations.'
+        : result.status==='Ambiguous' ? 'Multiple installation candidates found. No installation selected.'
+        : 'Installation metadata could not be confirmed.';
+    } catch {
+      if (!disposed) macInstallationNotice='Installation inspection unavailable.';
+    } finally { installationPending=false; }
   }
   async function refresh(passiveIdle = false) {
     if (!supportsManagedSessions(nativeBackend) || closeReviewActive(reviewState()) || activeOperation !== null || refreshing || resizing || disposed) return;
@@ -1058,6 +1076,7 @@
         const capabilities = await lazyTester.startupCapabilities();
         if (disposed) return;
         nativeBackend = capabilities.backend;
+        macInstallationInspection = capabilities.macInstallationInspection === true;
         diagnostic = capabilities.diagnostic;
         screenshotAvailable = capabilities.screenshot;
         recordingAvailable = capabilities.recording;
@@ -1490,7 +1509,13 @@
         </section>
       {:else if nativeBackend==='Unsupported'&&!initializing}
         <section class="lazytester-binding" tabindex="0" aria-label="Unsupported platform">
-          <div><strong>Minecraft backend unavailable</strong><p>{bindingIssue}</p></div>
+          <div><strong>Minecraft backend unavailable</strong><p>{bindingIssue}</p>
+            {#if macInstallationNotice}<p role="status">{macInstallationNotice}</p>{/if}
+          </div>
+          {#if macInstallationInspection}
+            <div class="lazytester-actions"><button class="lazytester-secondary" disabled={installationPending}
+              on:click={()=>void checkMacInstallation()}>{installationPending?'Checking…':'Check installation'}</button></div>
+          {/if}
         </section>
       {:else if !binding?.configured&&!initializing}<section class="lazytester-binding" tabindex="0" aria-label="Launcher recovery"><div><strong>Existing launcher connection could not be verified</strong><p>{bindingIssue||userMessage('binding')}</p></div><div class="lazytester-actions"><button disabled={busy||manualRefreshing||manualRefreshRequested} on:click={()=>manualRefreshRequested=true}>Retry connection</button><button class="lazytester-secondary" on:click={()=>navigate('storage')}>Data Storage</button></div></section>{/if}
       </div>

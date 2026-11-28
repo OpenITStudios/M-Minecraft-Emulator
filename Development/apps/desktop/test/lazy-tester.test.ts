@@ -1,7 +1,7 @@
 import {sameWorkspaceGeometry, type WorkspaceGeometry} from '../src/app/workspaceGeometry.js';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, supportsManagedSessions, parseNativeBackendSupport, parseStartupCapabilities, parseEducationInstallation, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, supportsManagedSessions, parseNativeBackendSupport, parseStartupCapabilities, parseEducationInstallation, parseMacEducationInstallation, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
@@ -32,6 +32,19 @@ describe('Education installation observation',()=>{
     const settings=readFileSync(new URL('../src/GeneralSettings.svelte',import.meta.url),'utf8');
     expect(settings).not.toMatch(/Image review|Reviewed image found|Task ready|Official updater/);
     expect(settings).toContain('{#if installationNotice}');
+  });
+  it('keeps Mac candidate observation separate from Windows and native admission',()=>{
+    const mac={schema:1,platform:'macos',status:'Candidate',version:'26.33',runtimeAdmission:false};
+    expect(parseMacEducationInstallation(mac)).toEqual(mac);
+    for(const status of ['Missing','Ambiguous','Unconfirmed'])
+      expect(parseMacEducationInstallation({...mac,status,version:null}).status).toBe(status);
+    for(const invalid of [report,{...mac,runtimeAdmission:true},{...mac,path:'/private'},
+      {...mac,version:null},{...mac,version:'1..2'},{...mac,status:'Missing'},
+      {...mac,status:'Ready'}])expect(()=>parseMacEducationInstallation(invalid)).toThrow();
+    expect(()=>parseEducationInstallation(mac)).toThrow();
+    const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    expect(app).toContain('on:click={()=>void checkMacInstallation()}');
+    expect(app).not.toContain('await checkMacInstallation()');
   });
   it('keeps version inspection out of passive session refresh and startup',()=>{
     const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
@@ -398,6 +411,12 @@ describe('Lazy Tester profile contract', () => {
     expect(parseStartupCapabilities({...normal,screenshot:true,recording:true})).toEqual({...normal,screenshot:true,recording:true});
     expect(parseStartupCapabilities({...normal,diagnostic:true}).diagnostic).toBe(true);
     expect(parseStartupCapabilities({...normal,backend:'Unsupported'}).backend).toBe('Unsupported');
+    const mac={...normal,backend:'Unsupported',macInstallationInspection:true};
+    expect(parseStartupCapabilities(mac)).toEqual(mac);
+    expect(supportsManagedSessions(parseStartupCapabilities(mac).backend)).toBe(false);
+    for(const forged of [{...normal,macInstallationInspection:true},
+      {...mac,macInstallationInspection:false},{...mac,screenshot:true}])
+      expect(()=>parseStartupCapabilities(forged)).toThrow();
     for(const value of ['WindowsNative',null,{...normal,recording:1},{...normal,extra:true},
       {...normal,diagnostic:true,screenshot:true},{...normal,backend:'Unsupported',recording:true},
       {...normal,backend:'Unsupported',diagnostic:true}])expect(()=>parseStartupCapabilities(value)).toThrow();

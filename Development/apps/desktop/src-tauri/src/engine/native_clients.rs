@@ -257,6 +257,30 @@ fn registered_education_metadata() -> io::Result<RegisteredEducationMetadata> {
     Ok(receipt)
 }
 
+#[cfg(target_os = "macos")]
+mod macos_installation;
+
+#[cfg(target_os = "macos")]
+pub use macos_installation::MacEducationInstallationReport;
+
+// Keep the existing Windows JSON receipt byte shape (no variant tag).
+// Mac is explicitly a candidate observation, not Windows updater state.
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum EducationInstallationObservation {
+    #[cfg(not(target_os = "macos"))]
+    Windows(EducationInstallationReport),
+    #[cfg(target_os = "macos")]
+    Mac(MacEducationInstallationReport),
+}
+
+pub fn education_installation_observation() -> io::Result<EducationInstallationObservation> {
+    #[cfg(target_os = "macos")]
+    { Ok(EducationInstallationObservation::Mac(macos_installation::inspect())) }
+    #[cfg(not(target_os = "macos"))]
+    { education_installation_report().map(EducationInstallationObservation::Windows) }
+}
+
 pub fn education_installation_report() -> io::Result<EducationInstallationReport> {
     #[cfg(all(windows, target_arch = "x86_64"))]
     { independent_bootstrap::education_installation_report() }

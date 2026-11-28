@@ -16,6 +16,8 @@ pub struct StartupCapabilities {
     diagnostic: bool,
     screenshot: bool,
     recording: bool,
+    #[cfg(target_os = "macos")]
+    mac_installation_inspection: bool,
 }
 
 #[tauri::command]
@@ -28,6 +30,8 @@ pub fn lazy_tester_startup_capabilities() -> StartupCapabilities {
         backend, diagnostic,
         screenshot: capture_allowed && crate::engine::capture::screenshot_available(),
         recording: capture_allowed && crate::engine::capture::recording_available(),
+        #[cfg(target_os = "macos")]
+        mac_installation_inspection: true,
     }
 }
 
@@ -95,9 +99,9 @@ pub async fn lazy_tester_session(
 
 // Explicit read-only Settings observation; no new session or updater owner.
 #[tauri::command]
-pub async fn lazy_tester_education_installation() -> Result<native_clients::EducationInstallationReport, String> {
+pub async fn lazy_tester_education_installation() -> Result<native_clients::EducationInstallationObservation, String> {
     if crate::app_bootstrap::startup_diagnostic_mode() { return Err("Installation inspection unavailable in startup diagnostic".into()); }
-    tauri::async_runtime::spawn_blocking(move || run_manager_operation(native_clients::education_installation_report))
+    tauri::async_runtime::spawn_blocking(move || run_manager_operation(native_clients::education_installation_observation))
         .await.map_err(|_| "Installation inspection task failed".to_string())?
         .map_err(|_| "Minecraft Education installation could not be verified".to_string())
 }

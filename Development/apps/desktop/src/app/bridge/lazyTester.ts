@@ -37,15 +37,33 @@ export function parseNativeBackendSupport(value: unknown): NativeBackendSupport 
   }
   return value;
 }
-export interface StartupCapabilities {backend:NativeBackendSupport; diagnostic:boolean; screenshot:boolean; recording:boolean}
+export interface StartupCapabilities {backend:NativeBackendSupport; diagnostic:boolean; screenshot:boolean; recording:boolean; macInstallationInspection?:true}
 export function parseStartupCapabilities(value: unknown): StartupCapabilities {
-  if (!record(value) || !exact(value, ['backend','diagnostic','screenshot','recording']) ||
+  if (!record(value)) throw new TypeError('Invalid startup capabilities');
+  const hasMac = Object.hasOwn(value,'macInstallationInspection');
+  if (!exact(value, hasMac ? ['backend','diagnostic','screenshot','recording','macInstallationInspection'] : ['backend','diagnostic','screenshot','recording']) ||
       typeof value.diagnostic !== 'boolean' || typeof value.screenshot !== 'boolean' || typeof value.recording !== 'boolean')
     throw new TypeError('Invalid startup capabilities');
   const backend = parseNativeBackendSupport(value.backend);
   if ((backend === 'Unsupported' || value.diagnostic) && (value.screenshot || value.recording) ||
       backend === 'Unsupported' && value.diagnostic) throw new TypeError('Inconsistent startup capabilities');
-  return {backend,diagnostic:value.diagnostic,screenshot:value.screenshot,recording:value.recording};
+  if (hasMac && (value.macInstallationInspection !== true || backend !== 'Unsupported'))
+    throw new TypeError('Inconsistent Mac installation inspection capability');
+  return {backend,diagnostic:value.diagnostic,screenshot:value.screenshot,recording:value.recording,
+    ...(hasMac ? {macInstallationInspection:true as const} : {})};
+}
+export interface MacEducationInstallationReport {
+  schema:1; platform:'macos'; status:'Missing'|'Candidate'|'Ambiguous'|'Unconfirmed';
+  version:string|null; runtimeAdmission:false;
+}
+export function parseMacEducationInstallation(value:unknown):MacEducationInstallationReport {
+  if (!record(value) || !exact(value,['schema','platform','status','version','runtimeAdmission']) ||
+      value.schema!==1 || value.platform!=='macos' || value.runtimeAdmission!==false ||
+      typeof value.status!=='string' || !['Missing','Candidate','Ambiguous','Unconfirmed'].includes(value.status) ||
+      (value.status==='Candidate' ? typeof value.version!=='string' || value.version.length>64 ||
+        !/^[0-9]+(?:\.[0-9]+){0,4}$/.test(value.version) : value.version!==null))
+    throw new TypeError('Invalid Mac installation candidate report');
+  return value as unknown as MacEducationInstallationReport;
 }
 export type EducationUpdaterState = 'Ready' | 'Busy' | 'Disabled' | 'Missing' | 'Unknown';
 export interface EducationInstallationReport {
@@ -535,6 +553,7 @@ export function parseNativeIssueReport(value:unknown):NativeIssueReport|null {
 
 export const lazyTester = {
   educationInstallation:async()=>parseEducationInstallation(await invokeRuntime<unknown>('lazy_tester_education_installation')),
+  macEducationInstallation:async()=>parseMacEducationInstallation(await invokeRuntime<unknown>('lazy_tester_education_installation')),
   issueReport:async()=>parseNativeIssueReport(await invokeRuntime<unknown>('lazy_tester_issue_report')),
   checkpointIssues:async(ui:string|null)=>invokeRuntime<void>('lazy_tester_checkpoint_issues',{ui}),
   recordingStatus:async()=>parseRecordingStatus(await invokeRuntime<unknown>('lazy_tester_recording_status')),

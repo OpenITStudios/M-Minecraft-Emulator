@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-04g: shared snapshot selection)
+## Current status — cross-platform-native (MAC-05a: product installation discovery)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,44 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-05a — product-facing Mac installation candidate (P1 partial, source only)
+
+Move the next work to actual product discovery, not further synthetic UI.
+Official [Mac installation](https://edusupport.minecraft.net/hc/en-us/articles/360047118792-Mac-Installation-Guide)
+uses Applications; [Homebrew cask](https://formulae.brew.sh/cask/minecraft-education)
+documents minecraft-edu.app renamed Minecraft Education.app. Names are
+discovery hints, never publisher pins. An attempted HTTP HEAD for the
+MAC-02 official DMG from the source environment failed DNS resolution;
+no DMG content or native evidence was obtained.
+
+Add a Mac-only leaf to native_clients and reuse the existing read-only
+installation command and resource admission. Only two fixed system
+Applications names; refuse links, ambiguity, malformed metadata and
+missing executable. Read at most 256 KiB of Info.plist, parse required
+APPL/identifier/executable/version fields, check the ordinary executable's
+presence/mode and recheck metadata. No executable bytes, game launch,
+signature admission, settings, credentials, home scan or caller paths.
+File checks are not atomic against concurrent changes; candidate metadata
+can be imitated, and no nonstandard install locations are searched.
+Use existing locked plist 1.10.2 and libc 0.2.191 as direct Mac-only
+dependencies; no new package version or extra process. The existing lock
+root dependency edge is authored, Cargo lock resolution NOT_EXECUTED.
+[plist reader](https://docs.rs/plist/latest/plist/enum.Value.html) is the
+API reference. Actual Mac compile and candidate behavior remain unknown.
+
+Reuse the existing unsupported shell and one explicit Check installation
+button, no startup scan or periodic polling. Mac-only optional capability
+and tagged receipt, unchanged Windows report shape. Distinguish Missing,
+Candidate, Ambiguous and Unconfirmed; runtimeAdmission always false.
+No positive native backend, capture, settings or profile eligibility.
+Authored Mac synthetic filesystem and TS wire refusal fixtures NOT_EXECUTED.
+No new Tauri command, controller, helper, service or installer. Preserve
+Windows build/test/release holds. The offline signature collector remains
+the deeper evidence owner. Candidate discovery does not solve independent
+storage or authentication. Next meaningful work requires actual artifact
+metadata and a defensible profile mechanism; do not claim source-ready
+Mac game management or expand speculative runtime plumbing.
 
 ### MAC-04g — shared snapshot panel and native focus (P3b partial, source only)
 
@@ -566,7 +604,8 @@ MAC-04c extends it with explicit two-instance path observations;
 MAC-04d records authentication counterevidence and alternate native topology;
 MAC-04e records operator-confirmed final workspace parity and staged design;
 MAC-04f adds same-login synthetic window capture/interaction feasibility source;
-MAC-04g adds a bounded synthetic shared snapshot/selection panel.
+MAC-04g adds a bounded synthetic shared snapshot/selection panel;
+MAC-05a adds an explicit product-side Mac installation candidate observation.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
