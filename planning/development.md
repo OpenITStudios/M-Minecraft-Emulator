@@ -1,6 +1,94 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status
+## Current status — cross-platform-native (MAC-01)
+
+Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
+macOS, retaining up to five independent licensed Education profiles
+(MC01–MC05), one official installation per host, one UI, one retained
+session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
+all native, execution and release holds remain. DESIGN_REVIEWED;
+implementation BLOCKED at Mac profile isolation. Not SOURCE_READY_FOR_LOCAL.
+
+### Minimal architecture — proposed, not implemented
+
+Keep UI -> typed bridge -> allowlisted Tauri commands -> retained Rust
+controller -> native game. Bind OS-specific primitives at compile time;
+no runtime provider chooser, fallback, second controller, VM, new service,
+extra polling, credential store or game patch. Share policy only where
+needed by a second concrete consumer; do not mount historical provider
+traits as another runtime. Preserve Windows public commands, wire receipts,
+slot IDs, private data and existing admission gates.
+
+| Existing owner | Planned boundary |
+| --- | --- |
+| `engine/native_clients.rs` | Official target admission; Mac bundle/signature/version/architecture, unchanged Windows PE/DLL checks. |
+| `independent_bootstrap/session_controller.rs` | One session lifecycle/state owner; extract neutral policy only as needed, retain native handles and uncertainty/recovery. |
+| `native_clients_session.rs` + `session_protocol.rs` | Shared validation, framing and admission; Windows pipe, candidate Mac Unix socket with exact peer/image verification, no replay. |
+| Existing product profile/storage owners | One five-slot catalog per host; verified private backing per OS; no automatic migration or credential copying. |
+| `process_identity.rs` | Preserve Windows receipts; explicitly tagged/versioned Mac identity if needed; no invented FILETIME/HWND. |
+| `workspace_surface.rs` | Same presentation contract; DWM or AppKit/Accessibility, optional ScreenCaptureKit after explicit permission and exact target validation. |
+| Capture and agent core | Keep capability gates; no automatic capture/input/recording parity; NVENC is not a Mac requirement. |
+| `LazyTesterApp.svelte`, `app/bridge/lazyTester.ts`, presentation/titlebar consumers | Replace OS-specific readiness comparisons with shared capability decisions only when real backend is admitted. Keep Unsupported fail-closed. |
+| `agent-configuration.mjs`, `native-transport.mjs` | Same MCP/SDK core and same-image CLI; review .exe/path assumptions with real Mac executable. |
+| `build.rs`, Tauri config, existing distribution/developer tooling | Preserve NSIS gates; later native .app/DMG and signing/notarization; no second build system. |
+
+Naming: use `windows.rs` / `macos.rs` under the actual owner only when
+needed; preserve clear existing names, no blanket rename or empty
+scaffolding. Proposed target priority macOS 14+, Apple Silicon first;
+Intel not excluded or declared compatible without artifact evidence.
+
+### Isolation feasibility — blocking gate
+
+Official [Mac installation](https://edusupport.minecraft.net/hc/en-us/articles/360047118792-Mac-Installation-Guide)
+and [requirements](https://edusupport.minecraft.net/hc/en-us/articles/360047556591-System-Requirements)
+confirm Mac 14+ support. Official [world locations](https://edusupport.minecraft.net/hc/en-us/articles/4404785703316-Location-of-World-Files)
+show a device-user-relative Library/Application Support/Minecraftpe/Games/com.mojang
+root, not a per-instance root. Apple [new instance](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/createsnewapplicationinstance)
+and [launch environment](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/environment)
+APIs do not establish independent Minecraft storage, singleton or login.
+[App Sandbox](https://developer.apple.com/documentation/security/accessing-files-from-the-macos-app-sandbox)
+and [Keychain access groups](https://developer.apple.com/documentation/Security/sharing-access-to-keychain-items-among-a-collection-of-apps)
+are app/signing-associated, not arbitrary instance isolation.
+[Fast user switching](https://support.apple.com/en-euro/guide/mac-help/mchlp2439/27/mac/27)
+does not establish simultaneous shared-desktop interaction. Do not use as
+fallback. No VM, duplicate game copies, global HOME/root swaps, ad-hoc
+re-signing, security bypass, credential inspection/copying or invented flags.
+
+Prefer a supported, verified per-instance profile mechanism. None established
+in reviewed references. Exact official Mac bundle artifact, identifier,
+signing requirement, Mach-O architectures, storage/authentication routing
+and singleton behavior remain unknown. Preserve Unsupported and refuse
+managed launch until a safe mechanism is established; two PIDs are not proof.
+
+### Implementation and acceptance sequence
+
+1. MAC-02: identify authorized official artifact and verified independent
+   storage/account mechanism, with sanitized image/architecture/signature
+   and boundary evidence. No binary or secret in Git; no execution now.
+2. MAC-03: implement narrow owner-to-consumer slice, one controller and
+   two independent persistent profiles, then reuse slot path for five.
+   Author fixtures for shared-root rejection, changed image, stale identity,
+   unauthorized IPC peer, uncertain close and unsupported capability.
+3. MAC-04: integrate shared UI and agent flow, explicit manual launch and
+   sign-in, native presentation. Apple
+   [NSRunningApplication](https://developer.apple.com/documentation/appkit/nsrunningapplication)
+   and [ScreenCaptureKit](https://developer.apple.com/documentation/ScreenCaptureKit)
+   are candidates, not integrated. No unverified permission/features.
+4. MAC-05: target-specific packaging after source/admission review;
+   [Tauri distribution](https://v2.tauri.app/distribute/) signing and
+   notarization for external distribution. Release approval separate.
+   Later separately authorized native evidence: two then five independent
+   licensed playable accounts/worlds, separate persistent writes, normal
+   close/relaunch/reconnect, permission-denied behavior, preservation,
+   CPU/RAM/GPU/frame time/startup and Windows regression. No estimated
+   performance claim or source-only PASS.
+
+MAC-01 changes planning only; no runtime code, dependencies, fake adapters,
+test execution or weakened gates. Builds, native/gameplay/performance,
+packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
+and defensible isolation mechanism. Preserve all existing holds.
+
+## Previous source closure — zero-legacy-runtime (unchanged)
 
 Branch `Local`; Unreleased. Work: `zero-legacy-runtime`.
 Approved goal: one retained native runtime, canonical profile storage, one agent
