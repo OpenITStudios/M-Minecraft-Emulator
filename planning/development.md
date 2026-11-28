@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-05c: expected signing team evidence)
+## Current status — cross-platform-native (MAC-05d: current binary counterevidence and isolation priority)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,77 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-05d — current release evidence and isolation priority (2026-11-28)
+
+OBSERVED_EXTERNAL, not locally verified: [Desktop Insights Minecraft-edu](https://desktopinsights.com/apps/minecraft-edu?platform=macos)
+reports a static analysis of release 1.26.33, universal Intel/Apple Silicon,
+Microsoft Developer ID team UBF8T346G9, Hardened Runtime and detected
+OneAuth/MSAL libraries, with app-group and keychain-access-group entitlements.
+Its published analyzed-binary SHA-256 is
+1e45a044621d5cefee9221238c6d7e96b565d6ddbb92587d099f68d3be4f2613.
+The exact hashed file scope and original archive provenance are not established
+from the public page; do not equate this with the DMG SHA or pin an executable
+from it. Its [extraction methodology](https://desktopinsights.com/blog/how-we-detect-sdks-in-macos-apps)
+combines bundle metadata and strings; detection does not establish active
+runtime paths. Corroborates MAC-05c team expectation and universal target
+candidate, not an independent cryptographic verification, notarization
+receipt, exact entitlements, bundle identifier or admission.
+
+[Official changelog](https://edusupport.minecraft.net/hc/en-us/articles/360047556451-Minecraft-Education-Change-Log/)
+confirms 26.33 released Oct 28, 2026. The official alias
+https://aka.ms/meeclientmacos redirects to the same 26.33.0 DMG recorded
+in MAC-02, but web retrieval of bytes failed; no artifact obtained.
+[Official Cloud Update notes](https://edusupport.minecraft.net/hc/en-us/articles/23323615654164-What-s-New-in-the-Cloud-Update-v1-21-10)
+document changed Mac sign-in libraries, Keychain permissions and OneDrive
+world backup. Add cloud sync to future isolation acceptance (disposable
+worlds and separate licensed accounts, verify independent cloud routing and
+no cross-account overwrite; no token/credential enumeration).
+
+[Apple TN3137](https://developer.apple.com/documentation/technotes/tn3137-on-mac-keychains)
+specifies one data-protection keychain per user in the caller's login
+context. [Apple access groups](https://developer.apple.com/documentation/security/sharing-access-to-keychain-items-among-a-collection-of-apps)
+and [Microsoft MSAL](https://learn.microsoft.com/en-us/entra/msal/objc/howto-v2-keychain-objc)
+describe app-signing-based group access and application-owned configuration,
+not an external per-instance account override.
+
+Independent alternative reviewed at exact
+[PluralMacPlus 458d8e2](https://github.com/knutwurst/PluralMacPlus/tree/458d8e23f9baeb4bf830381e59f6ba8f94e8c13b):
+README explicitly shares Keychain; DirectLauncher.swift retains shared
+Keychains under redirected HOME; PreferencesIsolation.swift uses a
+compatibility shim subject to hardened-runtime restrictions. Do not import
+this solution: it cannot establish Education account isolation; private
+app copies, injection, re-signing and device-ID changes are out of scope.
+No supported same-user Education isolation switch found.
+
+Decision: prioritize P1/U1–U4 distinct existing standard macOS user
+contexts as the strongest current isolation candidate. This is a change
+in investigation priority, NOT selection or implementation of topology B.
+A remains preferred if a supported game-owned isolation route is found.
+For B, P3 inactive-session capture and selected human interaction without
+manual console switching are still mandatory before integrating a per-user
+endpoint. Do not lower final five-client workspace parity. Explicit separate
+consent required for user-session access; no root, account creation,
+login automation, credential handling, signature modification or implicit
+fallback. The existing fixtures and product discovery remain sufficient
+for the current source-only phase.
+
+Next decisive evidence inputs (no localtest request):
+1. An unchanged official DMG copy can be provided from any OS, not necessarily
+   Mac. Static package hash and metadata review are separate from runtime
+   proof; compare the exact package with MAC-02's published checksum and
+   inspect an authorized offline bundle. No install, execution or package
+   bytes in Git. Existing MAC-03b collector remains the evidence owner.
+2. A supported actual Education profile isolation mechanism, or later
+   separately authorized evidence for U1–U4 and P3 with existing standard
+   users and two licensed sessions. A third-party static report does not
+   supply that evidence.
+
+No runtime code changes, additional fixtures, dependencies or admission
+gates in this checkpoint. No compiler, tests, CI or native execution.
+Do not spend further source iterations on synthetic substitutes or
+signing refinements that cannot resolve the missing mechanism. The actual
+Mac integration remains BLOCKED; preserve all Windows and release holds.
 
 ### MAC-05c — expected signing team and deployment name (P1 partial)
 
@@ -683,7 +754,9 @@ MAC-04g adds a bounded synthetic shared snapshot/selection panel;
 MAC-05a adds an explicit product-side Mac installation candidate observation;
 MAC-05b adds generic static signature and explicit singleton metadata observation;
 MAC-05c tightens candidate signature observation with reviewed expected team
-and adds the historical Microsoft Intune installation name.
+and adds the historical Microsoft Intune installation name;
+MAC-05d records current-release external binary evidence and prioritizes
+OS-user isolation feasibility without changing product acceptance.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
