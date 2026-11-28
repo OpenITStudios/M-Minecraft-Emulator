@@ -278,6 +278,28 @@ describe("Emulator source verification routing", () => {
     expect(app.scripts["dev:preview"]).not.toContain("--features lazy-tester-package");
   });
 
+  it("keeps the Mac development shell explicit, non-product and payload-free", async () => {
+    const {mergePatch}=await import("../scripts/check-native-preview-package.mjs");
+    const base=JSON.parse(readFileSync(new URL("../src-tauri/tauri.conf.json",import.meta.url),"utf8"));
+    const mac=JSON.parse(readFileSync(new URL("../src-tauri/tauri.macos.conf.json",import.meta.url),"utf8"));
+    const effective=mergePatch(base,mac);
+    expect(effective.identifier).toBe("com.mivubi.lazytester.macos.dev");
+    expect(effective.bundle.active).toBe(false);
+    expect(effective.bundle.targets).toEqual(["app"]);
+    expect(effective.bundle.resources).toEqual({});
+    expect(effective.bundle.externalBin).toEqual([]);
+    expect(effective.bundle.icon).toContain("icons/icon.icns");
+    expect(effective.app).toEqual(base.app);
+    expect(effective.build).toEqual(base.build);
+    expect(app.scripts["dev:macos"]).toContain("process.platform !== 'darwin'");
+    expect(app.scripts["dev:macos"]).toContain("tauri dev -- --locked");
+    expect(app.scripts["dev:macos"]).not.toMatch(/--features|--release|tauri build|prepare:lazy-payload/);
+    expect(app.scripts["dev:app"]).not.toContain("dev:macos");
+    expect(root.scripts["verify:source"]).not.toContain("dev:macos");
+    const icons=readFileSync(new URL("../scripts/prepare-icons.mjs",import.meta.url),"utf8");
+    expect(icons).toContain("if(process.platform==='darwin')names.push('icon.icns')");
+  });
+
   it("prevents shipping the native pilot inside the existing VMware NSIS bundle", () => {
     const entry = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
     const packageBuilder = readFileSync(new URL("../scripts/prepare-package-binaries.mjs", import.meta.url), "utf8");

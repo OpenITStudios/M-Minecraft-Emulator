@@ -11,6 +11,7 @@
     "dev:frontend": "vite --host 127.0.0.1 --port 1421 --strictPort",
     "prepare:icons": "node scripts/prepare-icons.mjs",
     "dev:app": "npm run dev:lazy-tester",
+    "dev:macos": "node -e \"if (process.platform !== 'darwin') { console.error('macOS required'); process.exit(1) }\" && npm run prepare:icons && tauri dev -- --locked",
     "dev:lazy-tester": "npm run prepare:icons && npm run check:lazy-package && npm run prepare:lazy-payload && tauri dev --target x86_64-pc-windows-msvc --config src-tauri/tauri.lazy-tester.conf.json --features lazy-tester-package -- --locked",
     "dev:preview": "npm run prepare:icons && npm run check:preview-package && tauri dev --target x86_64-pc-windows-msvc --config src-tauri/tauri.native-preview.conf.json --features native-workspace-preview -- --locked",
     "build:frontend": "vite build && node scripts/check-lazy-tester-package.mjs --frontend",

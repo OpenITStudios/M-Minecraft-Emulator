@@ -9,8 +9,9 @@ import {createRequire} from 'node:module';
 const root=resolve(import.meta.dirname,'..');
 const source=resolve(root,'src-tauri','app-icon.svg');
 const iconDir=resolve(root,'src-tauri','icons');
-const outputs=['32x32.png','128x128.png','128x128@2x.png','icon.ico']
-  .map(name=>resolve(iconDir,name));
+const names=['32x32.png','128x128.png','128x128@2x.png','icon.ico'];
+if(process.platform==='darwin')names.push('icon.icns');
+const outputs=names.map(name=>resolve(iconDir,name));
 const stamp=resolve(iconDir,'.app-icon-source.sha256');
 const digest=createHash('sha256').update(readFileSync(source)).digest('hex');
 if(outputs.every(existsSync)&&existsSync(stamp)&&readFileSync(stamp,'utf8').trim()===digest)

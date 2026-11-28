@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-03d: native identity boundary)
+## Current status — cross-platform-native (MAC-04a: Mac development shell)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,44 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-04a — separate source development from native activation
+
+The operator has no current Mac test access and wants staged work to continue.
+Do not make local testing a prerequisite for source preparation. Native
+activation and release still require matching later evidence.
+
+One explicit `dev:macos` route uses the existing locked Tauri/Svelte/Rust
+desktop and native host, not Windows PowerShell, DLL staging or a second app.
+The platform-specific Tauri overlay gives a separate dev identifier, disables
+bundling and selects Mac icons; existing icon generator also checks ICNS on
+Mac. Tauri [platform merge](https://v2.tauri.app/develop/configuration-files/)
+and [prerequisites](https://v2.tauri.app/start/prerequisites/) are the source
+references. Windows default scripts, native and release gates remain unchanged.
+Authored config/route fixture NOT_EXECUTED; actual Mac compile and app startup
+NOT_EXECUTED. The diagnostic shell is not a Mac backend or release candidate.
+
+Stage native design/implementation against bounded acceptance, with
+activation OFF until verified:
+
+| Stage | Planned native work and acceptance |
+| --- | --- |
+| A — shell | One explicit host-native development route; ordinary window/close, Unsupported backend, no game or profile access. Source prepared. |
+| B — target | Reuse existing artifact inspector; pin actual Microsoft bundle, architecture, signer and launch behavior. Source collector exists; missing artifact remains unknown. |
+| C — lifecycle candidate | One explicitly selected, disposable current-user game session as a later opt-in feasibility milestone, not a managed private slot or changed product acceptance. Use AppKit original application object, no adoption/force-close, normal quit and retained exit evidence. Source design can precede Mac runtime validation; no actual launch admitted until provenance and disposable-user boundaries are established. |
+| D — independent profiles | Prefer verified same-user per-instance native game profile mechanism. Only accept documented/verified routing of worlds, settings, cache, preferences, login/broker and singleton, with no shared mutable state. No invented environment flags or credentials. |
+| E — alternative native isolation | If D is unavailable, evaluate separately consented existing standard macOS users and explicit logged-in GUI sessions, one official app installation. Apple [login sessions](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/SystemContexts.html) and [Fast User Switching](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/FastUserSwitching.html) support OS-user boundaries but also restrict cross-session window/IPC access and permit app-wide singleton refusal. A per-user actor or screen-sharing bridge would change topology; not authorized/implemented as fallback. Use no privilege escalation or automated login. Evaluate separately if necessary. |
+| F — convergence | Only after verified independent two-client mechanism, connect existing five-slot controller contract, typed native identity, shared UI and MCP; scale 2 to 5 without new providers. Workspace, capture, optimization and packaging follow in scope. |
+
+Mac OS user path is documented in [Minecraft world locations](https://edusupport.minecraft.net/hc/en-us/articles/4404785703316-Location-of-World-Files);
+AppKit [new instance](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/createsnewapplicationinstance)
+and [environment](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/environment)
+are launch tools, not proof of private storage. One-client diagnostic
+milestone does not satisfy final five independent playable account acceptance.
+No VM, app patch, signature changes, global path swap, credential handling,
+new service, release, CI or test execution. The next source unit is a
+bounded native lifecycle feasibility design, not more common-code
+refactoring. No positive Mac capability until actual admission.
 
 ### MAC-03d — native identity boundary (source only)
 
@@ -229,7 +267,8 @@ managed launch until a safe mechanism is established; two PIDs are not proof.
 MAC-01 and MAC-02 change planning only; MAC-03a changes common frontend
 source and matching fixtures; MAC-03b adds explicit offline artifact tooling;
 MAC-03c shares existing pure session policy with its active native caller;
-MAC-03d centralizes active frontend window identity comparisons.
+MAC-03d centralizes active frontend window identity comparisons;
+MAC-04a adds the explicit non-product Mac development shell route.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

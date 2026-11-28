@@ -1,0 +1,23 @@
+{
+  "productName": "Lazy Tester macOS Development",
+  "identifier": "com.mivubi.lazytester.macos.dev",
+  "bundle": {
+    "active": false,
+    "targets": [
+      "app"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "shortDescription": "Lazy Tester macOS development shell",
+    "longDescription": "Development-only diagnostic shell. Managed Minecraft sessions are not available.",
+    "externalBin": [],
+    "resources": {},
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    }
+  }
+}

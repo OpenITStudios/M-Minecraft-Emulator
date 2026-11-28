@@ -34,6 +34,29 @@ Native Windows Minecraft Education has five
 fixed profile identities and an explicit manual launch path; the old
 Sandboxie/VMware provider route is retired.
 
+## macOS development shell — source prepared, not executed
+
+This is an explicit development route for a future separately approved
+Mac source-validation phase, not a supported native product or installer.
+Use the pinned Node/npm/Rust versions in [toolchain.json](../../toolchain.json),
+the locked desktop dependencies and Apple's Xcode Command Line Tools.
+The proposed game compatibility floor remains macOS 14; the bundle minimum
+setting does not enforce that floor during Tauri dev.
+
+From `Development/apps/desktop`, the existing dependency setup and
+`npm run dev:macos` are the candidate development route. The command
+refuses non-Mac hosts and uses the same Svelte/Vite frontend and Tauri/Rust
+entrypoint. Tauri automatically merges `src-tauri/tauri.macos.conf.json`
+for Mac targets. The distinct dev identity, disabled bundling, empty native
+payload and Mac icon reuse are deliberate. No auto-install, release,
+Minecraft launch or managed data access. The normal Windows
+`dev:app` and existing build/release gates are unchanged.
+
+The shell must show unsupported native management, not five ready
+profiles. Build/launch and permission behavior remain NOT_EXECUTED.
+See [cross-platform handoff](../../../planning/development.md) for the
+staged native isolation work. No local test is requested by this source edit.
+
 ## Canonical source owners
 
 | Area | Owner |
