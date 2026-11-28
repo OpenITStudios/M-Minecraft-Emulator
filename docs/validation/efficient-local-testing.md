@@ -205,6 +205,40 @@ freshness separately. No persistent IPC rewrite or removal of identity
 fences without measured benefit and equivalent safety. OPT-07 performance
 evidence remains deferred, not a source defect or a runtime PASS.
 
+### End-to-end source acceptance (E2E-01–06)
+
+Scope: the reviewed desktop/native/agent changes from the pre-E2E
+baseline `f46a96b95a2f66f3d0061e73854d0150e7fd7d62` through the
+current source handoff. The existing full `DEV.cmd check` route owns
+repository verification, desktop Vitest, Windows Rust and agent
+`test:localtest` fixtures; no new validation runner. `verify:quick`
+includes repository and frontend fixtures and a scoped Rust check, not
+Rust test execution or agent `test:localtest`. All fixtures below are
+`TEST_AUTHORED_NOT_RUN`; actual acceptance and performance remain
+`NOT_EXECUTED`.
+
+| Work | Existing fixture/verification owner | Required acceptance |
+| --- | --- | --- |
+| E2E-01 | `tooling/repository/verify.mjs`, bootstrap/native presentation fixtures | One validated FPS read per launch/cohort, original presentation ABI, refusal before child creation and intact rollback |
+| E2E-02 | `test/lazy-tester.test.ts`, `session_controller.rs`, repository verifier | One post-save reap and full settings receipt; ApplyPreset retains separate fresh pre-mutation admission |
+| E2E-03 | `test/startup-network-boundary.test.ts`, `test/verification-routing.test.ts`, profile binding/location fixtures | One automatic initializer, independent Inspect, explicit retry, read-only diagnostic, no duplicate product lookup or implicit data replacement |
+| E2E-04 | `test/workspace-surface.test.ts`, `native_clients_session.rs`, original workspace/DWM fixtures | Exact-slot selection; pending request refusal; only complete ordered full Inspect reconciles uncertainty; no placement geometry for refused sources; preserve rollback and peers |
+| E2E-05 | `profile_storage.rs`, `mcp.test.mjs`, original archive fixtures | Retained root/leaf identity, unchanged bounds and digest; fresh matching FINAL receipt avoids redundant finalize; conflicts cannot claim archive/publication success |
+| E2E-06 | All affected owners above plus original standard/experimental acceptance inventory | Source/fixture contract consistency, unchanged ownership and permissions, no unsupported runtime PASS |
+
+For future approved measurement, compare exact baseline/candidate SHAs
+with matching Windows, game version, profile data class and workload.
+Record startup successful/failed attempts, launch FPS read/receipt flow,
+Settings save and Play selection latency, preview source count, bounded
+storage scan completeness, and QA finalization native calls. Use the
+existing resource/performance routes above; count source operations
+separately from observed timings. A smaller source scope is not a CPU,
+RAM, latency or gameplay improvement claim. Use the original native
+acceptance gates for startup, one/two/five clients, data and close
+recovery; do not authorize input/capture/cleanup experiments by this
+runbook. Stop optimization when no additional proven duplicate work
+remains; OPT-07 persistent IPC remains measurement-dependent and held.
+
 ## Evidence policy — short, honest, reusable
 
 Record one session report privately under ignored `workspace/`, using the

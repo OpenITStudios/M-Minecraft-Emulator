@@ -650,6 +650,18 @@ impl SessionSnapshot {
         self.agent_activity.is_none() && self.testing_run.is_none() && self.testing_inspection.is_none()
     }
 
+    // Only a complete ordinary Inspect receipt may reconcile a previous
+    // uncertain transport. In particular, an exact-slot presentation
+    // receipt or input acknowledgement cannot clear that gate.
+    #[cfg(windows)]
+    fn is_full_inspect_receipt(&self)->bool {
+        self.schema==1 && self.profiles.len()==5 &&
+        self.profiles.iter().enumerate().all(|(index,profile)|profile.slot==index as u32+1) &&
+        self.storage.is_none() && self.selective_inventory.is_none() &&
+        self.selective_review.is_none() && self.settings.is_none() &&
+        self.testing_run.is_none() && self.testing_inspection.is_none()
+    }
+
     // Private experimental input/lease ACK, never a roster observation.
     // The same authenticated request/reply envelope carries the result.
     // No fabricated STOPPED entries, settings, issues or agent activity.
@@ -1515,8 +1527,13 @@ fn request_inner(request: SessionRequest, workspace_selection:bool) -> io::Resul
                                 "Invalid selected target receipt; outcome uncertain"));
                         }
                     }
-                    if reconciling && reply.is_ok() {
-                        owner.uncertain = false;
+                    if reconciling {
+                        if reply.as_ref().is_ok_and(|snapshot|!snapshot.is_full_inspect_receipt()) {
+                            owner.uncertain=true;
+                            return Err(io::Error::new(io::ErrorKind::BrokenPipe,
+                                "Invalid full Inspect receipt; outcome uncertain"));
+                        }
+                        if reply.is_ok() { owner.uncertain = false; }
                     }
                     reply.map_err(io::Error::other)
                 }
@@ -2984,6 +3001,29 @@ mod tests {
         }
         assert!(!SessionRequest::Inspect.is_agent_target());
         assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectAgentTarget","slot":2,"pid":1}"#).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn full_inspect_reconciliation_refuses_partial_duplicate_and_unrelated_receipts() {
+        let full=SessionSnapshot::stopped();
+        assert!(full.is_full_inspect_receipt());
+        let mut partial=full.clone();
+        partial.profiles.retain(|p|p.slot==2);
+        assert!(partial.is_agent_target_receipt(2));
+        assert!(!partial.is_full_inspect_receipt());
+        let mut duplicate=full.clone();
+        duplicate.profiles[4].slot=4;
+        assert!(!duplicate.is_full_inspect_receipt());
+        let mut reordered=full.clone();
+        reordered.profiles.swap(0,1);
+        assert!(!reordered.is_full_inspect_receipt());
+        let mut wrong=full.clone();
+        wrong.schema=2;
+        assert!(!wrong.is_full_inspect_receipt());
+        let mut storage=full;
+        storage.storage=Some(Vec::new());
+        assert!(!storage.is_full_inspect_receipt());
     }
 
     #[cfg(windows)]

@@ -2270,6 +2270,9 @@ mod tests {
             SessionRequest::InspectSettings,
             SessionRequest::InspectStorage,
             SessionRequest::InspectProfileStorage { slot: 3 },
+            SessionRequest::SavePerformance {active_fps:144,background_fps:10},
+            SessionRequest::SaveStoragePreferences {preferences:Default::default()},
+            SessionRequest::SaveAudio {mode:crate::engine::manager_settings::BackgroundAudio::Keep},
             SessionRequest::Launch { slot: 2 },
         ] {
             assert_eq!(ReplySnapshot::for_request(&request), ReplySnapshot::Full);

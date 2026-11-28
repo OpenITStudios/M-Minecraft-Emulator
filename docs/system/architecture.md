@@ -187,7 +187,9 @@ original recovery checkpoints where possible. The trusted Rust presentation
 handler uses the existing exact-slot target observation rather than a full
 roster for ordinary selection. Under the original transport gate, a pending
 request is refused and an uncertain prior result requires full Inspect
-instead; no second request or retry. The generic webview command still
+instead; only a complete ordered five-slot Inspect receipt can clear
+uncertainty. A partial or unrelated receipt fails closed. No second request
+or retry. The generic webview command still
 refuses the private target route. Full preview layout keeps its fresh
 roster because it owns peer and primary reconciliation. Background preview
 adoption reads a fresh placement rectangle only when the first eligible

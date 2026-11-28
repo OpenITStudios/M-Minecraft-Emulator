@@ -16,7 +16,9 @@ describe("Emulator source verification routing", () => {
     const explicitStorage = ui.split("async function refreshPage() {")[1]
       ?.split("  async function saveAudio(")[0] ?? "";
     expect(startup).toContain("await loadBinding()");
-    expect(startup).toContain("if(binding?.configured){await refresh();return;}");
+    expect(startup.match(/await loadBinding\(\)/g)).toHaveLength(1);
+    expect(startup).toContain("if(!disposed)await refresh();");
+    expect(startup).not.toMatch(/setTimeout|for\s*\(let attempt/);
     expect(startup).not.toMatch(/\b(?:loadLocation|lazyTester\.dataLocation)\s*\(/);
     // The canonical binding retains full product profile/hive verification.
     // Only the redundant *location display* inspection is deferred.
@@ -24,7 +26,9 @@ describe("Emulator source verification routing", () => {
     expect(navigate).toContain("if(next==='storage') {");
     expect(navigate).toContain("const location=await lazyTester.dataLocation()");
     expect(explicitStorage).toContain("const location=await lazyTester.dataLocation()");
-    expect(ui).toContain("dataLocation=await lazyTester.dataLocation(action)");
+    expect(ui).toContain("const location=await lazyTester.dataLocation(action)");
+    expect(ui).toContain("dataLocation=location;");
+    expect(ui).toContain("if((action==='Locate'||action==='Choose')&&dataLocation.path!==null)await checkBinding();");
     expect(ui).toContain("if(action==='Inspect')");
     expect(ui).toContain("binding=null;if(!bindingIssue)bindingIssue=locationIssue");
   });
