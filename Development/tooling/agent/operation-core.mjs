@@ -382,7 +382,7 @@ export function createOperationCore(config,{
     if((args.width===undefined)!==(args.height===undefined))throw new Error('Invalid tool arguments');
     return previewSize(args.width,args.height);
   }
-  async function captureVerifiedFrame(slot,onceSize=null) {
+  async function captureVerifiedFrame(slot,onceSize=null,afterFrame=undefined) {
     protectedSlot(slot);
     if (!config.cuaExecutable && !gpuSource) {
       throw new Error('Visual provider is NOT_CONFIGURED; set --cua-exe or --gpu-capture-exe');
@@ -430,7 +430,10 @@ export function createOperationCore(config,{
       if (!frame || (!webp&&frame.mimeType!=='image/png') ||
           (webp&&(!gpuSource||mc02Enabled||multiEnabled)) ||
           (onceSize&&(!webp||frame.width!==onceSize.width||frame.height!==onceSize.height)) ||
-          typeof frame.imageBase64!=='string' ||
+          (!onceSize&&typeof frame.imageBase64!=='string') ||
+          (onceSize&&(Buffer.isBuffer(frame.bytes)?
+            frame.bytes.length<1||frame.bytes.length>3*1024*1024:
+            typeof frame.imageBase64!=='string')) ||
           !Number.isInteger(frame.width) || !Number.isInteger(frame.height) ||
           frame.width<1 || frame.height<1) {
         throw new Error('Visual provider did not produce a usable frame');
@@ -458,8 +461,24 @@ export function createOperationCore(config,{
           gameInput:'BACKGROUND_MINECRAFT_INPUT_UNVERIFIED',
           note:'Pixels may be stale, blank, or unrepresentative of gameplay. Captures do not prove player login or peer-to-peer join.',
         },
-        imageBase64:frame.imageBase64,
+        imageBase64:null,
       };
+      if(onceSize) {
+        // Compare the fresh, exact-target encoded hash BEFORE Base64. Raw
+        // bytes are not returned to MCP or retained in a second cache.
+        const meta=observation.metadata,identity=meta.processIdentity;
+        if(!/^[a-f0-9]{64}$/.test(meta.sha256??''))throw new Error('GPU_PREVIEW_UNAVAILABLE');
+        const frameRef=createHash('sha256').update(JSON.stringify([
+          slot,identity.pid,identity.windowId,identity.createdFileTime,identity.sessionId,
+          meta.mimeType,meta.width,meta.height,meta.sha256,
+        ])).digest('hex');
+        const unchanged=afterFrame===frameRef;
+        return {metadata:{...meta,frameRef,hasNewImage:!unchanged,
+          ...(unchanged?{screenshotStatus:'WEBP_UNCHANGED_NOT_GAMEPLAY_PROOF'}:{})},
+          imageBase64:unchanged?null:Buffer.isBuffer(frame.bytes)?
+            frame.bytes.toString('base64'):frame.imageBase64};
+      }
+      observation.imageBase64=frame.imageBase64;
       // No additional native read, frame parse or player/world inference.
       // This is only a bounded capability hint on an existing screenshot.
       if(webp)return observation; // No unrelated legacy F3 projection in AI previews.
@@ -1424,22 +1443,9 @@ export function createOperationCore(config,{
         throw new Error('Invalid tool arguments');
       }
       const size=visualSize(args);
-      const result=await captureVerifiedFrame(slot,size);
+      const result=await captureVerifiedFrame(slot,size,args.afterFrame);
       if(args.imageFormat==='png'&&result.metadata.mimeType==='image/webp')throw new Error('VISUAL_FORMAT_MISMATCH');
-      if(!size)return result;
-      // Exact encoded-image equality, only AFTER the usual fresh capture and
-      // native identity recheck. The caller holds the reference, not a second
-      // image cache. It is neither authority nor proof of gameplay sameness.
-      const meta=result.metadata,identity=meta.processIdentity;
-      if(!/^[a-f0-9]{64}$/.test(meta.sha256??''))throw new Error('GPU_PREVIEW_UNAVAILABLE');
-      const frameRef=createHash('sha256').update(JSON.stringify([
-        slot,identity.pid,identity.windowId,identity.createdFileTime,identity.sessionId,
-        meta.mimeType,meta.width,meta.height,meta.sha256,
-      ])).digest('hex');
-      const unchanged=args.afterFrame===frameRef;
-      return {metadata:{...meta,frameRef,hasNewImage:!unchanged,
-        ...(unchanged?{screenshotStatus:'WEBP_UNCHANGED_NOT_GAMEPLAY_PROOF'}:{})},
-        imageBase64:unchanged?null:result.imageBase64};
+      return result;
     }
     if (name==='get_computer_use_target' ||
         name==='revalidate_computer_use_target') {

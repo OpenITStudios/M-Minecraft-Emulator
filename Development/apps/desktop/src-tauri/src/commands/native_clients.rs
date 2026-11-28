@@ -67,6 +67,9 @@ pub async fn lazy_tester_session(
     if request.is_agent_report() {
         return Err("Desktop cannot publish agent activity or arbitrate Testing runs".into());
     }
+    if request.is_agent_target() {
+        return Err("Agent target inspection is restricted to the native agent CLI".into());
+    }
     // The desktop's normal session command must never be an alternate
     // admission path for experimental game hooks. Only the explicitly
     // opted-in, same-image native agent CLI may send these requests

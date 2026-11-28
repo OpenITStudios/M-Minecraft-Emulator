@@ -189,8 +189,11 @@ assumed visual similarity. Playtest observe/read image responses project
 compact receipts (size, status, timestamp, sequence/reference, freshness
 where applicable); native identity and validation remain in the core. Full
 legacy responses and the existing multi-client metadata/baseline contract
-are preserved. No native capture or encoding work is claimed saved by
-one-shot deduplication; it avoids sending a repeated image to the host.
+are preserved. One-shot deduplication still performs capture, resize and
+WebP encoding; identical frames now skip Base64 conversion as well as
+image delivery in the MCP response. A stopped persistent
+worker reserves its slot until close is observed; retry only after it exits.
+GPU_WORKER_STOP_PENDING is a refusal, not a successful restart.
 WebP reduces potential encoded payload size, not a guaranteed model
 token discount; dimensions and number of delivered images affect vision
 context according to the actual model/host. Use the host's supported low-detail
@@ -290,7 +293,11 @@ Duplicate in-flight IDs are ignored (the original retains its only reply);
 there is no replay cache, automatic retry, second dispatcher or serial queue
 that delays an independent stop. Closing the core suppresses late tool replies.
 The verified native target checks before/after capture and before delivery are
-intentionally separate freshness/ownership checks, not duplicate work to remove.
+intentionally separate freshness/ownership checks. Each target read now uses
+a private one-slot receipt from the existing actor (no unrelated roster or
+window relabeling); full Inspect remains unchanged. Selected target reads
+cannot spawn or reconcile an uncertain mutation and are not exposed to desktop
+commands. The same original process/window proof remains required.
 The same-image native CLI uses authenticated IPC per request; a persistent
 replacement channel is not introduced without measured benefit and equivalent
 admission. Runtime connection latency and host compatibility remain unverified.

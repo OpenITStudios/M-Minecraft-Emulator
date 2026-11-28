@@ -642,6 +642,14 @@ pub struct CacheStorage {
     pub issue: Option<String>,
 }
 impl SessionSnapshot {
+    #[cfg(windows)]
+    fn is_agent_target_receipt(&self,slot:u32)->bool {
+        self.schema==1 && self.profiles.len()==1 && self.profiles[0].slot==slot &&
+        self.storage.is_none() && self.selective_inventory.is_none() &&
+        self.selective_review.is_none() && self.settings.is_none() &&
+        self.agent_activity.is_none() && self.testing_run.is_none() && self.testing_inspection.is_none()
+    }
+
     // Private experimental input/lease ACK, never a roster observation.
     // The same authenticated request/reply envelope carries the result.
     // No fabricated STOPPED entries, settings, issues or agent activity.
@@ -688,6 +696,8 @@ impl SessionSnapshot {
 #[serde(tag = "operation", deny_unknown_fields)]
 pub enum SessionRequest {
     Inspect,
+    // Private exact-slot observation for the same-image agent CLI.
+    InspectAgentTarget { slot: u32 },
     // Status-only mirror; desktop Tauri requests cannot publish this.
     PublishAgentActivity {activity:AgentActivityReport},
     // Original controller reserves per-slot run correlation across separate
@@ -764,6 +774,10 @@ impl SessionRequest {
         matches!(self, Self::PublishAgentActivity { .. } |
             Self::TestingReserve { .. } | Self::TestingFinalize { .. } |
             Self::TestingInspect { .. })
+    }
+
+    pub(crate) fn is_agent_target(&self)->bool {
+        matches!(self,Self::InspectAgentTarget { .. })
     }
 
     // Launch is still a lifecycle operation and must return a full roster.
@@ -1246,6 +1260,11 @@ fn can_reconcile_pending_transport(request:&SessionRequest)->bool {
 
 #[cfg(windows)]
 pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
+    if let SessionRequest::InspectAgentTarget {slot}=*request {
+        if !(1..=5).contains(&slot) {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,"Unknown Minecraft profile"));
+        }
+    }
     if let SessionRequest::ReviewSelectiveInventory { selections, .. } | SessionRequest::ConfirmSelectedWorlds { selections, .. } | SessionRequest::ConfirmSelectedPacks { selections, .. } = request {
         let mut identities = std::collections::HashSet::new();
         let mut names = std::collections::HashSet::new();
@@ -1406,8 +1425,11 @@ pub(super) fn validate_request(request: &SessionRequest) -> io::Result<()> {
 #[cfg(windows)]
 pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
     validate_request(&request)?;
-    let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings);
-    // Both reads remain available while a previous mutation is uncertain;
+    let selected_target=match &request {
+        SessionRequest::InspectAgentTarget{slot}=>Some(*slot),_=>None,
+    };
+    let inspecting = matches!(request, SessionRequest::Inspect | SessionRequest::InspectSettings) || selected_target.is_some();
+    // Read-only observations remain available while a previous mutation is uncertain;
     // only a complete session Inspect may reconcile that uncertainty.
     let reconciling = can_reconcile_pending_transport(&request);
     #[cfg(feature="mc02-native-input")]
@@ -1456,6 +1478,13 @@ pub fn request(request: SessionRequest) -> io::Result<SessionSnapshot> {
                         owner.uncertain=true;
                         return Err(io::Error::new(io::ErrorKind::BrokenPipe,
                             "Invalid native input receipt; outcome uncertain"));
+                    }
+                    if let Some(slot)=selected_target {
+                        if reply.as_ref().is_ok_and(|snapshot|!snapshot.is_agent_target_receipt(slot)) {
+                            owner.uncertain=true;
+                            return Err(io::Error::new(io::ErrorKind::BrokenPipe,
+                                "Invalid selected target receipt; outcome uncertain"));
+                        }
                     }
                     if reconciling && reply.is_ok() {
                         owner.uncertain = false;
@@ -1596,6 +1625,11 @@ fn transact(request: SessionRequest) -> io::Result<SessionReply> {
             snapshot.settings = Some(SettingsReport::policy(idle, None)?);
         }
         return Ok(Ok(snapshot));
+    }
+    // A target read cannot create a controller or adopt another game.
+    if request.is_agent_target() {
+        return Err(io::Error::new(io::ErrorKind::NotFound,
+            "No retained controller; agent target observation refused"));
     }
     // A report or Testing correlation cannot cause fresh game/profile
     // construction if the original controller disappeared after the
@@ -2902,6 +2936,27 @@ mod tests {
         assert_eq!(admit_native_input_frame(2,1|4|16|64,0,0,150).unwrap(),
             NativeInputIntent::Active);
     }
+    #[cfg(windows)]
+    #[test]
+    fn agent_target_admission_and_receipt_are_exact_slot_only() {
+        for slot in [0,6,u32::MAX] {
+            assert!(validate_request(&SessionRequest::InspectAgentTarget{slot}).is_err());
+        }
+        for slot in 1..=5 {
+            let request=SessionRequest::InspectAgentTarget{slot};
+            assert!(request.is_agent_target());
+            assert!(validate_request(&request).is_ok());
+            assert!(!can_reconcile_pending_transport(&request));
+            let mut snapshot=SessionSnapshot::stopped();
+            assert!(!snapshot.is_agent_target_receipt(slot));
+            snapshot.profiles.retain(|p|p.slot==slot);
+            assert!(snapshot.is_agent_target_receipt(slot));
+            assert!(!snapshot.is_agent_target_receipt(if slot==1{2}else{1}));
+        }
+        assert!(!SessionRequest::Inspect.is_agent_target());
+        assert!(serde_json::from_str::<SessionRequest>(r#"{"operation":"InspectAgentTarget","slot":2,"pid":1}"#).is_err());
+    }
+
     #[test]
     fn agent_request_classes_keep_private_routes_out_of_desktop_and_spawn() {
         for request in [

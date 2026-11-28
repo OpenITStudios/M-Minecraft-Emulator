@@ -148,6 +148,9 @@ test('stopped WGC worker retains counters but not authority over a restarted slo
     assert.equal(children[0].kills,1);
     assert.throws(()=>source.latest(2,target),/GPU_SOURCE_NOT_ACTIVE/);
 
+    await assert.rejects(source.start(2,target),/GPU_WORKER_STOP_PENDING/);
+    assert.equal(children.length,1);
+    children[0].emit('close');
     await source.start(2,target);
     // A late old-worker callback must not corrupt the new active worker.
     children[0].stdout.emit('data',packet(2));
@@ -332,6 +335,8 @@ test('one-shot preview uses the existing executable, exact target, bounded exit 
   try {
     const image=await source.captureOnce(2,target,{width:320,height:180});
     assert.equal(image.mimeType,'image/webp');assert.equal(image.width,320);
+    assert.ok(Buffer.isBuffer(image.bytes));
+    assert.equal(Object.hasOwn(image,'imageBase64'),false);
     assert.equal(source.status(2).active,false);
     output=Buffer.concat([webpPacket(320,180),webpPacket(320,180,2)]);
     await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/GPU_PREVIEW_UNAVAILABLE/);
@@ -362,6 +367,8 @@ test('WebP stream and one-shot share slot admission; cached image is not re-enco
     await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/USE_EXISTING_SAMPLER/);
     assert.equal(calls,0);
     source.stop([2]);
+    await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/GPU_WORKER_STOP_PENDING/);
+    child.emit('close');
     assert.equal((await source.captureOnce(2,target,{width:320,height:180})).mimeType,'image/webp');
   }finally{source.shutdown();}
 });

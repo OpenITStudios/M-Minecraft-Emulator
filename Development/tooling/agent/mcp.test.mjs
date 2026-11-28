@@ -5479,7 +5479,7 @@ test('playtest cached image read refuses a PNG cache before delivery or target l
 });
 
 test('playtest one-shot frame reference suppresses only identical fresh target and dimensions',async()=>{
-  let captures=0,checks=0,pidBase=400,hash='a'.repeat(64);
+  let captures=0,checks=0,encodes=0,pidBase=400,hash='a'.repeat(64);
   const h=createHandler({...config(),surface:'playtest',
     gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')},{
     native:async(_exe,operation,slot)=>{
@@ -5492,7 +5492,10 @@ test('playtest one-shot frame reference suppresses only identical fresh target a
     gpuSourceFactory:()=>({
       captureOnce:async(_slot,_target,size)=>{
         captures++;
-        return {mimeType:'image/webp',imageBase64:'UklGRgAAAABXRUJQ',...size,
+        const bytes=Buffer.from('UklGRgAAAABXRUJQ','base64');
+        const encode=bytes.toString.bind(bytes);
+        bytes.toString=(...args)=>{encodes++;return encode(...args);};
+        return {mimeType:'image/webp',bytes,...size,
           sha256:hash,capturedAtMs:Date.now(),workerSequence:1};
       },stop:()=>{},shutdown:()=>{},
     }),
@@ -5521,6 +5524,7 @@ test('playtest one-shot frame reference suppresses only identical fresh target a
     assert.equal(duplicate.meta.screenshotStatus,'WEBP_UNCHANGED_NOT_GAMEPLAY_PROOF');
     assert.equal(duplicate.images.length,0);
     assert.equal(captures,2);
+    assert.equal(encodes,1);
     assert.equal(checks,4);
     const smaller=await read({slot:2,width:320,height:180,afterFrame:first.meta.frameRef});
     assert.notEqual(smaller.meta.frameRef,first.meta.frameRef);
@@ -5542,6 +5546,7 @@ test('playtest one-shot frame reference suppresses only identical fresh target a
     assert.equal(unconditional.images.length,1);
     await assert.rejects(h.callTool('observe_client',{slot:2,afterFrame:'bad'}),/Invalid tool arguments/);
     assert.equal(captures,7);
+    assert.equal(encodes,6);
     assert.equal(checks,14);
   }finally{h.shutdown();}
 });

@@ -573,8 +573,8 @@ impl Sessions {
         self.snapshot_slots(relabel, 0..5)
     }
 
-    // Only explicit desktop receipt scope may select a single verified slot.
-    // Use the same profile observation logic as the full roster.
+    // Selected desktop receipts and private agent target observations reuse
+    // the same profile observation logic without relabeling unrelated windows.
     fn snapshot_slots(&mut self, relabel: bool, slots: std::ops::Range<usize>) -> SessionSnapshot {
         let profiles = slots
             .map(|index| {
@@ -1620,6 +1620,7 @@ enum ReplySnapshot {
     #[cfg(feature="mc02-native-input")]
     InputReceipt,
     Selected(u32),
+    AgentTarget(u32),
 }
 impl ReplySnapshot {
     fn for_request(request: &SessionRequest) -> Self {
@@ -1627,6 +1628,7 @@ impl ReplySnapshot {
         if request.expects_input_receipt(){return Self::InputReceipt;}
         match request {
             SessionRequest::CloseOne { .. } | SessionRequest::CloseAll => Self::Close,
+            SessionRequest::InspectAgentTarget {slot} => Self::AgentTarget(*slot),
             SessionRequest::OpenProfileFolder { slot, selected_profile } |
             SessionRequest::InspectSelectiveInventory { slot, selected_profile, .. } |
             SessionRequest::ReviewSelectiveInventory { slot, selected_profile, .. } => {
@@ -1649,7 +1651,7 @@ impl ReplySnapshot {
             Self::Receipt => sessions.snapshot_without_reaping(false),
             #[cfg(feature="mc02-native-input")]
             Self::InputReceipt => SessionSnapshot::input_receipt(),
-            Self::Selected(slot) => sessions.snapshot_slots(false, (slot as usize - 1)..slot as usize),
+            Self::Selected(slot) | Self::AgentTarget(slot) => sessions.snapshot_slots(false, (slot as usize - 1)..slot as usize),
         }
     }
 }
@@ -1839,6 +1841,10 @@ fn run() -> io::Result<()> {
             let mut inspection_reply=None;
             match envelope.request {
                 SessionRequest::Inspect | SessionRequest::InspectSettings => {}
+                SessionRequest::InspectAgentTarget {slot} => {
+                    let selected=normal_close_mask(Some(slot)).map_err(|error|error.to_string())?;
+                    sessions.reap_selected(&selected);
+                }
                 SessionRequest::TestingInspect {slot,owner_id} => {
                     inspection_reply=Some(testing_runs.inspect(slot,&owner_id)
                         .map_err(|error|error.to_string())?);
@@ -2020,6 +2026,9 @@ fn run() -> io::Result<()> {
             #[cfg(feature="mc02-native-input")]
             if reply_snapshot==ReplySnapshot::InputReceipt {
                 return Ok(snapshot);
+            }
+            if matches!(reply_snapshot,ReplySnapshot::AgentTarget(_)) {
+                return Ok(snapshot); // No unrelated status/activity payload.
             }
             // Read-only Settings shares the full snapshot's reap. No actor
             // request can change its roster between these two observations.
@@ -2237,6 +2246,10 @@ mod tests {
     #[test]
     fn reply_snapshot_policy_distinguishes_close_receipts_and_full_observation() {
         // Pure routing assertions; do not launch a game or touch profile data.
+        for slot in 1..=5 {
+            assert_eq!(ReplySnapshot::for_request(&SessionRequest::InspectAgentTarget{slot}),
+                ReplySnapshot::AgentTarget(slot));
+        }
         for request in [
             SessionRequest::CloseOne { slot: 1 },
             SessionRequest::CloseOne { slot: 5 },

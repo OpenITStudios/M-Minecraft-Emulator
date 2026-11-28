@@ -148,8 +148,11 @@ export function createGpuFrameSource({
   // Reserve each slot before the asynchronous file check. Otherwise a
   // concurrent start/stop or connection shutdown can leave an orphan worker.
   const pendingStarts=new Map();
+  // A stop request is not exit proof. Retain only the per-slot worker
+  // reference until its close event, preventing replacement overlap.
+  const stopping=new Map();
   let closed=false;
-  function drop(state,status) {
+  function drop(state,status,exited=false) {
     if (!state.active) return;
     state.active=false;
     state.status=status;
@@ -157,7 +160,7 @@ export function createGpuFrameSource({
     if (state.deadlineTimer!==null) {
       cancel(state.deadlineTimer);state.deadlineTimer=null;
     }
-    try {state.process.kill();} catch { /* exit is not authority over games */ }
+    if(!exited)stopping.set(state.slot,state);
     // The source's slot map must not permanently retain a stopped child,
     // stdout listeners, decoder or partially assembled 3 MiB PNG.
     // Preserve only the existing bounded status counters for diagnostics.
@@ -167,6 +170,7 @@ export function createGpuFrameSource({
       slots.set(state.slot,{slot:state.slot,status,frames:state.frames,
         errors:state.errors,active:false});
     }
+    if(!exited)try {state.process.kill();} catch { /* keep slot reserved until close */ }
   }
   async function start(slot,target,{durationMs=30000,fps=5,webpSize=null}={}) {
     if(webpSize!==null)webpSize=previewSize(webpSize.width,webpSize.height);
@@ -178,6 +182,7 @@ export function createGpuFrameSource({
       throw new TypeError('GPU capture requires one slot, 5-90s and 1-10 fps');
     }
     const selected=validateGpuTarget(target);
+    if(stopping.has(slot))throw new Error('GPU_WORKER_STOP_PENDING');
     if (slots.get(slot)?.active || pendingStarts.has(slot)) {
       throw new Error('GPU source already active or starting on this slot');
     }
@@ -213,6 +218,10 @@ export function createGpuFrameSource({
       };
       slots.set(slot,state);
       try {
+        child.on('close',()=>{
+          if(state.active)drop(state,'GPU_WORKER_EXITED',true);
+          if(stopping.get(slot)===state)stopping.delete(slot);
+        });
         const decoder=createGpuPacketDecoder(frame=>{
           if (!state.active) return;
           // A new worker sequence can carry the exact same image bytes.
@@ -237,9 +246,6 @@ export function createGpuFrameSource({
         });
         child.stdout.on('error',()=>drop(state,'GPU_FRAME_STREAM_IO_ERROR'));
         child.on('error',()=>drop(state,'GPU_WORKER_UNAVAILABLE'));
-        child.on('close',()=>{
-          if(state.active) drop(state,'GPU_WORKER_EXITED');
-        });
         state.deadlineTimer=schedule(()=>drop(state,'EXPIRED'),durationMs+2000);
         state.deadlineTimer?.unref?.();
       } catch(error) {
@@ -305,6 +311,7 @@ export function createGpuFrameSource({
     if(!Number.isInteger(slot)||slot<1||slot>MAX_SLOTS)throw new Error('Invalid tool arguments');
     const webpSize=previewSize(size.width,size.height);
     const selected=validateGpuTarget(target);
+    if(stopping.has(slot))throw new Error('GPU_WORKER_STOP_PENDING');
     if(slots.get(slot)?.active||pendingStarts.has(slot))throw new Error('GPU_PREVIEW_USE_EXISTING_SAMPLER');
     const abort=new AbortController();
     const reservation={cancelled:false,abort};
@@ -340,7 +347,7 @@ export function createGpuFrameSource({
         throw new Error('GPU_PREVIEW_UNAVAILABLE');
       }
       return {provider:'NATIVE_WGC_ON_DEMAND',mimeType:'image/webp',
-        imageBase64:frame.bytes.toString('base64'),width:frame.width,height:frame.height,
+        bytes:frame.bytes,width:frame.width,height:frame.height,
         sha256:frame.sha256,capturedAtMs:frame.capturedAtMs,workerSequence:frame.sequence,
         frameFreshness:'CAPTURE_TIMESTAMP_RECENT_GAMEPLAY_NOT_VERIFIED'};
     }finally {
@@ -363,6 +370,7 @@ export function createGpuFrameSource({
     stop([...slots.keys()]);
     pendingStarts.clear();
     slots.clear();
+    stopping.clear(); // closed source cannot admit a replacement
   }
   function status(slot) {
     const s=slots.get(slot);

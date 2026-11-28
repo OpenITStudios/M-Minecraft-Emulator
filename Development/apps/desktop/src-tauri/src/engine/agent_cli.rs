@@ -775,14 +775,11 @@ fn execute(args: &[String]) -> Result<Value, &'static str> {
             // Same authenticated native controller as the UI. No PID scanning
             // or adoption of an unowned Minecraft client.
             let slot = slot.ok_or("INVALID_ARGUMENTS")?;
-            let snapshot = native_clients_session::request(SessionRequest::Inspect)
+            // The request owner checks the exact one-slot receipt. Do not
+            // reap/observe/relabel all five profiles to inspect one target.
+            let snapshot = native_clients_session::request(SessionRequest::InspectAgentTarget{slot})
                 .map_err(native_error)?;
-            if snapshot.schema != 1 || snapshot.profiles.len() != 5 ||
-                snapshot.profiles.iter().enumerate()
-                    .any(|(index,profile)| profile.slot as usize != index+1) {
-                return Err("INVALID_NATIVE_SNAPSHOT");
-            }
-            let profile = &snapshot.profiles[(slot - 1) as usize];
+            let profile = snapshot.profiles.first().ok_or("INVALID_NATIVE_SNAPSHOT")?;
             if profile.state != "RUNNING" || profile.issue.is_some() {
                 return Err("TARGET_NOT_RUNNING");
             }
