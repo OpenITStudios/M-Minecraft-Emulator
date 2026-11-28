@@ -6,10 +6,10 @@ import type {NativeBackendSupport, ProfileSlot, EducationInstallationReport} fro
 // Do not expose scheduler states, hashes or successful internal review in UI.
 export function educationInstallationNotice(report: EducationInstallationReport | null): string | null {
   if (!report) return 'Installation status unavailable. Refresh to check again.';
-  if (report.updater === 'Busy') return 'Minecraft is updating. Refresh when it finishes.';
+  if (report.updater === 'Busy') return 'Minecraft is updating. Keep games closed until it finishes, then Refresh.';
   if (!report.reviewedImage) return 'This Minecraft version is not yet supported. A Lazy Tester compatibility update is required.';
-  if (report.updater === 'Disabled') return 'Automatic Minecraft updates are disabled.';
-  if (report.updater === 'Missing') return 'Automatic Minecraft updater unavailable.';
+  if (report.updater === 'Disabled') return 'Automatic Minecraft updates are disabled. Check your Windows update policy.';
+  if (report.updater === 'Missing') return 'Automatic Minecraft updater unavailable. Check the official installation.';
   if (report.updater === 'Unknown') return 'Update status unavailable. Refresh to check again.';
   return null;
 }

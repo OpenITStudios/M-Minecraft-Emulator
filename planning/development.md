@@ -32,8 +32,21 @@ F3, experimental AI and heap experiments are compile-time isolated;
 ordinary and AI DLL admission are separately digest-pinned, with no
 verified new game ABI. Preserve these existing boundaries rather than
 add a duplicate capability manager or enable unsupported optional features.
-Pending: native updater/task behavior and costs, safe official check
-action, future exact recipe/ABI review and end-to-end update acceptance.
+Fourth slice (baseline [8d9b262](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/8d9b262ed1e2c953cfab0f529192107f00702274)):
+official Education support confirms the Desktop task checks at sign-in and
+opening Minecraft can cancel an update. Keep official auto-updates; direct
+task invocation held because task name/Ready alone cannot prove publisher,
+permissions or installer exclusion against active/unmanaged game launches.
+Do not add a button, elevated helper or updater. Existing exception notice
+explains leaving games closed. Reduce managed launch hashing: exact
+continuous child image pins and matching reviewed recipes permit reuse within
+the active cohort; no idle cache, new pin, service or dependency. All launches
+still freshly validate signed registration, updater state, image identity and
+native DLLs. New or conflicting image generation refused; last exit requires
+full hash again. Synthetic fixture authored NOT_EXECUTED.
+Pending: final source integration audit, native updater/task behavior and
+costs, future exact recipe/ABI review and end-to-end update acceptance.
+Manual official task execution remains held pending verified native evidence.
 No new binary is admitted, and the ABI v4/local-test holds below remain.
 
 Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).

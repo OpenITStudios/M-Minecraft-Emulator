@@ -3,6 +3,14 @@ use super::{file_digest, image_id, invalid, pin_image, same_image};
 use std::{fs::File, io, path::Path};
 
 pub(super) fn registered_image(observe: bool) -> io::Result<(String, File, u32)> {
+    registered_image_for_generation(observe, std::iter::empty::<(&File, u32)>())
+}
+
+// Only live controller-owned children with continuously retained image pins
+// may supply a reviewed recipe. No path/version cache survives the last exit.
+pub(super) fn registered_image_for_generation<'a>(
+    observe: bool, active: impl IntoIterator<Item = (&'a File, u32)>,
+) -> io::Result<(String, File, u32)> {
     use crate::engine::native_clients::resolve_registered_education_target;
     let target = resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly")?;
     // Query the updater once in the existing post-pin resolver, not in a new
@@ -12,7 +20,11 @@ pub(super) fn registered_image(observe: bool) -> io::Result<(String, File, u32)>
     } else {
         "Resolve-ManagerEducationTarget -RegisteredOnly"
     };
-    pin_registered_image_with(target, observe, || resolve_registered_education_target(selector))
+    let (target, image, _) = pin_registered_image_with(target, false, || resolve_registered_education_target(selector))?;
+    let recipe = if observe {
+        generation_recipe(&image, active, || reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?))?
+    } else { 0 };
+    Ok((target, image, recipe))
 }
 
 #[cfg(test)]
@@ -110,6 +122,25 @@ pub(super) fn require_same_generation<'a>(
     Ok(())
 }
 
+// Reuse the previously admitted recipe only when every original pin still
+// names the exact same file object and all retained recipes agree. No cached
+// metadata or caller-supplied version is used. The first launch after idle
+// must read the new bytes again, even when the path or file ID is unchanged.
+fn generation_recipe<'a>(
+    image: &File, active: impl IntoIterator<Item = (&'a File, u32)>,
+    review: impl FnOnce() -> io::Result<u32>,
+) -> io::Result<u32> {
+    let mut known = None;
+    for (original, recipe) in active {
+        require_same_generation(image, [original])?;
+        if recipe == 0 || known.is_some_and(|previous| previous != recipe) {
+            return Err(invalid("Retained Education compatibility recipe is inconsistent"));
+        }
+        known = Some(recipe);
+    }
+    match known { Some(recipe) => Ok(recipe), None => review() }
+}
+
 #[cfg(test)]
 mod launch_preflight_measurement {
     use super::*;
@@ -186,6 +217,29 @@ mod launch_preflight_measurement {
         drop(same);
         drop(original);
         assert!(OpenOptions::new().write(true).open(&first).is_ok());
+    }
+    #[test]
+    fn only_continuously_pinned_matching_generation_reuses_review() {
+        let root = tempfile::tempdir().unwrap();
+        let first = root.path().join("first.exe");
+        let second = root.path().join("second.exe");
+        std::fs::write(&first, [7u8; 128]).unwrap();
+        std::fs::write(&second, [7u8; 128]).unwrap();
+        let original = pin_image(&first).unwrap();
+        let same = pin_image(&first).unwrap();
+        let replacement = pin_image(&second).unwrap();
+        let mut reviews = 0;
+        assert_eq!(generation_recipe(&same, [(&original, 7)], || {reviews+=1; Ok(8)}).unwrap(), 7);
+        assert_eq!(reviews, 0);
+        assert!(generation_recipe(&replacement, [(&original, 7)], || panic!("must refuse replacement before review")).is_err());
+        assert!(generation_recipe(&same, [(&original, 7), (&same, 8)], || panic!("must refuse conflicting recipes")).is_err());
+        assert!(generation_recipe(&same, [(&original, 0)], || panic!("must refuse missing recipe")).is_err());
+        drop(same);
+        drop(original);
+        std::fs::write(&first, [9u8;128]).unwrap();
+        let updated = pin_image(&first).unwrap();
+        assert_eq!(generation_recipe(&updated, std::iter::empty::<(&File,u32)>(), || {reviews+=1; Ok(8)}).unwrap(), 8);
+        assert_eq!(reviews, 1);
     }
     #[test]
     fn retained_launch_validation_checks_fresh_registration_identity_and_bytes() {

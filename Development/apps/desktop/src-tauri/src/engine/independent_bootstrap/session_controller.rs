@@ -248,18 +248,17 @@ impl Sessions {
         // Freeze the validated launch preference before any profile mutation.
         // The same value reaches the original presentation ABI.
         let limits = crate::engine::manager_settings::load_performance()?;
-        // Each attempt selects the current signed registration and pins its exact
-        // reviewed bytes before touching settings or creating a game process.
-        let (path, image, singleton_caller_rva) = match registered_image::registered_image(true) {
+        // Every launch still resolves signed registration, pins the current
+        // image and checks the updater. Reuse the exact recipe only while
+        // original controller-owned child pins continuously protect its bytes.
+        let admission = self.running.iter().flatten().map(|started| {
+            let child = &started.children[0];
+            (&child._image, child.storage.as_ref().map_or(0, |store| store.singleton_caller_rva))
+        });
+        let (path, image, singleton_caller_rva) = match registered_image::registered_image_for_generation(true, admission) {
             Ok(target) => target,
             Err(error) => { self.issues[index] = Some(error.to_string()); return Err(error); }
         };
-        if let Err(error) = registered_image::require_same_generation(
-            &image, self.running.iter().flatten().map(|started| &started.children[0]._image),
-        ) {
-            self.issues[index] = Some(error.to_string());
-            return Err(error);
-        }
         // A positively reviewed replacement resolves only stale compatibility
         // issues, not unrelated profile errors or uncertain live processes.
         for other in 0..self.issues.len() {

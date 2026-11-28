@@ -22,7 +22,7 @@ describe('Education installation observation',()=>{
     const healthy=parseEducationInstallation(report);
     expect(educationInstallationNotice(healthy)).toBeNull();
     expect(educationInstallationNotice(null)).toContain('Refresh');
-    expect(educationInstallationNotice({...healthy,updater:'Busy',reviewedImage:false})).toContain('updating');
+    expect(educationInstallationNotice({...healthy,updater:'Busy',reviewedImage:false})).toContain('Keep games closed');
     expect(educationInstallationNotice({...healthy,reviewedImage:false})).toContain('compatibility update');
     expect(educationInstallationNotice({...healthy,updater:'Disabled'})).toContain('disabled');
     expect(educationInstallationNotice({...healthy,updater:'Missing'})).toContain('unavailable');

@@ -152,6 +152,12 @@ the stopped profiles marked as needing attention. Launch remains blocked
 until its exact image/callsite is reviewed. The idle controller retains no
 game executable handle; each launch resolves the current signed installation
 again. Running games retain their original image pins until they exit.
+The first managed launch after idle hashes the game executable; later launches
+in the same active cohort reuse the already reviewed recipe only when every
+original child still retains the same immutable image pin and all recipes
+agree. No idle cache or persisted admission; a replaced file or last exit
+requires full review again. Fresh signed registration, updater state, exact
+file identity and DLL admission remain mandatory for every launch.
 The official Windows Desktop updater remains the only game update provider.
 The existing post-pin launch preflight reads the registered updater task
 state once (no additional PowerShell process, no background polling).
@@ -177,6 +183,13 @@ identity checks, hashes once, releases the temporary pin, and returns no
 path or hash to the UI. A match does not prove native ABI or gameplay;
 a failed check clears the displayed receipt without invalidating unrelated
 session state. No action starts the updater or changes task policy.
+Minecraft Education support documents that opening a game can cancel an
+automatic update: keep games closed after Windows sign-in until the official
+update finishes. See [support explanation](https://edusupport.minecraft.net/hc/en-us/community/posts/39644204051732-This-v1-21-91-Update-Has-Really-Messed-Things-Up).
+Do not expose a manual task-run button until exact installed task provenance,
+permissions and safe coordination with active/unmanaged games are verified.
+A task name or Ready state is not that proof; no elevation or task-policy
+change is authorized.
 This does not promise automatic compatibility with future Minecraft builds.
 Task visibility, installer coordination and runtime acceptance remain
 NOT_EXECUTED; no task is started, enabled, disabled or created by Lazy Tester.
