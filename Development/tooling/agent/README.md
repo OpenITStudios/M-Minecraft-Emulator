@@ -562,8 +562,8 @@ must explicitly request an eligible frame to review it.
 The selected original game window must remain independently
 identical (PID, birth, Windows session and root HWND) across reads.
 
-- Capture providers retain at most one relevant bounded PNG per slot;
-  CUA and native WGC share a **3 MiB lossless PNG** limit. CUA reads
+- Capture providers retain bounded frames per slot; CUA PNG and native
+  WGC PNG/WebP share a **3 MiB encoded image** limit. CUA reads
   exactly the admitted file length and refuses changed or incomplete
   output, instead of unbounded `FileHandle.readFile()` after a size check.
   The observer and MCP image response share a **4 MiB base64** ceiling.
@@ -573,9 +573,12 @@ identical (PID, birth, Windows session and root HWND) across reads.
   bytes, and rechecked after assembly. Native producer FPS follows
   the requested observer interval within 1–5 FPS; no worker is
   automatically installed or packaged.
-- Identical WGC PNG byte hashes and dimensions reuse the previous
-  on-demand base64 representation, while worker sequence/timestamp and
-  native identity/freshness are always checked independently.
+- Identical WGC image hashes, format and dimensions reuse one private
+  payload between producer and verified observer. Polling and metadata-only
+  reads do not convert WGC frames to Base64; explicit image delivery encodes
+  once and releases raw bytes. A newer, not-yet-verified different frame
+  may coexist with the observer's prior verified payload. Worker receipts
+  and native identity/freshness remain independently checked.
 - When WGC stops or fails, the provider's slot map retains only
   bounded status counters—not the stopped child, decoder or partial PNG.
   Late callbacks from the old worker cannot change a restarted slot.

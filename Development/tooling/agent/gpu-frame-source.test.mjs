@@ -360,9 +360,16 @@ test('WebP stream and one-shot share slot admission; cached image is not re-enco
   try {
     await source.start(2,target,{webpSize:{width:320,height:180}});
     child.stdout.emit('data',webpPacket(320,180));
-    const frame=source.latest(2,target);
-    assert.equal(frame.mimeType,'image/webp');
+    const deferred=source.latest(2,target,{deferImage:true});
+    assert.equal(deferred.mimeType,'image/webp');
+    assert.equal(Object.hasOwn(deferred,'imageBase64'),false);
+    assert.equal(Object.hasOwn(deferred,'bytes'),false);
     child.stdout.emit('data',webpPacket(320,180,2));
+    const next=source.latest(2,target,{deferImage:true});
+    assert.equal(next.workerSequence,2);
+    assert.equal(next.imageRef,deferred.imageRef);
+    const frame=source.latest(2,target);
+    assert.equal(frame.imageBase64,deferred.imageRef.read());
     assert.equal(source.latest(2,target).imageBase64,frame.imageBase64);
     await assert.rejects(source.captureOnce(2,target,{width:320,height:180}),/USE_EXISTING_SAMPLER/);
     assert.equal(calls,0);

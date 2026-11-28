@@ -916,3 +916,49 @@ test('WebP sampler retains changed-only delivery and does not enable legacy scre
     assert.equal(Object.hasOwn(visual.frames[0],'pngBytesChangedSinceBaseline'),false);
   }finally{observer.shutdown();}
 });
+
+test('persistent sampler holds a private image reference until a fresh image is requested',async()=>{
+  const t=clockFixture();
+  let reads=0,seq=0;
+  const imageRef={length:64,read(){reads++;return 'a'.repeat(64);}};
+  const observer=createVisualObserver({...t,capture:async slot=>{
+    const raw=frame(slot);
+    return {metadata:{...raw.metadata,provider:'NATIVE_WGC_PERSISTENT',
+      workerSequence:++seq,capturedAtMs:t.clock()},imageRef};
+  }});
+  try {
+    observer.start([2],{intervalMs:800,durationMs:10000});
+    await t.next();
+    const first=observer.read(2,{includeImage:false});
+    assert.equal(first.metadata.freshFrameAvailable,true);
+    assert.equal(first.imageBase64,null);
+    assert.equal(reads,0);
+    await t.next();
+    assert.equal(observer.activity()[0].status,'SAMPLER_ACTIVE_RECENT_FRAME');
+    assert.equal(observer.read(2,{afterSequence:1}).imageBase64,null);
+    assert.equal(reads,0);
+    const delivered=observer.read(2);
+    assert.equal(delivered.imageBase64,'a'.repeat(64));
+    assert.equal(delivered.metadata.screenReviewFrameDelivered,true);
+    assert.equal(Object.hasOwn(delivered,'imageRef'),false);
+    assert.equal(reads,1);
+    observer.stop([2]);
+    assert.equal(observer.read(2).imageBase64,null);
+    assert.equal(reads,1);
+  }finally{observer.shutdown();}
+});
+
+test('invalid deferred image is not marked delivered',async()=>{
+  const t=clockFixture();
+  const raw=frame(2);
+  const observer=createVisualObserver({...t,capture:async()=>({
+    metadata:{...raw.metadata,provider:'NATIVE_WGC_PERSISTENT',workerSequence:1,capturedAtMs:t.clock()},
+    imageRef:{length:64,read:()=>''},
+  })});
+  try {
+    observer.start([2],{durationMs:5000});
+    await t.next();
+    assert.throws(()=>observer.read(2),/CAPTURE_UNAVAILABLE/);
+    assert.equal(observer.read(2,{includeImage:false}).metadata.screenReviewFrameDelivered,false);
+  }finally{observer.shutdown();}
+});

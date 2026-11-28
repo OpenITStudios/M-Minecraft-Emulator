@@ -132,7 +132,20 @@ export function createGpuPacketDecoder(onFrame,{clock=()=>Date.now(),webpSize=nu
   return {push,finish:()=>{if(headerUsed!==0||bytes!==null)throw new Error('Incomplete GPU frame stream');}};
 }
 
-/** One provider for an existing MCP process, not a second game session owner. */
+// Shared image payload: retain raw OR Base64, never both after delivery.
+function deferredImage(bytes) {
+  let encoded=null;
+  const length=4*Math.ceil(bytes.length/3);
+  return Object.freeze({length,read(){
+    if(bytes!==null) {
+      encoded=bytes.toString('base64');
+      bytes=null;
+    }
+    return encoded;
+  }});
+}
+
+/** One provider for an existing operation core, not a second game session owner. */
 export function createGpuFrameSource({
   executable,
   platform=process.platform,
@@ -224,17 +237,14 @@ export function createGpuFrameSource({
         });
         const decoder=createGpuPacketDecoder(frame=>{
           if (!state.active) return;
-          // A new worker sequence can carry the exact same image bytes.
-          // Reuse the last encoded representation when it already exists,
-          // without re-encoding or retaining a second raw image buffer.
+          // Producer and observer share a payload for identical bytes,
+          // while independently advancing verified frame receipts.
           const prior=state.latest;
-          if(typeof prior?.imageBase64==='string' &&
-             prior.sha256===frame.sha256 && prior.mimeType===frame.mimeType &&
-             prior.width===frame.width && prior.height===frame.height) {
-            frame.imageBase64=prior.imageBase64;
-            frame.bytes=null;
-          }
-          state.latest=frame; // still replace sequence/time with new receipt
+          const {bytes,...receipt}=frame;
+          const imageRef=prior&&prior.sha256===frame.sha256&&
+            prior.mimeType===frame.mimeType&&prior.width===frame.width&&
+            prior.height===frame.height?prior.imageRef:deferredImage(bytes);
+          state.latest={...receipt,imageRef};
           state.lastFrameAt=clock();
           state.frames++;
           state.status='FRAME_FROM_NATIVE_WGC_NOT_GAMEPLAY_VERIFIED';
@@ -260,7 +270,7 @@ export function createGpuFrameSource({
       if (pendingStarts.get(slot)===reservation) pendingStarts.delete(slot);
     }
   }
-  function latest(slot,expectedTarget) {
+  function latest(slot,expectedTarget,{deferImage=false}={}) {
     if (!Number.isInteger(slot) || slot<1 || slot>MAX_SLOTS) {
       throw new TypeError('Unknown Minecraft profile');
     }
@@ -289,15 +299,11 @@ export function createGpuFrameSource({
         now-frame.capturedAtMs>MAX_AGE_MS) {
       throw new Error('GPU_FRAME_NOT_READY');
     }
-    // Encode once on first demand; release raw bytes and reuse the string.
-    // The target identity and source-age checks above still run on every read.
-    if(frame.bytes!==null) {
-      frame.imageBase64=frame.bytes.toString('base64');
-      frame.bytes=null;
-    }
+    // Only the internal sampler requests the private image reference.
     return {
       provider:'NATIVE_WGC_PERSISTENT',
-      mimeType:frame.mimeType??'image/png',imageBase64:frame.imageBase64,
+      mimeType:frame.mimeType??'image/png',
+      ...(deferImage?{imageRef:frame.imageRef}:{imageBase64:frame.imageRef.read()}),
       width:frame.width,height:frame.height,sha256:frame.sha256,
       capturedAtMs:frame.capturedAtMs,
       workerSequence:frame.sequence,

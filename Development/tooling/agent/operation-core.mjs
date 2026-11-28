@@ -382,7 +382,7 @@ export function createOperationCore(config,{
     if((args.width===undefined)!==(args.height===undefined))throw new Error('Invalid tool arguments');
     return previewSize(args.width,args.height);
   }
-  async function captureVerifiedFrame(slot,onceSize=null,afterFrame=undefined) {
+  async function captureVerifiedFrame(slot,onceSize=null,afterFrame=undefined,deferImage=false) {
     protectedSlot(slot);
     if (!config.cuaExecutable && !gpuSource) {
       throw new Error('Visual provider is NOT_CONFIGURED; set --cua-exe or --gpu-capture-exe');
@@ -412,7 +412,7 @@ export function createOperationCore(config,{
       // screenshot request began (not when the game rendered its pixels).
       // WGC carries a separate producer-authored readback time instead.
       const captureStartedAtMs=Date.now();
-      const frame=gpuSource ? (onceSize?await gpuSource.captureOnce(slot,before,onceSize):gpuSource.latest(slot,before)) :
+      const frame=gpuSource ? (onceSize?await gpuSource.captureOnce(slot,before,onceSize):gpuSource.latest(slot,before,{deferImage})) :
         await capture(config.cuaExecutable,before);
       requireOpen();
       const after=await readNative('target',slot);
@@ -423,6 +423,7 @@ export function createOperationCore(config,{
         throw new Error('Minecraft window changed during capture; screenshot discarded');
       }
       const webp=frame?.mimeType==='image/webp';
+      const deferred=deferImage&&gpuSource&&!onceSize&&frame?.imageRef!==undefined;
       if(webp&&(!Number.isSafeInteger(frame.capturedAtMs)||frame.capturedAtMs<1||
          Date.now()-frame.capturedAtMs<0||Date.now()-frame.capturedAtMs>3500)) {
         throw new Error('GPU_PREVIEW_UNAVAILABLE');
@@ -430,7 +431,7 @@ export function createOperationCore(config,{
       if (!frame || (!webp&&frame.mimeType!=='image/png') ||
           (webp&&(!gpuSource||mc02Enabled||multiEnabled)) ||
           (onceSize&&(!webp||frame.width!==onceSize.width||frame.height!==onceSize.height)) ||
-          (!onceSize&&typeof frame.imageBase64!=='string') ||
+          (!onceSize&&!deferred&&typeof frame.imageBase64!=='string') ||
           (onceSize&&(Buffer.isBuffer(frame.bytes)?
             frame.bytes.length<1||frame.bytes.length>3*1024*1024:
             typeof frame.imageBase64!=='string')) ||
@@ -478,7 +479,8 @@ export function createOperationCore(config,{
           imageBase64:unchanged?null:Buffer.isBuffer(frame.bytes)?
             frame.bytes.toString('base64'):frame.imageBase64};
       }
-      observation.imageBase64=frame.imageBase64;
+      if(deferred)observation.imageRef=frame.imageRef;
+      else observation.imageBase64=frame.imageBase64;
       // No additional native read, frame parse or player/world inference.
       // This is only a bounded capability hint on an existing screenshot.
       if(webp)return observation; // No unrelated legacy F3 projection in AI previews.
@@ -501,7 +503,7 @@ export function createOperationCore(config,{
     }
   };
   const visualObserver=visualObserverFactory({
-    capture:captureVerifiedFrame,
+    capture:slot=>captureVerifiedFrame(slot,null,undefined,true),
     sourceLabel:gpuSource?'PERSISTENT_WGC_GPU_FRAME_SOURCE':'BOUNDED_CUA_WINDOW_SNAPSHOTS',
     onFinish:(slot)=>{
       gpuSource?.stop([slot]);

@@ -5841,3 +5841,38 @@ test('direct Playtest refuses experimental catalog attachment',()=>{
   const core={isClosed:()=>false,callTool:async()=>{},listTools:()=>[{name:'run_experimental_multi_client_actions'}]};
   assert.throws(()=>createCodeModeClient(core,'playtest'),/does not admit experimental input/);
 });
+
+test('operation core requests deferred persistent image only for its local sampler',async()=>{
+  let capture,reads=0,nativeReads=0;
+  const cfg={...config(),gpuExecutable:path.resolve('lazy-tester-gpu-capture.exe')};
+  const imageRef={length:64,read(){reads++;return 'a'.repeat(64);}};
+  const core=createOperationCore(cfg,{
+    native:async(_exe,operation,slot)=>{
+      assert.equal(operation,'target');nativeReads++;
+      return {schema:1,ok:true,operation,slot,pid:402,windowId:1002,
+        createdFileTime:'134000000000000001',sessionId:1,foreground:false,
+        visible:true,minimized:false,verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+    },
+    gpuSourceFactory:()=>({
+      latest(_slot,_target,{deferImage}){
+        return {mimeType:'image/png',width:960,height:540,sha256:'a'.repeat(64),
+          capturedAtMs:Date.now(),workerSequence:1,
+          ...(deferImage?{imageRef}:{imageBase64:imageRef.read()})};
+      },
+      shutdown(){},stop(){},
+    }),
+    visualObserverFactory:options=>{capture=options.capture;return {shutdown(){}};},
+  });
+  try {
+    const sampled=await capture(2);
+    assert.equal(sampled.imageRef,imageRef);
+    assert.equal(sampled.imageBase64,null);
+    assert.equal(reads,0);
+    assert.equal(nativeReads,2);
+    const explicit=await core.callTool('observe_client',{slot:2});
+    assert.equal(explicit.imageBase64,'a'.repeat(64));
+    assert.equal(Object.hasOwn(explicit,'imageRef'),false);
+    assert.equal(reads,1);
+    assert.equal(nativeReads,4);
+  }finally{core.shutdown();}
+});

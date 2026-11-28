@@ -1,4 +1,4 @@
-// Bounded, ephemeral local window-frame sampling owned by ONE MCP stdio process.
+// Bounded, ephemeral local window-frame sampling owned by ONE operation core.
 // Frames are collected locally and delivered to Codex/Claude only when asked.
 // This is NOT live 30 FPS video, semantic gameplay perception, or game input.
 // Game capture, provider latency and Minecraft Windows behavior NOT_EXECUTED.
@@ -42,11 +42,14 @@ function frameIdentity(meta) {
 }
 function boundedFrame(frame) {
   const meta=frame?.metadata;
+  const image=frame?.imageRef??frame?.imageBase64;
+  const lazy=typeof image!=='string'&&meta?.provider==='NATIVE_WGC_PERSISTENT'&&
+    typeof image?.read==='function';
   if (!meta || !['CUA_DRIVER_WINDOW_CAPTURE','NATIVE_WGC_PERSISTENT']
       .includes(meta.provider) ||
-      typeof frame.imageBase64!=='string' ||
-      frame.imageBase64.length<32 ||
-      frame.imageBase64.length>OBSERVATION_LIMITS.maximumEncodedFrameChars ||
+      (typeof image!=='string'&&!lazy) ||
+      !Number.isSafeInteger(image.length) || image.length<32 ||
+      image.length>OBSERVATION_LIMITS.maximumEncodedFrameChars ||
       !HASH.test(meta.sha256??'') ||
       !Number.isInteger(meta.width) || meta.width<1 || meta.width>1536 ||
       !Number.isInteger(meta.height) || meta.height<1 || meta.height>1536 ||
@@ -68,7 +71,7 @@ function boundedFrame(frame) {
      !unknown && (!Number.isSafeInteger(sourceAt) || sourceAt<1)) {
     throw new TypeError('Capture has invalid source clock or GPU sequence');
   }
-  return {meta,identity:frameIdentity(meta),
+  return {meta,image,identity:frameIdentity(meta),
     sourceFrameAtMs:unknown?null:sourceAt,
     sourceTimeKind:unknown?null:wgc?
       'WGC_READBACK_COMPLETED':'CUA_QUERY_STARTED',
@@ -231,7 +234,7 @@ export function createVisualObserver({
     state.active=false;
     clearTimer(state);
     state.status=status;
-    state.imageBase64=null;
+    state.image=null;
     state.lastHash=null;
     state.lastDeliveredFrame=null;
     state.identity=null;
@@ -281,7 +284,7 @@ export function createVisualObserver({
         finish(state,'EXPIRED');
         return;
       }
-      const {meta,identity,sourceFrameAtMs,sourceTimeKind,
+      const {meta,image,identity,sourceFrameAtMs,sourceTimeKind,
         producerSequence}=boundedFrame(frame);
       const collectedMs=clock();
       if(sourceFrameAtMs!==null &&
@@ -332,7 +335,7 @@ export function createVisualObserver({
       if (meta.sha256!==state.lastHash) {
         state.lastHash=meta.sha256;
         state.sequence++;
-        state.imageBase64=frame.imageBase64;
+        state.image=image;
         state.width=meta.width;
         state.height=meta.height;
         state.mimeType=meta.mimeType??'image/png';
@@ -370,7 +373,7 @@ export function createVisualObserver({
         state.totalErrors++;
         state.lastError=/changed|target|identity|stale/i.test(error?.message??'') ?
           'WINDOW_IDENTITY_UNCONFIRMED':'CAPTURE_UNAVAILABLE';
-        state.imageBase64=null; // Never serve an old image as a fresh one.
+        state.image=null; // Never serve an old image as a fresh one.
         state.lastDeliveredFrame=null;
         state.lastHash=null;
         state.status='CAPTURE_ERROR';
@@ -411,7 +414,7 @@ export function createVisualObserver({
       const state={
         slot,active:true,status:'WAITING_FOR_FIRST_FRAME',sequence:0,
         startedAt,endsAt:startedAt+durationMs,intervalMs,
-        timer:null,nextDueAt:null,imageBase64:null,
+        timer:null,nextDueAt:null,image:null,
         identity:null,captureIdentity:null,
         sourceFrameAtMs:null,sourceTimeKind:null,producerSequence:null,
         duplicateGpuReads:0,
@@ -458,10 +461,15 @@ export function createVisualObserver({
       ageMs>MAX_READ_FRAME_AGE_MS ||
       (sourceAge!==null && sourceAge<0);
     const fresh=state.active && !tooOld &&
-      state.imageBase64!==null && state.captureIdentity!==null;
+      state.image!==null && state.captureIdentity!==null;
     const deliver=includeImage && fresh && state.sequence>afterSequence;
+    let imageBase64=null;
     if (deliver) {
-      // No extra image buffer: remember only the exact PNG frame exposed
+      imageBase64=typeof state.image==='string'?state.image:state.image.read();
+      if(typeof imageBase64!=='string'||imageBase64.length!==state.image.length) {
+        throw new Error('CAPTURE_UNAVAILABLE');
+      }
+      // No extra image buffer: remember only the exact frame exposed
       // by this observer connection, not a metadata-only read.
       state.lastDeliveredFrame={sequence:state.sequence,
         sourceFrameAtMs:state.sourceFrameAtMs,identity:state.identity};
@@ -473,7 +481,7 @@ export function createVisualObserver({
     return {
       metadata:{
         schema:1,slot,sequence:state.sequence,
-        status:state.active && tooOld && state.imageBase64!==null ?
+        status:state.active && tooOld && state.image!==null ?
           'CACHED_FRAME_AGED_OUT' : state.status,
         hasNewImage:deliver,active:state.active,
         screenReviewFrameDelivered:delivered,
@@ -508,7 +516,7 @@ export function createVisualObserver({
         modelDelivery:'ONLY_ON_MCP_READ',
         gameInput:'INDEPENDENT_BACKGROUND_INPUT_NOT_VERIFIED',
       },
-      imageBase64:deliver?state.imageBase64:null,
+      imageBase64,
     };
   }
   // Metadata-only and side-effect free. In contrast to read(), this does
@@ -522,7 +530,7 @@ export function createVisualObserver({
           now-state.sourceFrameAtMs;
         const collectionAge=state.lastCollectedMs===null?null:
           now-state.lastCollectedMs;
-        const recent=state.imageBase64!==null &&
+        const recent=state.image!==null &&
           state.captureIdentity!==null &&
           collectionAge!==null&&collectionAge>=0&&
           collectionAge<=MAX_READ_FRAME_AGE_MS&&
