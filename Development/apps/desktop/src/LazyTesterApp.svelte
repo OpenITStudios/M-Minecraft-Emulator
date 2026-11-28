@@ -169,6 +169,7 @@
   let lastRecordingInspectionStartedAt = Number.NEGATIVE_INFINITY;
   let managerVisible = false;
   let observationTimer: number | undefined;
+  let observationTimerDue: number | null = null;
   let queuedLaunch:ProfileSlot|null=null;
   let mounted = false, disposed = false, dirty = false, detached = false;
   // Alert context is authored, not a retained raw backend exception.
@@ -1111,20 +1112,29 @@
   function clearBackgroundObservation() {
     if (observationTimer !== undefined) window.clearTimeout(observationTimer);
     observationTimer = undefined;
+    observationTimerDue = null;
   }
   function scheduleBackgroundObservation(sessionDue: number | null, recordingDue: number | null) {
-    clearBackgroundObservation();
     const due = nextBackgroundDeadline(sessionDue, recordingDue);
+    // A change in the other lane need not cancel the same pending wake.
+    if (!disposed && due !== null && observationTimer !== undefined && observationTimerDue === due) return;
+    clearBackgroundObservation();
     if (due === null || disposed) return;
     const timer = window.setTimeout(() => {
       if (observationTimer !== timer || disposed) return;
       observationTimer = undefined;
+      observationTimerDue = null;
       // Visibility can change before its event is delivered. Publish the
       // observed hidden state so the next visible event rearms this deadline.
       if (document.hidden) { managerVisible = false; return; }
+      // The retained timer may outlive changes to either lane's deadline.
+      // Read the latest pair rather than the pair captured when it was armed.
+      const sessionDue = sessionDeadline, recordingDue = recordingDeadline;
+      const currentDue = nextBackgroundDeadline(sessionDue, recordingDue);
+      if (currentDue === null) return;
       const now = performance.now();
-      // A timer that fires early must not lose either original deadline.
-      if (now < due) {
+      // An early wake must not lose either current deadline.
+      if (now < currentDue) {
         scheduleBackgroundObservation(sessionDue, recordingDue);
         return;
       }
@@ -1138,6 +1148,7 @@
           sessionObservationHint, settings, now - lastSettingsObservedAt));
     }, Math.max(0, Math.ceil(due - performance.now())));
     observationTimer = timer;
+    observationTimerDue = due;
   }
   onMount(() => {
     try { workspaceLayout = window.localStorage.getItem(workspaceLayoutKey) === 'Right' ? 'Right' : 'Bottom'; }

@@ -380,6 +380,12 @@ describe('Lazy Tester profile contract', () => {
     expect(nextBackgroundDeadline(null,null)).toBeNull();
     expect(nextBackgroundDeadline(11200,13200)).toBe(11200);
     expect(nextBackgroundDeadline(Number.NEGATIVE_INFINITY,null)).toBe(Number.NEGATIVE_INFINITY);
+    // A focus hint can move the later lane onto the existing recording wake.
+    expect(nextBackgroundDeadline(6200,3200)).toBe(3200);
+    expect(nextBackgroundDeadline(3200,3200)).toBe(3200);
+    // Either lane can disappear while the other retains the same wake.
+    expect(nextBackgroundDeadline(null,3200)).toBe(3200);
+    expect(nextBackgroundDeadline(3200,null)).toBe(3200);
   });
   it('shares the observation clocks, pauses blocked lanes, and cancels the one timer on teardown', () => {
     const mounted = readFileSync(new URL('../src/LazyTesterApp.svelte', import.meta.url), 'utf8');
@@ -401,6 +407,13 @@ describe('Lazy Tester profile contract', () => {
     expect(mounted).toContain('!selectiveOpen && storageReview===null');
     expect(mounted).toContain('recordingAvailable && recordingWatch && !recordingStatusPending');
     expect(mounted).toContain('const due = nextBackgroundDeadline(sessionDue, recordingDue)');
+    const scheduler=mounted.slice(mounted.indexOf('function scheduleBackgroundObservation('),mounted.indexOf('onMount(() => {'));
+    expect(scheduler.indexOf('observationTimerDue === due) return;')).toBeGreaterThan(-1);
+    expect(scheduler.indexOf('observationTimerDue === due) return;')).toBeLessThan(scheduler.indexOf('clearBackgroundObservation();'));
+    expect(scheduler.indexOf('const sessionDue = sessionDeadline, recordingDue = recordingDeadline;')).toBeGreaterThan(scheduler.indexOf('window.setTimeout('));
+    expect(scheduler).toContain('if (currentDue === null) return;');
+    expect(scheduler).toContain('if (now < currentDue)');
+    expect(scheduler).toContain('observationTimerDue = due;');
     expect(mounted).toContain('if (due === null || disposed) return;');
     expect(mounted).toContain('if (observationTimer !== timer || disposed) return;');
     expect(mounted).toContain('if (document.hidden) { managerVisible = false; return; }');
