@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-03c: shared session contract)
+## Current status — cross-platform-native (MAC-03d: native identity boundary)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,39 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-03d — native identity boundary (source only)
+
+Centralize frontend exact window observation equality and transient selection
+key in existing observedProcess.ts. Scheduling compares responsiveness
+separately; DWM invalidation keeps its slot and RUNNING guards; selection
+keeps identical key bytes. Rust process_identity.rs already owns exact
+Windows wire equality. No new identity store, process scan, data access,
+IPC, permission or native mutation. Existing native capture and MCP
+receipts have distinct verification semantics and remain unchanged.
+Authored fixtures cover identity replacement, responsiveness, absent target,
+and rejection of a speculative Mac shape; tests NOT_EXECUTED.
+
+Mac candidate: retain the original NSRunningApplication returned by an
+admitted launch and compare application objects, not PID alone (Apple
+[processIdentifier](https://developer.apple.com/documentation/appkit/nsrunningapplication/processidentifier)
+and [NSRunningApplication](https://developer.apple.com/documentation/appkit/nsrunningapplication)).
+The Apple [proc_bsdinfo source](https://github.com/apple/darwin-xnu/blob/main/bsd/sys/proc_info.h)
+contains start seconds and microseconds; a native exact-size proc_pidinfo
+observation may corroborate process birth and user context, not replace
+retained ownership or code-signing evidence. Use a typed platform-specific
+receipt when there is a real admitted consumer; do not reinterpret FILETIME,
+HWND or Windows session IDs. Window identity is separate from app identity;
+Accessibility target and capture window identity must be verified against
+the retained app before use, not inferred from caption, bundle ID or PID.
+Normal quit is a request, not proof of termination. Missing/changed identity
+must refuse selection and mutation, preserving the original session.
+
+Do not introduce a new wire variant or SDK dependencies before the supported
+Mac isolation/launch mechanism and actual native consumer exist. This
+completes the bounded common identity preparation, not native Mac process
+observation. Further speculative refactoring does not resolve MAC-02.
+Mac artifact, storage/account separation and launch remain BLOCKED.
 
 ### MAC-03c — shared session contract (source only)
 
@@ -195,7 +228,8 @@ managed launch until a safe mechanism is established; two PIDs are not proof.
 
 MAC-01 and MAC-02 change planning only; MAC-03a changes common frontend
 source and matching fixtures; MAC-03b adds explicit offline artifact tooling;
-MAC-03c shares existing pure session policy with its active native caller.
+MAC-03c shares existing pure session policy with its active native caller;
+MAC-03d centralizes active frontend window identity comparisons.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

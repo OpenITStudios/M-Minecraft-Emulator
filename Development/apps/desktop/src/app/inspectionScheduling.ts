@@ -2,15 +2,15 @@
 // Launch/Close; those remain under the Rust controller and Tauri admission.
 import {supportsManagedSessions, type NativeBackendSupport, type ProfileSession, type SettingsReport, type AgentActivityReport} from './bridge/lazyTester.js';
 
+import {sameWindowIdentity} from './bridge/observedProcess.js';
+
 // Compare the layout-relevant fields of the validated profile contract.
 // Issue text changes feedback, not the native geometry or source identity.
 function sameLayoutProfile(current: ProfileSession, incoming: ProfileSession): boolean {
   if (current.slot !== incoming.slot || current.state !== incoming.state) return false;
   const a = current.process, b = incoming.process;
   if (a === null || b === null) return a === b;
-  return a.pid === b.pid && a.createdFileTime === b.createdFileTime &&
-    a.sessionId === b.sessionId && a.windowHandle === b.windowHandle &&
-    a.responding === b.responding;
+  return sameWindowIdentity(a,b) && a.responding === b.responding;
 }
 
 export function sameProfileLayout(

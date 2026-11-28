@@ -1,4 +1,13 @@
 export interface OwnedProcess {pid:number;createdFileTime:string;sessionId:number;windowHandle:string;responding:boolean}
+// Compare validated observations only. Neither equality nor this transient
+// key is native ownership, liveness or permission to manipulate a window.
+export function sameWindowIdentity(a:OwnedProcess,b:OwnedProcess):boolean {
+  return a.pid===b.pid && a.createdFileTime===b.createdFileTime &&
+    a.sessionId===b.sessionId && a.windowHandle===b.windowHandle;
+}
+export function windowIdentityKey(process:OwnedProcess|null|undefined):string {
+  return process ? [process.pid,process.createdFileTime,process.sessionId,process.windowHandle].join('/') : '';
+}
 const record=(v:unknown):v is Record<string,unknown>=>typeof v==="object" && v!==null && !Array.isArray(v);
 const keys=(v:Record<string,unknown>, names:string[])=>Object.keys(v).length===names.length && names.every(n=>Object.hasOwn(v,n));
 export function parseObservedProcess(p:unknown):OwnedProcess {

@@ -2,6 +2,7 @@
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
   import {lazyTester, supportsManagedSessions, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type EducationInstallationReport, type NativeBackendSupport, profileSlots, recordingActive, type RecordingReceipt} from './app/bridge/lazyTester.js';
+  import {windowIdentityKey} from './app/bridge/observedProcess.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazytester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -295,7 +296,7 @@
   $: navigationReviewOpen = selectiveOpen || closeReviewPending || clearingData || storageReview !== null;
   const images = new Map<ProfileSlot, HTMLElement>();
   const labels = {STOPPED: 'Stopped', STARTING: 'Starting…', RUNNING: 'Running', NOT_RESPONDING: 'Not Responding', ATTENTION: 'Needs Attention'};
-  const identity = (profile?: ProfileSession) => profile?.process ? [profile.process.pid, profile.process.createdFileTime, profile.process.sessionId, profile.process.windowHandle].join('/') : '';
+  const identity = (profile?: ProfileSession) => windowIdentityKey(profile?.process);
   $: primary = active ?? requested ?? profiles.find(profile => profile.state === 'RUNNING')?.slot ?? 1;
   $: others = profiles.filter(profile => profile.slot !== primary);
   $: runningCount = profiles.filter(profile => ['STARTING', 'RUNNING', 'NOT_RESPONDING'].includes(profile.state)).length;

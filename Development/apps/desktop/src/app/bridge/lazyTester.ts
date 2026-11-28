@@ -1,5 +1,5 @@
 import {invokeRuntime} from './invokeRuntime.js';
-import {parseObservedProcess, type OwnedProcess} from './observedProcess.js';
+import {parseObservedProcess, sameWindowIdentity, type OwnedProcess} from './observedProcess.js';
 import {previewViewport, workspaceViewport, type WorkspaceRectangle, type WorkspaceViewport} from './workspaceSurface.js';
 
 export const profileSlots = [1, 2, 3, 4, 5] as const;
@@ -205,8 +205,7 @@ export function dwmPreviewInvalidationApplies(
 ):boolean {
   const p=profile?.process, n=notice.process;
   return !!p && profile?.state==='RUNNING' && profile.slot===notice.slot &&
-    p.pid===n.pid && p.createdFileTime===n.createdFileTime &&
-    p.sessionId===n.sessionId && p.windowHandle===n.windowHandle;
+    sameWindowIdentity(p,n);
 }
 export interface ProfileBinding {schema: 1; required: boolean; configured: boolean; issue: string | null}
 export interface DataLocation {schema:1; defaultPath:string; path:string|null; profiles:{slot:ProfileSlot;path:string}[]; canLocate:boolean}
