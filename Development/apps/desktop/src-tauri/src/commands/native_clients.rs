@@ -93,6 +93,15 @@ pub async fn lazy_tester_session(
     })).await.map_err(|_| "Session task failed".to_string())?.map_err(|error| error.to_string())
 }
 
+// Explicit read-only Settings observation; no new session or updater owner.
+#[tauri::command]
+pub async fn lazy_tester_education_installation() -> Result<native_clients::EducationInstallationReport, String> {
+    if crate::app_bootstrap::startup_diagnostic_mode() { return Err("Installation inspection unavailable in startup diagnostic".into()); }
+    tauri::async_runtime::spawn_blocking(move || run_manager_operation(native_clients::education_installation_report))
+        .await.map_err(|_| "Installation inspection task failed".to_string())?
+        .map_err(|_| "Minecraft Education installation could not be verified".to_string())
+}
+
 // Read only the current process's bounded report, not a native session request.
 #[tauri::command]
 pub(crate) fn lazy_tester_issue_report() -> Result<Option<crate::engine::issue_report::NativeIssueReport>, &'static str> {

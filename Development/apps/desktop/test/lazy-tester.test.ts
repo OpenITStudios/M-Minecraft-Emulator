@@ -1,12 +1,30 @@
 import {sameWorkspaceGeometry, type WorkspaceGeometry} from '../src/app/workspaceGeometry.js';
 import {describe, expect, it} from 'vitest';
 import {readFileSync} from 'node:fs';
-import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, parseStartupCapabilities, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
+import {lazyTester, parseRecordingStatus, recordingActive, parseSelectedClose, firstEmbeddedProfile, parseSession, parsePreviewReport, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, parseProfileBinding, parseDataLocation, validFpsLimits, canRequestLaunch, parseNativeBackendSupport, parseStartupCapabilities, parseEducationInstallation, type ProfileSession, type ProfileSlot} from '../src/app/bridge/lazyTester.js';
 import {previewViewport} from '../src/app/bridge/workspaceSurface.js';
 import {canRequestProfileLaunch, projectSessionHealth, launcherCardGuidance, reconcileLaunchReceipts} from '../src/app/presentation/sessionHealth.js';
 import {guidedRecoveryAllowed} from '../src/app/presentation/guidedRecovery.js';
 import {userMessage, userFeedback, feedbackHeading, sessionConnectionLabel, updateRecoverySlots, recoveryLabels, type UserMessageKey} from '../src/app/presentation/sessionFeedback.js';
 import {closeReviewActive, observationStillCurrent, previewLayoutStillCurrent, releasedSelectionStillCurrent, periodicInspectionInterval, passiveIdleAllowed, sessionInspectionDeadline, nextBackgroundDeadline, nextPendingUiAction, sameProfileObservation, sameProfileLayout, sameSettingsObservation, sameAgentObservation, agentNeedsFastInspection, type PendingUiQueueState, type PendingUiAction, type CloseReview} from '../src/app/inspectionScheduling.js';
+
+describe('Education installation observation',()=>{
+  const report={schema:1,registeredVersion:'1.26.33.0',updater:'Ready',reviewedImage:true};
+  it('accepts only bounded metadata, not executable paths or launch authorization',()=>{
+    expect(parseEducationInstallation(report)).toEqual(report);
+    for(const updater of ['Busy','Disabled','Missing','Unknown'])
+      expect(parseEducationInstallation({...report,updater,reviewedImage:false}).updater).toBe(updater);
+    for(const invalid of [{...report,schema:2},{...report,path:'private'}, {...report,registeredVersion:'bad'},
+      {...report,registeredVersion:'1.'+'0'.repeat(64)},{...report,updater:'Running'},
+      {...report,reviewedImage:1}]) expect(()=>parseEducationInstallation(invalid)).toThrow();
+  });
+  it('keeps version inspection out of passive session refresh and startup',()=>{
+    const app=readFileSync(new URL('../src/LazyTesterApp.svelte',import.meta.url),'utf8');
+    const refresh=app.split('async function refresh(passiveIdle = false)')[1]!.split('async function launch(')[0]!;
+    expect(refresh).not.toContain('refreshInstallation');
+    expect(app.match(/await refreshInstallation\(issued\)/g)).toHaveLength(2);
+  });
+});
 
 const stopped = () => ({schema: 1, storage: null, profiles: [1,2,3,4,5].map(slot => ({slot, state: 'STOPPED', process: null, issue: null}))});
 const running = (slot: number) => ({slot, state: 'RUNNING', issue: null, process: {

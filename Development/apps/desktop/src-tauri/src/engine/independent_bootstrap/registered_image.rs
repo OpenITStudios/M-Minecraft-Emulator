@@ -34,6 +34,24 @@ fn pin_registered_image_with(target: String, observe: bool, resolve: impl FnOnce
     Ok((target,image,singleton_caller_rva))
 }
 
+// Explicit informational observation. Reuse the post-pin registration and
+// file identity gate; do not acquire an idle/retained controller image pin.
+pub(super) fn installation_report() -> io::Result<crate::engine::native_clients::EducationInstallationReport> {
+    use crate::engine::native_clients::{registered_education_metadata, resolve_registered_education_target, EducationInstallationReport};
+    let target = resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly")?;
+    let mut metadata = None;
+    let (_, image, _) = pin_registered_image_with(target, false, || {
+        let receipt = registered_education_metadata()?;
+        let path = receipt.path.clone();
+        metadata = Some(receipt);
+        Ok(path)
+    })?;
+    let metadata = metadata.ok_or_else(|| invalid("Education installation metadata unavailable"))?;
+    let reviewed_image = reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?).is_ok();
+    Ok(EducationInstallationReport { schema: 1, registered_version: metadata.registered_version,
+        updater: metadata.updater, reviewed_image })
+}
+
 // Retained-image comparison is used only by the opt-in timing fixture.
 #[cfg(test)]
 fn validate_registered_image(target:&str,image:&File,observe:bool)->io::Result<u32> {

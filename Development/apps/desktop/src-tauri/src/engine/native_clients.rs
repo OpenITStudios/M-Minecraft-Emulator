@@ -193,6 +193,11 @@ pub fn registered_education_target() -> io::Result<String> {
 
 #[cfg(target_os = "windows")]
 fn resolve_registered_education_target(selector: &str) -> io::Result<String> {
+    run_registered_education_query(selector, "\n$selectedTarget")
+}
+
+#[cfg(windows)]
+fn run_registered_education_query(selector: &str, output: &str) -> io::Result<String> {
     let resolver =
         include_str!("../../../../../tooling/acceptance/windows/education-target.ps1");
     let script = [
@@ -200,7 +205,8 @@ fn resolve_registered_education_target(selector: &str) -> io::Result<String> {
         EDUCATION_DESKTOP_PREFLIGHT,
         "\n$selectedTarget=",
         selector,
-        "\nAssert-ManagerRegisteredAppId $appId $selectedTarget\n$selectedTarget",
+        "\nAssert-ManagerRegisteredAppId $appId $selectedTarget",
+        output,
     ].concat();
     virtual_clients_core::bounded_command_output(
         &system_powershell()?,
@@ -208,6 +214,53 @@ fn resolve_registered_education_target(selector: &str) -> io::Result<String> {
         std::time::Duration::from_secs(15),
     )
     .map(|s| s.trim().to_owned())
+}
+
+// Informational receipt only: no path or hash is exposed to the webview,
+// and neither the registry version nor recipe match grants launch admission.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum EducationUpdaterState { Ready, Busy, Disabled, Missing, Unknown }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EducationInstallationReport {
+    pub schema: u32,
+    pub registered_version: String,
+    pub updater: EducationUpdaterState,
+    pub reviewed_image: bool,
+}
+
+#[cfg(all(windows, target_arch = "x86_64"))]
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RegisteredEducationMetadata {
+    path: String,
+    registered_version: String,
+    updater: EducationUpdaterState,
+}
+
+#[cfg(all(windows, target_arch = "x86_64"))]
+fn registered_education_metadata() -> io::Result<RegisteredEducationMetadata> {
+    let json = run_registered_education_query("Resolve-ManagerEducationTarget -RegisteredOnly",
+        r#"
+[pscustomobject]@{path=$selectedTarget;registeredVersion=$desktopVersions[0];updater=(Get-ManagerEducationUpdaterState)} | ConvertTo-Json -Compress
+"#)?;
+    let receipt: RegisteredEducationMetadata = serde_json::from_str(&json)
+        .map_err(|_| invalid_evidence("Invalid Education installation metadata"))?;
+    let version = &receipt.registered_version;
+    if version.len() > 64 || !(2..=5).contains(&version.split('.').count())
+        || !version.split('.').all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()))
+        || receipt.path.is_empty() {
+        return Err(invalid_evidence("Invalid Education installation metadata"));
+    }
+    Ok(receipt)
+}
+
+pub fn education_installation_report() -> io::Result<EducationInstallationReport> {
+    #[cfg(all(windows, target_arch = "x86_64"))]
+    { independent_bootstrap::education_installation_report() }
+    #[cfg(not(all(windows, target_arch = "x86_64")))]
+    { Err(io::Error::new(io::ErrorKind::Unsupported, "Education installation inspection requires Windows x64")) }
 }
 
 #[cfg(not(target_os = "windows"))]

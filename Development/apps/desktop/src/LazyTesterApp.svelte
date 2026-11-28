@@ -1,7 +1,7 @@
 <script lang="ts">
   import {onMount, tick} from 'svelte';
   import {listen} from '@tauri-apps/api/event';
-  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type NativeBackendSupport, profileSlots, recordingActive, type RecordingReceipt} from './app/bridge/lazyTester.js';
+  import {lazyTester, firstEmbeddedProfile, validFpsLimits, type AgentActivityReport, type ProfileSession, type ProfileSlot, type ProfileStorage, type PreviewStatus, parseDwmPreviewInvalidation, dwmPreviewInvalidationApplies, type DwmPreviewInvalidation, type ProfileBinding, type DataLocation, type SettingsReport, type EducationInstallationReport, type NativeBackendSupport, profileSlots, recordingActive, type RecordingReceipt} from './app/bridge/lazyTester.js';
   import {workspaceSurface} from './app/bridge/workspaceSurface.js';
   import './lazytester.css';
   import WindowTitlebar from './WindowTitlebar.svelte';
@@ -20,6 +20,8 @@
 
   let profiles: ProfileSession[] = [], storage: ProfileStorage[] | null = null;
   let binding: ProfileBinding | null = null;
+  let installation: EducationInstallationReport | null = null;
+  let installationPending = false;
   let nativeBackend: NativeBackendSupport | null = null;
   let bindingIssue = '', locationIssue = '';
   let dataLocation:DataLocation|null=null;
@@ -489,6 +491,18 @@
   function isCurrentObservation(issued: number): boolean {
     return !disposed && observationStillCurrent(issued, observationEpoch, reviewState());
   }
+  // Explicit Settings entry/Refresh only. A failed installation observation
+  // does not invalidate independently observed profiles or settings.
+  async function refreshInstallation(issued:number) {
+    installation=null;
+    installationPending=true;
+    try {
+      const receipt=await lazyTester.educationInstallation();
+      if (isCurrentObservation(issued) && page==='settings') installation=receipt;
+    } catch {
+      // No stale positive receipt after a failed check.
+    } finally {installationPending=false;}
+  }
   async function refresh(passiveIdle = false) {
     if (nativeBackend !== 'WindowsNative' || closeReviewActive(reviewState()) || activeOperation !== null || refreshing || resizing || disposed) return;
     const issued = observationEpoch;
@@ -616,6 +630,8 @@
         if (!current()) return;
         publishProfiles(snapshot.profiles);observeSettings(snapshot.settings);available=true;
       }
+      if(next==='settings') await refreshInstallation(issued);
+      if (!current()) return;
       if(next==='storage') {
         try {
           const location=await lazyTester.dataLocation();
@@ -694,6 +710,8 @@
       if (!binding?.configured) await loadBinding();
       if (!current()) return;
       await refresh();
+      if (!current()) return;
+      if (page==='settings') await refreshInstallation(issued);
       if (!current()) return;
       if (previewFailed && page === 'workspace' && available &&
           !detached) dirty = true;
@@ -1511,7 +1529,7 @@
         </div>
       </section>
       {#if page==='settings'}
-        <GeneralSettings {settings} {workspaceLayout} {layoutPersistenceIssue} onChooseWorkspaceLayout={chooseWorkspaceLayout}
+        <GeneralSettings {settings} {installation} {installationPending} {workspaceLayout} {layoutPersistenceIssue} onChooseWorkspaceLayout={chooseWorkspaceLayout}
           bind:activeFps bind:backgroundFps
           {busy} {available} {refreshing} {resizing}
           performanceQueued={queuedPerformance!==null}

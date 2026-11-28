@@ -43,6 +43,18 @@ export function parseStartupCapabilities(value: unknown): StartupCapabilities {
       backend === 'Unsupported' && value.diagnostic) throw new TypeError('Inconsistent startup capabilities');
   return {backend,diagnostic:value.diagnostic,screenshot:value.screenshot,recording:value.recording};
 }
+export type EducationUpdaterState = 'Ready' | 'Busy' | 'Disabled' | 'Missing' | 'Unknown';
+export interface EducationInstallationReport {
+  schema:1; registeredVersion:string; updater:EducationUpdaterState; reviewedImage:boolean;
+}
+export function parseEducationInstallation(value:unknown):EducationInstallationReport {
+  if (!record(value) || !exact(value,['schema','registeredVersion','updater','reviewedImage']) ||
+      value.schema!==1 || typeof value.registeredVersion!=='string' || value.registeredVersion.length>64 ||
+      !/^[0-9]+(?:\.[0-9]+){1,4}$/.test(value.registeredVersion) ||
+      typeof value.updater!=='string' || !['Ready','Busy','Disabled','Missing','Unknown'].includes(value.updater) ||
+      typeof value.reviewedImage!=='boolean') throw new TypeError('Invalid Education installation report');
+  return {schema:1,registeredVersion:value.registeredVersion,updater:value.updater as EducationUpdaterState,reviewedImage:value.reviewedImage};
+}
 export type GraphicsPreset = 'Preserve' | 'High' | 'Low';
 export type BackgroundAudio = 'Keep'|'Mute';
 export interface StoragePreferences {autoClearWebCache:boolean; autoClearDownloadCache?:boolean; autoClearOldLogs?:boolean}
@@ -517,6 +529,7 @@ export function parseNativeIssueReport(value:unknown):NativeIssueReport|null {
 }
 
 export const lazyTester = {
+  educationInstallation:async()=>parseEducationInstallation(await invokeRuntime<unknown>('lazy_tester_education_installation')),
   issueReport:async()=>parseNativeIssueReport(await invokeRuntime<unknown>('lazy_tester_issue_report')),
   checkpointIssues:async(ui:string|null)=>invokeRuntime<void>('lazy_tester_checkpoint_issues',{ui}),
   recordingStatus:async()=>parseRecordingStatus(await invokeRuntime<unknown>('lazy_tester_recording_status')),

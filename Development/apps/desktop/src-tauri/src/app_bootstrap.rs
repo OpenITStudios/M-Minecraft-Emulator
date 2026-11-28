@@ -87,6 +87,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::native_clients::lazy_tester_startup_capabilities,
             commands::native_clients::lazy_tester_session,
+            commands::native_clients::lazy_tester_education_installation,
             commands::native_clients::lazy_tester_issue_report,
             commands::native_clients::lazy_tester_checkpoint_issues,
             commands::native_clients::lazy_tester_close_one,

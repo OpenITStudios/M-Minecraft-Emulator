@@ -1,10 +1,13 @@
 <script lang="ts">
   // Presentation only; parent owns state, saved settings, admission and native IPC.
   import {tick} from 'svelte';
-  import type {BackgroundAudio, SettingsReport} from './app/bridge/lazyTester.js';
+  import type {BackgroundAudio, SettingsReport, EducationInstallationReport} from './app/bridge/lazyTester.js';
   import {userMessage} from './app/presentation/sessionFeedback.js';
 
   export let settings: SettingsReport | null;
+  export let installation: EducationInstallationReport | null = null;
+  export let installationPending = false;
+  const updaterLabel = {Ready:'Task ready',Busy:'Queued or running',Disabled:'Disabled',Missing:'Task not found',Unknown:'Unavailable'} as const;
   export let workspaceLayout: 'Bottom' | 'Right';
   export let layoutPersistenceIssue: string;
   export let onChooseWorkspaceLayout: (value: 'Bottom' | 'Right') => void;
@@ -108,6 +111,18 @@
           </form>{:else}<p>Settings unavailable. Refresh to try again.</p>{/if}</section>
           <section class="lazytester-group" aria-labelledby="lazytester-app-behavior-section"><h2 id="lazytester-app-behavior-section">Audio</h2><div class="lazytester-settings-panel"><div class="lazytester-setting"><div><h3 bind:this={audioHeading} tabindex="-1">Mute Background Games</h3><p>Mute audio from background games.</p>{#if settings?.audioIssue}<p class="lazytester-error" role="status">{userMessage('audio')}</p>{/if}{#if !settings?.backgroundAudio}<p>Audio control is unavailable in this controller.</p>{/if}</div><label class="lazytester-audio-toggle"><input type="checkbox" role="switch" checked={settings?.backgroundAudio==='Mute'} disabled={busy||audioQueued||refreshing||resizing||!available||!settings?.backgroundAudio} aria-label="Mute background games" on:change={changeAudioWithFocus}/></label></div></div></section>
           {#if settingsNotice}<p role="status">{settingsNotice}</p>{/if}
+          <section class="lazytester-group" aria-labelledby="lazytester-education-installation">
+            <h2 id="lazytester-education-installation">Minecraft Education</h2>
+            <div class="lazytester-settings-panel" aria-live="polite">
+              {#if installationPending}<p>Checking installation…</p>
+              {:else if installation}
+                <div class="lazytester-setting"><div><h3>Registered version</h3><p>{installation.registeredVersion}</p></div></div>
+                <div class="lazytester-setting"><div><h3>Official updater</h3><p>{updaterLabel[installation.updater]}</p></div></div>
+                <div class="lazytester-setting"><div><h3>Image review</h3><p>{installation.reviewedImage?'Reviewed image found':'Compatibility review required'}</p></div></div>
+                <p class="lazytester-help">Last check only. Launch revalidates the installation and native compatibility. Use Refresh to check again.</p>
+              {:else}<p>Installation status unavailable. Use Refresh to check again.</p>{/if}
+            </div>
+          </section>
           <section class="lazytester-group" aria-labelledby="lazytester-issue-report-section">
               <h2 id="lazytester-issue-report-section">Issue report</h2>
               <p class="lazytester-help">Problems observed since this app opened. Nothing is sent automatically.</p>

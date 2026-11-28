@@ -13,9 +13,16 @@ active child image pins before profile mutation, and clear only stale
 unsupported-image issues on verified compatible admission. Authored synthetic
 generation fixture NOT_EXECUTED. Updater state is a point-in-time observation,
 not an installer lock; missing/disabled tasks may be managed policy.
-Pending: verify native updater/task behavior and costs, explicit refresh and
-version/updater Settings projection, official check action only after safe
-coordination evidence, capability-specific admission and future recipe review.
+Second slice (baseline [ea12355](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/ea12355be1e20f04b57e4e733d219438da7d3338)):
+explicit Settings entry/header Refresh reads bounded registry version,
+task state and exact reviewed-image match from existing registered resolver
+and post-pin checks; hashes once per explicit observation and releases pin.
+Normal session wire, passive polling and startup remain unchanged. One
+read-only Tauri route uses the existing manager gate; no raw path/hash in
+receipt, no launch permission, no task execution. TS contract fixtures
+authored NOT_EXECUTED. Pending: native updater/task behavior and costs,
+safe official check action, capability-specific admission, future recipe
+review and end-to-end update acceptance.
 No new binary is admitted, and the ABI v4/local-test holds below remain.
 
 Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).

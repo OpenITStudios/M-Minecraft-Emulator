@@ -485,6 +485,10 @@ mod session_audio;
 mod window_caption;
 #[path = "independent_bootstrap/registered_image.rs"]
 mod registered_image;
+
+pub(super) fn education_installation_report() -> io::Result<super::EducationInstallationReport> {
+    registered_image::installation_report()
+}
 #[path = "independent_bootstrap/profile_storage.rs"]
 mod profile_storage;
 #[path = "independent_bootstrap/resource_pack_inventory.rs"]
