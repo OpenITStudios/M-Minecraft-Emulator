@@ -525,6 +525,23 @@ test('extracted agent owners retain cross-module review after MCP modularization
   }
 });
 
+test('extracted session owners retain their precise cross-module review routes',()=>{
+  const root='Development/apps/desktop/src-tauri/src/engine/native_clients_session/';
+  const cases=[
+    ['session_protocol.rs',['agent-input-lease','native-desktop-session','agent-activity-mirror','native-input-v4']],
+    ['controller_ai_input_leases.rs',['agent-input-lease','native-input-v4']],
+    ['controller_testing_runs.rs',['agent-input-lease']],
+    ['agent_activity.rs',['agent-activity-mirror']]
+  ];
+  for(const [file,expected] of cases){
+    const path=root+file;
+    const review=qualityReviewForPaths([path],SHA);
+    assert.deepEqual(review.crossModuleReviews.map(seam=>seam.id),expected,file);
+    assert.ok(review.crossModuleReviews.every(seam=>seam.reviewParties.some(p=>
+      p.selectedInChangeSet&&p.inspectFiles.includes(path))));
+  }
+});
+
 test('desktop-only native or UI changes route to their exact consumer boundaries',()=>{
   const session=qualityReviewForPaths(
     ['Development/apps/desktop/src-tauri/src/engine/process_identity.rs'],SHA);
@@ -580,6 +597,8 @@ test('P44 Rust/C++ ABI v4 consumer changes require bounded cross-owner input rev
   assert.deepEqual(seam.counterpartsNotSelected,[]);
   assert.deepEqual(seam.reviewParties[1].inspectFiles,[
     'Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs',
+    'Development/apps/desktop/src-tauri/src/engine/native_clients_session/controller_ai_input_leases.rs',
+    'Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs',
     controller,writer
   ]);
   assert.deepEqual(seam.reviewParties[2].inspectFiles,[reader,header]);

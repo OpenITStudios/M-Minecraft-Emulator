@@ -377,7 +377,7 @@ export function verifyRepository(root,requireCommittedDesktopLock=false) {
   const gameSource=read('Development/apps/desktop/src-tauri/src/engine/native_clients.rs');
   const gameSessions=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/session_controller.rs');
   const gamePreset=read('Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/game_preset.rs');
-  const gameWire=read('Development/apps/desktop/src-tauri/src/engine/native_clients_session.rs');
+  const gameWire=read('Development/apps/desktop/src-tauri/src/engine/native_clients_session/session_protocol.rs');
   // Only InspectSettings may skip a second full registered-app PowerShell
   // lookup. All state-mutating paths MUST retain the original fresh gate.
   assert.ok(gameSource.includes('fn inspect_native_workspace_for_pinned_settings(')
