@@ -262,9 +262,13 @@ new scheduler, or experimental activation.
 The existing experimental multi-client pulse builder now reuses one
 validated cross-client compilation rather than recompiling per slot; exact
 per-slot validation, heartbeat, expiry, retrigger refusal and neutral
-behavior are preserved. Fingerprints reuse the already-compiled plan
-where available. This reduces deterministic compiler work, not a measured
-runtime or token saving. Source fixtures are authored NOT_EXECUTED.
+behavior are preserved. The observed action path and ordinary experimental
+action path share the same private schedule runner; the observed path reuses
+its original preflight compilation for native transport and fingerprint.
+Read-only route assessment retains its initial validated timeline across
+native observation instead of compiling twice. No public prepared-plan
+argument or cached execution token. These reduce deterministic compiler work,
+not a measured runtime or token saving. Source fixtures are authored NOT_EXECUTED.
 
 Native experimental input/lease requests use the same authenticated
 controller envelope with an empty-roster receipt (schema 1, no status

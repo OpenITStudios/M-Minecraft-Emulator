@@ -1,7 +1,7 @@
 // Authored regression fixtures. Do not run without operator approval.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {assessInputRoute,requiredInputSlots,matchesNativeInputTarget} from './input-route.mjs';
+import {assessInputRoute,prepareInputRoute,requiredInputSlots,matchesNativeInputTarget} from './input-route.mjs';
 
 const action=(slot,kind,atMs=0,durationMs=150)=>
   ({slot,kind,atMs,durationMs});
@@ -89,4 +89,17 @@ test('no game-input authorization can be inferred from observed foreground',()=>
     'NOT_PROVEN_BY_NATIVE_WINDOW_INSPECTION');
   assert.match(result.routeType,/NOT_GAME_INPUT/);
   assert.equal(result.actionTimeline.execution,'NOT_DISPATCHED');
+});
+
+test('prepared route retains its validated intent across native observation',()=>{
+  const actions=[action(2,'move_forward')];
+  const expected=assessInputRoute('human-plus-four-ai',actions,[target(1),target(2)],
+    {observedAtMs:100000,elapsedMs:10});
+  const prepared=prepareInputRoute('human-plus-four-ai',actions);
+  assert.deepEqual(prepared.observedSlots,[1,2]);
+  assert.throws(()=>prepared.observedSlots.push(3),TypeError);
+  actions[0].slot=1;
+  actions[0].kind='attack';
+  assert.deepEqual(prepared.assess([target(1),target(2)],{observedAtMs:100000,elapsedMs:10}),expected);
+  assert.throws(()=>prepared.assess([target(1),target(3)]),/unexpected native window/);
 });

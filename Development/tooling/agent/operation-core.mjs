@@ -5,7 +5,7 @@ import {createHash,randomBytes} from 'node:crypto';
 import path from 'node:path';
 import {planPeerSession,planPlayerActions,expandActionGroups} from './control-plan.mjs';
 import {compilePlayerInputTimeline,compilePerClientInputFrames} from './input-timeline.mjs';
-import {assessInputRoute,requiredInputSlots} from './input-route.mjs';
+import {prepareInputRoute} from './input-route.mjs';
 import {inputExecutionStatus} from './input-delivery.mjs';
 import {projectAgentActivity} from './activity-status.mjs';
 import {prepareMc02PulseBatch,prepareMultiClientPulseBatches} from './mc02-action-sequence.mjs';
@@ -575,6 +575,127 @@ export function createOperationCore(config,{
     for(const slot of slots) {
       uncertainAiSlots.delete(slot);
       startupReconcileSlots.delete(slot);
+    }
+  }
+  // Both entrypoints compile once before admission; never accept a caller-supplied schedule.
+  async function runMultiClientSchedule(schedule) {
+    requireOpen();
+    refuseUncertain(schedule.slots);
+    if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
+    inFlight=true;
+    // One completely new epoch per authored cross-client action.
+    // No native lease may adopt stale frames from a prior invocation.
+    const leaseEpoch=makeAiLeaseEpoch();
+    const abort=new AbortController();
+    const run={abort,slots:schedule.slots};
+    multiSequence=run;
+    let dispatched=false,transportConfirmed=false;
+    let nativeNeutralReceipt=null;
+    let leaseAttempted=false,leaseHeld=false;
+    let leaseDefinitelyDenied=false;
+    let neutralUnconfirmed=[],released=[];
+    try {
+      leaseAttempted=true;
+      // All-or-nothing native cohort claim. A definitely denied foreign
+      // writer never touched an input and needs no added recovery marker.
+      try {
+        await changeAiLease('acquire',schedule.slots,leaseEpoch,false);
+      } catch(error) {
+        leaseDefinitelyDenied=definitelyDeniedWriterLease(error);
+        throw error;
+      }
+      leaseHeld=true;
+      // A previously awaited native acquire may return after shutdown.
+      // Refuse new active input; finally still releases the confirmed
+      // neutral lease via the same original controller.
+      if(closed||abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
+      // A visual source could disappear during the await. Do not
+      // acquire a lease and then send the already-invalidated action.
+      refuseUncertain(schedule.slots);
+      if(observedSequence!==null) {
+        // Reuse the existing observer metadata; never take another
+        // screenshot, start a worker or add a controller. Fail closed
+        // when even one original model-reviewed image has advanced,
+        // expired, changed identity, or lost its delivery proof.
+        const round=observedSequence;
+        if(round.slots.length!==schedule.slots.length ||
+           round.slots.some((slot,i)=>slot!==schedule.slots[i])) {
+          throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
+        }
+        verifyTeamObservationBasis(config.mode,schedule.slots,round.basis,
+          schedule.slots.map(slot=>visualObserver.read(slot,{
+            includeImage:false,
+          }).metadata));
+        requireOpen();
+        if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
+        refuseUncertain(schedule.slots);
+        round.dispatchStartedAtMs=Date.now();
+      }
+      // No await between the final source check and native batch request.
+      dispatched=true;
+      const receipt=await aiMultiBatch(config.executable,schedule.batches,
+        {signal:abort.signal,writerId,mode:config.mode,leaseEpoch});
+      if(receipt?.schema!==1||
+         JSON.stringify(receipt?.slots)!==JSON.stringify(schedule.slots)||
+         receipt?.status!=='EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED'||
+         receipt?.gameplayObserved!==false) {
+        throw new Error('AI_INPUT_NATIVE_RESULT_UNVERIFIED');
+      }
+      if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
+      transportConfirmed=true;
+      nativeNeutralReceipt=receipt;
+      return receipt;
+    }finally{
+      // A failed/aborted action may already have published packets.
+      // Keep the original ENTIRE cohort quarantined until the model
+      // explicitly requests recovery, even when neutral ACKs arrive.
+      if(dispatched&&!transportConfirmed)markAiUncertain(schedule.slots);
+      if(leaseHeld) {
+        // A claim that never dispatched input remains initially neutral.
+        // The original CLI has ALREADY sent independent neutral to
+        // every touched slot before emitting its exact-content ACK.
+        // Skip 4/5 duplicate CLI process/IPC calls only for the
+        // canonical sender + fully confirmed exact-slot neutral proof.
+        // Aborted/uncertain/fake transport responses still take the
+        // existing conservative independent neutral/quarantine path.
+        const nativeNeutralConfirmed=canReuseVerifiedNativeBatchNeutral(
+          nativeNeutralReceipt,schedule.slots,{
+            verifiedSender:aiMultiBatch===sendExperimentalMultiClientBatchNative,
+            transportConfirmed,
+          });
+        const neutral=!dispatched || nativeNeutralConfirmed?
+          {acknowledged:[...schedule.slots],unconfirmed:[]}:
+          await releaseAiSlots(schedule.slots,leaseEpoch);
+        neutralUnconfirmed=neutral.unconfirmed;
+        if(neutralUnconfirmed.length)markAiUncertain(neutralUnconfirmed);
+        // Each selected native child can disappear between its
+        // neutral ACK and the final release. Do not send a grouped
+        // release which lets one departed slot strand all peers.
+        const release=await releaseAcknowledgedAiLeases(
+          neutral.acknowledged,leaseEpoch);
+        released=release.released;
+        if(release.unconfirmed.length)markAiUncertain(release.unconfirmed);
+      }
+      if(leaseAttempted&&!leaseHeld&&!leaseDefinitelyDenied) {
+        // Native acquire ACK was ambiguous. Never assume release or
+        // replay; each native writer claim expires without a daemon.
+        markAiUncertain(schedule.slots);
+      }
+      if(multiSequence===run)multiSequence=null;
+      inFlight=false;
+      if(neutralUnconfirmed.length)throw new Error('AI_RELEASE_UNCONFIRMED');
+      if(leaseHeld&&released.length!==schedule.slots.length) {
+        throw new Error('AI_WRITER_LEASE_RELEASE_UNCONFIRMED');
+      }
+      // A Stop/shutdown may arrive AFTER the original batch ACK while
+      // individual native lease releases still await their CLI replies.
+      // A prior successful transport is not a completed MCP transaction
+      // once the operator has cancelled during this final cleanup.
+      // Preserve stronger unconfirmed neutral/lease errors above.
+      if(transportConfirmed&&(closed||abort.signal.aborted)) {
+        markAiUncertain(schedule.slots);
+        throw new Error('AI_SEQUENCE_ABORTED');
+      }
     }
   }
   async function callTool(name,args) {
@@ -1760,9 +1881,7 @@ export function createOperationCore(config,{
         dispatchStartedAtMs:null};
       observedSequence=observedRound;
       try {
-        const receipt=await callTool('run_experimental_multi_client_actions',{
-          actions:args.actions,
-        });
+        const receipt=await runMultiClientSchedule(schedule);
         // Do not mislabel pre-lease waiting as action transport time.
         if(!Number.isSafeInteger(observedRound.dispatchStartedAtMs)) {
           throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
@@ -1792,123 +1911,7 @@ export function createOperationCore(config,{
       keysExactly(args,['actions']);
       // Compile the FULL cross-slot plan before any input request.
       const schedule=prepareMultiClientPulseBatches(config.mode,args.actions);
-      refuseUncertain(schedule.slots);
-      if(exclusiveBusy())throw new Error('Native operation in progress; do not overlap requests');
-      inFlight=true;
-      // One completely new epoch per authored cross-client action.
-      // No native lease may adopt stale frames from a prior invocation.
-      const leaseEpoch=makeAiLeaseEpoch();
-      const abort=new AbortController();
-      const run={abort,slots:schedule.slots};
-      multiSequence=run;
-      let dispatched=false,transportConfirmed=false;
-      let nativeNeutralReceipt=null;
-      let leaseAttempted=false,leaseHeld=false;
-      let leaseDefinitelyDenied=false;
-      let neutralUnconfirmed=[],released=[];
-      try {
-        leaseAttempted=true;
-        // All-or-nothing native cohort claim. A definitely denied foreign
-        // writer never touched an input and needs no added recovery marker.
-        try {
-          await changeAiLease('acquire',schedule.slots,leaseEpoch,false);
-        } catch(error) {
-          leaseDefinitelyDenied=definitelyDeniedWriterLease(error);
-          throw error;
-        }
-        leaseHeld=true;
-        // A previously awaited native acquire may return after shutdown.
-        // Refuse new active input; finally still releases the confirmed
-        // neutral lease via the same original controller.
-        if(closed||abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
-        // A visual source could disappear during the await. Do not
-        // acquire a lease and then send the already-invalidated action.
-        refuseUncertain(schedule.slots);
-        if(observedSequence!==null) {
-          // Reuse the existing observer metadata; never take another
-          // screenshot, start a worker or add a controller. Fail closed
-          // when even one original model-reviewed image has advanced,
-          // expired, changed identity, or lost its delivery proof.
-          const round=observedSequence;
-          if(round.slots.length!==schedule.slots.length ||
-             round.slots.some((slot,i)=>slot!==schedule.slots[i])) {
-            throw new Error('TEAM_OBSERVATION_STALE_OR_REPLACED');
-          }
-          verifyTeamObservationBasis(config.mode,schedule.slots,round.basis,
-            schedule.slots.map(slot=>visualObserver.read(slot,{
-              includeImage:false,
-            }).metadata));
-          requireOpen();
-          if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
-          refuseUncertain(schedule.slots);
-          round.dispatchStartedAtMs=Date.now();
-        }
-        // No await between the final source check and native batch request.
-        dispatched=true;
-        const receipt=await aiMultiBatch(config.executable,schedule.batches,
-          {signal:abort.signal,writerId,mode:config.mode,leaseEpoch});
-        if(receipt?.schema!==1||
-           JSON.stringify(receipt?.slots)!==JSON.stringify(schedule.slots)||
-           receipt?.status!=='EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED'||
-           receipt?.gameplayObserved!==false) {
-          throw new Error('AI_INPUT_NATIVE_RESULT_UNVERIFIED');
-        }
-        if(abort.signal.aborted)throw new Error('AI_SEQUENCE_ABORTED');
-        transportConfirmed=true;
-        nativeNeutralReceipt=receipt;
-        return receipt;
-      }finally{
-        // A failed/aborted action may already have published packets.
-        // Keep the original ENTIRE cohort quarantined until the model
-        // explicitly requests recovery, even when neutral ACKs arrive.
-        if(dispatched&&!transportConfirmed)markAiUncertain(schedule.slots);
-        if(leaseHeld) {
-          // A claim that never dispatched input remains initially neutral.
-          // The original CLI has ALREADY sent independent neutral to
-          // every touched slot before emitting its exact-content ACK.
-          // Skip 4/5 duplicate CLI process/IPC calls only for the
-          // canonical sender + fully confirmed exact-slot neutral proof.
-          // Aborted/uncertain/fake transport responses still take the
-          // existing conservative independent neutral/quarantine path.
-          const nativeNeutralConfirmed=canReuseVerifiedNativeBatchNeutral(
-            nativeNeutralReceipt,schedule.slots,{
-              verifiedSender:aiMultiBatch===sendExperimentalMultiClientBatchNative,
-              transportConfirmed,
-            });
-          const neutral=!dispatched || nativeNeutralConfirmed?
-            {acknowledged:[...schedule.slots],unconfirmed:[]}:
-            await releaseAiSlots(schedule.slots,leaseEpoch);
-          neutralUnconfirmed=neutral.unconfirmed;
-          if(neutralUnconfirmed.length)markAiUncertain(neutralUnconfirmed);
-          // Each selected native child can disappear between its
-          // neutral ACK and the final release. Do not send a grouped
-          // release which lets one departed slot strand all peers.
-          const release=await releaseAcknowledgedAiLeases(
-            neutral.acknowledged,leaseEpoch);
-          released=release.released;
-          if(release.unconfirmed.length)markAiUncertain(release.unconfirmed);
-        }
-        if(leaseAttempted&&!leaseHeld&&!leaseDefinitelyDenied) {
-          // Native acquire ACK was ambiguous. Never assume release or
-          // replay; each native writer claim expires without a daemon.
-          markAiUncertain(schedule.slots);
-        }
-        if(multiSequence===run)multiSequence=null;
-        inFlight=false;
-        if(neutralUnconfirmed.length)throw new Error('AI_RELEASE_UNCONFIRMED');
-        if(leaseHeld&&released.length!==schedule.slots.length) {
-          throw new Error('AI_WRITER_LEASE_RELEASE_UNCONFIRMED');
-        }
-        // A Stop/shutdown may arrive AFTER the original batch ACK while
-        // individual native lease releases still await their CLI replies.
-        // A prior successful transport is not a completed MCP transaction
-        // once the operator has cancelled during this final cleanup.
-        // Preserve stronger unconfirmed neutral/lease errors above.
-        if(transportConfirmed&&(closed||abort.signal.aborted)) {
-          markAiUncertain(schedule.slots);
-          throw new Error('AI_SEQUENCE_ABORTED');
-        }
-      }
+      return runMultiClientSchedule(schedule);
     }
     if (name==='stop_experimental_mc02_actions') {
       if(!mc02Enabled)throw new Error('MC02_EXPERIMENT_DISABLED');
@@ -2042,7 +2045,7 @@ export function createOperationCore(config,{
       keysExactly(args,['actions']);
       // Validate all actions and the human/AI ownership before touching
       // the native controller. The request only inspects existing windows.
-      const required=requiredInputSlots(config.mode,args.actions);
+      const required=prepareInputRoute(config.mode,args.actions);
       if (exclusiveBusy()) throw new Error('Native operation in progress; do not overlap requests');
       inFlight=true;
       const started=Date.now();
@@ -2053,7 +2056,7 @@ export function createOperationCore(config,{
         }
         const elapsed=Date.now()-started;
         return {
-          ...assessInputRoute(config.mode,args.actions,observed,{
+          ...required.assess(observed,{
             observedAtMs:Date.now(),elapsedMs:elapsed,
           }),
           transactionEngine:inputExecutionStatus(),

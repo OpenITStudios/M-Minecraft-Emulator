@@ -66,10 +66,22 @@ export function matchesNativeInputTarget(expected,observation) {
  * receives independent background controls. Game acceptance is a separate
  * real-Windows/Minecraft requirement.
  */
-export function assessInputRoute(mode,actions,observations,{
+export function assessInputRoute(mode,actions,observations,options) {
+  return prepareInputRoute(mode,actions).assess(observations,options);
+}
+
+// Bind the validated timeline before native reads; do not recompile mutable
+// input after awaits or accept an externally supplied prepared timeline.
+export function prepareInputRoute(mode,actions) {
+  const required=requiredInputSlots(mode,actions);
+  return {
+    observedSlots:Object.freeze([...required.observedSlots]),
+    assess:(observations,options)=>assessPreparedRoute(mode,required,observations,options),
+  };
+}
+function assessPreparedRoute(mode,{timeline,aiSlots,observedSlots},observations,{
   observedAtMs=Date.now(),elapsedMs=0,
 }={}) {
-  const {timeline,aiSlots,observedSlots}=requiredInputSlots(mode,actions);
   if (!Array.isArray(observations) ||
       observations.length!==observedSlots.length ||
       !Number.isSafeInteger(observedAtMs) || observedAtMs<0 ||

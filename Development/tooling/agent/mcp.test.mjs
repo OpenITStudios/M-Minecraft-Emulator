@@ -5876,3 +5876,60 @@ test('operation core requests deferred persistent image only for its local sampl
     assert.equal(nativeReads,4);
   }finally{core.shutdown();}
 });
+
+test('route assessment compiles caller intent before native reads and never reinterprets it',async()=>{
+  const actions=[{slot:2,kind:'move_forward',atMs:0,durationMs:200}];
+  const observed=[];
+  const h=createHandler(config(),{native:async(_exe,operation,slot)=>{
+    observed.push(slot);
+    actions[0].slot=1;
+    actions[0].kind='attack';
+    return {schema:1,ok:true,operation:'target',slot,
+      pid:500+slot,windowId:2000+slot,
+      createdFileTime:'134000000000000001',sessionId:1,
+      foreground:slot===1,visible:true,minimized:false,
+      verification:'SAME_SESSION_PID_BIRTH_ROOT_HWND',gameplayInput:'NOT_VERIFIED'};
+  }});
+  try {
+    const result=await h.callTool('assess_input_route',{actions});
+    assert.deepEqual(observed,[1,2]);
+    assert.equal(result.actionTimeline.actions[0].slot,2);
+    assert.equal(result.actionTimeline.actions[0].kind,'move_forward');
+    assert.equal(result.execution,'NOT_DISPATCHED');
+  }finally{h.shutdown();}
+});
+
+test('observed action fingerprint and transport share the original compiled schedule across preflight',async()=>{
+  const fixture=teamVisualFixture();
+  const actions=fixture.slots.map(aiMove);
+  const expected=fingerprintActions('human-plus-four-ai',actions);
+  let mutated=false,batches=0,armed=false;
+  const h=createHandler({...config(),experimentalMultiClientInputEnabled:true},{
+    visualObserverFactory:fixture.factory,
+    native:async(...args)=>{
+      if(armed&&!mutated){mutated=true;actions[0].kind='attack';}
+      return fixture.native(...args);
+    },
+    aiLease:leaseAck,
+    aiMultiBatch:async(_exe,entries)=>{
+      batches++;
+      assert.equal(entries[0].pulses[0].keys,1);
+      return {schema:1,slots:entries.map(e=>e.slot),
+        status:'EXPERIMENTAL_MULTI_CLIENT_TRANSPORT_ACKNOWLEDGED',gameplayObserved:false};
+    },
+    aiInput:async(_exe,frame)=>({schema:1,slot:frame.slot,
+      status:'NATIVE_AI_STATE_WRITTEN_GAMEPLAY_UNVERIFIED',gameplayObserved:false}),
+  });
+  try {
+    await h.callTool('stop_experimental_multi_client_actions',{slots:fixture.slots});
+    const basis=(await h.callTool('get_multi_client_visual_state',{})).frames.map(f=>f.baseline);
+    fixture.markDelivered();
+    armed=true;
+    const receipt=await h.callTool('run_experimental_observed_actions',{actions,basis});
+    assert.equal(mutated,true);
+    assert.equal(batches,1);
+    assert.equal(receipt.actionFingerprint,expected);
+    assert.notEqual(fingerprintActions('human-plus-four-ai',actions),expected);
+    assert.equal(receipt.gameplayObserved,false);
+  }finally{h.shutdown();}
+});
