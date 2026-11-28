@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-04b: synthetic native lifecycle)
+## Current status — cross-platform-native (MAC-04c: synthetic profile boundaries)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,38 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-04c — one bundle, two synthetic profile contexts (source only)
+
+Extend the existing AppKit lifecycle fixture, not the product. The original
+no-argument single-app route remains; explicit `--profile-probe` launches
+two synthetic children from the same unique bundle/identifier. Two fresh
+fixture-only directories receive process-local HOME/TMPDIR values; no global
+environment mutation, real Minecraft process, world, preferences or Keychain
+content access. Apple [launch environment](https://developer.apple.com/documentation/appkit/nsworkspace/openconfiguration/environment)
+can be ignored for sandboxed callers. Apple's [file-system guidance](https://developer.apple.com/documentation/foundation/using-the-file-system-effectively)
+and [preference domains](https://developer.apple.com/documentation/corefoundation/preferences-utilities)
+show why process-local environment alone is not a profile-isolation contract.
+
+Each child observes only path resolution (environment HOME, Foundation home,
+Application Support, Caches, temporary directory); the fixture parent binds
+a bounded private receipt to the retained app PID and slot. Require different
+PIDs and app objects with the same exact bundle/executable; normal close A,
+confirm B remains live, normal close B. No adoption, force close, auto-retry
+or cleanup of uncertain outcomes. Public receipt contains per-slot booleans
+only. Even a positive synthetic path result leaves preferences, authentication
+and Minecraft isolation NOT_OBSERVED/NOT_VERIFIED and runtimeAdmission=false.
+
+Implementation decision: a process-local path recipe is only a candidate
+for cooperating applications. If Minecraft has a supported profile route,
+bind it to existing five-slot catalog/lifecycle and verify every mutable
+namespace before admitting launch. If it does not, the OS-user route remains
+a distinct design option with per-login GUI constraints and separate approval;
+do not build a second controller or enable an implicit fallback. Do not guess
+game switches, intercept credentials or port Windows DLL hooks. No product
+dependency, native backend or new fixture file. Compilation and both native
+fixture modes NOT_EXECUTED; current Mac artifact and actual game isolation
+remain unresolved.
 
 ### MAC-04b — native AppKit lifecycle feasibility fixture (source only)
 
@@ -303,7 +335,8 @@ source and matching fixtures; MAC-03b adds explicit offline artifact tooling;
 MAC-03c shares existing pure session policy with its active native caller;
 MAC-03d centralizes active frontend window identity comparisons;
 MAC-04a adds the explicit non-product Mac development shell route;
-MAC-04b authors a synthetic AppKit lifecycle acceptance fixture.
+MAC-04b authors a synthetic AppKit lifecycle acceptance fixture;
+MAC-04c extends it with explicit two-instance path observations.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact

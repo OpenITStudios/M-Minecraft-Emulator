@@ -144,7 +144,9 @@ included in the existing native-feasibility test route, NOT_EXECUTED.
 `acceptance/macos/lifecycle-fixture.swift` is a separately compiled, opt-in
 acceptance program for a future approved Mac phase. It builds no game
 adapter and is not part of the desktop, DEV.cmd, startup, MCP or package.
-The fixture accepts no target path or arguments and refuses root. It copies
+The fixture accepts no target path and refuses root. It supports no arguments
+for the original single-instance lifecycle or the explicit `--profile-probe`
+option for two synthetic instances of the same bundle. It copies
 its own compiled executable into a fresh private temporary application bundle,
 uses AppKit to request a new application, retains the original running-app
 object, verifies bundle/executable identity and requests normal termination.
@@ -153,7 +155,15 @@ fixture directory, with no force close, retries, adoption or recursive deletion.
 Use the existing macOS developer tools, not a new runtime dependency.
 A future authorized local agent may compile with `swiftc -swift-version 5
 -parse-as-library` and an explicit private output path, then run the resulting
-executable without arguments. The temporary fixture bundle is retained and
+executable without arguments or with the explicit `--profile-probe` option.
+The pair uses two fresh fixture-only HOME/TMPDIR directories and reads bounded
+child receipts for environment HOME, Foundation home, Application Support,
+Caches and temporary path resolution. No real preference/Keychain contents are
+read or written. One normal close must leave the other original app alive.
+Both observed exits and path results are synthetic only; shared or unresolved
+paths are reported as a non-success status. Only booleans leave the parent
+report, not local paths or PIDs. Preferences/authentication remain NOT_OBSERVED.
+The temporary fixture bundle is retained and
 may be removed by that operator after confirming exit. The result is scoped
 to a synthetic app, never game isolation or gameplay proof. Source not compiled
 or executed; main-run-loop behavior, bundle launch and exit remain unverified.
