@@ -210,6 +210,8 @@ const NAMED_OWNERS=Object.freeze([
   ['struct BootstrapLibrary',OWNERSHIP_ENGINE+'independent_bootstrap/reviewed_bootstrap_payload.rs'],
   ['struct EducationConfig',OWNERSHIP_ENGINE+'independent_bootstrap/child_configuration.rs'],
   ['struct SlotStorage',OWNERSHIP_ENGINE+'independent_bootstrap/profile_storage_handles.rs'],
+  ['struct StartupObservation',OWNERSHIP_ENGINE+'independent_bootstrap/legacy_startup_observation.rs'],
+  ['fn registered_replay_slots',OWNERSHIP_ENGINE+'independent_bootstrap/reviewed_profile_replay.rs'],
   ['fn open_private_temporary',OWNERSHIP_ENGINE+'independent_bootstrap/profile_storage_handles.rs'],
   ['fn child_environment',OWNERSHIP_ENGINE+'independent_bootstrap/child_process_environment.rs'],
   ['struct Sessions',OWNERSHIP_ENGINE+'independent_bootstrap/session_controller.rs'],

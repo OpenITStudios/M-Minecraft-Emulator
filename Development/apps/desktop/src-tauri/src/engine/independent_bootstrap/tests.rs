@@ -138,7 +138,7 @@
 
     #[test]
     fn registered_enrollment_refuses_unreviewed_payload_before_game_lookup() {
-        assert!(matches!(prepare_registered_enrolled(), Err(error)
+        assert!(matches!(prepare_registered_enrolled_for::<2>(), Err(error)
             if error.kind() == io::ErrorKind::Unsupported));
     }
 

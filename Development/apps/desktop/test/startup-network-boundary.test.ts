@@ -54,8 +54,10 @@ describe("Active native-first startup boundary", () => {
     expect(location).toContain("None => match registered_replay_slots::<5>()");
     expect(location).not.toMatch(/\bregistered_slots::<5>\s*\(/);
     const bootstrap = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap.rs", import.meta.url), "utf8");
-    const normal = bootstrap.split("fn registered_slots<const N: usize>")[1]!.split("fn registered_replay_slots")[0]!;
-    const replay = bootstrap.split("fn registered_replay_slots<const N: usize>")[1]!.split("struct InheritList")[0]!;
+    const normal = bootstrap.split("fn registered_slots<const N: usize>")[1]!.split("struct InheritList")[0]!;
+    const replaySource = readFileSync(new URL("../src-tauri/src/engine/independent_bootstrap/reviewed_profile_replay.rs", import.meta.url), "utf8");
+    const replay = replaySource.split("fn registered_replay_slots<const N: usize>")[1]!;
+    expect(bootstrap).toContain('mod reviewed_profile_replay;');
     expect(normal).toContain("product_profiles::open()?");
     expect(normal).toContain("registered_replay_slots::<N>()");
     expect(replay).not.toContain("product_profiles::open()");

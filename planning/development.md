@@ -3,7 +3,7 @@
 ## Current status
 
 Branch `Local`; Unreleased. Work: `prelocal-modularity-efficiency`.
-MOD-01–09 scoped source integration closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). Operator reopened focused simplification: SIM-MOD-01 extracts storage handle ownership, consolidates existing/create Temp paths and corrects the production fresh-root cfg gate. Source only; fixtures NOT_EXECUTED.
+MOD-01–09 closed at [64d3922](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/64d392206c51922d5fccc191eafe99acc6fc95a0). Reopened focused simplification. SIM-MOD-01 [bc3417c](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/bc3417c92accb76ee3fb8f02e72d6b291ca3fe2b): storage handles, explicit Temp mode, production fresh-root cfg. SIM-MOD-02: reviewed replay and startup journal owners; fixed-size UTF-16 decode and removed redundant path clone/pair forwarding. Source only; fixtures NOT_EXECUTED.
 Final review baseline: `bf2588dc527d137fe75e4cdf6559130259b1dcf3`. Original work baseline: `ed320acd98065300e48dce9f574af0bfd7e7f18b`.
 No source test, compiler, formatter, build, CI, PC or runtime execution.
 
@@ -20,7 +20,7 @@ No source test, compiler, formatter, build, CI, PC or runtime execution.
 
 | MOD-09 | Correct staging, packaging and readiness digest-owner paths; repair stale startup fixture boundaries and classify extracted Rust test files correctly. Source fixtures authored NOT_EXECUTED. |
 
-Next: review remaining bootstrap replay/observation and controller storage responsibilities; avoid mechanical splitting. Re-pin actual HEAD for any separately
+Next: review controller storage responsibilities; eliminate duplication before any further extraction. Re-pin actual HEAD for any separately
 approved PC-local stage. The existing native DLL and release holds remain.
 No compilation, runtime improvement or whole-product readiness claimed.
 
@@ -50,7 +50,7 @@ Use [implementation map](../docs/system/implementation-map.md),
 
 Only a separately selected verified `LOCAL_PC_AGENT` with explicit
 operator approval may execute the existing sequence. Re-pin actual Local
-HEAD after MOD-09; the old source-ready baseline is not current proof.
+HEAD after the focused review; the old source-ready baseline is not current proof.
 Use [Windows first-run guide](../docs/validation/local-pc-first-run.md),
 [progressive smoke](../docs/validation/efficient-local-testing.md) and
 the [full prior acceptance sequence](https://github.com/OpenITStudios/M-Minecraft-Emulator/blob/f7fc983ead90964b40d99ec68c06213ab19e8215/planning/development.md#source-to-local-handoff--source_ready_for_local).

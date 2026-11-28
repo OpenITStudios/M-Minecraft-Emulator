@@ -576,12 +576,15 @@ test('extracted controller owners retain scoped counterpart review',()=>{
   }
 });
 
-test('bootstrap storage handles retain their native review routes',()=>{
-  const path='Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/profile_storage_handles.rs';
-  const review=qualityReviewForPaths([path],SHA);
-  assert.deepEqual(review.crossModuleReviews.map(seam=>seam.id),['agent-input-lease','native-desktop-session']);
-  assert.ok(review.crossModuleReviews.every(seam=>seam.reviewParties.some(p=>
-    p.selectedInChangeSet&&p.inspectFiles.includes(path))));
+test('bootstrap storage, replay and observation owners retain their native review routes',()=>{
+  const root='Development/apps/desktop/src-tauri/src/engine/independent_bootstrap/';
+  for(const file of ['profile_storage_handles.rs','reviewed_profile_replay.rs','legacy_startup_observation.rs']){
+    const path=root+file;
+    const review=qualityReviewForPaths([path],SHA);
+    assert.deepEqual(review.crossModuleReviews.map(seam=>seam.id),['agent-input-lease','native-desktop-session']);
+    assert.ok(review.crossModuleReviews.every(seam=>seam.reviewParties.some(p=>
+      p.selectedInChangeSet&&p.inspectFiles.includes(path))));
+  }
 });
 
 test('extracted instance identity owners keep their native desktop review route',()=>{
