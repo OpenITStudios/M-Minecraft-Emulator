@@ -12,17 +12,19 @@ describe('Education installation observation',()=>{
   const report={schema:1,registeredVersion:'1.26.33.0',updater:'Ready',reviewedImage:true};
   it('accepts only bounded metadata, not executable paths or launch authorization',()=>{
     expect(parseEducationInstallation(report)).toEqual(report);
-    for(const updater of ['Busy','Disabled','Missing','Unknown'])
+    expect(parseEducationInstallation({...report,updater:'Busy',reviewedImage:null}).reviewedImage).toBeNull();
+    for(const updater of ['Disabled','Missing','Unknown'])
       expect(parseEducationInstallation({...report,updater,reviewedImage:false}).updater).toBe(updater);
     for(const invalid of [{...report,schema:2},{...report,path:'private'}, {...report,registeredVersion:'bad'},
       {...report,registeredVersion:'1.'+'0'.repeat(64)},{...report,updater:'Running'},
-      {...report,reviewedImage:1}]) expect(()=>parseEducationInstallation(invalid)).toThrow();
+      {...report,reviewedImage:1},{...report,reviewedImage:null},
+      {...report,updater:'Busy',reviewedImage:false}]) expect(()=>parseEducationInstallation(invalid)).toThrow();
   });
   it('shows only an actionable installation notice and never a healthy image review label',()=>{
     const healthy=parseEducationInstallation(report);
     expect(educationInstallationNotice(healthy)).toBeNull();
     expect(educationInstallationNotice(null)).toContain('Refresh');
-    expect(educationInstallationNotice({...healthy,updater:'Busy',reviewedImage:false})).toContain('Keep games closed');
+    expect(educationInstallationNotice({...healthy,updater:'Busy',reviewedImage:null})).toContain('Keep games closed');
     expect(educationInstallationNotice({...healthy,reviewedImage:false})).toContain('compatibility update');
     expect(educationInstallationNotice({...healthy,updater:'Disabled'})).toContain('disabled');
     expect(educationInstallationNotice({...healthy,updater:'Missing'})).toContain('unavailable');
@@ -36,6 +38,9 @@ describe('Education installation observation',()=>{
     const refresh=app.split('async function refresh(passiveIdle = false)')[1]!.split('async function launch(')[0]!;
     expect(refresh).not.toContain('refreshInstallation');
     expect(app.match(/await refreshInstallation\(issued\)/g)).toHaveLength(2);
+    expect(app).toContain('busy: activeOperation !== null || manualRefreshing');
+    expect(app).toContain('!manualRefreshing && sessionDue !== null');
+    expect(app).toContain('!manualRefreshing && recordingDue !== null');
   });
 });
 

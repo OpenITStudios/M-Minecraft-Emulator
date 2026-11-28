@@ -45,14 +45,15 @@ export function parseStartupCapabilities(value: unknown): StartupCapabilities {
 }
 export type EducationUpdaterState = 'Ready' | 'Busy' | 'Disabled' | 'Missing' | 'Unknown';
 export interface EducationInstallationReport {
-  schema:1; registeredVersion:string; updater:EducationUpdaterState; reviewedImage:boolean;
+  schema:1; registeredVersion:string; updater:EducationUpdaterState; reviewedImage:boolean|null;
 }
 export function parseEducationInstallation(value:unknown):EducationInstallationReport {
   if (!record(value) || !exact(value,['schema','registeredVersion','updater','reviewedImage']) ||
       value.schema!==1 || typeof value.registeredVersion!=='string' || value.registeredVersion.length>64 ||
       !/^[0-9]+(?:\.[0-9]+){1,4}$/.test(value.registeredVersion) ||
       typeof value.updater!=='string' || !['Ready','Busy','Disabled','Missing','Unknown'].includes(value.updater) ||
-      typeof value.reviewedImage!=='boolean') throw new TypeError('Invalid Education installation report');
+      (typeof value.reviewedImage!=='boolean' && value.reviewedImage!==null) ||
+      ((value.updater==='Busy') !== (value.reviewedImage===null))) throw new TypeError('Invalid Education installation report');
   return {schema:1,registeredVersion:value.registeredVersion,updater:value.updater as EducationUpdaterState,reviewedImage:value.reviewedImage};
 }
 export type GraphicsPreset = 'Preserve' | 'High' | 'Low';

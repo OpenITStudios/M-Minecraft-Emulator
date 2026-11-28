@@ -159,8 +159,9 @@ agree. No idle cache or persisted admission; a replaced file or last exit
 requires full review again. Fresh signed registration, updater state, exact
 file identity and DLL admission remain mandatory for every launch.
 The official Windows Desktop updater remains the only game update provider.
-The existing post-pin launch preflight reads the registered updater task
-state once (no additional PowerShell process, no background polling).
+The existing two launch resolver calls check the updater state before and
+after taking the executable pin (no additional PowerShell process or
+background polling). Known busy state before pinning avoids a new pin.
 Queued/running or unobservable updater state defers new launch; a missing
 or disabled task may be intentional organization policy and is not changed.
 This observation is not an installer lock. Active managed games retain
@@ -178,9 +179,12 @@ claim. Settings entry observes installation independently before the
 session settings request, so a native payload hold does not itself prevent
 the installation check. The report is refreshed on Settings entry or
 explicit header Refresh, not passive session inspection, app startup or
-a new timer. It reuses the signed resolver and post-pin file
-identity checks, hashes once, releases the temporary pin, and returns no
-path or hash to the UI. A match does not prove native ABI or gameplay;
+a new timer. The explicit observation reads updater state with the first
+signed resolver result; a known busy updater skips pinning and hashing.
+Otherwise it rechecks registration and identity under a temporary pin;
+if the updater became busy, it skips hashing and drops the pin. The UI
+receives no path or hash, and a deferred review is not an unsupported image.
+Manual Refresh serializes the existing UI and background observation lanes. A match does not prove native ABI or gameplay;
 a failed check clears the displayed receipt without invalidating unrelated
 session state. No action starts the updater or changes task policy.
 Minecraft Education support documents that opening a game can cancel an

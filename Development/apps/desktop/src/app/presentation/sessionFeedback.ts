@@ -7,7 +7,7 @@ import type {NativeBackendSupport, ProfileSlot, EducationInstallationReport} fro
 export function educationInstallationNotice(report: EducationInstallationReport | null): string | null {
   if (!report) return 'Installation status unavailable. Refresh to check again.';
   if (report.updater === 'Busy') return 'Minecraft is updating. Keep games closed until it finishes, then Refresh.';
-  if (!report.reviewedImage) return 'This Minecraft version is not yet supported. A Lazy Tester compatibility update is required.';
+  if (report.reviewedImage === false) return 'This Minecraft version is not yet supported. A Lazy Tester compatibility update is required.';
   if (report.updater === 'Disabled') return 'Automatic Minecraft updates are disabled. Check your Windows update policy.';
   if (report.updater === 'Missing') return 'Automatic Minecraft updater unavailable. Check the official installation.';
   if (report.updater === 'Unknown') return 'Update status unavailable. Refresh to check again.';

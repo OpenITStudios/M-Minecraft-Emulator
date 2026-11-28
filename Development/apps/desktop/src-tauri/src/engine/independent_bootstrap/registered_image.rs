@@ -12,14 +12,15 @@ pub(super) fn registered_image_for_generation<'a>(
     observe: bool, active: impl IntoIterator<Item = (&'a File, u32)>,
 ) -> io::Result<(String, File, u32)> {
     use crate::engine::native_clients::resolve_registered_education_target;
-    let target = resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly")?;
-    // Query the updater once in the existing post-pin resolver, not in a new
-    // PowerShell process or passive Inspect loop. This is not an installer lock.
+    // Refuse a known busy updater BEFORE taking a write/delete-denying pin.
+    // Recheck after pinning to narrow the race; neither check is an installer lock.
+    // Both checks reuse existing resolver processes; no passive polling.
     let selector = if observe {
         "Resolve-ManagerEducationTarget -RegisteredOnly -RequireUpdaterIdle"
     } else {
         "Resolve-ManagerEducationTarget -RegisteredOnly"
     };
+    let target = resolve_registered_education_target(selector)?;
     let (target, image, _) = pin_registered_image_with(target, false, || resolve_registered_education_target(selector))?;
     let recipe = if observe {
         generation_recipe(&image, active, || reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?))?
@@ -49,17 +50,26 @@ fn pin_registered_image_with(target: String, observe: bool, resolve: impl FnOnce
 // Explicit informational observation. Reuse the post-pin registration and
 // file identity gate; do not acquire an idle/retained controller image pin.
 pub(super) fn installation_report() -> io::Result<crate::engine::native_clients::EducationInstallationReport> {
-    use crate::engine::native_clients::{registered_education_metadata, resolve_registered_education_target, EducationInstallationReport};
-    let target = resolve_registered_education_target("Resolve-ManagerEducationTarget -RegisteredOnly")?;
+    use crate::engine::native_clients::{registered_education_metadata, EducationInstallationReport, EducationUpdaterState};
+    let initial = registered_education_metadata()?;
+    if matches!(initial.updater, EducationUpdaterState::Busy) {
+        // A known pending/running update needs no game-image pin or hash.
+        return Ok(EducationInstallationReport { schema: 1, registered_version: initial.registered_version,
+            updater: initial.updater, reviewed_image: None });
+    }
     let mut metadata = None;
-    let (_, image, _) = pin_registered_image_with(target, false, || {
+    let (_, image, _) = pin_registered_image_with(initial.path, false, || {
         let receipt = registered_education_metadata()?;
         let path = receipt.path.clone();
         metadata = Some(receipt);
         Ok(path)
     })?;
     let metadata = metadata.ok_or_else(|| invalid("Education installation metadata unavailable"))?;
-    let reviewed_image = reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?).is_ok();
+    let reviewed_image = if matches!(metadata.updater, EducationUpdaterState::Busy) {
+        None // Updater started during the observation. Release the pin without hashing.
+    } else {
+        Some(reviewed_singleton_recipe(file_digest(&image, 256 * 1024 * 1024)?).is_ok())
+    };
     Ok(EducationInstallationReport { schema: 1, registered_version: metadata.registered_version,
         updater: metadata.updater, reviewed_image })
 }

@@ -91,7 +91,7 @@
     'confirmSelectedData' | 'clearDownloadCache' | 'clearCache' |
     'recoverSettings' | 'clearData';
   let activeOperation: UiOperation | null = null;
-  $: busy = activeOperation !== null;
+  $: busy = activeOperation !== null || manualRefreshing;
   $: savingPerformance = activeOperation === 'savePerformance';
   $: screenshotBusy = activeOperation === 'screenshot';
   $: clearingData = activeOperation === 'clearData';
@@ -356,10 +356,10 @@
   $: sessionObservationEnabled = mounted && !disposed && managerVisible &&
     nativeBackend === 'WindowsNative' && !closeReviewPending && !!binding?.configured &&
     !selectiveOpen && storageReview===null &&
-    activeOperation === null && !refreshing && !resizing && !initializing;
+    activeOperation === null && !manualRefreshing && !refreshing && !resizing && !initializing;
   $: recordingObservationEnabled = mounted && !disposed && managerVisible &&
     recordingAvailable && recordingWatch && !recordingStatusPending &&
-    activeOperation === null && !closeInProgress && !nativeExitReview;
+    activeOperation === null && !manualRefreshing && !closeInProgress && !nativeExitReview;
   $: sessionDeadline = sessionObservationEnabled
     ? sessionInspectionDeadline(lastInspectionStartedAt,
         periodicInspectionInterval(page, runningCount, available, workspaceSettledIdle, workspaceSettledLive),
@@ -401,7 +401,7 @@
       mounted, nativeBackend, closeInProgress, closeReviewPending,
       selectedReviewGeometryOnly: closeOneSlot!==null && closingOneSlot===null &&
         !nativeExitReview && page==='workspace' && !detached && available,
-      initializing, busy: activeOperation !== null, refreshing, resizing,
+      initializing, busy: activeOperation !== null || manualRefreshing, refreshing, resizing,
       queuedAudio: queuedAudio !== null,
       queuedPerformance: queuedPerformance !== null,
       queuedPage: queuedPage !== null,
@@ -711,9 +711,9 @@
         previewStatuses.some(status => !status.registered && status.reason !== null);
       if (!binding?.configured) await loadBinding();
       if (!current()) return;
-      await refresh();
-      if (!current()) return;
       if (page==='settings') await refreshInstallation(issued);
+      if (!current()) return;
+      await refresh();
       if (!current()) return;
       if (previewFailed && page === 'workspace' && available &&
           !detached) dirty = true;
@@ -1254,9 +1254,9 @@
       }
       // As before, capture status is an independent bounded read. Native
       // admission and the existing action dispatcher remain authoritative.
-      if (recordingDue !== null && recordingDue <= now && recordingObservationEnabled)
+      if (!manualRefreshing && recordingDue !== null && recordingDue <= now && recordingObservationEnabled)
         void refreshRecordingStatus();
-      if (sessionDue !== null && sessionDue <= now && sessionObservationEnabled &&
+      if (!manualRefreshing && sessionDue !== null && sessionDue <= now && sessionObservationEnabled &&
           !closeReviewActive(reviewState()) && binding?.configured && !selectiveOpen && storageReview===null)
         void refresh(passiveIdleAllowed(page, available, workspaceSettledIdle,
           sessionObservationHint, settings, now - lastSettingsObservedAt));

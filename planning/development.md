@@ -2,7 +2,7 @@
 
 ## Current status
 
-**Active source work — Education update compatibility (UPD).** Baseline
+**Source integration closed — Education update compatibility (UPD, scoped SOURCE_READY_FOR_LOCAL).** Baseline
 [`41e7eadd`](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/41e7eadde35bd72f215f0da983136a2817750c65).
 First slice: official Desktop updater state guard in the existing post-pin
 registered resolver; one query per managed launch, no task changes, updater
@@ -44,9 +44,23 @@ the active cohort; no idle cache, new pin, service or dependency. All launches
 still freshly validate signed registration, updater state, image identity and
 native DLLs. New or conflicting image generation refused; last exit requires
 full hash again. Synthetic fixture authored NOT_EXECUTED.
-Pending: final source integration audit, native updater/task behavior and
-costs, future exact recipe/ABI review and end-to-end update acceptance.
-Manual official task execution remains held pending verified native evidence.
+Final integration slice (baseline [8c12940](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/8c12940976cada6326dc1dae0eda5282001dec5a)):
+launch checks updater before/after pin using the two existing resolver
+processes. Explicit Settings observes updater first and skips pin/hash
+when already busy; if busy after pin it skips the hash and releases the
+pin. Nullable image review is valid only during Busy, not a positive
+compatibility receipt. Manual Refresh pauses competing UI/background
+observations and checks installation independently before session settings.
+No new polling, process count, dependency, service, updater action or
+native admission. Core and direct consumers reviewed; fixtures authored
+NOT_EXECUTED. Official Windows scheduler state values and Desktop task
+name checked against Microsoft/Minecraft documentation. Actual scheduler
+visibility, task provenance, pin/installer coordination (including the
+existing temporary controller-preparation pin), measured overhead,
+future exact recipe/ABI review and end-to-end update acceptance remain
+unverified. Manual official task execution remains held pending verified
+native evidence. Stop source work at scoped handoff; no release or
+automatic future-version compatibility claim.
 No new binary is admitted, and the ABI v4/local-test holds below remain.
 
 Branch `Local`; Unreleased. Work: `selective-issue-reporting` (RPT-01–07). Baseline [35e6524](https://github.com/OpenITStudios/M-Minecraft-Emulator/commit/35e652489d1ba297aff3845ec51964f5018678b8).
@@ -93,7 +107,8 @@ Use the existing [Windows first-run guide](../docs/validation/local-pc-first-run
 3. **Native prerequisite:** use VAL-01/02 below for independently reviewed ABI v4 x64 DLL build/controls and separate exact digest admission; `REVIEWED_EDUCATION_BOOTSTRAP = None` at the baseline. Until admitted, do not follow preflight's generic dev suggestion, launch a new game or package. No placeholders, old DLLs, hash bypass or experimental flags.
 4. **Product smoke:** after native admission and matching approval, use `DEV.cmd dev` and the existing progressive LT-01–13 plan, manager then MC01/MC02, before any five-client escalation. Preserve original slot/session ownership, normal close/reconnect and private data. Reuse already matching source receipts rather than rerunning the quick screen. Packaging, capture/recording, experimental AI/input and full regression escalation remain separate gates.
 5. **Report acceptance during the same approved smoke:** on an isolated checkout/data root, healthy explicit Check yields no current issue report and creates no checkpoint; any existing historical checkpoint remains unchanged. A safely observed UI/native issue yields bounded sanitized evidence; check native-only Check/Copy, repeat/recovery semantics, exit/Copy checkpoint and retention via existing regression fixtures and naturally observed failures. Never induce faults in licensed sessions or overwrite real evidence. Use `DEV.cmd report --json` once when needed: no report is not health proof; UI/native provenance stays separate, at most 12 review candidates, root cause/build identity unknown. Malformed/oversized/interrupted evidence preservation belongs to existing disposable fixtures; do not modify real Data to simulate it. Unobserved runtime cases stay NOT_EXECUTED/INCONCLUSIVE.
-6. **Feedback/STOP:** use existing private `workspace/runs/` receipts, exact SHA, first failing stage, sanitized observed vs expected and canonical source owner. Do not dump logs or commit private Data. No automatic fix, replay or repeat of successful unaffected checks; stop at the selected proof ceiling. OPT-07/ICE-05 and other holds below remain unchanged.
+6. **UPD acceptance during the same approved native phase:** observe the actual official task and registration before/after an ordinary supported update on a disposable installation/data root. Check Settings healthy/busy/disabled/missing/unknown and failed observation; no stale success or duplicate UI requests. Verify queued/running task refusal, unchanged generation reuse across five launches, last-exit pin release, full hash of new bytes, unknown hash refusal before profile mutation, and normal close/account/world preservation. Do not trigger an unreviewed scheduled task, force an update, downgrade or modify real user data. Compare actual hash count/timing separately from Authenticode and DLL checks; if no natural approved update occurs, leave transition NOT_EXECUTED. No future-image admission without exact native review.
+7. **Feedback/STOP:** use existing private `workspace/runs/` receipts, exact SHA, first failing stage, sanitized observed vs expected and canonical source owner. Do not dump logs or commit private Data. No automatic fix, replay or repeat of successful unaffected checks; stop at the selected proof ceiling. OPT-07/ICE-05 and other holds below remain unchanged.
 
 All commands above are deferred; this is a source handoff, not a test or release authorization.
 

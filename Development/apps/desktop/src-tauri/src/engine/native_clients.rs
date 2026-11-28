@@ -227,7 +227,8 @@ pub struct EducationInstallationReport {
     pub schema: u32,
     pub registered_version: String,
     pub updater: EducationUpdaterState,
-    pub reviewed_image: bool,
+    // None means review intentionally deferred while the updater is busy.
+    pub reviewed_image: Option<bool>,
 }
 
 #[cfg(all(windows, target_arch = "x86_64"))]
