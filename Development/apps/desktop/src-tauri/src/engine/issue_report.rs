@@ -162,6 +162,18 @@ mod tests {
     }
 
     #[test]
+    fn checkpoint_due_only_for_new_recurrent_or_power_of_two_counts() {
+        let mut report = NativeIssueReport::new();
+        let context = Context { operation: "inspect", slot: None };
+        for due in [true, true, false, true, false] {
+            assert_eq!(report.record(Code::IpcReplyTimeout, context, None, 100), due);
+        }
+        assert!(report.reconcile_transport(110));
+        assert!(!report.reconcile_transport(111));
+        assert!(report.record(Code::IpcReplyTimeout, context, None, 120));
+    }
+
+    #[test]
     fn report_preserves_bound_and_distinct_os_codes() {
         let mut report = NativeIssueReport::new();
         let context = Context { operation: "inspect", slot: None };

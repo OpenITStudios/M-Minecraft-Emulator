@@ -43,7 +43,7 @@ Sandboxie/VMware provider route is retired.
 | Shared visual tokens, shell, launcher and settings styles | `src/lazytester.css` |
 | Health and recovery guidance | `src/SessionHealthNotice.svelte`, `src/app/presentation/` |
 | Authored diagnostic categories, stable support codes and user error messages | `src/app/presentation/sessionFeedback.ts` |
-| Selective desktop issue summary | `src/app/presentation/issueReport.ts`, mounted `LazyTesterApp.svelte` feedback, General Settings Copy report |
+| Selective desktop issue summary and checkpoint | `src/app/presentation/issueReport.ts`, `src-tauri/src/engine/issue_report.rs`, `src-tauri/src/engine/report_store.rs`; mounted feedback and General Settings Copy report |
 | Validated desktop protocol | `src/app/bridge/lazyTester.ts`, `workspaceSurface.ts` |
 | Only raw Tauri invoke boundary | `src/app/bridge/invokeRuntime.ts` |
 | Game lifecycle / retained process identity | `src-tauri/src/engine/independent_bootstrap/session_controller.rs` |
@@ -107,7 +107,7 @@ Copy indicates `storageUnavailable:true` if saving fails.
 `Data/Reports/issues.json` holds the latest issue-bearing desktop lifetime:
 64 rows maximum, 16 KiB hard cap. Healthy runs preserve it; the next
 issue-bearing lifetime replaces it, without merging old recovery episodes.
-Identical snapshots skip publication. A fixed exclusive `issues.pending`
+Identical snapshots skip publication only after comparing the actual bounded file; a missing final is recreated. A fixed exclusive `issues.pending`
 stage is flushed and moved within the pinned directory; interrupted or
 unrecognized files block publication and require manual review, never
 automatic deletion. At most two reporter-created files (16 KiB each).

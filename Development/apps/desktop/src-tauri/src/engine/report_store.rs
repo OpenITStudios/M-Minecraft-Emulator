@@ -1,6 +1,5 @@
 //! Single product desktop checkpoint. CLI/controller/helpers never enable it.
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::{fs::{self, File, OpenOptions}, io::{self, Read, Write},
     os::windows::{ffi::OsStrExt, fs::OpenOptionsExt}, path::Path,
     sync::{Mutex, atomic::{AtomicBool, Ordering}}};
@@ -67,8 +66,8 @@ struct Checkpoint<'a> {
     native: Option<super::issue_report::NativeIssueReport>,
 }
 fn is_false(value: &bool) -> bool { !*value }
-struct Store { ui: Option<UiSnapshot>, published_digest: Option<[u8; 32]> }
-static STORE: Mutex<Store> = Mutex::new(Store { ui: None, published_digest: None });
+struct Store { ui: Option<UiSnapshot> }
+static STORE: Mutex<Store> = Mutex::new(Store { ui: None });
 static ENABLED: AtomicBool = AtomicBool::new(false);
 static DUE: AtomicBool = AtomicBool::new(false);
 pub(crate) fn enable() { ENABLED.store(true, Ordering::Release); }
@@ -98,12 +97,8 @@ impl Store {
             truncated: self.ui.as_ref().is_some_and(|ui| ui.truncated), native };
         let bytes = serde_json::to_vec(&payload).map_err(io::Error::other)?;
         if bytes.len() > MAX_BYTES { return Err(invalid()); }
-        let digest: [u8; 32] = Sha256::digest(&bytes).into();
-        if self.published_digest == Some(digest) { return Ok(()); }
         let settings = super::manager_settings::product_settings()?;
-        publish(settings.parent().ok_or_else(invalid)?, &bytes)?;
-        self.published_digest = Some(digest);
-        Ok(())
+        publish(settings.parent().ok_or_else(invalid)?, &bytes)
     }
 }
 fn pin_directory(path: &Path) -> io::Result<File> {
@@ -116,11 +111,11 @@ fn pin_directory(path: &Path) -> io::Result<File> {
     }
     Ok(file)
 }
-fn existing_checkpoint(path: &Path) -> io::Result<bool> {
+fn existing_checkpoint(path: &Path) -> io::Result<Option<Vec<u8>>> {
     let mut file = match OpenOptions::new().read(true).share_mode(FILE_SHARE_READ | FILE_SHARE_DELETE)
         .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT).open(path) {
         Ok(file) => file,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
     };
     let attrs = super::windows_file_identity::attributes(&file)?;
@@ -137,7 +132,7 @@ fn existing_checkpoint(path: &Path) -> io::Result<bool> {
         !value.get("issues").is_some_and(|v| v.is_array()) || value.get("native").is_none() {
         return Err(invalid());
     }
-    Ok(true)
+    Ok(Some(bytes))
 }
 fn publish(data: &Path, bytes: &[u8]) -> io::Result<()> {
     if !data.is_absolute() || bytes.is_empty() || bytes.len() > MAX_BYTES ||
@@ -154,7 +149,11 @@ fn publish(data: &Path, bytes: &[u8]) -> io::Result<()> {
     pins.push(pin_directory(&directory)?);
     let final_path = directory.join("issues.json");
     let pending = directory.join("issues.pending");
-    let replace = existing_checkpoint(&final_path)?;
+    // Compare the actual bounded file, not a cached digest. Explicit copy
+    // cannot report success for a checkpoint removed or replaced externally.
+    let previous = existing_checkpoint(&final_path)?;
+    if previous.as_deref() == Some(bytes) { return Ok(()); }
+    let replace = previous.is_some();
     // Fixed exclusive stage; interruption preserves both files and blocks
     // subsequent writes rather than deleting an unverified staging file.
     let mut file = OpenOptions::new().write(true).create_new(true).share_mode(0)
@@ -193,10 +192,16 @@ mod tests {
         let path = root.path().join("Reports/issues.json");
         publish(root.path(), next).unwrap();
         assert_eq!(fs::read(&path).unwrap(), next);
+        // An identical snapshot needs no staging. A deleted final must be recreated.
         fs::write(root.path().join("Reports/issues.pending"), b"interrupted").unwrap();
+        publish(root.path(), next).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), next);
         assert!(publish(root.path(), first).is_err());
         assert_eq!(fs::read(&path).unwrap(), next);
         fs::remove_file(root.path().join("Reports/issues.pending")).unwrap();
+        fs::remove_file(&path).unwrap();
+        publish(root.path(), next).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), next);
         fs::write(&path, b"unrelated").unwrap();
         assert!(publish(root.path(), first).is_err());
         assert_eq!(fs::read(&path).unwrap(), b"unrelated");
