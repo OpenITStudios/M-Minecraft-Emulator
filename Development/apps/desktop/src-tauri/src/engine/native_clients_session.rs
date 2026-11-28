@@ -1210,11 +1210,10 @@ fn admit_controller(
     }
 }
 
-// An automatic Settings read can return a valid settings snapshot without
-// reconciling the result of a timed-out launch, CloseOne, or native input.
 // Only the original session Inspect route is allowed to clear the transport
-// uncertainty gate, and only when its fresh reply succeeds. This remains
-// read-only inspection, not an assertion that an older mutation succeeded.
+// uncertainty gate, and only when its fresh reply succeeds. Settings and
+// storage observations may request that reconciliation first; their own
+// receipt never proves an older mutation succeeded.
 #[cfg(windows)]
 fn can_reconcile_pending_transport(request:&SessionRequest)->bool {
     matches!(request,SessionRequest::Inspect)
@@ -1411,6 +1410,12 @@ fn workspace_observation_request(request:SessionRequest, workspace_selection:boo
 }
 
 #[cfg(windows)]
+fn read_needs_reconciliation(request:&SessionRequest, uncertain:bool)->bool {
+    uncertain && matches!(request, SessionRequest::InspectSettings |
+        SessionRequest::InspectStorage | SessionRequest::InspectProfileStorage { .. })
+}
+
+#[cfg(windows)]
 fn request_inner(request: SessionRequest, workspace_selection:bool) -> io::Result<SessionSnapshot> {
     validate_request(&request)?;
     let mut owner = admit_controller(&CONTROLLER)?;
@@ -1418,6 +1423,19 @@ fn request_inner(request: SessionRequest, workspace_selection:bool) -> io::Resul
     // A prior uncertain mutation still requires the original full Inspect.
     // Decide after draining while holding the existing admission gate.
     let request=workspace_observation_request(request,workspace_selection,owner.uncertain);
+    let deadline=std::time::Instant::now()+std::time::Duration::from_secs(45);
+    if read_needs_reconciliation(&request,owner.uncertain) {
+        // Do not replay an older mutation or let the page-specific receipt
+        // clear uncertainty. A failed full Inspect stops this read.
+        // Both serial transactions share the original bounded wait budget.
+        request_locked(&mut owner,SessionRequest::Inspect,deadline)?;
+    }
+    request_locked(&mut owner,request,deadline)
+}
+
+#[cfg(windows)]
+fn request_locked(owner:&mut Controller, request:SessionRequest, deadline:std::time::Instant)
+    -> io::Result<SessionSnapshot> {
     let selected_target=match &request {
         SessionRequest::InspectAgentTarget{slot}=>Some(*slot),_=>None,
     };
@@ -1446,6 +1464,10 @@ fn request_inner(request: SessionRequest, workspace_selection:bool) -> io::Resul
             "Previous request outcome is uncertain. Refresh session status before another action.",
         ));
     }
+    if deadline<=std::time::Instant::now() {
+        return Err(io::Error::new(io::ErrorKind::TimedOut,
+            "Session observation budget expired before the next request"));
+    }
     let (sender, replies) = std::sync::mpsc::sync_channel(1);
     let worker = std::thread::spawn(move || {
         let _ = sender.send(transact(request));
@@ -1453,7 +1475,7 @@ fn request_inner(request: SessionRequest, workspace_selection:bool) -> io::Resul
     owner.pending = Some(PendingRequest { replies, worker });
     let outcome = classify_pending_worker_wait(
         owner.pending.as_ref().unwrap().replies
-            .recv_timeout(std::time::Duration::from_secs(45)));
+            .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now())));
     match outcome {
         PendingWorkerWait::Completed(result) => {
             owner.join_finished_request();
@@ -1953,6 +1975,16 @@ mod tests {
         assert!(!can_reconcile_pending_transport(&SessionRequest::InspectProfileStorage {slot:1}));
         assert!(!can_reconcile_pending_transport(&SessionRequest::CloseOne{slot:2}));
         assert!(!can_reconcile_pending_transport(&SessionRequest::CloseAll));
+        for read in [SessionRequest::InspectSettings, SessionRequest::InspectStorage,
+            SessionRequest::InspectProfileStorage {slot:1}] {
+            assert!(read_needs_reconciliation(&read,true));
+            assert!(!read_needs_reconciliation(&read,false));
+        }
+        for other in [SessionRequest::Inspect,SessionRequest::InspectAgentTarget {slot:1},
+            SessionRequest::CloseOne {slot:2},SessionRequest::CloseAll,
+            SessionRequest::Launch {slot:3}] {
+            assert!(!read_needs_reconciliation(&other,true));
+        }
         #[cfg(feature="mc02-native-input")]
         {
             let owner="a".repeat(32);
