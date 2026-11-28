@@ -1,6 +1,6 @@
 # Current Development Handoff — Lazy Tester
 
-## Current status — cross-platform-native (MAC-04c: synthetic profile boundaries)
+## Current status — cross-platform-native (MAC-04d: native isolation decision)
 
 Branch `Local`; Unreleased. Target: one native Lazy Tester for Windows and
 macOS, retaining up to five independent licensed Education profiles
@@ -9,6 +9,71 @@ session authority, one catalog and one MCP/SDK operation core. ZLR-04 and
 all native, execution and release holds remain. DESIGN_REVIEWED;
 implementation BLOCKED at Mac profile isolation. MAC-02 candidate provenance
 and mechanism review recorded below. Not SOURCE_READY_FOR_LOCAL.
+
+### MAC-04d — native isolation decision and alternate topology (2026-11-28)
+
+New source evidence changes the investigation priority, not product acceptance:
+- Minecraft Education [Wild Update 1.19.53 notes](https://edusupport.minecraft.net/hc/en-us/articles/13961617817236-What-s-New-in-The-Wild-Update-v1-19-53)
+  document the switch to MSAL. Current [Manage Accounts](https://edusupport.minecraft.net/hc/en-us/articles/360061382672-Sign-Into-Minecraft-Education)
+  describes last-player persistence and switching, not concurrent private sessions.
+- Microsoft [MSAL macOS cache configuration](https://learn.microsoft.com/en-us/entra/msal/objc/howto-v2-keychain-objc)
+  and [MSAL SSO](https://learn.microsoft.com/en-us/entra/msal/objc/single-sign-on-macos-ios)
+  document a default shared keychain group and app-owned cache configuration.
+  This is evidence against assuming HOME/TMPDIR isolation is sufficient,
+  NOT proof of the current Education build's actual token-cache configuration.
+  Never read token contents, change keychains, patch/sign the official game,
+  or configure MSAL on behalf of the game.
+- [Official world locations](https://edusupport.minecraft.net/hc/en-us/articles/4404785703316-Location-of-World-Files)
+  are device-user relative. [Apple concurrent login sessions](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/SystemContexts.html)
+  establish native user/session boundaries. [Fast User Switching](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPMultipleUsers/Concepts/FastUserSwitching.html)
+  permits background sessions but only the active console receives local
+  keyboard/mouse input. [Launch Services restrictions](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/LaunchServicesKeys.html)
+  can also prohibit second launches across users.
+- Historical [official community reply](https://edusupport.minecraft.net/hc/en-us/community/posts/360072475972-Multi-World-Setup?sort_by=votes)
+  (2019-01-25) rejects multi-instance use on one machine in a Windows-host
+  question. It is counterevidence, not a current 26.33 macOS determination.
+  No current official Education per-instance profile option found in reviewed
+  installation, world, account or community sources. DMG direct web retrieval
+  unavailable; actual bundle/entitlements/signature still uninspected.
+
+Decision: same-user AppKit/private-profile remains the preferred final
+topology if a supported concrete game route is established, but no additional
+HOME-only fixture or generic abstraction can solve authentication. Prioritize
+evaluating separate existing standard macOS accounts as an alternative
+feasibility candidate; do not auto-fallback or silently replace the final
+five-client single-workspace requirement.
+
+#### Alternate topology — proposed only
+
+Use one official installed game bundle shared read-only between users,
+one normal licensed game session within each explicitly logged-in standard
+macOS account, separate native home/preferences/keychain contexts, manual
+Minecraft sign-in and normal OS user switching. Do not create users, use
+root, automate login, collect credentials, change game registration or
+adopt preexisting unrelated sessions. No helper/daemon or cross-user IPC
+is required for the minimal manual feasibility phase. A controller launched
+in one user session cannot claim ownership of other sessions merely from PID
+or bundle ID. The existing Rust/Tauri app and common session contracts remain
+the eventual product; a separate user actor, authenticated IPC or screen
+sharing integration is a material topology change requiring operator
+decision, not an implementation shortcut. No separate product or release.
+
+| Ordered feasibility gate | Required later evidence |
+| --- | --- |
+| U1 — one official app | Exact admitted game image/signing and two existing consented standard users with distinct homes and GUI login sessions. No account creation or local execution in this phase. |
+| U2 — two native clients | Two distinct licensed accounts, simultaneous native processes in different GUI sessions; verify app-wide singleton does not refuse, each remains playable in its own active session. |
+| U3 — persistence | Distinct synthetic world/settings changes and normal close/reopen preserve own data; account sign-out/relogin on one does not affect the other. No real world or credential values in receipts. |
+| U4 — usability | Verify background multiplayer continues during manual switching; document input, audio, rendering, network and measured resource limits. No claim that switching provides simultaneous embedded previews or direct input. |
+| U5 — integration decision | If U1–U4 feasible, explicitly decide whether manual session switching is acceptable as a Mac-specific workspace or require a reviewed per-user bridge to meet single-workspace parity. If not, no admitted Mac multi-instance route. Scale to five only after acceptance. |
+
+The alternative deliberately trades workspace parity for stronger native
+isolation. Same-user route cannot be approved solely from MAC-04c positive
+synthetic paths; alternate route cannot be approved solely from OS login
+semantics. Preserve all prior source/activation/CI/test/release holds.
+No new source module or test fixture: decision checkpoint only. Do not
+spend further source effort on speculative game-independent abstractions.
+Next decision is workspace acceptance for the alternate route, while
+actual artifact and live validation remain deferred; no localtest request.
 
 ### MAC-04c — one bundle, two synthetic profile contexts (source only)
 
@@ -336,7 +401,8 @@ MAC-03c shares existing pure session policy with its active native caller;
 MAC-03d centralizes active frontend window identity comparisons;
 MAC-04a adds the explicit non-product Mac development shell route;
 MAC-04b authors a synthetic AppKit lifecycle acceptance fixture;
-MAC-04c extends it with explicit two-instance path observations.
+MAC-04c extends it with explicit two-instance path observations;
+MAC-04d records authentication counterevidence and alternate native topology.
 No new native backend, dependencies,
 fake adapters, test execution or weakened gates. Builds, native/gameplay/performance,
 packaging and tests NOT_EXECUTED. Next: BLOCKED on verified Mac artifact
